@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getApps, initializeApp } from 'firebase/app';
+import { createUserWithEmailAndPassword, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -15,6 +16,7 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 export default function AuthScreen() {
   const { mode } = useLocalSearchParams();
@@ -29,12 +31,20 @@ export default function AuthScreen() {
     setLoading(true);
     setError('');
     try {
+      let uid = '';
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const result = await createUserWithEmailAndPassword(auth, email, password);
+        uid = result.user.uid;
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        uid = result.user.uid;
       }
-      router.replace('/(tabs)/profile-setup');
+      const profileDoc = await getDoc(doc(db, 'users', uid));
+      if (profileDoc.exists()) {
+        router.replace('/(tabs)/dashboard');
+      } else {
+        router.replace('/(tabs)/profile-setup');
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -70,7 +80,10 @@ export default function AuthScreen() {
           {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.primaryButtonText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={styles.switchButton} onPress={() => setIsSignUp(!isSignUp)}>
-          <Text style={styles.switchText}>{isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}</Text>
+          <Text style={styles.switchText}>
+  {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+  <Text style={styles.switchLink}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
+</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -95,4 +108,5 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '700' },
   switchButton: { marginTop: 20, alignItems: 'center' },
   switchText: { color: '#888888', fontSize: 14 },
+  switchLink: { color: '#00ff87', fontSize: 14, textDecorationLine: 'underline' },
 });
