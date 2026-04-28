@@ -1,6 +1,22 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
+  authDomain: "association-social.firebaseapp.com",
+  projectId: "association-social",
+  storageBucket: "association-social.firebasestorage.app",
+  messagingSenderId: "444786220612",
+  appId: "1:444786220612:web:53724911dead483995e611"
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 export default function ProfileSetupScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -12,13 +28,47 @@ export default function ProfileSetupScreen() {
   const [console_, setConsole] = useState('');
   const [favSport, setFavSport] = useState('');
   const [plan, setPlan] = useState('trial');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const genders = ['Male', 'Female', 'Other'];
   const consoles = ['PS5', 'Xbox', 'PC'];
   const sports = ['NBA 2K', 'Madden', 'MLB The Show'];
 
+  const handleSave = async () => {
+    if (!displayName || !username) {
+      setError('Display name and username are required.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        displayName,
+        username,
+        age,
+        gender,
+        gamerTag,
+        bio,
+        console: console_,
+        favSport,
+        plan,
+        createdAt: new Date().toISOString(),
+        leagues: [],
+      });
+      router.replace('/(tabs)/dashboard');
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View style={styles.inner}>
         <Text style={styles.title}>Set Up Your Profile</Text>
         <Text style={styles.subtitle}>Tell the league who you are</Text>
@@ -28,9 +78,9 @@ export default function ProfileSetupScreen() {
           </View>
           <Text style={styles.avatarLabel}>Add Photo</Text>
         </TouchableOpacity>
-        <Text style={styles.label}>Display Name</Text>
+        <Text style={styles.label}>Display Name *</Text>
         <TextInput style={styles.input} placeholder="Your name" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
-        <Text style={styles.label}>Username</Text>
+        <Text style={styles.label}>Username *</Text>
         <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
         <Text style={styles.label}>Age</Text>
         <TextInput style={styles.input} placeholder="Your age" placeholderTextColor="#555" value={age} onChangeText={setAge} keyboardType="number-pad" />
@@ -68,11 +118,12 @@ export default function ProfileSetupScreen() {
           <Text style={styles.planDesc}>2 weeks free, no credit card needed</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.planCard, plan === 'paid' && styles.planCardActive]} onPress={() => setPlan('paid')}>
-          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly - $5/month</Text>
+          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly - 5 dollars per month</Text>
           <Text style={styles.planDesc}>Full access, cancel anytime</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace('/(tabs)/index')}>
-          <Text style={styles.primaryButtonText}>Enter the Association</Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={loading}>
+          {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.primaryButtonText}>Enter the Association</Text>}
         </TouchableOpacity>
         <View style={styles.spacer} />
       </View>
@@ -82,6 +133,7 @@ export default function ProfileSetupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
+  scrollContent: { flexGrow: 1 },
   inner: { padding: 24, paddingTop: 60 },
   title: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
   subtitle: { fontSize: 15, color: '#888888', marginBottom: 32 },
@@ -107,6 +159,7 @@ const styles = StyleSheet.create({
   planTitle: { fontSize: 16, fontWeight: '700', color: '#888888', marginBottom: 4 },
   planTitleActive: { color: '#00ff87' },
   planDesc: { fontSize: 13, color: '#555555' },
+  error: { color: '#ff4444', fontSize: 13, marginBottom: 12 },
   primaryButton: { backgroundColor: '#00ff87', borderRadius: 14, paddingVertical: 18, alignItems: 'center', marginTop: 12 },
   primaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '700' },
   spacer: { height: 60 },
