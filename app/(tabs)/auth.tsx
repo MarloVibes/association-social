@@ -1,22 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { getApps, initializeApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
-  authDomain: "association-social.firebaseapp.com",
-  projectId: "association-social",
-  storageBucket: "association-social.firebasestorage.app",
-  messagingSenderId: "444786220612",
-  appId: "1:444786220612:web:53724911dead483995e611"
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
+import { auth, db } from '@/constants/firebase';
 
 export default function AuthScreen() {
   const { mode } = useLocalSearchParams();
@@ -45,7 +32,7 @@ export default function AuthScreen() {
       } else {
         router.replace('/(tabs)/profile-setup');
       }
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message);
     }
     setLoading(false);
@@ -81,9 +68,9 @@ export default function AuthScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.switchButton} onPress={() => setIsSignUp(!isSignUp)}>
           <Text style={styles.switchText}>
-  {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-  <Text style={styles.switchLink}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
-</Text>
+            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+            <Text style={styles.switchLink}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
+          </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

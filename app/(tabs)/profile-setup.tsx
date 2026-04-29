@@ -1,22 +1,8 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
-  authDomain: "association-social.firebaseapp.com",
-  projectId: "association-social",
-  storageBucket: "association-social.firebasestorage.app",
-  messagingSenderId: "444786220612",
-  appId: "1:444786220612:web:53724911dead483995e611"
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
+import { doc, setDoc } from 'firebase/firestore';
+import { useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { auth, db } from '@/constants/firebase';
 
 export default function ProfileSetupScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -61,7 +47,7 @@ export default function ProfileSetupScreen() {
         leagues: [],
       });
       router.replace('/(tabs)/dashboard');
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message);
     }
     setLoading(false);
@@ -118,7 +104,7 @@ export default function ProfileSetupScreen() {
           <Text style={styles.planDesc}>2 weeks free, no credit card needed</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.planCard, plan === 'paid' && styles.planCardActive]} onPress={() => setPlan('paid')}>
-          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly - 5 dollars per month</Text>
+          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly - $5/month</Text>
           <Text style={styles.planDesc}>Full access, cancel anytime</Text>
         </TouchableOpacity>
         {error ? <Text style={styles.error}>{error}</Text> : null}
