@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
+import GlobalNav from '@/components/GlobalNav';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
@@ -94,7 +95,7 @@ export default function DMScreen() {
   };
 
   const handleMore = () => {
-    blockAndReport(otherUid, name, () => router.replace('/(tabs)/friends'));
+    blockAndReport(otherUid, name, () => router.back());
   };
 
   const formatTime = (ts: any) => {
@@ -123,7 +124,7 @@ export default function DMScreen() {
       keyboardVerticalOffset={0}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/friends')}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
@@ -240,6 +241,7 @@ export default function DMScreen() {
           />
         </View>
       </Modal>
+          <GlobalNav />
     </KeyboardAvoidingView>
   );
 }

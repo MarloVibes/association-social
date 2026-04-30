@@ -1,11 +1,27 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { blockAndReport } from '@/constants/moderation';
+import GlobalNav from '@/components/GlobalNav';
 
 const SPORT_KEY: Record<string, string> = {
-  nba: 'nba', madden: 'nfl', mlb: 'mlb',
+  nba: 'nba',
+  madden: 'nfl',
+  mlb: 'mlb',
+};
+
+const CHANNEL_LABEL: Record<string, string> = {
+  nba: 'Inside the NBA',
+  madden: 'Inside the NFL',
+  mlb: 'Inside MLB',
+};
+
+const CHANNEL_ICON: Record<string, string> = {
+  nba: '🏀',
+  madden: '🏈',
+  mlb: '⚾',
 };
 
 export default function LeagueScreen() {
@@ -29,13 +45,12 @@ export default function LeagueScreen() {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
       if (!leagueSnap.exists()) {
         Alert.alert('Not found', 'This league no longer exists.');
-        router.back();
+        router.replace('/(tabs)/dashboard');
         return;
       }
       const leagueData = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
 
-      // Load member profiles
       const memberProfiles = await Promise.all(
         (leagueData.members || []).map(async (uid: string) => {
           const snap = await getDoc(doc(db, 'users', uid));
@@ -44,7 +59,6 @@ export default function LeagueScreen() {
       );
       setMembers(memberProfiles);
 
-      // Find my team
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const myT = teamsSnap.docs.find(d => d.data().gmId === user?.uid);
       if (myT) setMyTeam({ id: myT.id, ...myT.data() });
@@ -54,7 +68,6 @@ export default function LeagueScreen() {
 
     loadLeague();
 
-    // Live activity feed
     const activityQuery = query(
       collection(db, 'leagues', leagueId, 'activity'),
       orderBy('createdAt', 'desc')
@@ -71,23 +84,14 @@ export default function LeagueScreen() {
       Alert.alert('Name mismatch', 'League name does not match. Please type it exactly.');
       return;
     }
-
     setDeleting(true);
     try {
       const batch = writeBatch(db);
-
-      // Remove leagueId from all members' profiles
       for (const member of members) {
-        batch.update(doc(db, 'users', member.uid), {
-          leagues: arrayRemove(leagueId),
-        });
+        batch.update(doc(db, 'users', member.uid), { leagues: arrayRemove(leagueId) });
       }
-
-      // Delete league doc
       batch.delete(doc(db, 'leagues', leagueId));
-
       await batch.commit();
-
       Alert.alert('Deleted', 'The league has been permanently deleted.', [
         { text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') },
       ]);
@@ -103,41 +107,58 @@ export default function LeagueScreen() {
       `This will permanently delete "${league?.name}" and remove all members. This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: () => setShowDeleteConfirm(true),
-        },
+        { text: 'Continue', style: 'destructive', onPress: () => setShowDeleteConfirm(true) },
       ]
     );
   };
 
   const handleLeaveLeague = async () => {
     if (!user) return;
-    Alert.alert(
-      'Leave League',
-      'Are you sure you want to leave this league?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await updateDoc(doc(db, 'leagues', leagueId), {
-                members: arrayRemove(user.uid),
-              });
-              await updateDoc(doc(db, 'users', user.uid), {
-                leagues: arrayRemove(leagueId),
-              });
-              router.replace('/(tabs)/dashboard');
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-            }
-          },
+    Alert.alert('Leave League', 'Are you sure you want to leave this league?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await updateDoc(doc(db, 'leagues', leagueId), { members: arrayRemove(user.uid) });
+            await updateDoc(doc(db, 'users', user.uid), { leagues: arrayRemove(leagueId) });
+            router.replace('/(tabs)/dashboard');
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          }
         },
-      ]
-    );
+      },
+    ]);
+  };
+
+  const handleMemberLongPress = (member: any) => {
+    if (member.uid === user?.uid) return;
+    Alert.alert(member.displayName, 'What would you like to do?', [
+      {
+        text: 'DM',
+        onPress: () => router.push({ pathname: '/screens/dm', params: { uid: member.uid, name: member.displayName } }),
+      },
+      {
+        text: 'Block / Report',
+        style: 'destructive',
+        onPress: () => blockAndReport(member.uid, member.displayName),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const goToChannels = () => {
+    router.push({
+      pathname: '/screens/channels',
+      params: {
+        leagueId,
+        leagueName: league.name,
+        sport: league.sport,
+        commissionerId: league.commissionerId,
+        coCommissioners: JSON.stringify(league.coCommissioners || []),
+      },
+    });
   };
 
   if (loading) {
@@ -153,9 +174,7 @@ export default function LeagueScreen() {
       <View style={styles.deleteScreen}>
         <View style={styles.deleteCard}>
           <Text style={styles.deleteTitle}>Final Confirmation</Text>
-          <Text style={styles.deleteSubtitle}>
-            Type the league name to confirm deletion:
-          </Text>
+          <Text style={styles.deleteSubtitle}>Type the league name to confirm deletion:</Text>
           <Text style={styles.deleteName}>"{league.name}"</Text>
           <TextInput
             style={styles.deleteInput}
@@ -167,10 +186,7 @@ export default function LeagueScreen() {
             autoCorrect={false}
           />
           <TouchableOpacity
-            style={[
-              styles.deleteConfirmBtn,
-              deleteInput.trim() !== league.name && styles.deleteConfirmBtnDisabled,
-            ]}
+            style={[styles.deleteConfirmBtn, deleteInput.trim() !== league.name && styles.deleteConfirmBtnDisabled]}
             onPress={handleDeleteLeague}
             disabled={deleteInput.trim() !== league.name || deleting}
           >
@@ -179,10 +195,7 @@ export default function LeagueScreen() {
               : <Text style={styles.deleteConfirmBtnText}>Permanently Delete League</Text>
             }
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteCancelBtn}
-            onPress={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}
-          >
+          <TouchableOpacity style={styles.deleteCancelBtn} onPress={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}>
             <Text style={styles.deleteCancelBtnText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -190,13 +203,16 @@ export default function LeagueScreen() {
     );
   }
 
+  const channelLabel = CHANNEL_LABEL[league.sport] || 'Channels';
+  const channelIcon = CHANNEL_ICON[league.sport] || '💬';
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.inner}>
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
+          <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (
@@ -212,29 +228,42 @@ export default function LeagueScreen() {
             <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
           </View>
           <Text style={styles.metaText}>{league.mode} mode</Text>
-          <View style={styles.codeChip}>
-            <Text style={styles.codeChipText}>Code: {league.code}</Text>
-          </View>
         </View>
 
-        {/* Action Buttons */}
+        {/* Channels — front and center */}
+        <TouchableOpacity style={styles.channelsTab} onPress={goToChannels}>
+          <View style={styles.channelsTabLeft}>
+            <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
+            <View>
+              <Text style={styles.channelsTabLabel}>{channelLabel}</Text>
+              <Text style={styles.channelsTabSub}>League Chat · Trade Talk · Polls · and more</Text>
+            </View>
+          </View>
+          <Text style={styles.channelsTabChevron}>›</Text>
+        </TouchableOpacity>
+
+        {/* Secondary Actions */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.rosterBtn}
             onPress={() => router.push({
-              pathname: '/(tabs)/roster',
-              params: {
-                leagueId,
-                sport: SPORT_KEY[league.sport] || league.sport,
-                teamId: myTeam?.id || '',
-              },
+              pathname: '/screens/roster',
+              params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam?.id || '' },
             })}
           >
             <Text style={styles.rosterBtnText}>Browse Roster</Text>
           </TouchableOpacity>
+          {isCommissioner && (
+            <TouchableOpacity
+              style={styles.inviteBtn}
+              onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+            >
+              <Text style={styles.inviteBtnText}>+ Invite</Text>
+            </TouchableOpacity>
+          )}
           {myTeam && (
             <View style={styles.myTeamChip}>
-              <Text style={styles.myTeamChipText}>My Team: {myTeam.name || 'Unnamed'}</Text>
+              <Text style={styles.myTeamChipText}>📋 {myTeam.name || 'My Team'}</Text>
             </View>
           )}
         </View>
@@ -268,21 +297,35 @@ export default function LeagueScreen() {
 
         {/* Members */}
         <Text style={styles.sectionTitle}>Members ({members.length})</Text>
+        <Text style={styles.memberHint}>Long press a member to DM or block/report</Text>
         <View style={styles.membersCard}>
           {members.map(member => (
-            <View key={member.uid} style={styles.memberRow}>
+            <TouchableOpacity
+              key={member.uid}
+              style={styles.memberRow}
+              onLongPress={() => handleMemberLongPress(member)}
+              activeOpacity={0.7}
+            >
               <View style={styles.memberAvatar}>
                 <Text style={styles.memberAvatarText}>
                   {member.displayName?.[0]?.toUpperCase() || '?'}
                 </Text>
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.memberName}>{member.displayName}</Text>
                 {member.uid === league.commissionerId && (
                   <Text style={styles.memberRole}>Commissioner</Text>
                 )}
               </View>
-            </View>
+              {member.uid !== user?.uid && (
+                <TouchableOpacity
+                  style={styles.dmSmallBtn}
+                  onPress={() => router.push({ pathname: '/screens/dm', params: { uid: member.uid, name: member.displayName } })}
+                >
+                  <Text style={styles.dmSmallBtnText}>DM</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -296,7 +339,6 @@ export default function LeagueScreen() {
           </View>
         )}
 
-        {/* Leave League (non-commissioner) */}
         {!isCommissioner && (
           <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveLeague}>
             <Text style={styles.leaveBtnText}>Leave League</Text>
@@ -305,6 +347,7 @@ export default function LeagueScreen() {
 
         <View style={styles.spacer} />
       </View>
+          <GlobalNav />
     </ScrollView>
   );
 }
@@ -317,19 +360,26 @@ const styles = StyleSheet.create({
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
   commBadge: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#00ff87' },
   commBadgeText: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
-  leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 12 },
-  leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24, flexWrap: 'wrap' },
+  leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
+  leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },
   metaText: { color: '#666', fontSize: 13 },
-  codeChip: { backgroundColor: '#111', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  codeChipText: { color: '#555', fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 32 },
-  rosterBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20 },
+  channelsTab: { backgroundColor: '#0a1a2a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a5a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  channelsTabLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  channelsTabIcon: { fontSize: 32 },
+  channelsTabLabel: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 3 },
+  channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
+  channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
+  rosterBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 18 },
   rosterBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
+  inviteBtn: { backgroundColor: '#1a1a2a', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: '#4444ff' },
+  inviteBtnText: { color: '#8888ff', fontSize: 14, fontWeight: '700' },
   myTeamChip: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#2a2a2a', flex: 1 },
   myTeamChipText: { color: '#888', fontSize: 13 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 8 },
+  memberHint: { color: '#333', fontSize: 12, marginBottom: 14 },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center' },
   activityItem: { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'flex-start' },
@@ -345,13 +395,14 @@ const styles = StyleSheet.create({
   memberAvatarText: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
   memberName: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
   memberRole: { color: '#00ff87', fontSize: 12 },
+  dmSmallBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
+  dmSmallBtnText: { color: '#8888ff', fontSize: 12, fontWeight: '700' },
   commSection: { marginBottom: 16 },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
   deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },
   leaveBtnText: { color: '#888', fontSize: 15, fontWeight: '600' },
   spacer: { height: 60 },
-  // Delete confirmation screen
   deleteScreen: { flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', padding: 24 },
   deleteCard: { backgroundColor: '#1a0a0a', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#ff3333' },
   deleteTitle: { fontSize: 22, fontWeight: '800', color: '#ff3333', marginBottom: 8 },

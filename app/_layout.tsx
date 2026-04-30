@@ -2,7 +2,6 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
-
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -14,9 +13,20 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="screens/league" />
+        <Stack.Screen name="screens/roster" />
+        <Stack.Screen name="screens/channels" />
+        <Stack.Screen name="screens/channel" />
+        <Stack.Screen name="screens/friends" />
+        <Stack.Screen name="screens/search-users" />
+        <Stack.Screen name="screens/dm" />
+        <Stack.Screen name="screens/invite-members" />
+        <Stack.Screen name="screens/create-league" />
+        <Stack.Screen name="screens/join-league" />
+        <Stack.Screen name="screens/notifications" />
+        <Stack.Screen name="screens/profile" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

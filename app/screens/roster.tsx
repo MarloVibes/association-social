@@ -14,6 +14,7 @@ import {
   Alert,
 } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import GlobalNav from '@/components/GlobalNav';
 
 const POSITIONS: Record<string, string[]> = {
   nfl: ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DE', 'DT', 'LB', 'CB', 'S'],
@@ -242,7 +243,7 @@ export default function RosterScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/league', params: { leagueId } })}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Player Roster</Text>
@@ -279,7 +280,8 @@ export default function RosterScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+            <GlobalNav />
+    </ScrollView>
 
       {/* Player List */}
       <FlatList

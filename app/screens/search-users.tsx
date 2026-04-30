@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
+import GlobalNav from '@/components/GlobalNav';
 
 export default function SearchUsersScreen() {
   const [search, setSearch] = useState('');
@@ -97,7 +98,7 @@ export default function SearchUsersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Find GMs</Text>
@@ -133,6 +134,7 @@ export default function SearchUsersScreen() {
           )
         }
       />
+          <GlobalNav />
     </View>
   );
 }

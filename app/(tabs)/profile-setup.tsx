@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
-import { doc, setDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { doc, getFirestore, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -22,7 +23,7 @@ export default function ProfileSetupScreen() {
   const sports = ['NBA 2K', 'Madden', 'MLB The Show'];
 
   const handleSave = async () => {
-    if (!displayName || !username) {
+    if (!displayName.trim() || !username.trim()) {
       setError('Display name and username are required.');
       return;
     }
@@ -34,8 +35,8 @@ export default function ProfileSetupScreen() {
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email,
-        displayName,
-        username,
+        displayName: displayName.trim(),
+        username: username.trim().toLowerCase(),
         age,
         gender,
         gamerTag,
@@ -44,7 +45,22 @@ export default function ProfileSetupScreen() {
         favSport,
         plan,
         createdAt: new Date().toISOString(),
+        // Leagues
         leagues: [],
+        // Social
+        friends: [],
+        friendRequestsSent: [],
+        friendRequestsReceived: [],
+        blockedUsers: [],
+        dmEnabled: true,
+        // Social media links
+        socials: {
+          twitch: '',
+          youtube: '',
+          twitter: '',
+          instagram: '',
+          tiktok: '',
+        },
       });
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
@@ -58,18 +74,23 @@ export default function ProfileSetupScreen() {
       <View style={styles.inner}>
         <Text style={styles.title}>Set Up Your Profile</Text>
         <Text style={styles.subtitle}>Tell the league who you are</Text>
+
         <TouchableOpacity style={styles.avatarContainer}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>+</Text>
           </View>
           <Text style={styles.avatarLabel}>Add Photo</Text>
         </TouchableOpacity>
+
         <Text style={styles.label}>Display Name *</Text>
         <TextInput style={styles.input} placeholder="Your name" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
+
         <Text style={styles.label}>Username *</Text>
         <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
+
         <Text style={styles.label}>Age</Text>
         <TextInput style={styles.input} placeholder="Your age" placeholderTextColor="#555" value={age} onChangeText={setAge} keyboardType="number-pad" />
+
         <Text style={styles.label}>Gender</Text>
         <View style={styles.optionRow}>
           {genders.map((g) => (
@@ -78,8 +99,10 @@ export default function ProfileSetupScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
         <Text style={styles.label}>Gamer Tag</Text>
         <TextInput style={styles.input} placeholder="PSN / Xbox / EA ID" placeholderTextColor="#555" value={gamerTag} onChangeText={setGamerTag} autoCapitalize="none" />
+
         <Text style={styles.label}>Console</Text>
         <View style={styles.optionRow}>
           {consoles.map((c) => (
@@ -88,6 +111,7 @@ export default function ProfileSetupScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
         <Text style={styles.label}>Favorite Sport</Text>
         <View style={styles.sportColumn}>
           {sports.map((s) => (
@@ -96,18 +120,29 @@ export default function ProfileSetupScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
         <Text style={styles.label}>Bio</Text>
         <TextInput style={[styles.input, styles.textArea]} placeholder="Tell the league about yourself..." placeholderTextColor="#555" value={bio} onChangeText={setBio} multiline />
+
+        <Text style={styles.label}>Social Media (Optional)</Text>
+        <TextInput style={styles.input} placeholder="Twitch username" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="YouTube channel" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Twitter / X handle" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="none" />
+
         <Text style={styles.label}>Choose Your Plan</Text>
         <TouchableOpacity style={[styles.planCard, plan === 'trial' && styles.planCardActive]} onPress={() => setPlan('trial')}>
           <Text style={[styles.planTitle, plan === 'trial' && styles.planTitleActive]}>Free Trial</Text>
           <Text style={styles.planDesc}>2 weeks free, no credit card needed</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.planCard, plan === 'paid' && styles.planCardActive]} onPress={() => setPlan('paid')}>
-          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly - $5/month</Text>
+          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly — $5/month</Text>
           <Text style={styles.planDesc}>Full access, cancel anytime</Text>
         </TouchableOpacity>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
         <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={loading}>
           {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.primaryButtonText}>Enter the Association</Text>}
         </TouchableOpacity>
@@ -128,8 +163,8 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 32, color: '#00ff87' },
   avatarLabel: { color: '#00ff87', fontSize: 14 },
   label: { fontSize: 13, fontWeight: '600', color: '#aaaaaa', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, color: '#ffffff', fontSize: 15, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
-  textArea: { height: 100, textAlignVertical: 'top' },
+  input: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, color: '#ffffff', fontSize: 15, marginBottom: 12, borderWidth: 1, borderColor: '#2a2a2a' },
+  textArea: { height: 100, textAlignVertical: 'top', marginBottom: 24 },
   optionRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   optionButton: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   optionButtonActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },

@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
+import GlobalNav from '@/components/GlobalNav';
 
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<any[]>([]);
@@ -13,9 +14,7 @@ export default function FriendsScreen() {
 
   const user = auth.currentUser;
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     if (!user) return;
@@ -24,9 +23,9 @@ export default function FriendsScreen() {
       const myDoc = await getDoc(doc(db, 'users', user.uid));
       if (!myDoc.exists()) return;
       const data = myDoc.data();
-
       const friendIds: string[] = data.friends || [];
       const requestIds: string[] = data.friendRequestsReceived || [];
+      const blockedIds: string[] = data.blockedUsers || [];
 
       const [friendProfiles, requestProfiles] = await Promise.all([
         Promise.all(friendIds.map(async uid => {
@@ -39,18 +38,15 @@ export default function FriendsScreen() {
         })),
       ]);
 
-      setFriends(friendProfiles.filter(Boolean));
-      setRequests(requestProfiles.filter(Boolean));
-    } catch (e) {
-      console.error(e);
-    }
+      setFriends(friendProfiles.filter((f): f is any => !!f && !blockedIds.includes(f.uid)));
+      setRequests(requestProfiles.filter((r): r is any => !!r && !blockedIds.includes(r.uid)));
+    } catch (e) { console.error(e); }
     setLoading(false);
   };
 
   const acceptRequest = async (fromUid: string) => {
     if (!user) return;
     try {
-      // Add each other as friends
       await updateDoc(doc(db, 'users', user.uid), {
         friends: arrayUnion(fromUid),
         friendRequestsReceived: arrayRemove(fromUid),
@@ -66,42 +62,61 @@ export default function FriendsScreen() {
   const declineRequest = async (fromUid: string) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        friendRequestsReceived: arrayRemove(fromUid),
-      });
-      await updateDoc(doc(db, 'users', fromUid), {
-        friendRequestsSent: arrayRemove(user.uid),
-      });
+      await updateDoc(doc(db, 'users', user.uid), { friendRequestsReceived: arrayRemove(fromUid) });
+      await updateDoc(doc(db, 'users', fromUid), { friendRequestsSent: arrayRemove(user.uid) });
       await loadData();
     } catch (e) { console.error(e); }
   };
 
-  const removeFriend = async (friendUid: string) => {
-    if (!user) return;
-    try {
-      await updateDoc(doc(db, 'users', user.uid), { friends: arrayRemove(friendUid) });
-      await updateDoc(doc(db, 'users', friendUid), { friends: arrayRemove(user.uid) });
-      await loadData();
-    } catch (e) { console.error(e); }
+  const removeFriend = (friendUid: string, friendName: string) => {
+    Alert.alert(
+      `Remove ${friendName}?`,
+      'They will be removed from your friends list.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, 'users', user!.uid), { friends: arrayRemove(friendUid) });
+              await updateDoc(doc(db, 'users', friendUid), { friends: arrayRemove(user!.uid) });
+              await loadData();
+            } catch (e) { console.error(e); }
+          },
+        },
+      ]
+    );
   };
 
   const renderFriend = ({ item }: { item: any }) => (
-    <View style={styles.userCard}>
-      <View style={styles.userAvatar}>
-        <Text style={styles.userAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+    <TouchableOpacity
+      onLongPress={() =>
+        Alert.alert(item.displayName, 'What would you like to do?', [
+          { text: 'Remove Friend', style: 'destructive', onPress: () => removeFriend(item.uid, item.displayName) },
+          { text: 'Block / Report', style: 'destructive', onPress: () => blockAndReport(item.uid, item.displayName, () => loadData()) },
+          { text: 'Cancel', style: 'cancel' },
+        ])
+      }
+      activeOpacity={1}
+    >
+      <View style={styles.userCard}>
+        <View style={styles.userAvatar}>
+          <Text style={styles.userAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.displayName}</Text>
+          <Text style={styles.userUsername}>@{item.username}</Text>
+          {item.gamerTag ? <Text style={styles.userGamerTag}>{item.gamerTag}</Text> : null}
+        </View>
+        <TouchableOpacity
+          style={styles.dmBtn}
+          onPress={() => router.push({ pathname: '/screens/dm', params: { uid: item.uid, name: item.displayName } })}
+        >
+          <Text style={styles.dmBtnText}>DM</Text>
+        </TouchableOpacity>
       </View>
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.displayName}</Text>
-        <Text style={styles.userUsername}>@{item.username}</Text>
-        {item.gamerTag && <Text style={styles.userGamerTag}>{item.gamerTag}</Text>}
-      </View>
-      <TouchableOpacity
-        style={styles.dmBtn}
-        onPress={() => router.push({ pathname: '/(tabs)/dm', params: { uid: item.uid, name: item.displayName } })}
-      >
-        <Text style={styles.dmBtnText}>DM</Text>
-      </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderRequest = ({ item }: { item: any }) => (
@@ -127,40 +142,32 @@ export default function FriendsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Friends</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/search-users')}>
+        <TouchableOpacity onPress={() => router.push('/screens/search-users')}>
           <Text style={styles.addText}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'friends' && styles.tabActive]}
-          onPress={() => setTab('friends')}
-        >
+        <TouchableOpacity style={[styles.tab, tab === 'friends' && styles.tabActive]} onPress={() => setTab('friends')}>
           <Text style={[styles.tabText, tab === 'friends' && styles.tabTextActive]}>
-            Friends {friends.length > 0 && `(${friends.length})`}
+            Friends{friends.length > 0 ? ` (${friends.length})` : ''}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'requests' && styles.tabActive]}
-          onPress={() => setTab('requests')}
-        >
+        <TouchableOpacity style={[styles.tab, tab === 'requests' && styles.tabActive]} onPress={() => setTab('requests')}>
           <Text style={[styles.tabText, tab === 'requests' && styles.tabTextActive]}>
-            Requests {requests.length > 0 && (
-              <Text style={styles.badge}> {requests.length}</Text>
-            )}
+            Requests{requests.length > 0 ? ` (${requests.length})` : ''}
           </Text>
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.hint}>Long press a friend to remove or block/report</Text>
+
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#00ff87" />
-        </View>
+        <View style={styles.loadingContainer}><ActivityIndicator color="#00ff87" /></View>
       ) : tab === 'friends' ? (
         <FlatList
           data={friends}
@@ -170,7 +177,7 @@ export default function FriendsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No friends yet</Text>
-              <TouchableOpacity style={styles.findBtn} onPress={() => router.push('/(tabs)/search-users')}>
+              <TouchableOpacity style={styles.findBtn} onPress={() => router.push('/screens/search-users')}>
                 <Text style={styles.findBtnText}>Find GMs to add</Text>
               </TouchableOpacity>
             </View>
@@ -189,6 +196,7 @@ export default function FriendsScreen() {
           }
         />
       )}
+          <GlobalNav />
     </View>
   );
 }
@@ -199,12 +207,12 @@ const styles = StyleSheet.create({
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
   addText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
-  tabRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 8 },
+  hint: { color: '#333', fontSize: 12, textAlign: 'center', marginBottom: 12 },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 8, gap: 8 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
   tabActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
   tabText: { color: '#666', fontSize: 14, fontWeight: '600' },
   tabTextActive: { color: '#00ff87' },
-  badge: { color: '#ff4444', fontWeight: '800' },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a' },
