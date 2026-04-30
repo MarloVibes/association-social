@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { arrayUnion, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -65,7 +65,7 @@ export default function CreateLeagueScreen() {
     }
     setLoading(true);
     try {
-      const leagueId = doc(db, 'leagues', '_').id;
+      const leagueId = doc(collection(db, 'leagues')).id;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
