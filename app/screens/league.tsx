@@ -31,8 +31,6 @@ export default function LeagueScreen() {
   const [members, setMembers] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteInput, setDeleteInput] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const user = auth.currentUser;
@@ -79,35 +77,31 @@ export default function LeagueScreen() {
     return () => unsubscribe();
   }, [leagueId]);
 
-  const handleDeleteLeague = async () => {
-    if (deleteInput.trim() !== league.name) {
-      Alert.alert('Name mismatch', 'League name does not match. Please type it exactly.');
-      return;
-    }
-    setDeleting(true);
-    try {
-      const batch = writeBatch(db);
-      for (const member of members) {
-        batch.update(doc(db, 'users', member.uid), { leagues: arrayRemove(leagueId) });
-      }
-      batch.delete(doc(db, 'leagues', leagueId));
-      await batch.commit();
-      Alert.alert('Deleted', 'The league has been permanently deleted.', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') },
-      ]);
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-      setDeleting(false);
-    }
-  };
-
   const confirmDelete = () => {
     Alert.alert(
       'Delete League',
-      `This will permanently delete "${league?.name}" and remove all members. This cannot be undone.`,
+      'Are you sure you want to delete this league? This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', style: 'destructive', onPress: () => setShowDeleteConfirm(true) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const batch = writeBatch(db);
+              for (const member of members) {
+                batch.update(doc(db, 'users', member.uid), { leagues: arrayRemove(leagueId) });
+              }
+              batch.delete(doc(db, 'leagues', leagueId));
+              await batch.commit();
+              router.replace('/(tabs)/dashboard');
+            } catch (e: any) {
+              Alert.alert('Error', e.message);
+              setDeleting(false);
+            }
+          },
+        },
       ]
     );
   };
@@ -169,39 +163,7 @@ export default function LeagueScreen() {
     );
   }
 
-  if (showDeleteConfirm) {
-    return (
-      <View style={styles.deleteScreen}>
-        <View style={styles.deleteCard}>
-          <Text style={styles.deleteTitle}>Final Confirmation</Text>
-          <Text style={styles.deleteSubtitle}>Type the league name to confirm deletion:</Text>
-          <Text style={styles.deleteName}>"{league.name}"</Text>
-          <TextInput
-            style={styles.deleteInput}
-            placeholder="Type league name here"
-            placeholderTextColor="#555"
-            value={deleteInput}
-            onChangeText={setDeleteInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TouchableOpacity
-            style={[styles.deleteConfirmBtn, deleteInput.trim() !== league.name && styles.deleteConfirmBtnDisabled]}
-            onPress={handleDeleteLeague}
-            disabled={deleteInput.trim() !== league.name || deleting}
-          >
-            {deleting
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.deleteConfirmBtnText}>Permanently Delete League</Text>
-            }
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteCancelBtn} onPress={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}>
-            <Text style={styles.deleteCancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+
 
   const channelLabel = CHANNEL_LABEL[league.sport] || 'Channels';
   const channelIcon = CHANNEL_ICON[league.sport] || '💬';

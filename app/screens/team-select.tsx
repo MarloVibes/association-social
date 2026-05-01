@@ -146,7 +146,7 @@ export default function TeamSelectScreen() {
                   {revealedIndex === null ? 'Tap any card to reveal your team!' : selectedTeam ? 'You got the ' + selectedTeam.full_name + '!' : 'Revealing...'}
                 </Text>
                 <View style={styles.cardGrid}>
-                  {shuffledTeams.slice(0, 15).map((team, index) => {
+                  {shuffledTeams.map((team, index) => {
                     const flipAnim = flipAnims.current[index] || new Animated.Value(0);
                     const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
                     const backRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
