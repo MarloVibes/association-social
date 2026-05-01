@@ -1,240 +1,139 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, getDoc, updateDoc, arrayUnion, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { useEffect, useState, useMemo } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  Alert,
-} from 'react-native';
+import { addDoc, arrayUnion, collection, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { useMemo, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
-const POSITIONS: Record<string, string[]> = {
-  nfl: ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DE', 'DT', 'LB', 'CB', 'S'],
-  nba: ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'],
-  mlb: ['ALL', 'LEGEND'],
-};
+const POSITIONS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'];
 
 export default function RosterScreen() {
-  const { leagueId, sport, teamId } = useLocalSearchParams<{
-    leagueId: string;
-    sport: string;
-    teamId: string;
+  const { leagueId, sport, teamId, era } = useLocalSearchParams<{
+    leagueId: string; sport: string; teamId: string; era?: string;
   }>();
 
-  const [players, setPlayers] = useState<any[]>([]);
-  const [myPlayers, setMyPlayers] = useState<string[]>([]);
-  const [tradeBlock, setTradeBlock] = useState<string[]>([]);
+  const [team, setTeam] = useState<any>(null);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [myPlayerIds, setMyPlayerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'my_team' | 'browse'>('my_team');
 
-  const sportKey = (sport as string)?.toLowerCase() === 'madden' ? 'nfl' : (sport as string)?.toLowerCase();
+  const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        // Load roster from Firestore
-        const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
-        if (rosterSnap.exists()) {
-          setPlayers(rosterSnap.data().players || []);
+  useEffect(() => { loadData(); }, [teamId, eraKey]);
+
+  const loadData = async () => {
+    if (!teamId) return;
+    setLoading(true);
+    try {
+      // Load my team doc from league
+      const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+      if (teamSnap.exists()) {
+        const data = teamSnap.data();
+        setTeam(data);
+        // players array contains full player objects
+        const players = data.players || [];
+        setMyPlayerIds(players.map((p: any) => p.player_id || p));
+
+        // If team already has full player objects use them
+        if (players.length > 0 && typeof players[0] === 'object' && players[0].player_id) {
+          setAllPlayers(players);
+          setLoading(false);
+          return;
         }
+      }
 
-        // Load team data to get owned players and trade block
-        if (teamId) {
-          const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
-          if (teamSnap.exists()) {
-            setMyPlayers(teamSnap.data().players || []);
-            setTradeBlock(teamSnap.data().tradeBlock || []);
+      // Load era roster for this team to get all available players
+      // First find the team doc in era_rosters
+      if (eraKey !== 'current') {
+        // Get all teams for this era and find matching abbreviation
+        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+        const leagueData = leagueSnap.data();
+        const myTeamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+        if (myTeamSnap.exists()) {
+          const myTeamData = myTeamSnap.data();
+          const eraTeamSnap = await getDoc(doc(db, 'era_rosters', eraKey, 'teams', myTeamData.teamId));
+          if (eraTeamSnap.exists()) {
+            const eraTeam = eraTeamSnap.data();
+            setAllPlayers(eraTeam.players || []);
           }
         }
-      } catch (e) {
-        console.error(e);
+      } else {
+        // Current era - load from rosters/{sport}
+        const sportKey = sport === 'madden' ? 'nfl' : sport === 'mlb' ? 'mlb' : 'nba';
+        const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
+        if (rosterSnap.exists()) {
+          setAllPlayers(rosterSnap.data().players || []);
+        }
       }
-      setLoading(false);
-    };
-    load();
-  }, [leagueId, sportKey, teamId]);
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
 
-  const filtered = useMemo(() => {
-    return players.filter(p => {
-      const matchesSearch = !search || p.full_name?.toLowerCase().includes(search.toLowerCase());
-      const matchesPos = posFilter === 'ALL' || p.position === posFilter;
+  const filteredPlayers = useMemo(() => {
+    return allPlayers.filter(p => {
+      const matchesSearch = !search || (p.full_name || p.name || '').toLowerCase().includes(search.toLowerCase());
+      const pos = p.position || '';
+      const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
       return matchesSearch && matchesPos;
     });
-  }, [players, search, posFilter]);
+  }, [allPlayers, search, posFilter]);
 
-  const handleAddToRoster = async (player: any) => {
-    const user = auth.currentUser;
-    if (!user || !teamId) return;
+  const myTeamPlayers = useMemo(() => {
+    if (!team) return [];
+    const players = team.players || [];
+    if (players.length > 0 && typeof players[0] === 'object') return players;
+    return allPlayers.filter(p => myPlayerIds.includes(p.player_id));
+  }, [team, allPlayers, myPlayerIds]);
 
-    if (myPlayers.includes(player.player_id)) {
-      Alert.alert('Already on roster', `${player.full_name} is already on your team.`);
+  const handleAddPlayer = async (player: any) => {
+    const pid = player.player_id || player.id;
+    if (myPlayerIds.includes(pid)) {
+      Alert.alert('Already on roster', `${player.full_name || player.name} is already on your team.`);
       return;
     }
-
-    setActionLoading(player.player_id);
     try {
-      // Add to team roster
       await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), {
-        players: arrayUnion(player.player_id),
+        players: arrayUnion(player),
       });
-
-      // Log activity
       await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
         type: 'pickup',
-        playerId: player.player_id,
-        playerName: player.full_name,
-        playerPosition: player.position,
-        playerTeam: player.team,
-        uid: user.uid,
-        message: `picked up ${player.full_name} (${player.position})`,
+        playerName: player.full_name || player.name,
+        uid: auth.currentUser?.uid,
+        message: `picked up ${player.full_name || player.name}`,
         createdAt: serverTimestamp(),
       });
-
-      setMyPlayers(prev => [...prev, player.player_id]);
-      Alert.alert('Added!', `${player.full_name} has been added to your roster.`);
+      setMyPlayerIds(prev => [...prev, pid]);
+      setTeam((prev: any) => ({ ...prev, players: [...(prev?.players || []), player] }));
+      Alert.alert('Added!', `${player.full_name || player.name} added to your roster.`);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
-    setActionLoading(null);
   };
 
-  const handleTradeBlock = async (player: any) => {
-    const user = auth.currentUser;
-    if (!user || !teamId) return;
-
-    if (!myPlayers.includes(player.player_id)) {
-      Alert.alert('Not on roster', 'You can only put your own players on the trade block.');
-      return;
-    }
-
-    const isOnBlock = tradeBlock.includes(player.player_id);
-    setActionLoading(player.player_id + '_trade');
-
-    try {
-      const teamRef = doc(db, 'leagues', leagueId, 'teams', teamId);
-      if (isOnBlock) {
-        // Remove from trade block
-        const teamSnap = await getDoc(teamRef);
-        const current = teamSnap.data()?.tradeBlock || [];
-        await updateDoc(teamRef, {
-          tradeBlock: current.filter((id: string) => id !== player.player_id),
-        });
-        setTradeBlock(prev => prev.filter(id => id !== player.player_id));
-      } else {
-        // Add to trade block
-        await updateDoc(teamRef, {
-          tradeBlock: arrayUnion(player.player_id),
-        });
-
-        // Log activity
-        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-          type: 'tradeblock',
-          playerId: player.player_id,
-          playerName: player.full_name,
-          playerPosition: player.position,
-          uid: user.uid,
-          message: `put ${player.full_name} on the trade block`,
-          createdAt: serverTimestamp(),
-        });
-
-        setTradeBlock(prev => [...prev, player.player_id]);
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    }
-    setActionLoading(null);
-  };
-
-  const renderPlayer = ({ item }: { item: any }) => {
-    const isOwned = myPlayers.includes(item.player_id);
-    const isOnBlock = tradeBlock.includes(item.player_id);
-    const isLoading = actionLoading === item.player_id;
-    const isTradeLoading = actionLoading === item.player_id + '_trade';
-
-    return (
-      <View style={[styles.playerCard, isOwned && styles.playerCardOwned]}>
-        <View style={styles.playerLeft}>
-          <View style={styles.photoContainer}>
-            <Image
-              source={{ uri: item.photo_url }}
-              style={styles.playerPhoto}
-              defaultSource={require('@/assets/images/icon.png')}
-            />
-            {item.is_legend && (
-              <View style={styles.legendBadge}>
-                <Text style={styles.legendBadgeText}>LEGEND</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.playerInfo}>
-            <View style={styles.playerNameRow}>
-              <Text style={styles.playerName}>{item.full_name}</Text>
-              {isOwned && <View style={styles.ownedDot} />}
-            </View>
-            <View style={styles.playerMetaRow}>
-              <View style={styles.posBadge}>
-                <Text style={styles.posBadgeText}>{item.position}</Text>
-              </View>
-              <Text style={styles.playerTeam}>{item.team !== 'LEGEND' ? item.team : 'Classic'}</Text>
-            </View>
-            <Text style={styles.playerStats}>
-              {[item.height && `${item.height}"`, item.age && `Age ${item.age}`, item.weight && `${item.weight}lbs`]
-                .filter(Boolean).join('  ·  ')}
-            </Text>
-            {item.injury_status && (
-              <View style={styles.injuryBadge}>
-                <Text style={styles.injuryText}>{item.injury_status}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.playerActions}>
-          {isOwned ? (
-            <TouchableOpacity
-              style={[styles.tradeBlockBtn, isOnBlock && styles.tradeBlockBtnActive]}
-              onPress={() => handleTradeBlock(item)}
-              disabled={!!isTradeLoading}
-            >
-              {isTradeLoading
-                ? <ActivityIndicator size="small" color="#00ff87" />
-                : <Text style={[styles.tradeBlockBtnText, isOnBlock && styles.tradeBlockBtnTextActive]}>
-                    {isOnBlock ? 'On Block' : 'Trade Block'}
-                  </Text>
-              }
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => handleAddToRoster(item)}
-              disabled={!!isLoading}
-            >
-              {isLoading
-                ? <ActivityIndicator size="small" color="#000" />
-                : <Text style={styles.addBtnText}>+ Add</Text>
-              }
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
+  const handleDropPlayer = async (player: any) => {
+    Alert.alert('Drop Player', `Remove ${player.full_name || player.name} from your roster?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Drop', style: 'destructive', onPress: async () => {
+        try {
+          const pid = player.player_id || player.id;
+          const newPlayers = (team?.players || []).filter((p: any) => (p.player_id || p.id) !== pid);
+          await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { players: newPlayers });
+          setMyPlayerIds(prev => prev.filter(id => id !== pid));
+          setTeam((prev: any) => ({ ...prev, players: newPlayers }));
+        } catch (e: any) { Alert.alert('Error', e.message); }
+      }},
+    ]);
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00ff87" />
-        <Text style={styles.loadingText}>Loading roster...</Text>
+        <ActivityIndicator size='large' color='#00ff87' />
       </View>
     );
   }
@@ -246,104 +145,132 @@ export default function RosterScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Player Roster</Text>
-        <Text style={styles.headerCount}>{filtered.length} players</Text>
+        <Text style={styles.title}>{team?.name || 'Roster'}</Text>
+        <View style={{ width: 60 }} />
       </View>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search players..."
-          placeholderTextColor="#555"
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'my_team' && styles.tabActive]}
+          onPress={() => setActiveTab('my_team')}
+        >
+          <Text style={[styles.tabText, activeTab === 'my_team' && styles.tabTextActive]}>
+            My Team ({myTeamPlayers.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'browse' && styles.tabActive]}
+          onPress={() => setActiveTab('browse')}
+        >
+          <Text style={[styles.tabText, activeTab === 'browse' && styles.tabTextActive]}>
+            Browse Players
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Position Filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterRow}
-      >
-        {(POSITIONS[sportKey] || POSITIONS.nfl).map(pos => (
-          <TouchableOpacity
-            key={pos}
-            style={[styles.filterChip, posFilter === pos && styles.filterChipActive]}
-            onPress={() => setPosFilter(pos)}
-          >
-            <Text style={[styles.filterChipText, posFilter === pos && styles.filterChipTextActive]}>
-              {pos}
-            </Text>
-          </TouchableOpacity>
-        ))}
-            <GlobalNav />
-    </ScrollView>
+      {activeTab === 'browse' && (
+        <>
+          <TextInput
+            style={styles.searchInput}
+            placeholder='Search players...'
+            placeholderTextColor='#555'
+            value={search}
+            onChangeText={setSearch}
+          />
+          <View style={styles.posFilters}>
+            {POSITIONS.map(pos => (
+              <TouchableOpacity
+                key={pos}
+                style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
+                onPress={() => setPosFilter(pos)}
+              >
+                <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
 
-      {/* Player List */}
       <FlatList
-        data={filtered}
-        keyExtractor={item => item.player_id}
-        renderItem={renderPlayer}
+        data={activeTab === 'my_team' ? myTeamPlayers : filteredPlayers}
+        keyExtractor={(item) => String(item.player_id || item.id)}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No players found</Text>
+            <Text style={styles.emptyText}>
+              {activeTab === 'my_team' ? 'No players on your roster yet.' : 'No players found.'}
+            </Text>
           </View>
         }
-        initialNumToRender={20}
-        maxToRenderPerBatch={20}
-        windowSize={5}
+        renderItem={({ item }) => {
+          const pid = item.player_id || item.id;
+          const onMyTeam = myPlayerIds.includes(pid);
+          return (
+            <View style={styles.playerCard}>
+              <View style={styles.playerAvatar}>
+                <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
+              </View>
+              <View style={styles.playerInfo}>
+                <Text style={styles.playerName}>{item.full_name || item.name}</Text>
+                <Text style={styles.playerMeta}>
+                  {[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.team || item.team_abbr].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
+              {activeTab === 'my_team' ? (
+                <TouchableOpacity style={styles.dropBtn} onPress={() => handleDropPlayer(item)}>
+                  <Text style={styles.dropBtnText}>Drop</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.addBtn, onMyTeam && styles.addBtnDisabled]}
+                  onPress={() => handleAddPlayer(item)}
+                  disabled={onMyTeam}
+                >
+                  <Text style={[styles.addBtnText, onMyTeam && styles.addBtnTextDisabled]}>
+                    {onMyTeam ? 'On Team' : '+ Add'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        }}
       />
+      <GlobalNav />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { color: '#888', fontSize: 14 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
-  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
-  headerCount: { fontSize: 13, color: '#555' },
-  searchContainer: { paddingHorizontal: 20, marginBottom: 12 },
-  searchInput: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a' },
-  filterScroll: { maxHeight: 44, marginBottom: 12 },
-  filterRow: { paddingHorizontal: 20, gap: 8 },
-  filterChip: { backgroundColor: '#1a1a1a', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#2a2a2a' },
-  filterChipActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
-  filterChipText: { color: '#888', fontSize: 13, fontWeight: '600' },
-  filterChipTextActive: { color: '#00ff87' },
-  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  playerCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  playerCardOwned: { borderColor: '#005533', backgroundColor: '#0a1a0f' },
-  playerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
-  photoContainer: { position: 'relative' },
-  playerPhoto: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#2a2a2a' },
-  legendBadge: { position: 'absolute', bottom: -4, left: 0, right: 0, backgroundColor: '#FFD700', borderRadius: 4, alignItems: 'center' },
-  legendBadgeText: { fontSize: 8, fontWeight: '800', color: '#000', letterSpacing: 0.5 },
-  playerInfo: { flex: 1 },
-  playerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  playerName: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
-  ownedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#00ff87' },
-  playerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  posBadge: { backgroundColor: '#2a2a2a', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  posBadgeText: { color: '#aaa', fontSize: 11, fontWeight: '700' },
-  playerTeam: { color: '#666', fontSize: 13 },
-  playerStats: { color: '#555', fontSize: 12 },
-  injuryBadge: { backgroundColor: '#2a0a0a', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginTop: 3 },
-  injuryText: { color: '#ff6666', fontSize: 11, fontWeight: '600' },
-  playerActions: { marginLeft: 8 },
-  addBtn: { backgroundColor: '#00ff87', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
-  tradeBlockBtn: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#333' },
-  tradeBlockBtnActive: { borderColor: '#ff9900', backgroundColor: '#1a1200' },
-  tradeBlockBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
-  tradeBlockBtnTextActive: { color: '#ff9900' },
+  loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
+  title: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
+  tabActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
+  tabText: { color: '#666', fontSize: 14, fontWeight: '600' },
+  tabTextActive: { color: '#00ff87' },
+  searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 10 },
+  posFilters: { flexDirection: 'row', paddingHorizontal: 20, gap: 6, marginBottom: 10, flexWrap: 'wrap' },
+  posBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
+  posBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
+  posBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
+  posBtnTextActive: { color: '#00ff87' },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },
+  playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
+  playerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  playerAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
+  playerInfo: { flex: 1 },
+  playerName: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  playerMeta: { color: '#666', fontSize: 12 },
+  addBtn: { backgroundColor: '#00ff87', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  addBtnDisabled: { backgroundColor: '#1a2a1a', borderWidth: 1, borderColor: '#2a4a2a' },
+  addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
+  addBtnTextDisabled: { color: '#4a8a4a' },
+  dropBtn: { backgroundColor: '#2a0a0a', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#ff3333' },
+  dropBtnText: { color: '#ff3333', fontSize: 13, fontWeight: '700' },
 });

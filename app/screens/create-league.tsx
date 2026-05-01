@@ -14,15 +14,21 @@ const NBA_ERAS = [
   { label: 'Magic vs Bird Era', value: 'magic_bird', desc: '1983-84 · Showtime Lakers vs Celtics rivalry', icon: '✨' },
 ];
 
+const TEAM_MODES = [
+  { label: 'Current Rosters', value: 'current', desc: 'Each GM picks from current teams', icon: '🏆' },
+  { label: 'Randomize Teams', value: 'random', desc: 'Teams randomly assigned to GMs', icon: '🎲' },
+  { label: 'Fantasy Draft', value: 'draft', desc: 'GMs draft players from scratch', icon: '🎯' },
+];
+
 const MADDEN_MODES = [
   { label: 'Current Rosters', value: 'current', desc: 'Start with current NFL rosters', icon: '📅' },
-  { label: 'Weekly NFL Roster', value: 'weekly', desc: 'Pick a specific week in the current season', icon: '📆' },
+  { label: 'Randomize Teams', value: 'random', desc: 'Teams randomly assigned to GMs', icon: '🎲' },
   { label: 'Fantasy Draft', value: 'draft', desc: 'Draft players from scratch before the season', icon: '🎯' },
 ];
 
 const MLB_MODES = [
   { label: 'Current Rosters', value: 'current', desc: 'Start with todays MLB rosters', icon: '📅' },
-  { label: 'Custom Roster', value: 'custom', desc: 'Use a community or custom roster from the Vault', icon: '🛠️' },
+  { label: 'Randomize Teams', value: 'random', desc: 'Teams randomly assigned to GMs', icon: '🎲' },
   { label: 'Fantasy Draft', value: 'draft', desc: 'Draft players from scratch before the season', icon: '🎯' },
 ];
 
@@ -32,6 +38,7 @@ export default function CreateLeagueScreen() {
   const [sport, setSport] = useState('');
   const [mode, setMode] = useState('');
   const [era, setEra] = useState('');
+  const [teamMode, setTeamMode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const sports = [
@@ -40,38 +47,30 @@ export default function CreateLeagueScreen() {
     { label: 'MLB The Show', value: 'mlb', emoji: '⚾' },
   ];
 
+  // NBA has 4 steps: Name+Sport -> Era -> Team Mode -> Review
+  // Others have 3 steps: Name+Sport -> Mode -> Review
+  const totalSteps = sport === 'nba' ? 4 : 3;
+
   const getModeOptions = () => {
-    if (sport === 'nba') return NBA_ERAS;
     if (sport === 'madden') return MADDEN_MODES;
     if (sport === 'mlb') return MLB_MODES;
     return [];
   };
 
-  const getStep2Title = () => {
-    if (sport === 'nba') return 'Choose Your Era';
-    return 'League Mode';
-  };
-
-  const getStep2Subtitle = () => {
-    if (sport === 'nba') return 'Which era of NBA history will your league be set in?';
-    return 'How will teams be assigned?';
-  };
-
   const handleCreate = async () => {
     const user = auth.currentUser;
-    if (!user) {
-      router.replace('/(tabs)/auth?mode=signin');
-      return;
-    }
+    if (!user) { router.replace('/(tabs)/auth?mode=signin'); return; }
     setLoading(true);
     try {
       const leagueId = doc(collection(db, 'leagues')).id;
+      const finalMode = sport === 'nba' ? teamMode : mode;
+      const finalEra = sport === 'nba' ? era : null;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
         sport,
-        mode: mode || era,
-        era: sport === 'nba' ? era : null,
+        mode: finalMode,
+        era: finalEra,
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],
@@ -84,30 +83,46 @@ export default function CreateLeagueScreen() {
         leagues: arrayUnion(leagueId),
       });
 
-      router.push({ pathname: '/screens/league', params: { leagueId } });
+      router.push({ pathname: '/screens/team-select', params: { leagueId, sport, era: finalEra || '', mode: finalMode } });
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
     setLoading(false);
   };
 
-  const selectedMode = getModeOptions().find(m => m.value === (sport === 'nba' ? era : mode));
+  const getSummaryMode = () => {
+    if (sport === 'nba') {
+      const e = NBA_ERAS.find(x => x.value === era);
+      const t = TEAM_MODES.find(x => x.value === teamMode);
+      return (e ? e.label : '') + (t ? ' · ' + t.label : '');
+    }
+    const m = getModeOptions().find(x => x.value === mode);
+    return m ? m.label : '';
+  };
+
+  const canAdvanceStep2 = sport === 'nba' ? !!era : !!mode;
+  const canAdvanceStep3 = sport === 'nba' ? !!teamMode : true;
 
   const StepDots = () => (
     <View style={styles.stepIndicator}>
-      {[1, 2, 3].map((s, i) => (
-        <View key={s} style={{ flexDirection: 'row', alignItems: 'center', flex: i < 2 ? 1 : 0 }}>
+      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s, i) => (
+        <View key={s} style={{ flexDirection: 'row', alignItems: 'center', flex: i < totalSteps - 1 ? 1 : 0 }}>
           <View style={[styles.stepDot, step === s && styles.stepDotActive, step > s && styles.stepDotDone]} />
-          {i < 2 && <View style={[styles.stepLine, step > s && styles.stepLineDone]} />}
+          {i < totalSteps - 1 && <View style={[styles.stepLine, step > s && styles.stepLineDone]} />}
         </View>
       ))}
     </View>
   );
 
+  const handleBack = () => {
+    if (step === 1) router.back();
+    else setStep(step - 1);
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.inner}>
-        <TouchableOpacity onPress={() => step === 1 ? router.back() : setStep(step - 1)} style={styles.topBack}>
+        <TouchableOpacity onPress={handleBack} style={styles.topBack}>
           <Text style={styles.topBackText}>← Back</Text>
         </TouchableOpacity>
 
@@ -120,8 +135,8 @@ export default function CreateLeagueScreen() {
             <Text style={styles.label}>League Name</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Friday Night Association"
-              placeholderTextColor="#555"
+              placeholder='e.g. Friday Night Association'
+              placeholderTextColor='#555'
               value={leagueName}
               onChangeText={setLeagueName}
               autoFocus
@@ -132,7 +147,7 @@ export default function CreateLeagueScreen() {
                 <TouchableOpacity
                   key={s.value}
                   style={[styles.sportCard, sport === s.value && styles.sportCardActive]}
-                  onPress={() => { setSport(s.value); setMode(''); setEra(''); }}
+                  onPress={() => { setSport(s.value); setMode(''); setEra(''); setTeamMode(''); }}
                 >
                   <Text style={styles.sportCardEmoji}>{s.emoji}</Text>
                   <Text style={[styles.sportCardLabel, sport === s.value && styles.sportCardLabelActive]}>{s.label}</Text>
@@ -149,44 +164,109 @@ export default function CreateLeagueScreen() {
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && sport === 'nba' && (
           <>
-            <Text style={styles.title}>{getStep2Title()}</Text>
-            <Text style={styles.subtitle}>{getStep2Subtitle()}</Text>
+            <Text style={styles.title}>Choose Your Era</Text>
+            <Text style={styles.subtitle}>Which era of NBA history will your league be set in?</Text>
             <View style={styles.optionList}>
-              {getModeOptions().map(m => {
-                const selected = sport === 'nba' ? era === m.value : mode === m.value;
-                return (
-                  <TouchableOpacity
-                    key={m.value}
-                    style={[styles.modeCard, selected && styles.modeCardActive]}
-                    onPress={() => sport === 'nba' ? setEra(m.value) : setMode(m.value)}
-                  >
-                    <View style={styles.modeCardInner}>
-                      <Text style={styles.modeCardEmoji}>{m.icon}</Text>
-                      <View style={[styles.modeRadio, selected && styles.modeRadioActive]}>
-                        {selected && <View style={styles.modeRadioDot} />}
-                      </View>
-                      <View style={styles.modeCardText}>
-                        <Text style={[styles.modeCardTitle, selected && styles.modeCardTitleActive]}>{m.label}</Text>
-                        <Text style={styles.modeCardDesc}>{m.desc}</Text>
-                      </View>
+              {NBA_ERAS.map(m => (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.modeCard, era === m.value && styles.modeCardActive]}
+                  onPress={() => setEra(m.value)}
+                >
+                  <View style={styles.modeCardInner}>
+                    <Text style={styles.modeCardEmoji}>{m.icon}</Text>
+                    <View style={[styles.modeRadio, era === m.value && styles.modeRadioActive]}>
+                      {era === m.value && <View style={styles.modeRadioDot} />}
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
+                    <View style={styles.modeCardText}>
+                      <Text style={[styles.modeCardTitle, era === m.value && styles.modeCardTitleActive]}>{m.label}</Text>
+                      <Text style={styles.modeCardDesc}>{m.desc}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
             </View>
             <TouchableOpacity
-              style={[styles.primaryButton, !(sport === 'nba' ? era : mode) && styles.primaryButtonDisabled]}
+              style={[styles.primaryButton, !era && styles.primaryButtonDisabled]}
               onPress={() => setStep(3)}
-              disabled={!(sport === 'nba' ? era : mode)}
+              disabled={!era}
             >
               <Text style={styles.primaryButtonText}>Next</Text>
             </TouchableOpacity>
           </>
         )}
 
-        {step === 3 && (
+        {step === 2 && sport !== 'nba' && (
+          <>
+            <Text style={styles.title}>League Mode</Text>
+            <Text style={styles.subtitle}>How will teams be set up?</Text>
+            <View style={styles.optionList}>
+              {getModeOptions().map(m => (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.modeCard, mode === m.value && styles.modeCardActive]}
+                  onPress={() => setMode(m.value)}
+                >
+                  <View style={styles.modeCardInner}>
+                    <Text style={styles.modeCardEmoji}>{m.icon}</Text>
+                    <View style={[styles.modeRadio, mode === m.value && styles.modeRadioActive]}>
+                      {mode === m.value && <View style={styles.modeRadioDot} />}
+                    </View>
+                    <View style={styles.modeCardText}>
+                      <Text style={[styles.modeCardTitle, mode === m.value && styles.modeCardTitleActive]}>{m.label}</Text>
+                      <Text style={styles.modeCardDesc}>{m.desc}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryButton, !mode && styles.primaryButtonDisabled]}
+              onPress={() => setStep(3)}
+              disabled={!mode}
+            >
+              <Text style={styles.primaryButtonText}>Next</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {step === 3 && sport === 'nba' && (
+          <>
+            <Text style={styles.title}>Team Assignment</Text>
+            <Text style={styles.subtitle}>How will teams be assigned to GMs?</Text>
+            <View style={styles.optionList}>
+              {TEAM_MODES.map(m => (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.modeCard, teamMode === m.value && styles.modeCardActive]}
+                  onPress={() => setTeamMode(m.value)}
+                >
+                  <View style={styles.modeCardInner}>
+                    <Text style={styles.modeCardEmoji}>{m.icon}</Text>
+                    <View style={[styles.modeRadio, teamMode === m.value && styles.modeRadioActive]}>
+                      {teamMode === m.value && <View style={styles.modeRadioDot} />}
+                    </View>
+                    <View style={styles.modeCardText}>
+                      <Text style={[styles.modeCardTitle, teamMode === m.value && styles.modeCardTitleActive]}>{m.label}</Text>
+                      <Text style={styles.modeCardDesc}>{m.desc}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryButton, !teamMode && styles.primaryButtonDisabled]}
+              onPress={() => setStep(4)}
+              disabled={!teamMode}
+            >
+              <Text style={styles.primaryButtonText}>Next</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {((step === 3 && sport !== 'nba') || (step === 4 && sport === 'nba')) && (
           <>
             <Text style={styles.title}>Review & Create</Text>
             <Text style={styles.subtitle}>Everything look good?</Text>
@@ -201,29 +281,26 @@ export default function CreateLeagueScreen() {
                 <Text style={styles.summaryValue}>{sports.find(s => s.value === sport)?.label}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{sport === 'nba' ? 'Era' : 'Mode'}</Text>
-                <Text style={styles.summaryValue}>{selectedMode?.label}</Text>
+                <Text style={styles.summaryLabel}>Setup</Text>
+                <Text style={styles.summaryValue}>{getSummaryMode()}</Text>
               </View>
             </View>
             <View style={styles.infoCard}>
-              <Text style={styles.infoText}>
-                Once created you'll go straight to your league. Invite friends from the league screen.
-              </Text>
+              <Text style={styles.infoText}>Once created you will go straight to your league. Invite friends from the league screen.</Text>
             </View>
             <TouchableOpacity
               style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
               onPress={handleCreate}
               disabled={loading}
             >
-              {loading
-                ? <ActivityIndicator color="#000" />
-                : <Text style={styles.primaryButtonText}>Create League</Text>
-              }
+              {loading ? <ActivityIndicator color='#000' /> : <Text style={styles.primaryButtonText}>Create League</Text>}
             </TouchableOpacity>
           </>
         )}
+
+        <View style={{ height: 100 }} />
       </View>
-          <GlobalNav />
+      <GlobalNav />
     </ScrollView>
   );
 }

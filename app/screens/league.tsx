@@ -242,31 +242,66 @@ export default function LeagueScreen() {
           <Text style={styles.channelsTabChevron}>›</Text>
         </TouchableOpacity>
 
-        {/* Secondary Actions */}
-        <View style={styles.actionRow}>
+        {/* My Team or Pick Team */}
+        {myTeam ? (
+          <View style={styles.myTeamCard}>
+            <View style={styles.myTeamCardHeader}>
+              <View>
+                <Text style={styles.myTeamCardLabel}>My Team</Text>
+                <Text style={styles.myTeamCardName}>{myTeam.name}</Text>
+                <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.rosterBtn}
+                onPress={() => router.push({
+                  pathname: '/screens/roster',
+                  params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '' },
+                })}
+              >
+                <Text style={styles.rosterBtnText}>View Roster</Text>
+              </TouchableOpacity>
+            </View>
+            {myTeam.players?.length > 0 && (
+              <View style={styles.myTeamPlayers}>
+                {myTeam.players.slice(0, 3).map((p: any) => (
+                  <View key={p.player_id} style={styles.myTeamPlayerRow}>
+                    <Text style={styles.myTeamPlayerPos}>{p.position}</Text>
+                    <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
+                    <Text style={styles.myTeamPlayerJersey}>#{p.jersey_number}</Text>
+                  </View>
+                ))}
+                {myTeam.players.length > 3 && (
+                  <Text style={styles.myTeamMorePlayers}>+{myTeam.players.length - 3} more players</Text>
+                )}
+              </View>
+            )}
+          </View>
+        ) : (
           <TouchableOpacity
-            style={styles.rosterBtn}
+            style={styles.pickTeamBtn}
             onPress={() => router.push({
-              pathname: '/screens/roster',
-              params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam?.id || '' },
+              pathname: '/screens/team-select',
+              params: { leagueId, sport: league.sport, era: league.era || '', mode: league.mode },
             })}
           >
-            <Text style={styles.rosterBtnText}>Browse Roster</Text>
-          </TouchableOpacity>
-          {isCommissioner && (
-            <TouchableOpacity
-              style={styles.inviteBtn}
-              onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
-            >
-              <Text style={styles.inviteBtnText}>+ Invite</Text>
-            </TouchableOpacity>
-          )}
-          {myTeam && (
-            <View style={styles.myTeamChip}>
-              <Text style={styles.myTeamChipText}>📋 {myTeam.name || 'My Team'}</Text>
+            <Text style={styles.pickTeamBtnIcon}>🏆</Text>
+            <View>
+              <Text style={styles.pickTeamBtnText}>Pick Your Team</Text>
+              <Text style={styles.pickTeamBtnSub}>Choose your team to get started</Text>
             </View>
-          )}
-        </View>
+            <Text style={styles.pickTeamChevron}>›</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Invite */}
+        {isCommissioner && (
+          <TouchableOpacity
+            style={styles.inviteBtn}
+            onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+          >
+            <Text style={styles.inviteBtnText}>+ Invite Friends</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Activity Feed */}
         <Text style={styles.sectionTitle}>League Activity</Text>
@@ -372,6 +407,22 @@ const styles = StyleSheet.create({
   channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
   channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
+  myTeamCard: { backgroundColor: '#0a1a0a', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a1a' },
+  myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  myTeamCardLabel: { fontSize: 11, color: '#4a8a4a', fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  myTeamCardName: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 2 },
+  myTeamCardSub: { fontSize: 12, color: '#4a8a4a' },
+  myTeamPlayers: { gap: 8 },
+  myTeamPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  myTeamPlayerPos: { color: '#00ff87', fontSize: 11, fontWeight: '700', width: 28 },
+  myTeamPlayerName: { color: '#cccccc', fontSize: 13, flex: 1 },
+  myTeamPlayerJersey: { color: '#555', fontSize: 12 },
+  myTeamMorePlayers: { color: '#555', fontSize: 12, marginTop: 4 },
+  pickTeamBtn: { backgroundColor: '#0a1a0a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a1a', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pickTeamBtnIcon: { fontSize: 28 },
+  pickTeamBtnText: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
+  pickTeamBtnSub: { color: '#4a8a4a', fontSize: 12 },
+  pickTeamChevron: { color: '#4a8a4a', fontSize: 24, marginLeft: 'auto' },
   rosterBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 18 },
   rosterBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
   inviteBtn: { backgroundColor: '#1a1a2a', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: '#4444ff' },
