@@ -3,27 +3,11 @@ import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSna
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 
 
-const ERA_YEAR: Record<string, number> = {
-  magic_bird: 1984, jordan: 1992, kobe: 2003, lebron: 2011, steph: 2017, current: 0,
-};
-
-const getTeamLogoUrl = (abbr: string, era?: string) => {
-  if (!abbr) return null;
-  const eraYear = era ? ERA_YEAR[era] : 0;
-  if (eraYear && eraYear < 2010) {
-    const slugMap: Record<string, string> = {
-      SEA: 'seattle-supersonics', NJN: 'new-jersey-nets', WAS: 'washington-bullets',
-      NOK: 'new-orleans-hornets', NOH: 'new-orleans-hornets', KCK: 'sacramento-kings',
-    };
-    const slug = slugMap[abbr] || abbr.toLowerCase();
-    if (slugMap[abbr]) return 'https://i.logocdn.com/nba/' + eraYear + '/' + slugMap[abbr] + '@3x.png';
-  }
-  return 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/' + abbr.toLowerCase() + '.png';
-};
 
 const SPORT_KEY: Record<string, string> = {
   nba: 'nba',
@@ -54,6 +38,11 @@ export default function LeagueScreen() {
 
   const user = auth.currentUser;
   const isCommissioner = league?.commissionerId === user?.uid;
+  const currentYear = league?.currentYear || 2024;
+  const teamAbbr = myTeam?.abbreviation || '';
+  const teamColors = getTeamColors(teamAbbr || 'ATL', currentYear);
+  const teamPrimary = teamColors[0];
+  const teamSecondary = teamColors[1];
 
   useEffect(() => {
     if (!leagueId) return;
@@ -192,13 +181,13 @@ export default function LeagueScreen() {
       <View style={styles.inner}>
 
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: teamAbbr ? teamPrimary + '22' : '#0a0a0a', borderBottomColor: teamAbbr ? teamPrimary + '44' : '#1a1a1a' }]}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={[styles.backText, { color: teamPrimary || '#00ff87' }]}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (
-            <View style={styles.commBadge}>
-              <Text style={styles.commBadgeText}>Commissioner</Text>
+            <View style={[styles.commBadge, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}>
+              <Text style={[styles.commBadgeText, { color: teamPrimary }]}>Commissioner</Text>
             </View>
           )}
         </View>
@@ -211,17 +200,23 @@ export default function LeagueScreen() {
               resizeMode='contain'
             />
           )}
-          <Text style={styles.leagueName}>{league.name}</Text>
+          <Text style={[styles.leagueName, teamAbbr && { color: '#ffffff' }]}>{league.name}</Text>
         </View>
         <View style={styles.leagueMeta}>
           <View style={styles.sportChip}>
             <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
           </View>
           <Text style={styles.metaText}>{league.mode} mode</Text>
+          <TouchableOpacity
+            style={[styles.findGMsBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+            onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+          >
+            <Text style={[styles.findGMsBtnText, { color: teamPrimary }]}>👥 Find GMs</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Channels — front and center */}
-        <TouchableOpacity style={styles.channelsTab} onPress={goToChannels}>
+        <TouchableOpacity style={[styles.channelsTab, { borderColor: teamPrimary + '44', backgroundColor: teamPrimary + '11' }]} onPress={goToChannels}>
           <View style={styles.channelsTabLeft}>
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
             <View>
@@ -234,15 +229,15 @@ export default function LeagueScreen() {
 
         {/* My Team or Pick Team */}
         {myTeam ? (
-          <View style={styles.myTeamCard}>
+          <View style={[styles.myTeamCard, { borderColor: teamPrimary + "88", backgroundColor: teamPrimary + "11" }]}>
             <View style={styles.myTeamCardHeader}>
               <View>
-                <Text style={styles.myTeamCardLabel}>My Team</Text>
-                <Text style={styles.myTeamCardName}>{myTeam.name}</Text>
+                <Text style={[styles.myTeamCardLabel, { color: teamPrimary }]}>My Team</Text>
+                <Text style={[styles.myTeamCardName, { color: teamSecondary }]}>{myTeam.name}</Text>
                 <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
               </View>
               <TouchableOpacity
-                style={styles.rosterBtn}
+                style={[styles.rosterBtn, { backgroundColor: teamPrimary }]}
                 onPress={() => router.push({
                   pathname: '/screens/roster',
                   params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
@@ -255,7 +250,7 @@ export default function LeagueScreen() {
               <View style={styles.myTeamPlayers}>
                 {myTeam.players.slice(0, 3).map((p: any) => (
                   <View key={p.player_id} style={styles.myTeamPlayerRow}>
-                    <Text style={styles.myTeamPlayerPos}>{p.position}</Text>
+                    <Text style={[styles.myTeamPlayerPos, { color: teamPrimary }]}>{p.position}</Text>
                     <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
                     <Text style={styles.myTeamPlayerJersey}>#{p.jersey_number}</Text>
                   </View>
@@ -280,16 +275,6 @@ export default function LeagueScreen() {
               <Text style={styles.pickTeamBtnSub}>Choose your team to get started</Text>
             </View>
             <Text style={styles.pickTeamChevron}>›</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Invite */}
-        {isCommissioner && (
-          <TouchableOpacity
-            style={styles.inviteBtn}
-            onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
-          >
-            <Text style={styles.inviteBtnText}>+ Invite Friends</Text>
           </TouchableOpacity>
         )}
 
@@ -331,7 +316,7 @@ export default function LeagueScreen() {
               onLongPress={() => handleMemberLongPress(member)}
               activeOpacity={0.7}
             >
-              <View style={styles.memberAvatar}>
+              <View style={[styles.memberAvatar, { borderColor: teamPrimary + '88' }]}>
                 <Text style={styles.memberAvatarText}>
                   {member.displayName?.[0]?.toUpperCase() || '?'}
                 </Text>
@@ -359,10 +344,10 @@ export default function LeagueScreen() {
           <View style={styles.commSection}>
             <Text style={styles.sectionTitle}>Commissioner Controls</Text>
             <TouchableOpacity
-              style={styles.advanceSeasonBtn}
+              style={[styles.advanceSeasonBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
             >
-              <Text style={styles.advanceSeasonBtnText}>⏩ Advance Season</Text>
+              <Text style={[styles.advanceSeasonBtnText, { color: teamPrimary }]}>⏩ Advance Season</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.deleteBtn, { marginTop: 10 }]} onPress={confirmDelete}>
               <Text style={styles.deleteBtnText}>Delete League</Text>
@@ -388,13 +373,13 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
   inner: { padding: 24, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
+  backText: { fontSize: 15, fontWeight: '600' },
   commBadge: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#00ff87' },
   commBadgeText: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
   leagueNameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   leagueNameLogo: { width: 40, height: 40 },
   leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff' },
-  leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
+  leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },
   metaText: { color: '#666', fontSize: 13 },
@@ -405,9 +390,9 @@ const styles = StyleSheet.create({
   channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
   channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  myTeamCard: { backgroundColor: '#0a1a0a', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a1a' },
+  myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
   myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  myTeamCardLabel: { fontSize: 11, color: '#4a8a4a', fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  myTeamCardLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
   myTeamCardName: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 2 },
   myTeamCardSub: { fontSize: 12, color: '#4a8a4a' },
   myTeamPlayers: { gap: 8 },
@@ -423,7 +408,9 @@ const styles = StyleSheet.create({
   pickTeamChevron: { color: '#4a8a4a', fontSize: 24, marginLeft: 'auto' },
   rosterBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 18 },
   rosterBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
-  inviteBtn: { backgroundColor: '#1a1a2a', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: '#4444ff' },
+  inviteBtn: { display: 'none' },
+  findGMsBtn: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center', borderWidth: 1, marginLeft: 'auto' },
+  findGMsBtnText: { fontSize: 12, fontWeight: '700' },
   inviteBtnText: { color: '#8888ff', fontSize: 14, fontWeight: '700' },
   myTeamChip: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#2a2a2a', flex: 1 },
   myTeamChipText: { color: '#888', fontSize: 13 },

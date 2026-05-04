@@ -13,14 +13,18 @@ export default function ProfileSetupScreen() {
   const [gamerTag, setGamerTag] = useState('');
   const [bio, setBio] = useState('');
   const [console_, setConsole] = useState('');
-  const [favSport, setFavSport] = useState('');
+  const [favSports, setFavSports] = useState<string[]>([]);
   const [plan, setPlan] = useState('trial');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const genders = ['Male', 'Female', 'Other'];
   const consoles = ['PS5', 'Xbox', 'PC'];
-  const sports = ['NBA 2K', 'Madden', 'MLB The Show'];
+  const sports = [
+    'NBA 2K', 'Madden NFL', 'MLB The Show', 'EA FC (FIFA)',
+    'NHL', 'UFC', 'WWE 2K', 'F1', 'College Football',
+    'Rocket League', 'Tony Hawk', 'Golf PGA Tour',
+  ];
 
   const handleSave = async () => {
     if (!displayName.trim() || !username.trim()) {
@@ -113,10 +117,18 @@ export default function ProfileSetupScreen() {
         </View>
 
         <Text style={styles.label}>Favorite Sport</Text>
-        <View style={styles.sportColumn}>
+        <Text style={styles.multiSelectHint}>Select all that apply</Text>
+        <View style={styles.sportGrid}>
           {sports.map((s) => (
-            <TouchableOpacity key={s} style={[styles.sportButton, favSport === s && styles.sportButtonActive]} onPress={() => setFavSport(s)}>
-              <Text style={[styles.sportText, favSport === s && styles.sportTextActive]}>{s}</Text>
+            <TouchableOpacity
+              key={s}
+              style={[styles.sportButton, favSports.includes(s) && styles.sportButtonActive]}
+              onPress={() => setFavSports(prev =>
+                prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+              )}
+            >
+              <Text style={[styles.sportText, favSports.includes(s) && styles.sportTextActive]}>{s}</Text>
+              {favSports.includes(s) && <Text style={styles.sportCheck}>✓</Text>}
             </TouchableOpacity>
           ))}
         </View>
@@ -170,10 +182,12 @@ const styles = StyleSheet.create({
   optionButtonActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
   optionText: { color: '#888888', fontSize: 14, fontWeight: '500' },
   optionTextActive: { color: '#00ff87' },
-  sportColumn: { flexDirection: 'column', gap: 10, marginBottom: 24 },
-  sportButton: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#2a2a2a' },
+  sportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
+  multiSelectHint: { color: '#666', fontSize: 12, marginBottom: 8 },
+  sportButton: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 6 },
   sportButtonActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
-  sportText: { color: '#888888', fontSize: 15, fontWeight: '500' },
+  sportText: { color: '#888888', fontSize: 13, fontWeight: '500' },
+  sportCheck: { color: '#00ff87', fontSize: 12, fontWeight: '700' },
   sportTextActive: { color: '#00ff87' },
   planCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#2a2a2a' },
   planCardActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },

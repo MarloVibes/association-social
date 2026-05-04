@@ -4,6 +4,7 @@ import { useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import PlayerCard from '@/components/PlayerCard';
 
 const POSITIONS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'];
 
@@ -23,6 +24,7 @@ export default function RosterScreen() {
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
@@ -229,7 +231,7 @@ export default function RosterScreen() {
         renderItem={({ item }) => {
           const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
           return (
-            <View style={styles.playerCard}>
+            <TouchableOpacity style={styles.playerCard} onPress={() => setSelectedPlayer(item)} activeOpacity={0.7}>
               <View style={styles.playerAvatar}>
                 <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
               </View>
@@ -247,17 +249,25 @@ export default function RosterScreen() {
                 </View>
               </View>
               {activeTab === 'my_team' ? (
-                <TouchableOpacity style={styles.dropBtn} onPress={() => handleDropPlayer(item)}>
+                <TouchableOpacity style={styles.dropBtn} onPress={(e) => { e.stopPropagation?.(); handleDropPlayer(item); }}>
                   <Text style={styles.dropBtnText}>Drop</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.addBtn} onPress={() => handleAddPlayer(item)}>
+                <TouchableOpacity style={styles.addBtn} onPress={(e) => { e.stopPropagation?.(); handleAddPlayer(item); }}>
                   <Text style={styles.addBtnText}>+ Add</Text>
                 </TouchableOpacity>
               )}
-            </View>
+            </TouchableOpacity>
           );
         }}
+      />
+      <PlayerCard
+        player={selectedPlayer}
+        era={eraKey}
+        leagueId={leagueId}
+        teamId={teamId}
+        visible={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
       />
       <GlobalNav />
     </View>

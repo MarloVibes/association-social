@@ -13,6 +13,7 @@ export default function SearchUsersScreen() {
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friends, setFriends] = useState<string[]>([]);
   const [blocked, setBlocked] = useState<string[]>([]);
+  const [gmLeagues, setGmLeagues] = useState<Record<string, any[]>>({});
 
   const user = auth.currentUser;
 
@@ -31,7 +32,6 @@ export default function SearchUsersScreen() {
         .map(d => ({ uid: d.id, ...d.data() }))
         .filter((u: any) => u.uid !== user?.uid);
       setResults(users);
-
       if (user) {
         const myDoc = await getDoc(doc(db, 'users', user.uid));
         if (myDoc.exists()) {
@@ -54,6 +54,20 @@ export default function SearchUsersScreen() {
     } catch (e) { console.error(e); }
   };
 
+  const loadGMLeagues = async (uid: string) => {
+    if (gmLeagues[uid] !== undefined) {
+      // Toggle off if already loaded
+      setGmLeagues(prev => { const n = { ...prev }; delete n[uid]; return n; });
+      return;
+    }
+    try {
+      const q = query(collection(db, 'leagues'), where('commissionerId', '==', uid));
+      const snap = await getDocs(q);
+      const leagues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setGmLeagues(prev => ({ ...prev, [uid]: leagues }));
+    } catch (e) { console.error(e); }
+  };
+
   const getButtonState = (uid: string) => {
     if (blocked.includes(uid)) return 'blocked';
     if (friends.includes(uid)) return 'friends';
@@ -70,7 +84,8 @@ export default function SearchUsersScreen() {
           setBlocked(prev => [...prev, item.uid]);
           setResults(prev => prev.filter(u => u.uid !== item.uid));
         })}
-        activeOpacity={1}
+        onPress={() => router.push({ pathname: '/screens/profile', params: { uid: item.uid } })}
+        activeOpacity={0.8}
       >
         <View style={styles.userCard}>
           <View style={styles.userAvatar}>
@@ -81,16 +96,46 @@ export default function SearchUsersScreen() {
             <Text style={styles.userUsername}>@{item.username}</Text>
             {item.gamerTag && <Text style={styles.userGamerTag}>{item.gamerTag}</Text>}
           </View>
-          {state === 'friends' ? (
-            <View style={styles.friendsBadge}><Text style={styles.friendsBadgeText}>Friends</Text></View>
-          ) : state === 'sent' ? (
-            <View style={styles.sentBadge}><Text style={styles.sentBadgeText}>Sent</Text></View>
-          ) : (
-            <TouchableOpacity style={styles.addBtn} onPress={() => sendFriendRequest(item.uid)}>
-              <Text style={styles.addBtnText}>+ Add</Text>
+          <View style={styles.actionBtns}>
+            {state === 'friends' ? (
+              <View style={styles.friendsBadge}><Text style={styles.friendsBadgeText}>Friends</Text></View>
+            ) : state === 'sent' ? (
+              <View style={styles.sentBadge}><Text style={styles.sentBadgeText}>Sent</Text></View>
+            ) : (
+              <TouchableOpacity style={styles.addBtn} onPress={(e) => { e.stopPropagation?.(); sendFriendRequest(item.uid); }}>
+                <Text style={styles.addBtnText}>+ Add</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.leaguesBtn}
+              onPress={(e) => { e.stopPropagation?.(); loadGMLeagues(item.uid); }}
+            >
+              <Text style={styles.leaguesBtnText}>🏆 Leagues</Text>
             </TouchableOpacity>
-          )}
+          </View>
         </View>
+        {gmLeagues[item.uid] !== undefined && (
+          <View style={styles.leaguesDropdown}>
+            {gmLeagues[item.uid].length === 0 ? (
+              <Text style={styles.noLeaguesText}>No active leagues</Text>
+            ) : (
+              gmLeagues[item.uid].map((league: any) => (
+                <View key={league.id} style={styles.leagueRow}>
+                  <View style={styles.leagueRowInfo}>
+                    <Text style={styles.leagueRowName}>{league.name}</Text>
+                    <Text style={styles.leagueRowMeta}>{league.sport?.toUpperCase()} · {league.members?.length || 1} members</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.joinLeagueBtn}
+                    onPress={() => router.push({ pathname: '/screens/join-league', params: { leagueId: league.id, leagueName: league.name } })}
+                  >
+                    <Text style={styles.joinLeagueBtnText}>Join</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -101,67 +146,64 @@ export default function SearchUsersScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Find GMs</Text>
+        <Text style={styles.title}>Search GMs</Text>
         <View style={{ width: 60 }} />
       </View>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by username..."
-          placeholderTextColor="#555"
-          value={search}
-          onChangeText={handleSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus
-        />
-      </View>
-      {loading && <View style={styles.loadingContainer}><ActivityIndicator color="#00ff87" /></View>}
+      <TextInput
+        style={styles.searchInput}
+        placeholder='Search by username...'
+        placeholderTextColor='#555'
+        value={search}
+        onChangeText={handleSearch}
+        autoFocus
+      />
+      {loading && <ActivityIndicator color='#00ff87' style={{ marginTop: 20 }} />}
       <FlatList
         data={results}
         keyExtractor={item => item.uid}
         renderItem={renderUser}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          search.length >= 2 && !loading ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No GMs found for "{search}"</Text>
-            </View>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.hintText}>Long press any GM to block or report</Text>
-            </View>
-          )
+          !loading && search.length >= 2 ? (
+            <Text style={styles.emptyText}>No GMs found for '{search}'</Text>
+          ) : null
         }
       />
-          <GlobalNav />
+      <GlobalNav />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
-  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
-  title: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
-  searchContainer: { paddingHorizontal: 20, marginBottom: 16 },
-  searchInput: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a' },
-  loadingContainer: { padding: 20, alignItems: 'center' },
-  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a' },
-  userAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#2a2a2a', borderWidth: 2, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  userAvatarText: { color: '#00ff87', fontSize: 18, fontWeight: '700' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12 },
+  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
+  title: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
+  searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 8 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  emptyText: { color: '#555', fontSize: 14, textAlign: 'center', paddingTop: 40 },
+  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 4, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
+  userAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  userAvatarText: { color: '#00ff87', fontSize: 18, fontWeight: '800' },
   userInfo: { flex: 1 },
-  userName: { color: '#ffffff', fontSize: 15, fontWeight: '700', marginBottom: 2 },
-  userUsername: { color: '#666', fontSize: 13 },
-  userGamerTag: { color: '#555', fontSize: 12, marginTop: 2 },
-  addBtn: { backgroundColor: '#00ff87', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
-  friendsBadge: { backgroundColor: '#0a2a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#00ff87' },
-  friendsBadgeText: { color: '#00ff87', fontSize: 13, fontWeight: '600' },
-  sentBadge: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#555' },
-  sentBadgeText: { color: '#555', fontSize: 13, fontWeight: '600' },
-  emptyContainer: { alignItems: 'center', paddingTop: 40 },
-  emptyText: { color: '#555', fontSize: 15 },
-  hintText: { color: '#333', fontSize: 13 },
+  userName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  userUsername: { color: '#666', fontSize: 12, marginTop: 2 },
+  userGamerTag: { color: '#888', fontSize: 11, marginTop: 2 },
+  actionBtns: { flexDirection: 'column', gap: 6, alignItems: 'flex-end' },
+  addBtn: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#00ff87' },
+  addBtnText: { color: '#00ff87', fontSize: 12, fontWeight: '700' },
+  friendsBadge: { backgroundColor: '#1a2a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  friendsBadgeText: { color: '#00ff87', fontSize: 11, fontWeight: '600' },
+  sentBadge: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  sentBadgeText: { color: '#888', fontSize: 11, fontWeight: '600' },
+  leaguesBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
+  leaguesBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
+  leaguesDropdown: { backgroundColor: '#111', borderRadius: 12, marginHorizontal: 4, marginTop: -2, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: '#1a1a2a', gap: 10 },
+  noLeaguesText: { color: '#555', fontSize: 13, textAlign: 'center', paddingVertical: 4 },
+  leagueRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  leagueRowInfo: { flex: 1 },
+  leagueRowName: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  leagueRowMeta: { color: '#666', fontSize: 12 },
+  joinLeagueBtn: { backgroundColor: '#00ff87', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+  joinLeagueBtnText: { color: '#000', fontSize: 12, fontWeight: '800' },
 });

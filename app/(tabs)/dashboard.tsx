@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/fires
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import GlobalNav from '@/components/GlobalNav';
 
 const SPORT_LABELS: Record<string, string> = {

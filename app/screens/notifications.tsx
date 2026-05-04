@@ -1,107 +1,108 @@
 import { router } from 'expo-router';
-import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function NotificationsScreen() {
   const [invites, setInvites] = useState<any[]>([]);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<string | null>(null);
-
   const user = auth.currentUser;
 
-  useEffect(() => { loadInvites(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  const loadInvites = async () => {
+  const loadAll = async () => {
     if (!user) return;
     setLoading(true);
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
       if (snap.exists()) {
-        setInvites(snap.data().leagueInvites || []);
+        const data = snap.data();
+        setInvites(data.leagueInvites || []);
+        setNotifications((data.notifications || []).reverse());
       }
+      // Load join requests for leagues where user is commissioner
+      const leaguesSnap = await getDocs(query(collection(db, 'leagues'), where('commissionerId', '==', user.uid)));
+      const allRequests: any[] = [];
+      for (const leagueDoc of leaguesSnap.docs) {
+        const reqSnap = await getDocs(collection(db, 'leagues', leagueDoc.id, 'join_requests'));
+        reqSnap.docs.forEach(r => {
+          const data = r.data();
+          if (data.status === 'pending') {
+            allRequests.push({ id: r.id, leagueDocId: leagueDoc.id, ...data });
+          }
+        });
+      }
+      setJoinRequests(allRequests);
     } catch (e) { console.error(e); }
     setLoading(false);
   };
 
   const acceptInvite = async (invite: any) => {
     if (!user) return;
-    setActing(invite.leagueId);
     try {
-      // Add user to league members
       await updateDoc(doc(db, 'leagues', invite.leagueId), {
         members: arrayUnion(user.uid),
-        invites: arrayRemove(user.uid),
       });
-      // Add league to user's leagues
       await updateDoc(doc(db, 'users', user.uid), {
         leagues: arrayUnion(invite.leagueId),
-        leagueInvites: (await getDoc(doc(db, 'users', user.uid)))
-          .data()?.leagueInvites?.filter((i: any) => i.leagueId !== invite.leagueId) || [],
+        leagueInvites: (await getDoc(doc(db, 'users', user.uid))).data()?.leagueInvites?.filter((i: any) => i.leagueId !== invite.leagueId) || [],
       });
-      Alert.alert('Joined!', `Welcome to ${invite.leagueName}!`, [
-        { text: 'Go to League', onPress: () => router.push({ pathname: '/screens/league', params: { leagueId: invite.leagueId } }) },
-        { text: 'Stay Here', style: 'cancel' },
-      ]);
-      loadInvites();
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    }
-    setActing(null);
+      setInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
+      router.push({ pathname: '/screens/league', params: { leagueId: invite.leagueId } });
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
-  const declineInvite = async (invite: any) => {
+  const denyInvite = async (invite: any) => {
     if (!user) return;
-    setActing(invite.leagueId);
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
       const current = snap.data()?.leagueInvites || [];
       await updateDoc(doc(db, 'users', user.uid), {
         leagueInvites: current.filter((i: any) => i.leagueId !== invite.leagueId),
       });
-      // Remove from league invites list
-      await updateDoc(doc(db, 'leagues', invite.leagueId), {
-        invites: arrayRemove(user.uid),
-      });
-      loadInvites();
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    }
-    setActing(null);
+      setInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
-  const renderInvite = ({ item }: { item: any }) => {
-    const isActing = acting === item.leagueId;
-    return (
-      <View style={styles.inviteCard}>
-        <View style={styles.inviteIcon}>
-          <Text style={styles.inviteIconText}>🏆</Text>
-        </View>
-        <View style={styles.inviteInfo}>
-          <Text style={styles.inviteTitle}>League Invite</Text>
-          <Text style={styles.inviteLeague}>{item.leagueName}</Text>
-          <Text style={styles.inviteMeta}>
-            Invited {new Date(item.invitedAt).toLocaleDateString()}
-          </Text>
-        </View>
-        <View style={styles.inviteActions}>
-          {isActing ? (
-            <ActivityIndicator color="#00ff87" />
-          ) : (
-            <>
-              <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptInvite(item)}>
-                <Text style={styles.acceptBtnText}>✓</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.declineBtn} onPress={() => declineInvite(item)}>
-                <Text style={styles.declineBtnText}>✕</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-    );
+  const acceptJoinRequest = async (req: any) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'leagues', req.leagueDocId), {
+        members: arrayUnion(req.uid),
+      });
+      await updateDoc(doc(db, 'users', req.uid), {
+        leagues: arrayUnion(req.leagueDocId),
+        notifications: arrayUnion({
+          type: 'join_accepted',
+          leagueId: req.leagueDocId,
+          leagueName: req.leagueName,
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      await deleteDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id));
+      setJoinRequests(prev => prev.filter(r => r.id !== req.id));
+      Alert.alert('Accepted!', req.displayName + ' has been added to ' + req.leagueName);
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const denyJoinRequest = async (req: any) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', req.uid), {
+        notifications: arrayUnion({
+          type: 'join_denied',
+          leagueId: req.leagueDocId,
+          leagueName: req.leagueName,
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      await deleteDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id));
+      setJoinRequests(prev => prev.filter(r => r.id !== req.id));
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   return (
@@ -116,24 +117,87 @@ export default function NotificationsScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#00ff87" />
+          <ActivityIndicator size='large' color='#00ff87' />
         </View>
       ) : (
-        <FlatList
-          data={invites}
-          keyExtractor={item => item.leagueId}
-          renderItem={renderInvite}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+
+          {/* Join Requests - Commissioner Only */}
+          {joinRequests.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Join Requests</Text>
+              {joinRequests.map((req: any) => (
+                <View key={req.id} style={styles.joinRequestCard}>
+                  <View style={styles.joinRequestInfo}>
+                    <Text style={styles.joinRequestName}>{req.displayName}</Text>
+                    <Text style={styles.joinRequestMeta}>@{req.username} wants to join</Text>
+                    <Text style={styles.joinRequestLeague}>🏆 {req.leagueName}</Text>
+                  </View>
+                  <View style={styles.joinRequestActions}>
+                    <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptJoinRequest(req)}>
+                      <Text style={styles.acceptBtnText}>✓</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.denyBtn} onPress={() => denyJoinRequest(req)}>
+                      <Text style={styles.denyBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+
+          {/* League Invites */}
+          {invites.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>League Invites</Text>
+              {invites.map((invite: any, i: number) => (
+                <View key={i} style={styles.inviteCard}>
+                  <View style={styles.inviteInfo}>
+                    <Text style={styles.inviteName}>{invite.leagueName}</Text>
+                    <Text style={styles.inviteMeta}>Invited by {invite.inviterName}</Text>
+                  </View>
+                  <View style={styles.joinRequestActions}>
+                    <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptInvite(invite)}>
+                      <Text style={styles.acceptBtnText}>✓</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.denyBtn} onPress={() => denyInvite(invite)}>
+                      <Text style={styles.denyBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+
+          {/* General Notifications */}
+          {notifications.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Activity</Text>
+              {notifications.map((n: any, i: number) => (
+                <View key={i} style={styles.notifCard}>
+                  <Text style={styles.notifIcon}>
+                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : '🔔'}
+                  </Text>
+                  <View style={styles.notifInfo}>
+                    {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
+                    {n.type === 'join_denied' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was denied.</Text>}
+                    {n.type !== 'join_accepted' && n.type !== 'join_denied' && <Text style={styles.notifText}>{n.message || n.type}</Text>}
+                    <Text style={styles.notifTime}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+
+          {joinRequests.length === 0 && invites.length === 0 && notifications.length === 0 && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>🔔</Text>
-              <Text style={styles.emptyText}>No notifications</Text>
-              <Text style={styles.emptySubtext}>League invites and updates will appear here</Text>
+              <Text style={styles.emptyText}>No notifications yet</Text>
             </View>
-          }
-        />
+          )}
+        </ScrollView>
       )}
-          <GlobalNav />
+      <GlobalNav />
     </View>
   );
 }
@@ -142,23 +206,31 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
-  title: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
+  title: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { padding: 20, gap: 12 },
-  inviteCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  inviteIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
-  inviteIconText: { fontSize: 20 },
-  inviteInfo: { flex: 1 },
-  inviteTitle: { fontSize: 12, color: '#666', marginBottom: 2 },
-  inviteLeague: { fontSize: 16, fontWeight: '700', color: '#ffffff', marginBottom: 2 },
-  inviteMeta: { fontSize: 12, color: '#555' },
-  inviteActions: { flexDirection: 'row', gap: 8 },
+  content: { padding: 20, paddingBottom: 100 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#ffffff', marginBottom: 12, marginTop: 8 },
+  joinRequestCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  joinRequestInfo: { flex: 1 },
+  joinRequestName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  joinRequestMeta: { color: '#888', fontSize: 12, marginTop: 2 },
+  joinRequestLeague: { color: '#00ff87', fontSize: 12, fontWeight: '600', marginTop: 4 },
+  joinRequestActions: { flexDirection: 'row', gap: 8 },
   acceptBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
   acceptBtnText: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
-  declineBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff3333', alignItems: 'center', justifyContent: 'center' },
-  declineBtnText: { color: '#ff3333', fontSize: 16, fontWeight: '700' },
-  emptyContainer: { alignItems: 'center', paddingTop: 80, gap: 12 },
+  denyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
+  denyBtnText: { color: '#ff4444', fontSize: 16, fontWeight: '700' },
+  inviteCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  inviteInfo: { flex: 1 },
+  inviteName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  inviteMeta: { color: '#888', fontSize: 12, marginTop: 2 },
+  notifCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  notifIcon: { fontSize: 22 },
+  notifInfo: { flex: 1 },
+  notifText: { color: '#cccccc', fontSize: 14, lineHeight: 20 },
+  notifBold: { color: '#ffffff', fontWeight: '700' },
+  notifTime: { color: '#555', fontSize: 11, marginTop: 4 },
+  emptyContainer: { alignItems: 'center', paddingTop: 80, gap: 16 },
   emptyIcon: { fontSize: 48 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
-  emptySubtext: { fontSize: 14, color: '#555', textAlign: 'center' },
+  emptyText: { color: '#555', fontSize: 15 },
 });
