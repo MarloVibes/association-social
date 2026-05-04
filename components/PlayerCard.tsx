@@ -17,42 +17,94 @@ const POSITION_COLORS: Record<string, string> = {
   G: '#00ccff', F: '#ff9900', 'G-F': '#88ddaa', 'F-G': '#88ddaa', 'F-C': '#cc7744', 'C-F': '#cc7744',
 };
 
-function calcOVR(seasons: any[]): number {
-  if (!seasons || seasons.length === 0) return 0;
-  const best = seasons.reduce((best, s) => {
-    const score = (parseFloat(s.ppg) || 0) + (parseFloat(s.rpg) || 0) + (parseFloat(s.apg) || 0);
-    const bestScore = (parseFloat(best.ppg) || 0) + (parseFloat(best.rpg) || 0) + (parseFloat(best.apg) || 0);
-    return score > bestScore ? s : best;
-  }, seasons[0]);
-  const ppg = parseFloat(best.ppg) || 0;
-  const rpg = parseFloat(best.rpg) || 0;
-  const apg = parseFloat(best.apg) || 0;
-  const spg = parseFloat(best.spg) || 0;
-  const bpg = parseFloat(best.bpg) || 0;
-  const fg = parseFloat(best.fg_pct) || 0;
-  const raw = (ppg * 1.5) + (rpg * 1.0) + (apg * 1.2) + (spg * 2.0) + (bpg * 1.5) + (fg * 20);
-  return Math.min(99, Math.max(60, Math.round(50 + raw)));
-}
 
-function ovrColor(ovr: number): string {
-  if (ovr >= 90) return '#00ff87';
-  if (ovr >= 80) return '#ffcc00';
-  if (ovr >= 70) return '#ff9900';
-  return '#ff4444';
-}
 
 function getAccoladeIcon(text: string): string {
   const t = text.toLowerCase();
   if (t.includes('champion')) return '🏆';
-  if (t.includes('most valuable player') || t.includes('mvp')) return '🥇';
+  if (t.includes('most valuable player') || t.includes(' mvp')) return '🥇';
   if (t.includes('all-star')) return '⭐';
   if (t.includes('all-nba') || t.includes('all nba')) return '🏅';
   if (t.includes('defensive player')) return '🛡️';
   if (t.includes('rookie')) return '🌟';
   if (t.includes('scoring')) return '🔥';
-  if (t.includes('finals')) return '🏆';
+  if (t.includes('finals mvp')) return '🏆';
   if (t.includes('olympic') || t.includes('gold medal')) return '🥇';
+  if (t.includes('sixth man')) return '6️⃣';
+  if (t.includes('assist')) return '🎯';
+  if (t.includes('rebound')) return '💪';
   return '🎖️';
+}
+
+function formatAccolade(text: string): string {
+  // Extract year like "2009-10" -> "09-10" or "2013-14" -> "'13-14"
+  // Extract award name and shorten it
+  let t = text;
+  
+  // Shorten year format: "2009-10" -> "'09"
+  t = t.replace(/\b(19|20)(\d{2})-(\d{2})\b/g, (_, _c, y1, y2) => "'" + y1 + "-" + y2);
+  t = t.replace(/\b(19|20)(\d{2})\b/g, (_, _c, y) => "'" + y);
+  
+  // Remove trophy names in parens
+  t = t.replace(/\s*\([^)]+Trophy\)/g, '');
+  t = t.replace(/\s*\([^)]+Award\)/g, '');
+  
+  // Shorten common awards
+  t = t.replace('Most Valuable Player', 'MVP');
+  t = t.replace('Defensive Player of the Year', 'DPOY');
+  t = t.replace('Sixth Man of the Year', '6MOY');
+  t = t.replace('Most Improved Player', 'MIP');
+  t = t.replace('Rookie of the Year', 'ROY');
+  t = t.replace('All-Star Game Most Valuable Player', 'All-Star MVP');
+  t = t.replace('Finals Most Valuable Player', 'Finals MVP');
+  t = t.replace('Scoring Champion', 'Scoring Champ');
+  t = t.replace('Assists Champion', 'Assists Champ');
+  t = t.replace('Rebounds Champion', 'Rebounds Champ');
+  t = t.replace('Sporting News', 'SN');
+  t = t.replace('Twyman-Stokes Teammate of the Year', 'Teammate Award');
+  t = t.replace('NBA Champion', 'Champion');
+  t = t.replace('All-NBA First Team', 'All-NBA 1st');
+  t = t.replace('All-NBA Second Team', 'All-NBA 2nd');
+  t = t.replace('All-NBA Third Team', 'All-NBA 3rd');
+  t = t.replace('All-Defensive First Team', 'All-Def 1st');
+  t = t.replace('All-Defensive Second Team', 'All-Def 2nd');
+  t = t.replace('All-Rookie First Team', 'All-Rookie 1st');
+  t = t.replace('All-Rookie Second Team', 'All-Rookie 2nd');
+  
+  return t.trim();
+}
+
+function groupAccolades(accolades: string[]): { icon: string; label: string; years: string }[] {
+  const map: Record<string, string[]> = {};
+  const champYears: string[] = [];
+
+  for (const a of accolades) {
+    const formatted = formatAccolade(a);
+    // Extract years
+    const yearMatches = formatted.match(/'\d{2}(?:-\d{2})?/g) || [];
+    const years = yearMatches.join(', ');
+    // Get base label (remove years)
+    const base = formatted.replace(/'\d{2}(?:-\d{2})?\s*/g, '').trim();
+
+    // If Finals MVP -> also add championship ring
+    if (base.includes('Finals MVP')) {
+      champYears.push(...yearMatches);
+    }
+
+    if (!map[base]) map[base] = [];
+    if (years) map[base].push(years);
+  }
+
+  // Add championship rings
+  if (champYears.length > 0) {
+    map['NBA Champion'] = champYears;
+  }
+
+  return Object.entries(map).map(([label, years]) => ({
+    icon: getAccoladeIcon(label),
+    label,
+    years: [...new Set(years)].join(', '),
+  }));
 }
 
 export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose }: Props) {
@@ -69,7 +121,8 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
     setLoading(true);
     setProfile(null);
     try {
-      const brefId = player.bref_id || '';
+      // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
+  const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
       if (brefId) {
         const snap = await getDoc(doc(db, 'player_profiles', brefId));
         if (snap.exists()) setProfile(snap.data());
@@ -105,8 +158,8 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
   const posColor = POSITION_COLORS[pos.split('-')[0]] || '#888';
   const seasons = profile?.seasons || [];
   const accolades = profile?.accolades || [];
-  const ovr = calcOVR(seasons);
-  const brefId = player.bref_id || '';
+  // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
+  const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
 
   return (
     <Modal visible={visible} animationType='slide' presentationStyle='pageSheet' onRequestClose={onClose}>
@@ -138,10 +191,7 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                       <Text style={[styles.photoInitial, { color: posColor }]}>{name[0]}</Text>
                     </View>
                   )}
-                  <View style={[styles.ovrBadge, { borderColor: ovrColor(ovr) }]}>
-                    <Text style={[styles.ovrNum, { color: ovrColor(ovr) }]}>{ovr}</Text>
-                    <Text style={styles.ovrLbl}>OVR</Text>
-                  </View>
+
                 </View>
 
                 <View style={styles.heroInfo}>
@@ -165,12 +215,14 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
               {accolades.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>🏆 Accolades</Text>
-                  {accolades.map((a: string, i: number) => (
-                    <View key={i} style={styles.accoladeRow}>
-                      <Text style={styles.accoladeIcon}>{getAccoladeIcon(a)}</Text>
-                      <Text style={styles.accoladeText}>{a}</Text>
-                    </View>
-                  ))}
+                  <View style={styles.accoladeGrid}>
+                    {groupAccolades(accolades).map((a, i) => (
+                      <View key={i} style={styles.accoladeChip}>
+                        <Text style={styles.accoladeChipIcon}>{a.icon}</Text>
+                        <Text style={styles.accoladeChipText}>{a.label}{a.years ? ' ' + a.years : ''}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
               )}
 
@@ -282,6 +334,10 @@ const styles = StyleSheet.create({
   section: { marginHorizontal: 16, marginBottom: 20, backgroundColor: '#111', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1e1e1e' },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: '#ffffff', marginBottom: 14, letterSpacing: 0.5 },
   accoladeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  accoladeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  accoladeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 8, borderWidth: 1, borderColor: '#333366' },
+  accoladeChipIcon: { fontSize: 11 },
+  accoladeChipText: { color: '#ffffff', fontSize: 11, fontWeight: '500', flexShrink: 1 },
   accoladeIcon: { fontSize: 16, marginTop: 1 },
   accoladeText: { flex: 1, color: '#cccccc', fontSize: 13, lineHeight: 20 },
   statsHeader: { flexDirection: 'row', marginBottom: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
