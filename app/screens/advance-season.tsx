@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { collection, doc, getDoc, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '@/constants/firebase';
@@ -94,16 +94,14 @@ export default function AdvanceSeasonScreen() {
     setAdvancing(true);
     try {
       const nextYear = (league.currentYear || 2024) + 1;
-      const nextSeason = SEASON_MAP[nextYear] || nextYear + '-' + (nextYear + 1);
+      const nextSeason = SEASON_MAP[nextYear] || String(nextYear);
       const batch = writeBatch(db);
 
-      // Update league year
       batch.update(doc(db, 'leagues', leagueId), {
         currentYear: nextYear,
         currentSeason: nextSeason,
       });
 
-      // Age all players on all teams +1 year
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       for (const teamDoc of teamsSnap.docs) {
         const teamData = teamDoc.data();
@@ -118,9 +116,27 @@ export default function AdvanceSeasonScreen() {
 
       await batch.commit();
 
+      // Save draft class to league free agents pool
+      if (draftClass.length > 0) {
+        const rookies = draftClass.map(p => ({
+          ...p,
+          player_id: p.player_id || ('draft_' + nextYear + '_' + p.draft_pick),
+          team: '',
+          age: 22,
+          birth_year: nextYear - 22,
+          position: p.position || 'G',
+        }));
+        await setDoc(doc(db, 'leagues', leagueId, 'free_agents', String(nextYear)), {
+          year: nextYear,
+          players: rookies,
+          addedAt: new Date().toISOString(),
+        });
+        console.log('Saved', rookies.length, 'rookies to free agents for year', nextYear);
+      }
+
       Alert.alert(
         'Season Advanced!',
-        `Welcome to the ${nextSeason} season.\n\n${draftClass.length} rookies are now available in the free agent pool.`,
+        'Welcome to the ' + nextSeason + ' season. ' + draftClass.length + ' rookies are now available in the free agent pool.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (e: any) {

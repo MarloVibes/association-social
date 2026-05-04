@@ -58,16 +58,28 @@ export default function RosterScreen() {
       setTakenPlayerNames(takenNames);
       setClaimedTeamAbbrs(claimedAbbrs);
 
+      // Load era player pool
+      let poolPlayers: any[] = [];
       const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
       if (poolSnap.exists()) {
-        setAllEraPlayers(poolSnap.data().players || []);
+        poolPlayers = poolSnap.data().players || [];
       } else {
         const sportKey = sport === 'madden' ? 'nfl' : sport === 'mlb' ? 'mlb' : 'nba';
         const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
         if (rosterSnap.exists()) {
-          setAllEraPlayers(rosterSnap.data().players || []);
+          poolPlayers = rosterSnap.data().players || [];
         }
       }
+
+      // Load league free agents (dropped players + draft classes unlocked by season advancement)
+      const freeAgentsSnap = await getDocs(collection(db, 'leagues', leagueId, 'free_agents'));
+      const leagueFreeAgents: any[] = [];
+      freeAgentsSnap.docs.forEach(d => {
+        const players = d.data().players || [];
+        leagueFreeAgents.push(...players);
+      });
+
+      setAllEraPlayers([...poolPlayers, ...leagueFreeAgents]);
     } catch (e) {
       console.error(e);
     }
