@@ -92,7 +92,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/(tabs)/auth?mode=signin');
+        router.replace('/(tabs)/auth');
         return;
       }
       await loadData(user.uid);
@@ -120,7 +120,7 @@ export default function DashboardScreen() {
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); router.replace('/(tabs)/index'); } },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); router.replace('/(tabs)/auth'); } },
     ]);
   };
 

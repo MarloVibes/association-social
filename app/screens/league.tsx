@@ -217,7 +217,7 @@ export default function LeagueScreen() {
                 style={styles.rosterBtn}
                 onPress={() => router.push({
                   pathname: '/screens/roster',
-                  params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '' },
+                  params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
                 })}
               >
                 <Text style={styles.rosterBtnText}>View Roster</Text>
@@ -330,7 +330,13 @@ export default function LeagueScreen() {
         {isCommissioner && (
           <View style={styles.commSection}>
             <Text style={styles.sectionTitle}>Commissioner Controls</Text>
-            <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
+            <TouchableOpacity
+              style={styles.advanceSeasonBtn}
+              onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
+            >
+              <Text style={styles.advanceSeasonBtnText}>⏩ Advance Season</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.deleteBtn, { marginTop: 10 }]} onPress={confirmDelete}>
               <Text style={styles.deleteBtnText}>Delete League</Text>
             </TouchableOpacity>
           </View>
@@ -411,6 +417,8 @@ const styles = StyleSheet.create({
   dmSmallBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
   dmSmallBtnText: { color: '#8888ff', fontSize: 12, fontWeight: '700' },
   commSection: { marginBottom: 16 },
+  advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
+  advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
   deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },

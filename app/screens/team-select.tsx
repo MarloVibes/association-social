@@ -95,6 +95,21 @@ export default function TeamSelectScreen() {
     if (!user) return;
     setSaving(true);
     try {
+      let players: any[] = [];
+
+      if (!isDraft) {
+        // Pull full team roster from era_player_pools by team abbreviation
+        const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+        if (poolSnap.exists()) {
+          const allPoolPlayers = poolSnap.data().players || [];
+          players = allPoolPlayers.filter((p: any) => p.team === team.abbreviation);
+        }
+        // Fallback to era roster players if pool is empty
+        if (players.length === 0) {
+          players = team.players || [];
+        }
+      }
+
       const teamDocId = leagueId + '_' + user.uid;
       await setDoc(doc(db, 'leagues', leagueId, 'teams', teamDocId), {
         gmId: user.uid,
@@ -102,7 +117,7 @@ export default function TeamSelectScreen() {
         name: team.full_name,
         abbreviation: team.abbreviation,
         era: eraKey,
-        players: isDraft ? [] : (team.players || []),
+        players,
         tradeBlock: [],
       });
       await updateDoc(doc(db, 'leagues', leagueId), {

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -13,12 +13,15 @@ export default function RosterScreen() {
   }>();
 
   const [team, setTeam] = useState<any>(null);
-  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [allEraPlayers, setAllEraPlayers] = useState<any[]>([]);
+  const [takenPlayerIds, setTakenPlayerIds] = useState<Set<string>>(new Set());
+  const [takenPlayerNames, setTakenPlayerNames] = useState<Set<string>>(new Set());
+  const [claimedTeamAbbrs, setClaimedTeamAbbrs] = useState<Set<string>>(new Set());
   const [myPlayerIds, setMyPlayerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
-  const [activeTab, setActiveTab] = useState<'my_team' | 'browse'>('my_team');
+  const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
@@ -28,44 +31,41 @@ export default function RosterScreen() {
     if (!teamId) return;
     setLoading(true);
     try {
-      // Load my team doc from league
+      // Load my team doc
       const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
       if (teamSnap.exists()) {
         const data = teamSnap.data();
         setTeam(data);
-        // players array contains full player objects
         const players = data.players || [];
         setMyPlayerIds(players.map((p: any) => p.player_id || p));
-
-        // If team already has full player objects use them
-        if (players.length > 0 && typeof players[0] === 'object' && players[0].player_id) {
-          setAllPlayers(players);
-          setLoading(false);
-          return;
-        }
       }
 
-      // Load era roster for this team to get all available players
-      // First find the team doc in era_rosters
-      if (eraKey !== 'current') {
-        // Get all teams for this era and find matching abbreviation
-        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-        const leagueData = leagueSnap.data();
-        const myTeamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
-        if (myTeamSnap.exists()) {
-          const myTeamData = myTeamSnap.data();
-          const eraTeamSnap = await getDoc(doc(db, 'era_rosters', eraKey, 'teams', myTeamData.teamId));
-          if (eraTeamSnap.exists()) {
-            const eraTeam = eraTeamSnap.data();
-            setAllPlayers(eraTeam.players || []);
-          }
-        }
+      // Load ALL teams in league to find taken players
+      const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      const taken = new Set<string>();
+      const takenNames = new Set<string>();
+      allTeamsSnap.docs.forEach(d => {
+        const players = d.data().players || [];
+        players.forEach((p: any) => {
+          const pid = p.player_id || p;
+          if (pid) taken.add(pid);
+          if (p.full_name) takenNames.add(p.full_name);
+        });
+      });
+      setTakenPlayerIds(taken);
+      setTakenPlayerNames(takenNames);
+      setClaimedTeamAbbrs(claimedAbbrs);
+
+      // Load full era player pool (all players from that season)
+      const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+      if (poolSnap.exists()) {
+        setAllEraPlayers(poolSnap.data().players || []);
       } else {
-        // Current era - load from rosters/{sport}
+        // Fallback to current rosters
         const sportKey = sport === 'madden' ? 'nfl' : sport === 'mlb' ? 'mlb' : 'nba';
         const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
         if (rosterSnap.exists()) {
-          setAllPlayers(rosterSnap.data().players || []);
+          setAllEraPlayers(rosterSnap.data().players || []);
         }
       }
     } catch (e) {
@@ -74,26 +74,29 @@ export default function RosterScreen() {
     setLoading(false);
   };
 
-  const filteredPlayers = useMemo(() => {
-    return allPlayers.filter(p => {
-      const matchesSearch = !search || (p.full_name || p.name || '').toLowerCase().includes(search.toLowerCase());
-      const pos = p.position || '';
-      const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
-      return matchesSearch && matchesPos;
-    });
-  }, [allPlayers, search, posFilter]);
-
   const myTeamPlayers = useMemo(() => {
     if (!team) return [];
     const players = team.players || [];
     if (players.length > 0 && typeof players[0] === 'object') return players;
-    return allPlayers.filter(p => myPlayerIds.includes(p.player_id));
-  }, [team, allPlayers, myPlayerIds]);
+    return allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
+  }, [team, allEraPlayers, myPlayerIds]);
+
+  const freeAgents = useMemo(() => {
+    return allEraPlayers.filter(p => {
+      const pid = p.player_id || p.id;
+      const matchesSearch = !search || (p.full_name || '').toLowerCase().includes(search.toLowerCase());
+      const pos = p.position || '';
+      const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
+      const isNotTaken = !takenPlayerIds.has(pid) && !takenPlayerNames.has(p.full_name || '');
+      const teamNotClaimed = !p.team || !claimedTeamAbbrs.has(p.team);
+      return matchesSearch && matchesPos && isNotTaken && teamNotClaimed;
+    });
+  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, claimedTeamAbbrs, search, posFilter]);
 
   const handleAddPlayer = async (player: any) => {
     const pid = player.player_id || player.id;
     if (myPlayerIds.includes(pid)) {
-      Alert.alert('Already on roster', `${player.full_name || player.name} is already on your team.`);
+      Alert.alert('Already on roster', player.full_name + ' is already on your team.');
       return;
     }
     try {
@@ -104,19 +107,21 @@ export default function RosterScreen() {
         type: 'pickup',
         playerName: player.full_name || player.name,
         uid: auth.currentUser?.uid,
-        message: `picked up ${player.full_name || player.name}`,
+        message: 'picked up ' + (player.full_name || player.name),
         createdAt: serverTimestamp(),
       });
       setMyPlayerIds(prev => [...prev, pid]);
+      setTakenPlayerIds(prev => new Set([...prev, pid]));
+      setTakenPlayerNames(prev => new Set([...prev, player.full_name || '']));
       setTeam((prev: any) => ({ ...prev, players: [...(prev?.players || []), player] }));
-      Alert.alert('Added!', `${player.full_name || player.name} added to your roster.`);
+      Alert.alert('Added!', (player.full_name || player.name) + ' added to your roster.');
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
   };
 
   const handleDropPlayer = async (player: any) => {
-    Alert.alert('Drop Player', `Remove ${player.full_name || player.name} from your roster?`, [
+    Alert.alert('Drop Player', 'Remove ' + (player.full_name || player.name) + ' from your roster?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Drop', style: 'destructive', onPress: async () => {
         try {
@@ -124,6 +129,8 @@ export default function RosterScreen() {
           const newPlayers = (team?.players || []).filter((p: any) => (p.player_id || p.id) !== pid);
           await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { players: newPlayers });
           setMyPlayerIds(prev => prev.filter(id => id !== pid));
+          setTakenPlayerIds(prev => { const s = new Set(prev); s.delete(pid); return s; });
+          setTakenPlayerNames(prev => { const s = new Set(prev); s.delete(player.full_name || ''); return s; });
           setTeam((prev: any) => ({ ...prev, players: newPlayers }));
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
@@ -138,9 +145,10 @@ export default function RosterScreen() {
     );
   }
 
+  const currentData = activeTab === 'my_team' ? myTeamPlayers : freeAgents;
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
@@ -149,7 +157,6 @@ export default function RosterScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabRow}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'my_team' && styles.tabActive]}
@@ -160,20 +167,20 @@ export default function RosterScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'browse' && styles.tabActive]}
-          onPress={() => setActiveTab('browse')}
+          style={[styles.tab, activeTab === 'free_agents' && styles.tabActive]}
+          onPress={() => setActiveTab('free_agents')}
         >
-          <Text style={[styles.tabText, activeTab === 'browse' && styles.tabTextActive]}>
-            Browse Players
+          <Text style={[styles.tabText, activeTab === 'free_agents' && styles.tabTextActive]}>
+            Free Agents ({freeAgents.length})
           </Text>
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'browse' && (
+      {activeTab === 'free_agents' && (
         <>
           <TextInput
             style={styles.searchInput}
-            placeholder='Search players...'
+            placeholder='Search free agents...'
             placeholderTextColor='#555'
             value={search}
             onChangeText={setSearch}
@@ -193,19 +200,19 @@ export default function RosterScreen() {
       )}
 
       <FlatList
-        data={activeTab === 'my_team' ? myTeamPlayers : filteredPlayers}
+        data={currentData}
         keyExtractor={(item) => String(item.player_id || item.id)}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {activeTab === 'my_team' ? 'No players on your roster yet.' : 'No players found.'}
+              {activeTab === 'my_team' ? 'No players on your roster yet.' : 'No free agents available.'}
             </Text>
           </View>
         }
         renderItem={({ item }) => {
-          const pid = item.player_id || item.id;
-          const onMyTeam = myPlayerIds.includes(pid);
+          const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
+          const isRetiring = item.retirement_year && item.age && item.age >= (item.retirement_year - (item.birth_year || 1980) + (item.birth_year || 1980) - item.birth_year);
           return (
             <View style={styles.playerCard}>
               <View style={styles.playerAvatar}>
@@ -213,9 +220,16 @@ export default function RosterScreen() {
               </View>
               <View style={styles.playerInfo}>
                 <Text style={styles.playerName}>{item.full_name || item.name}</Text>
-                <Text style={styles.playerMeta}>
-                  {[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.team || item.team_abbr].filter(Boolean).join(' · ')}
-                </Text>
+                <View style={styles.playerMetaRow}>
+                  <Text style={styles.playerMeta}>
+                    {[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
+                  </Text>
+                  {item.retirement_year && item.birth_year && item.age && item.age >= (item.retirement_year - item.birth_year - 1) && (
+                    <View style={styles.retireBadge}>
+                      <Text style={styles.retireBadgeText}>Retiring</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               {activeTab === 'my_team' ? (
                 <TouchableOpacity style={styles.dropBtn} onPress={() => handleDropPlayer(item)}>
@@ -223,13 +237,10 @@ export default function RosterScreen() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.addBtn, onMyTeam && styles.addBtnDisabled]}
+                  style={styles.addBtn}
                   onPress={() => handleAddPlayer(item)}
-                  disabled={onMyTeam}
                 >
-                  <Text style={[styles.addBtnText, onMyTeam && styles.addBtnTextDisabled]}>
-                    {onMyTeam ? 'On Team' : '+ Add'}
-                  </Text>
+                  <Text style={styles.addBtnText}>+ Add</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -250,7 +261,7 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
   tabActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
-  tabText: { color: '#666', fontSize: 14, fontWeight: '600' },
+  tabText: { color: '#666', fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: '#00ff87' },
   searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 10 },
   posFilters: { flexDirection: 'row', paddingHorizontal: 20, gap: 6, marginBottom: 10, flexWrap: 'wrap' },
@@ -265,12 +276,13 @@ const styles = StyleSheet.create({
   playerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
   playerAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   playerInfo: { flex: 1 },
-  playerName: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  playerName: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  playerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   playerMeta: { color: '#666', fontSize: 12 },
   addBtn: { backgroundColor: '#00ff87', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  addBtnDisabled: { backgroundColor: '#1a2a1a', borderWidth: 1, borderColor: '#2a4a2a' },
   addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
-  addBtnTextDisabled: { color: '#4a8a4a' },
   dropBtn: { backgroundColor: '#2a0a0a', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#ff3333' },
   dropBtnText: { color: '#ff3333', fontSize: 13, fontWeight: '700' },
+  retireBadge: { backgroundColor: '#2a0a0a', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#ff4444' },
+  retireBadgeText: { color: '#ff4444', fontSize: 10, fontWeight: '700' },
 });

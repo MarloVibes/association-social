@@ -1,13 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 
 export default function AuthScreen() {
   const { mode } = useLocalSearchParams();
-  const [isSignUp, setIsSignUp] = useState(mode !== 'signin');
+  const [isSignUp, setIsSignUp] = useState(mode === 'signup');
+
+  useEffect(() => {
+    if (mode === 'signin') setIsSignUp(false);
+    if (mode === 'signup') setIsSignUp(true);
+  }, [mode]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
