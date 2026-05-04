@@ -1,10 +1,29 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
+
+
+const ERA_YEAR: Record<string, number> = {
+  magic_bird: 1984, jordan: 1992, kobe: 2003, lebron: 2011, steph: 2017, current: 0,
+};
+
+const getTeamLogoUrl = (abbr: string, era?: string) => {
+  if (!abbr) return null;
+  const eraYear = era ? ERA_YEAR[era] : 0;
+  if (eraYear && eraYear < 2010) {
+    const slugMap: Record<string, string> = {
+      SEA: 'seattle-supersonics', NJN: 'new-jersey-nets', WAS: 'washington-bullets',
+      NOK: 'new-orleans-hornets', NOH: 'new-orleans-hornets', KCK: 'sacramento-kings',
+    };
+    const slug = slugMap[abbr] || abbr.toLowerCase();
+    if (slugMap[abbr]) return 'https://i.logocdn.com/nba/' + eraYear + '/' + slugMap[abbr] + '@3x.png';
+  }
+  return 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/' + abbr.toLowerCase() + '.png';
+};
 
 const SPORT_KEY: Record<string, string> = {
   nba: 'nba',
@@ -184,7 +203,16 @@ export default function LeagueScreen() {
           )}
         </View>
 
-        <Text style={styles.leagueName}>{league.name}</Text>
+        <View style={styles.leagueNameRow}>
+          {myTeam?.abbreviation && (
+            <Image
+              source={{ uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
+              style={styles.leagueNameLogo}
+              resizeMode='contain'
+            />
+          )}
+          <Text style={styles.leagueName}>{league.name}</Text>
+        </View>
         <View style={styles.leagueMeta}>
           <View style={styles.sportChip}>
             <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
@@ -363,7 +391,9 @@ const styles = StyleSheet.create({
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
   commBadge: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#00ff87' },
   commBadgeText: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
-  leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
+  leagueNameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  leagueNameLogo: { width: 40, height: 40 },
+  leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff' },
   leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },

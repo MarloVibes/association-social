@@ -1,9 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+
+const { width, height } = Dimensions.get('window');
 
 const ERA_LABELS: Record<string, string> = {
   magic_bird: 'Magic vs Bird Era',
@@ -34,6 +36,33 @@ const TEAM_COLORS: Record<string, string[]> = {
   UTA: ['#002B5C', '#F9A01B'], WAS: ['#002B5C', '#E31837'],
 };
 
+const NBA_TEAM_IDS: Record<string, string> = {
+  ATL: '1610612737', BOS: '1610612738', BKN: '1610612751', NJN: '1610612751',
+  CHA: '1610612766', CHI: '1610612741', CLE: '1610612739', DAL: '1610612742',
+  DEN: '1610612743', DET: '1610612765', GSW: '1610612744', HOU: '1610612745',
+  IND: '1610612754', LAC: '1610612746', LAL: '1610612747', MEM: '1610612763',
+  MIA: '1610612748', MIL: '1610612749', MIN: '1610612750', NOH: '1610612740',
+  NOK: '1610612740', NOP: '1610612740', NYK: '1610612752', OKC: '1610612760',
+  ORL: '1610612753', PHI: '1610612755', PHX: '1610612756', POR: '1610612757',
+  SAC: '1610612758', SAS: '1610612759', SEA: '1610612760', TOR: '1610612761',
+  UTA: '1610612762', WAS: '1610612764',
+};
+
+const DEFUNCT_LOGOS: Record<string, string> = {
+  SEA: 'https://i.logocdn.com/nba/1992/seattle-supersonics@3x.png',
+  NJN: 'https://i.logocdn.com/nba/1992/new-jersey-nets@3x.png',
+  NOK: 'https://i.logocdn.com/nba/2003/new-orleans-hornets@3x.png',
+  NOH: 'https://i.logocdn.com/nba/2003/new-orleans-hornets@3x.png',
+  KCK: 'https://i.logocdn.com/nba/1984/sacramento-kings@3x.png',
+  WAS: 'https://i.logocdn.com/nba/1992/washington-bullets@3x.png',
+};
+
+const getLogoUrl = (abbr: string, era?: string) => {
+  if (!abbr) return null;
+  if (DEFUNCT_LOGOS[abbr]) return DEFUNCT_LOGOS[abbr];
+  return 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/' + abbr.toLowerCase() + '.png';
+};
+
 export default function TeamSelectScreen() {
   const { leagueId, sport, era, mode } = useLocalSearchParams<{
     leagueId: string; sport: string; era: string; mode: string;
@@ -47,7 +76,15 @@ export default function TeamSelectScreen() {
   const [shuffledTeams, setShuffledTeams] = useState<any[]>([]);
   const [revealedIndex, setRevealedIndex] = useState<number | null>(null);
   const [hasShuffled, setHasShuffled] = useState(false);
+  const [showReveal, setShowReveal] = useState(false);
+  const [countdown, setCountdown] = useState(5);
   const flipAnims = useRef<Animated.Value[]>([]);
+  const othersOpacity = useRef(new Animated.Value(1)).current;
+  const cardScale = useRef(new Animated.Value(1)).current;
+  const cardY = useRef(new Animated.Value(0)).current;
+  const topTextOpacity = useRef(new Animated.Value(0)).current;
+  const bottomTextOpacity = useRef(new Animated.Value(0)).current;
+  const countdownRef = useRef<any>(null);
 
   const user = auth.currentUser;
   const isRandom = mode === 'random';
@@ -55,6 +92,15 @@ export default function TeamSelectScreen() {
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
   useEffect(() => { loadTeams(); }, []);
+
+  useEffect(() => {
+    if (showReveal && countdown > 0) {
+      countdownRef.current = setTimeout(() => setCountdown(c => c - 1), 1000);
+    } else if (showReveal && countdown === 0) {
+      handleConfirmTeam(selectedTeam);
+    }
+    return () => clearTimeout(countdownRef.current);
+  }, [showReveal, countdown]);
 
   const loadTeams = async () => {
     setLoading(true);
@@ -81,6 +127,7 @@ export default function TeamSelectScreen() {
   const handleFlipCard = (index: number, team: any) => {
     if (revealedIndex !== null) return;
     setRevealedIndex(index);
+
     Animated.spring(flipAnims.current[index], {
       toValue: 1,
       friction: 8,
@@ -88,28 +135,42 @@ export default function TeamSelectScreen() {
       useNativeDriver: true,
     }).start(() => {
       setSelectedTeam(team);
+      // Fade out other cards
+      Animated.timing(othersOpacity, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start(() => {
+        // Zoom chosen card to center
+        Animated.parallel([
+          Animated.spring(cardScale, { toValue: 2.5, friction: 6, tension: 40, useNativeDriver: true }),
+          Animated.timing(cardY, { toValue: -60, duration: 500, useNativeDriver: true }),
+        ]).start(() => {
+          // Show reveal text
+          setShowReveal(true);
+          Animated.stagger(300, [
+            Animated.timing(topTextOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(bottomTextOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+          ]).start();
+        });
+      });
     });
   };
 
   const handleConfirmTeam = async (team: any) => {
-    if (!user) return;
+    if (!team || !user) return;
+    clearTimeout(countdownRef.current);
     setSaving(true);
     try {
       let players: any[] = [];
-
       if (!isDraft) {
-        // Pull full team roster from era_player_pools by team abbreviation
         const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
         if (poolSnap.exists()) {
           const allPoolPlayers = poolSnap.data().players || [];
           players = allPoolPlayers.filter((p: any) => p.team === team.abbreviation);
         }
-        // Fallback to era roster players if pool is empty
-        if (players.length === 0) {
-          players = team.players || [];
-        }
+        if (players.length === 0) players = team.players || [];
       }
-
       const teamDocId = leagueId + '_' + user.uid;
       await setDoc(doc(db, 'leagues', leagueId, 'teams', teamDocId), {
         gmId: user.uid,
@@ -123,11 +184,12 @@ export default function TeamSelectScreen() {
       await updateDoc(doc(db, 'leagues', leagueId), {
         takenTeams: arrayUnion(team.id),
       });
+      router.dismissAll();
       router.replace({ pathname: '/screens/league', params: { leagueId } });
     } catch (e: any) {
       Alert.alert('Error', e.message);
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   if (loading) {
@@ -143,64 +205,118 @@ export default function TeamSelectScreen() {
 
   if (isRandom) {
     return (
-      <View style={styles.container}>
-        <ScrollView style={{ flex: 1 }}>
-          <View style={styles.inner}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-              <Text style={styles.backText}>← Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>Pick a Card</Text>
-            <Text style={styles.subtitle}>{ERA_LABELS[eraKey]} · {availableTeams.length} teams available</Text>
-            {!hasShuffled ? (
-              <TouchableOpacity style={styles.shuffleButton} onPress={handleShuffle}>
-                <Text style={styles.shuffleButtonText}>🎲 Shuffle Teams</Text>
-              </TouchableOpacity>
-            ) : (
-              <>
-                <Text style={styles.pickHint}>
-                  {revealedIndex === null ? 'Tap any card to reveal your team!' : selectedTeam ? 'You got the ' + selectedTeam.full_name + '!' : 'Revealing...'}
-                </Text>
+      <TouchableWithoutFeedback onPress={() => showReveal && selectedTeam && !saving ? handleConfirmTeam(selectedTeam) : undefined}>
+        <View style={styles.container}>
+          <ScrollView style={{ flex: 1 }} scrollEnabled={!showReveal}>
+            <View style={styles.inner}>
+              {!showReveal && (
+                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                  <Text style={styles.backText}>← Back</Text>
+                </TouchableOpacity>
+              )}
+
+              {!showReveal && (
+                <>
+                  <Text style={styles.title}>Pick a Card</Text>
+                  <Text style={styles.subtitle}>{ERA_LABELS[eraKey]} · {availableTeams.length} teams available</Text>
+                </>
+              )}
+
+              {!hasShuffled && !showReveal ? (
+                <TouchableOpacity style={styles.shuffleButton} onPress={handleShuffle}>
+                  <Text style={styles.shuffleButtonText}>🎲 Shuffle Teams</Text>
+                </TouchableOpacity>
+              ) : showReveal && selectedTeam ? (
+                // REVEAL SCREEN
+                <View style={styles.revealContainer}>
+                  <Animated.Text style={[styles.revealTopText, { opacity: topTextOpacity }]}>
+                    It's time to hoop
+                  </Animated.Text>
+                  <Animated.View style={[
+                    styles.revealCardWrapper,
+                    { transform: [{ scale: cardScale }, { translateY: cardY }] }
+                  ]}>
+                    {(() => {
+                      const colors = TEAM_COLORS[selectedTeam.abbreviation] || ['#1a1a2a', '#4444ff'];
+                      return (
+                        <View style={[styles.revealCard, { backgroundColor: colors[0], borderColor: colors[1] }]}>
+                          <Image
+                            source={{ uri: getLogoUrl(selectedTeam.abbreviation, eraKey) || '' }}
+                            style={styles.revealLogo}
+                            resizeMode='contain'
+                            onError={() => {}}
+                          />
+                          {!getLogoUrl(selectedTeam.abbreviation, eraKey) && (
+                            <Text style={styles.revealCardAbbr}>{selectedTeam.abbreviation}</Text>
+                          )}
+                          <Text style={styles.revealCardName}>{selectedTeam.name}</Text>
+                        </View>
+                      );
+                    })()}
+                  </Animated.View>
+                  <Animated.View style={[styles.revealBottomText, { opacity: bottomTextOpacity }]}>
+                    <Text style={styles.revealTeamName}>You have chosen the</Text>
+                    <Text style={styles.revealTeamFull}>{selectedTeam.full_name}</Text>
+                    {saving ? (
+                      <ActivityIndicator color='#00ff87' style={{ marginTop: 20 }} />
+                    ) : (
+                      <Text style={styles.revealCountdown}>
+                        Locking in {countdown > 0 ? 'in ' + countdown + 's' : '...'} · tap anywhere to skip
+                      </Text>
+                    )}
+                  </Animated.View>
+                </View>
+              ) : (
+                // CARD GRID
                 <View style={styles.cardGrid}>
                   {shuffledTeams.map((team, index) => {
                     const flipAnim = flipAnims.current[index] || new Animated.Value(0);
                     const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
                     const backRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
                     const colors = TEAM_COLORS[team.abbreviation] || ['#1a1a2a', '#4444ff'];
+                    const isChosen = revealedIndex === index;
                     return (
-                      <TouchableOpacity
+                      <Animated.View
                         key={team.id}
-                        style={styles.cardWrapper}
-                        onPress={() => handleFlipCard(index, team)}
-                        disabled={revealedIndex !== null}
-                        activeOpacity={0.8}
+                        style={[
+                          styles.cardWrapper,
+                          !isChosen && revealedIndex !== null && { opacity: othersOpacity },
+                          isChosen && { transform: [{ scale: cardScale }, { translateY: cardY }], zIndex: 10 },
+                        ]}
                       >
-                        <Animated.View style={[styles.cardFace, styles.cardBack, { transform: [{ rotateY: frontRotate }] }]}>
-                          <Text style={styles.cardBackIcon}>🏀</Text>
-                          <Text style={styles.cardBackText}>NBA</Text>
-                        </Animated.View>
-                        <Animated.View style={[styles.cardFace, styles.cardFront, { backgroundColor: colors[0], borderColor: colors[1], transform: [{ rotateY: backRotate }] }]}>
-                          <Text style={styles.cardFrontAbbr}>{team.abbreviation}</Text>
-                          <Text style={styles.cardFrontName}>{team.name}</Text>
-                        </Animated.View>
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ width: 88, height: 116 }}
+                          onPress={() => handleFlipCard(index, team)}
+                          disabled={revealedIndex !== null}
+                          activeOpacity={0.8}
+                        >
+                          <Animated.View style={[styles.cardFace, styles.cardBack, { transform: [{ rotateY: frontRotate }] }]}>
+                            <Text style={styles.cardBackIcon}>🏀</Text>
+                            <Text style={styles.cardBackText}>NBA</Text>
+                          </Animated.View>
+                          <Animated.View style={[styles.cardFace, styles.cardFront, { backgroundColor: colors[0], borderColor: colors[1], transform: [{ rotateY: backRotate }] }]}>
+                            {getLogoUrl(team.abbreviation) ? (
+                              <Image
+                                source={{ uri: getLogoUrl(team.abbreviation, eraKey) || '' }}
+                                style={styles.cardLogo}
+                                resizeMode='contain'
+                              />
+                            ) : (
+                              <Text style={styles.cardFrontAbbr}>{team.abbreviation}</Text>
+                            )}
+                            <Text style={styles.cardFrontName}>{team.name}</Text>
+                          </Animated.View>
+                        </TouchableOpacity>
+                      </Animated.View>
                     );
                   })}
                 </View>
-                {selectedTeam && (
-                  <View style={styles.selectedBanner}>
-                    <Text style={styles.selectedBannerTitle}>🏆 {selectedTeam.full_name}</Text>
-                    <Text style={styles.selectedBannerSub}>{selectedTeam.season}</Text>
-                    <TouchableOpacity style={styles.primaryButton} onPress={() => handleConfirmTeam(selectedTeam)} disabled={saving}>
-                      {saving ? <ActivityIndicator color='#000' /> : <Text style={styles.primaryButtonText}>Lock In This Team</Text>}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
-        </ScrollView>
-        <GlobalNav />
-      </View>
+              )}
+            </View>
+          </ScrollView>
+          <GlobalNav />
+        </View>
+      </TouchableWithoutFeedback>
     );
   }
 
@@ -255,8 +371,8 @@ export default function TeamSelectScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
-  loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center', gap: 16 },
+  container: { flex: 1, backgroundColor: '#000000' },
+  loadingContainer: { flex: 1, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText: { color: '#888', fontSize: 15 },
   inner: { padding: 24, paddingTop: 60, paddingBottom: 120 },
   backBtn: { marginBottom: 16 },
@@ -265,7 +381,6 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#888', marginBottom: 24 },
   shuffleButton: { backgroundColor: '#1a1a2a', borderRadius: 16, padding: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4444ff', marginBottom: 24 },
   shuffleButtonText: { fontSize: 22, fontWeight: '800', color: '#8888ff' },
-  pickHint: { color: '#00ff87', fontSize: 14, textAlign: 'center', marginBottom: 20, fontWeight: '600' },
   cardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 32 },
   cardWrapper: { width: 88, height: 116 },
   cardFace: { position: 'absolute', width: 88, height: 116, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backfaceVisibility: 'hidden', borderWidth: 2 },
@@ -274,10 +389,19 @@ const styles = StyleSheet.create({
   cardBackText: { color: '#4444ff', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
   cardFront: { borderRadius: 12 },
   cardFrontAbbr: { fontSize: 20, fontWeight: '900', color: '#ffffff' },
+  cardLogo: { width: 60, height: 60 },
+  revealLogo: { width: 100, height: 100 },
   cardFrontName: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.8)', textAlign: 'center', paddingHorizontal: 6, marginTop: 4 },
-  selectedBanner: { backgroundColor: '#0a2a1a', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#00ff87', marginBottom: 24, alignItems: 'center', gap: 8 },
-  selectedBannerTitle: { fontSize: 20, fontWeight: '800', color: '#00ff87' },
-  selectedBannerSub: { fontSize: 13, color: '#4a8a4a', marginBottom: 8 },
+  revealContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: height * 0.7, paddingTop: 40 },
+  revealTopText: { fontSize: 22, fontWeight: '800', color: '#00ff87', marginBottom: 40, textAlign: 'center', letterSpacing: 1 },
+  revealCardWrapper: { marginBottom: 40 },
+  revealCard: { width: 160, height: 210, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 3 },
+  revealCardAbbr: { fontSize: 48, fontWeight: '900', color: '#ffffff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 4 },
+  revealCardName: { fontSize: 16, fontWeight: '700', color: 'rgba(255,255,255,0.9)', textAlign: 'center', paddingHorizontal: 12, marginTop: 8 },
+  revealBottomText: { alignItems: 'center', gap: 8 },
+  revealTeamName: { fontSize: 16, color: '#888', textAlign: 'center' },
+  revealTeamFull: { fontSize: 28, fontWeight: '900', color: '#ffffff', textAlign: 'center' },
+  revealCountdown: { fontSize: 13, color: '#555', marginTop: 16, textAlign: 'center' },
   teamList: { gap: 8, marginBottom: 32 },
   teamRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a2a' },
   teamRowTaken: { opacity: 0.35 },
@@ -295,6 +419,4 @@ const styles = StyleSheet.create({
   confirmBarSub: { color: '#4a8a4a', fontSize: 12 },
   confirmBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 },
   confirmBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
-  primaryButton: { backgroundColor: '#00ff87', borderRadius: 14, paddingVertical: 16, paddingHorizontal: 32, alignItems: 'center', marginTop: 8 },
-  primaryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
 });

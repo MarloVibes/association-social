@@ -17,6 +17,7 @@ export default function RosterScreen() {
   const [takenPlayerIds, setTakenPlayerIds] = useState<Set<string>>(new Set());
   const [takenPlayerNames, setTakenPlayerNames] = useState<Set<string>>(new Set());
   const [claimedTeamAbbrs, setClaimedTeamAbbrs] = useState<Set<string>>(new Set());
+  const [droppedPlayerNames, setDroppedPlayerNames] = useState<Set<string>>(new Set());
   const [myPlayerIds, setMyPlayerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -31,7 +32,6 @@ export default function RosterScreen() {
     if (!teamId) return;
     setLoading(true);
     try {
-      // Load my team doc
       const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
       if (teamSnap.exists()) {
         const data = teamSnap.data();
@@ -40,12 +40,14 @@ export default function RosterScreen() {
         setMyPlayerIds(players.map((p: any) => p.player_id || p));
       }
 
-      // Load ALL teams in league to find taken players
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const taken = new Set<string>();
       const takenNames = new Set<string>();
+      const claimedAbbrs = new Set<string>();
       allTeamsSnap.docs.forEach(d => {
-        const players = d.data().players || [];
+        const teamData = d.data();
+        if (teamData.abbreviation) claimedAbbrs.add(teamData.abbreviation);
+        const players = teamData.players || [];
         players.forEach((p: any) => {
           const pid = p.player_id || p;
           if (pid) taken.add(pid);
@@ -56,12 +58,10 @@ export default function RosterScreen() {
       setTakenPlayerNames(takenNames);
       setClaimedTeamAbbrs(claimedAbbrs);
 
-      // Load full era player pool (all players from that season)
       const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
       if (poolSnap.exists()) {
         setAllEraPlayers(poolSnap.data().players || []);
       } else {
-        // Fallback to current rosters
         const sportKey = sport === 'madden' ? 'nfl' : sport === 'mlb' ? 'mlb' : 'nba';
         const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
         if (rosterSnap.exists()) {
@@ -87,11 +87,14 @@ export default function RosterScreen() {
       const matchesSearch = !search || (p.full_name || '').toLowerCase().includes(search.toLowerCase());
       const pos = p.position || '';
       const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
-      const isNotTaken = !takenPlayerIds.has(pid) && !takenPlayerNames.has(p.full_name || '');
-      const teamNotClaimed = !p.team || !claimedTeamAbbrs.has(p.team);
-      return matchesSearch && matchesPos && isNotTaken && teamNotClaimed;
+      // Only show players who have NO team in this era (truly unaffiliated)
+      // OR players explicitly on active rosters who were dropped (not on any team)
+      const hasNoTeam = !p.team || p.team === '';
+      // Also show players who were dropped (on no active roster but had a team)
+      const wasDropped = !takenPlayerNames.has(p.full_name || '') && !takenPlayerIds.has(pid) && p.team && droppedPlayerNames.has(p.full_name || '');
+      return matchesSearch && matchesPos && (hasNoTeam || wasDropped);
     });
-  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, claimedTeamAbbrs, search, posFilter]);
+  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter]);
 
   const handleAddPlayer = async (player: any) => {
     const pid = player.player_id || player.id;
@@ -132,6 +135,7 @@ export default function RosterScreen() {
           setTakenPlayerIds(prev => { const s = new Set(prev); s.delete(pid); return s; });
           setTakenPlayerNames(prev => { const s = new Set(prev); s.delete(player.full_name || ''); return s; });
           setTeam((prev: any) => ({ ...prev, players: newPlayers }));
+          setDroppedPlayerNames(prev => new Set([...prev, player.full_name || '']));
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
     ]);
@@ -212,7 +216,6 @@ export default function RosterScreen() {
         }
         renderItem={({ item }) => {
           const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
-          const isRetiring = item.retirement_year && item.age && item.age >= (item.retirement_year - (item.birth_year || 1980) + (item.birth_year || 1980) - item.birth_year);
           return (
             <View style={styles.playerCard}>
               <View style={styles.playerAvatar}>
@@ -236,10 +239,7 @@ export default function RosterScreen() {
                   <Text style={styles.dropBtnText}>Drop</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity
-                  style={styles.addBtn}
-                  onPress={() => handleAddPlayer(item)}
-                >
+                <TouchableOpacity style={styles.addBtn} onPress={() => handleAddPlayer(item)}>
                   <Text style={styles.addBtnText}>+ Add</Text>
                 </TouchableOpacity>
               )}
