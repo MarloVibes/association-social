@@ -50,18 +50,25 @@ export default function ChannelsScreen() {
               style={[styles.channelCard, isLocked && styles.channelCardLocked]}
               onPress={() => {
                 if (isLocked) return;
-                router.push({
-                  pathname: '/screens/channel',
-                  params: {
-                    leagueId,
-                    leagueName,
-                    channelId: channel.id,
-                    channelLabel: channel.label,
-                    channelIcon: channel.icon,
-                    commissionerId,
-                    coCommissioners,
-                  },
-                });
+                if (channel.id === 'trade-talk' || channel.id === 'trade-block') {
+                  router.push({
+                    pathname: '/screens/trade-channel',
+                    params: { leagueId, channelId: channel.id },
+                  });
+                } else {
+                  router.push({
+                    pathname: '/screens/channel',
+                    params: {
+                      leagueId,
+                      leagueName,
+                      channelId: channel.id,
+                      channelLabel: channel.label,
+                      channelIcon: channel.icon,
+                      commissionerId,
+                      coCommissioners,
+                    },
+                  });
+                }
               }}
             >
               <View style={styles.channelIcon}>

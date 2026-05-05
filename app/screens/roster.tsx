@@ -110,6 +110,53 @@ export default function RosterScreen() {
     });
   }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter]);
 
+  const handlePlayerAction = (player: any) => {
+    Alert.alert(
+      player.full_name || player.name,
+      'What would you like to do?',
+      [
+        { text: '🔄 Trade', onPress: () => postToTradeChannel(player) },
+        { text: '📋 Trade Block', onPress: () => toggleTradeBlock(player) },
+        { text: '❌ Drop', style: 'destructive', onPress: () => handleDropPlayer(player) },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const postToTradeChannel = async (player: any) => {
+    try {
+      const channelsSnap = await getDocs(collection(db, 'leagues', leagueId, 'channels'));
+      const tradeChannel = channelsSnap.docs.find(d => d.data().type === 'trade' || d.id === 'trade-talk');
+      const channelDocId = tradeChannel?.id || 'trade-talk';
+      await addDoc(collection(db, 'leagues', leagueId, 'channels', channelDocId, 'messages'), {
+        type: 'trade_listing',
+        player,
+        fromUid: auth.currentUser?.uid,
+        fromTeamId: teamId,
+        fromTeamName: team?.name || '',
+        createdAt: serverTimestamp(),
+        status: 'available',
+      });
+      Alert.alert('Posted!', (player.full_name || player.name) + ' posted to Trade channel.');
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const toggleTradeBlock = async (player: any) => {
+    const pid = player.player_id || player.id;
+    try {
+      const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+      const tradeBlock = teamSnap.data()?.tradeBlock || [];
+      const isOnBlock = tradeBlock.includes(pid);
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), {
+        tradeBlock: isOnBlock ? tradeBlock.filter((p: string) => p !== pid) : [...tradeBlock, pid],
+      });
+      Alert.alert(
+        isOnBlock ? 'Removed' : 'Added to Trade Block',
+        (player.full_name || player.name) + (isOnBlock ? ' removed from trade block.' : ' added to trade block.')
+      );
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
   const handleAddPlayer = async (player: any) => {
     const pid = player.player_id || player.id;
     if (myPlayerIds.includes(pid)) {
@@ -249,8 +296,8 @@ export default function RosterScreen() {
                 </View>
               </View>
               {activeTab === 'my_team' ? (
-                <TouchableOpacity style={styles.dropBtn} onPress={(e) => { e.stopPropagation?.(); handleDropPlayer(item); }}>
-                  <Text style={styles.dropBtnText}>Drop</Text>
+                <TouchableOpacity style={styles.moveBtn} onPress={(e) => { e.stopPropagation?.(); handlePlayerAction(item); }}>
+                  <Text style={styles.moveBtnText}>⇄</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity style={styles.addBtn} onPress={(e) => { e.stopPropagation?.(); handleAddPlayer(item); }}>
@@ -303,6 +350,8 @@ const styles = StyleSheet.create({
   playerMeta: { color: '#666', fontSize: 12 },
   addBtn: { backgroundColor: '#00ff87', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
+  moveBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#4444ff' },
+  moveBtnText: { color: '#8888ff', fontSize: 18, fontWeight: '700' },
   dropBtn: { backgroundColor: '#2a0a0a', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#ff3333' },
   dropBtnText: { color: '#ff3333', fontSize: 13, fontWeight: '700' },
   retireBadge: { backgroundColor: '#2a0a0a', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#ff4444' },
