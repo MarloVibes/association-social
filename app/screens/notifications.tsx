@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where, deleteDoc } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -181,7 +181,13 @@ export default function NotificationsScreen() {
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
                     {n.type === 'join_denied' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was denied.</Text>}
-                    {n.type !== 'join_accepted' && n.type !== 'join_denied' && <Text style={styles.notifText}>{n.message || n.type}</Text>}
+                    {n.type === 'trade_listing' && (
+                      <TouchableOpacity onPress={() => router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-talk' } })}>
+                        <Text style={styles.notifText}>{n.message}</Text>
+                        <Text style={styles.notifLink}>View trade talks →</Text>
+                      </TouchableOpacity>
+                    )}
+                    {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && <Text style={styles.notifText}>{n.message || n.type}</Text>}
                     <Text style={styles.notifTime}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</Text>
                   </View>
                 </View>
@@ -230,6 +236,7 @@ const styles = StyleSheet.create({
   notifText: { color: '#cccccc', fontSize: 14, lineHeight: 20 },
   notifBold: { color: '#ffffff', fontWeight: '700' },
   notifTime: { color: '#555', fontSize: 11, marginTop: 4 },
+  notifLink: { color: '#ff9900', fontSize: 11, marginTop: 2, fontWeight: '600' },
   emptyContainer: { alignItems: 'center', paddingTop: 80, gap: 16 },
   emptyIcon: { fontSize: 48 },
   emptyText: { color: '#555', fontSize: 15 },

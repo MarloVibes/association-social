@@ -33,6 +33,7 @@ export default function LeagueScreen() {
   const [myTeam, setMyTeam] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
+  const [activityIndex, setActivityIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
@@ -207,12 +208,20 @@ export default function LeagueScreen() {
             <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
           </View>
           <Text style={styles.metaText}>{league.mode} mode</Text>
-          <TouchableOpacity
-            style={[styles.findGMsBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
-            onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
-          >
-            <Text style={[styles.findGMsBtnText, { color: teamPrimary }]}>👥 Find GMs</Text>
-          </TouchableOpacity>
+          <View style={styles.metaBtns}>
+            <TouchableOpacity
+              style={[styles.membersTabBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              onPress={() => router.push({ pathname: '/screens/friends', params: { leagueId } })}
+            >
+              <Text style={[styles.membersTabBtnText, { color: teamPrimary }]}>👥 Members ({members.length})</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.findGMsBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+            >
+              <Text style={[styles.findGMsBtnText, { color: teamPrimary }]}>🔍 Find GMs</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Channels — front and center */}
@@ -221,7 +230,7 @@ export default function LeagueScreen() {
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
             <View>
               <Text style={styles.channelsTabLabel}>{channelLabel}</Text>
-              <Text style={styles.channelsTabSub}>League Chat · Trade Talk · Polls · and more</Text>
+              <Text style={styles.channelsTabSub}>League Chat · Trade Center · Polls · and more</Text>
             </View>
           </View>
           <Text style={styles.channelsTabChevron}>›</Text>
@@ -243,7 +252,7 @@ export default function LeagueScreen() {
                   params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
                 })}
               >
-                <Text style={styles.rosterBtnText}>View Roster</Text>
+                <Text style={styles.rosterBtnText}>Roster</Text>
               </TouchableOpacity>
             </View>
             {myTeam.players?.length > 0 && (
@@ -279,70 +288,64 @@ export default function LeagueScreen() {
         )}
 
         {/* Activity Feed */}
-        <Text style={styles.sectionTitle}>League Activity</Text>
+        {/* League Activity Carousel */}
+        <View style={styles.activityCarouselHeader}>
+          <Text style={styles.sectionTitle}>League Activity</Text>
+          {activity.length > 1 && (
+            <View style={styles.activityNav}>
+              <TouchableOpacity
+                onPress={() => setActivityIndex(i => Math.max(0, i - 1))}
+                style={[styles.activityNavBtn, activityIndex === 0 && styles.activityNavBtnDisabled]}
+              >
+                <Text style={styles.activityNavText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.activityNavCount}>{activityIndex + 1}/{activity.length}</Text>
+              <TouchableOpacity
+                onPress={() => setActivityIndex(i => Math.min(activity.length - 1, i + 1))}
+                style={[styles.activityNavBtn, activityIndex === activity.length - 1 && styles.activityNavBtnDisabled]}
+              >
+                <Text style={styles.activityNavText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
         {activity.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No activity yet. Pick up your first player!</Text>
           </View>
-        ) : (
-          activity.slice(0, 20).map(item => (
-            <View key={item.id} style={styles.activityItem}>
-              <View style={[styles.activityDot, item.type === 'tradeblock' && styles.activityDotTrade]} />
-              <View style={styles.activityContent}>
-                <Text style={styles.activityMessage}>
-                  <Text style={styles.activityBold}>
-                    {members.find(m => m.uid === item.uid)?.displayName || 'A GM'}
-                  </Text>
-                  {' '}{item.message}
-                </Text>
-                {item.createdAt && (
-                  <Text style={styles.activityTime}>
-                    {new Date(item.createdAt.seconds * 1000).toLocaleDateString()}
-                  </Text>
-                )}
-              </View>
-            </View>
-          ))
-        )}
-
-        {/* Members */}
-        <Text style={styles.sectionTitle}>Members ({members.length})</Text>
-        <Text style={styles.memberHint}>Long press a member to DM or block/report</Text>
-        <View style={styles.membersCard}>
-          {members.map(member => (
+        ) : (() => {
+          const item = activity[activityIndex];
+          return (
             <TouchableOpacity
-              key={member.uid}
-              style={styles.memberRow}
-              onLongPress={() => handleMemberLongPress(member)}
-              activeOpacity={0.7}
+              key={item.id}
+              style={styles.activityCarouselCard}
+              onPress={() => item.type === 'trade_listing' && item.leagueId && router.push({ pathname: '/screens/trade-channel', params: { leagueId: item.leagueId, channelId: 'trade-center' } })}
+              activeOpacity={item.type === 'trade_listing' ? 0.7 : 1}
             >
-              <View style={[styles.memberAvatar, { borderColor: teamPrimary + '88' }]}>
-                <Text style={styles.memberAvatarText}>
-                  {member.displayName?.[0]?.toUpperCase() || '?'}
+              <View style={[styles.activityDot, (item.type === 'trade_listing' || item.type === 'tradeblock') && styles.activityDotTrade]} />
+              <View style={styles.activityContent}>
+                <Text style={styles.activityMessage}>{item.message}</Text>
+                {item.type === 'trade_listing' && (
+                  <Text style={styles.activityLink}>Tap to view Trade Center →</Text>
+                )}
+                <Text style={styles.activityTime}>
+                  {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : ''}
                 </Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.memberName}>{member.displayName}</Text>
-                {member.uid === league.commissionerId && (
-                  <Text style={styles.memberRole}>Commissioner</Text>
-                )}
-              </View>
-              {member.uid !== user?.uid && (
-                <TouchableOpacity
-                  style={styles.dmSmallBtn}
-                  onPress={() => router.push({ pathname: '/screens/dm', params: { uid: member.uid, name: member.displayName } })}
-                >
-                  <Text style={styles.dmSmallBtnText}>DM</Text>
-                </TouchableOpacity>
-              )}
             </TouchableOpacity>
-          ))}
-        </View>
+          );
+        })()}
 
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
             <Text style={styles.sectionTitle}>Commissioner Controls</Text>
+            <TouchableOpacity
+              style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+            >
+              <Text style={[styles.inviteBtnText, { color: teamPrimary }]}>📨 Send League Invite</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.advanceSeasonBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
@@ -418,6 +421,17 @@ const styles = StyleSheet.create({
   memberHint: { color: '#333', fontSize: 12, marginBottom: 14 },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center' },
+  activityCarouselHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  activityNav: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  activityNavBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  activityNavBtnDisabled: { opacity: 0.3 },
+  activityNavText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  activityNavCount: { color: '#666', fontSize: 12 },
+  activityCarouselCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  activityLink: { color: '#ff9900', fontSize: 11, marginTop: 4, fontWeight: '600' },
+  metaBtns: { flexDirection: 'row', gap: 8, marginLeft: 'auto' },
+  membersTabBtn: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center', borderWidth: 1 },
+  membersTabBtnText: { fontSize: 11, fontWeight: '700' },
   activityItem: { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'flex-start' },
   activityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00ff87', marginTop: 5 },
   activityDotTrade: { backgroundColor: '#ff9900' },
@@ -434,6 +448,8 @@ const styles = StyleSheet.create({
   dmSmallBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
   dmSmallBtnText: { color: '#8888ff', fontSize: 12, fontWeight: '700' },
   commSection: { marginBottom: 16 },
+  inviteBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, marginBottom: 10 },
+  inviteBtnText: { fontSize: 15, fontWeight: '700' },
   advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },

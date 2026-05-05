@@ -22,16 +22,26 @@ export default function SearchUsersScreen() {
     if (text.trim().length < 2) { setResults([]); return; }
     setLoading(true);
     try {
+      const searchText = text.toLowerCase().trim();
+      // Search by username
       const q = query(
         collection(db, 'users'),
-        where('username', '>=', text.toLowerCase()),
-        where('username', '<=', text.toLowerCase() + '\uf8ff')
+        where('username', '>=', searchText),
+        where('username', '<=', searchText + '\uf8ff')
       );
       const snap = await getDocs(q);
-      const users = snap.docs
-        .map(d => ({ uid: d.id, ...d.data() }))
-        .filter((u: any) => u.uid !== user?.uid);
-      setResults(users);
+      let users = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+
+      // Also search by email if input looks like email
+      if (searchText.includes('@')) {
+        const emailQ = query(collection(db, 'users'), where('email', '==', searchText));
+        const emailSnap = await getDocs(emailQ);
+        const emailUsers = emailSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        const existingIds = new Set(users.map((u: any) => u.uid));
+        emailUsers.forEach((u: any) => { if (!existingIds.has(u.uid)) users.push(u); });
+      }
+
+      setResults(users.filter((u: any) => u.uid !== user?.uid));
       if (user) {
         const myDoc = await getDoc(doc(db, 'users', user.uid));
         if (myDoc.exists()) {

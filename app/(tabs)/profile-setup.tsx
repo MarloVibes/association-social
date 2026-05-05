@@ -40,7 +40,8 @@ export default function ProfileSetupScreen() {
         uid: user.uid,
         email: user.email,
         displayName: displayName.trim(),
-        username: username.trim().toLowerCase(),
+        username: cleanUsername,
+        email: auth.currentUser?.email || '',
         age,
         gender,
         gamerTag,
@@ -90,7 +91,7 @@ export default function ProfileSetupScreen() {
         <TextInput style={styles.input} placeholder="Your name" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
 
         <Text style={styles.label}>Username *</Text>
-        <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={v => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))} autoCapitalize="none" />
 
         <Text style={styles.label}>Age</Text>
         <TextInput style={styles.input} placeholder="Your age" placeholderTextColor="#555" value={age} onChangeText={setAge} keyboardType="number-pad" />

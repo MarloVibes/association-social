@@ -125,19 +125,60 @@ export default function RosterScreen() {
 
   const postToTradeChannel = async (player: any) => {
     try {
-      const channelsSnap = await getDocs(collection(db, 'leagues', leagueId, 'channels'));
-      const tradeChannel = channelsSnap.docs.find(d => d.data().type === 'trade' || d.id === 'trade-talk');
-      const channelDocId = tradeChannel?.id || 'trade-talk';
-      await addDoc(collection(db, 'leagues', leagueId, 'channels', channelDocId, 'messages'), {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      // Get user profile for display name
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const username = userSnap.data()?.username || userSnap.data()?.displayName || 'A GM';
+      const playerName = player.full_name || player.name || 'Unknown';
+      const teamName = team?.name || 'Unknown Team';
+
+      // Post to trade-center channel
+      const listingRef = await addDoc(collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'), {
         type: 'trade_listing',
         player,
-        fromUid: auth.currentUser?.uid,
+        fromUid: user.uid,
         fromTeamId: teamId,
-        fromTeamName: team?.name || '',
+        fromTeamName: teamName,
         createdAt: serverTimestamp(),
         status: 'available',
       });
-      Alert.alert('Posted!', (player.full_name || player.name) + ' posted to Trade channel.');
+
+      // Add to league activity feed
+      const activityRef = await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+        type: 'trade_listing',
+        message: teamName + ' (' + username + ') added ' + playerName + ' to Trade Center',
+        playerName,
+        playerData: player,
+        teamName,
+        fromUid: user.uid,
+        fromTeamId: teamId,
+        listingId: listingRef.id,
+        leagueId,
+        createdAt: serverTimestamp(),
+      });
+
+      // Notify all league members
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const members = leagueSnap.data()?.members || [];
+      for (const memberId of members) {
+        if (memberId === user.uid) continue;
+        await updateDoc(doc(db, 'users', memberId), {
+          notifications: arrayUnion({
+            type: 'trade_listing',
+            leagueId,
+            listingId: listingRef.id,
+            activityId: activityRef.id,
+            message: teamName + ' added ' + playerName + ' to Trade Center',
+            playerName,
+            teamName,
+            createdAt: new Date().toISOString(),
+          }),
+        });
+      }
+
+      Alert.alert('Posted!', playerName + ' posted to Trade channel.');
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 

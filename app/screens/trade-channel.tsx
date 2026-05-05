@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -108,7 +108,7 @@ export default function TradeChannelScreen() {
 
   useEffect(() => {
     const q = query(
-      collection(db, 'leagues', leagueId, 'channels', 'trade-talk', 'messages'),
+      collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'),
       orderBy('createdAt', 'desc')
     );
     const unsub = onSnapshot(q, snap => {
@@ -241,7 +241,22 @@ export default function TradeChannelScreen() {
                     Alert.alert('Remove listing?', l.player?.full_name, [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Remove', style: 'destructive', onPress: async () => {
-                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-talk', 'messages', l.id), { status: 'cancelled' });
+                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages', l.id), { status: 'cancelled' });
+                        // Remove activity entry
+                        if (l.activityId) {
+                          await deleteDoc(doc(db, 'leagues', leagueId, 'activity', l.activityId));
+                        }
+                        // Remove notifications from all members
+                        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+                        const members = leagueSnap.data()?.members || [];
+                        for (const memberId of members) {
+                          const userSnap = await getDoc(doc(db, 'users', memberId));
+                          const notifs = userSnap.data()?.notifications || [];
+                          const toRemove = notifs.filter((n: any) => n.listingId === l.id);
+                          for (const n of toRemove) {
+                            await updateDoc(doc(db, 'users', memberId), { notifications: arrayRemove(n) });
+                          }
+                        }
                       }},
                     ])
                   } />
@@ -335,9 +350,13 @@ export default function TradeChannelScreen() {
                       // Post or remove from trade channel
                       const existing = listings.find((l: any) => l.fromUid === user?.uid && (l.player?.player_id || l.player?.full_name) === pid);
                       if (existing) {
-                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-talk', 'messages', existing.id), { status: 'cancelled' });
+                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages', existing.id), { status: 'cancelled' });
+                        // Remove activity
+                        if (existing.activityId) {
+                          try { await deleteDoc(doc(db, 'leagues', leagueId, 'activity', existing.activityId)); } catch(e) {}
+                        }
                       } else {
-                        await addDoc(collection(db, 'leagues', leagueId, 'channels', 'trade-talk', 'messages'), {
+                        await addDoc(collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'), {
                           type: 'trade_listing',
                           player: p,
                           fromUid: user?.uid,
@@ -424,8 +443,8 @@ const styles = StyleSheet.create({
   threeCol: { flexDirection: 'row', gap: 8 },
   col: { flex: 1, gap: 6 },
   colTitle: { color: '#888', fontSize: 9, fontWeight: '800', letterSpacing: 1, textAlign: 'center', marginBottom: 4, textTransform: 'uppercase' },
-  playerSlot: { backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden', marginBottom: 4 },
-  playerSlotEmpty: { borderStyle: 'dashed', borderColor: '#333', alignItems: 'center', justifyContent: 'center', height: 72 },
+  playerSlot: { backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden', marginBottom: 4, minHeight: 80 },
+  playerSlotEmpty: { borderStyle: 'dashed', borderColor: '#333', alignItems: 'center', justifyContent: 'center', height: 80 },
   addItemText: { color: '#333', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   playerSlotInner: { flexDirection: 'row', alignItems: 'center', padding: 6, gap: 6 },
   playerSlotPhoto: { width: 44, height: 44, borderRadius: 4, backgroundColor: '#111' },
@@ -446,6 +465,14 @@ const styles = StyleSheet.create({
   dmBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', alignItems: 'center' },
   dmBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
   emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptySubtext: { color: '#333', fontSize: 12, textAlign: 'center' },
+  teamTradeCard: { backgroundColor: '#111', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#1e1e1e' },
+  teamTradeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  teamTradeName: { color: '#ffffff', fontSize: 15, fontWeight: '800', flex: 1 },
+  teamTradeActions: { flexDirection: 'row', gap: 6 },
+  teamTradeSubLabel: { color: '#555', fontSize: 9, fontWeight: '800', letterSpacing: 1, marginBottom: 6, marginTop: 4 },
+  teamPlayerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+  availableSlot: { width: 90 },
   emptyIcon: { fontSize: 48 },
   emptyText: { color: '#444', fontSize: 14 },
   modalContainer: { flex: 1, backgroundColor: '#0a0a0a' },

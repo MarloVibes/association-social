@@ -5,7 +5,7 @@ import GlobalNav from '@/components/GlobalNav';
 
 const CHANNELS = [
   { id: 'league-chat', label: 'League Chat', icon: '💬', desc: 'General conversation', commOnly: false },
-  { id: 'trade-talk', label: 'Trade Talk', icon: '🔄', desc: 'Propose and discuss trades', commOnly: false },
+  { id: 'trade-center', label: 'Trade Center', icon: '🔄', desc: 'Propose and discuss trades', commOnly: false },
   { id: 'announcements', label: 'Announcements', icon: '📣', desc: 'Commissioner updates', commOnly: false },
   { id: 'league-rules', label: 'League Rules', icon: '📋', desc: 'Official league rules', commOnly: false },
   { id: 'trade-block', label: 'Trade Block', icon: '🏷️', desc: 'Players available for trade', commOnly: false },
@@ -50,7 +50,7 @@ export default function ChannelsScreen() {
               style={[styles.channelCard, isLocked && styles.channelCardLocked]}
               onPress={() => {
                 if (isLocked) return;
-                if (channel.id === 'trade-talk' || channel.id === 'trade-block') {
+                if (channel.id === 'trade-center' || channel.id === 'trade-block') {
                   router.push({
                     pathname: '/screens/trade-channel',
                     params: { leagueId, channelId: channel.id },

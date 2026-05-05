@@ -28,7 +28,21 @@ export default function AuthScreen() {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         uid = result.user.uid;
       } else {
-        const result = await signInWithEmailAndPassword(auth, email, password);
+        // Support login by username OR email
+        let loginEmail = email.trim().toLowerCase();
+        if (!loginEmail.includes('@')) {
+          // It's a username - look up the email
+          const { getDocs, collection, query, where } = await import('firebase/firestore');
+          const q = query(collection(db, 'users'), where('username', '==', loginEmail));
+          const snap = await getDocs(q);
+          if (snap.empty) {
+            setError('No account found with that username.');
+            setLoading(false);
+            return;
+          }
+          loginEmail = snap.docs[0].data().email || loginEmail;
+        }
+        const result = await signInWithEmailAndPassword(auth, loginEmail, password);
         uid = result.user.uid;
       }
       const profileDoc = await getDoc(doc(db, 'users', uid));
@@ -65,7 +79,7 @@ export default function AuthScreen() {
         {isSignUp && (
           <TextInput style={styles.input} placeholder="GM Username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
         )}
-        <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Email or Username" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#555" value={password} onChangeText={setPassword} secureTextEntry />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.primaryButton} onPress={handleAuth} disabled={loading}>
