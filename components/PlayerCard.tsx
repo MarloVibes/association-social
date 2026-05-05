@@ -42,7 +42,7 @@ function formatAccolade(text: string): string {
   let t = text;
   
   // Shorten year format: "2009-10" -> "'09"
-  t = t.replace(/\b(19|20)(\d{2})-(\d{2})\b/g, (_, _c, y1, y2) => "'" + y1 + "-" + y2);
+  t = t.replace(/\b(19|20)(\d{2})-(\d{2})\b/g, (_, _c, y1, y2) => "'" + y2);
   t = t.replace(/\b(19|20)(\d{2})\b/g, (_, _c, y) => "'" + y);
   
   // Remove trophy names in parens
@@ -86,19 +86,13 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
     // Get base label (remove years)
     const base = formatted.replace(/'\d{2}(?:-\d{2})?\s*/g, '').trim();
 
-    // If Finals MVP -> also add championship ring
-    if (base.includes('Finals MVP')) {
-      champYears.push(...yearMatches);
-    }
+    // Finals MVP tracked but rings come from scraped data
 
     if (!map[base]) map[base] = [];
     if (years) map[base].push(years);
   }
 
-  // Add championship rings
-  if (champYears.length > 0) {
-    map['NBA Champion'] = champYears;
-  }
+  // Championship rings are already in accolades from scraped data
 
   return Object.entries(map).map(([label, years]) => ({
     icon: getAccoladeIcon(label),
