@@ -28,7 +28,7 @@ export const TEAM_COLORS: Record<string, [string, string, string]> = {
   PHX: ['#1D1160', '#E56020', '#ffffff'],
   POR: ['#E03A3E', '#000000', '#ffffff'],
   SAC: ['#5A2D81', '#63727A', '#ffffff'],
-  SAS: ['#000000', '#C4CED4', '#ffffff'],
+  SAS: ['#C4CED4', '#6D6E71', '#ffffff'],
   TOR: ['#CE1141', '#000000', '#ffffff'],
   UTA: ['#002B5C', '#F9A01B', '#ffffff'],
   WAS: ['#002B5C', '#E31837', '#ffffff'],

@@ -24,6 +24,7 @@ export default function RosterScreen() {
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
+  const [league, setLeague] = useState<any>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
@@ -41,6 +42,9 @@ export default function RosterScreen() {
         const players = data.players || [];
         setMyPlayerIds(players.map((p: any) => p.player_id || p));
       }
+
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      if (leagueSnap.exists()) setLeague(leagueSnap.data());
 
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const taken = new Set<string>();
@@ -96,15 +100,19 @@ export default function RosterScreen() {
   }, [team, allEraPlayers, myPlayerIds]);
 
   const freeAgents = useMemo(() => {
+    const isDraftMode = league?.mode === 'draft';
     return allEraPlayers.filter(p => {
       const pid = p.player_id || p.id;
       const matchesSearch = !search || (p.full_name || '').toLowerCase().includes(search.toLowerCase());
       const pos = p.position || '';
       const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
-      // Only show players who have NO team in this era (truly unaffiliated)
-      // OR players explicitly on active rosters who were dropped (not on any team)
+      // In draft mode - show ALL players not already on a roster
+      if (isDraftMode) {
+        const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
+        return matchesSearch && matchesPos && !isTaken;
+      }
+      // In random/current mode - show only teamless or dropped players
       const hasNoTeam = !p.team || p.team === '';
-      // Also show players who were dropped (on no active roster but had a team)
       const wasDropped = !takenPlayerNames.has(p.full_name || '') && !takenPlayerIds.has(pid) && p.team && droppedPlayerNames.has(p.full_name || '');
       return matchesSearch && matchesPos && (hasNoTeam || wasDropped);
     });
