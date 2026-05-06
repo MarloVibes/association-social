@@ -211,7 +211,7 @@ export default function LeagueScreen() {
           <View style={styles.metaBtns}>
             <TouchableOpacity
               style={[styles.membersTabBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
-              onPress={() => router.push({ pathname: '/screens/friends', params: { leagueId } })}
+              onPress={() => router.push({ pathname: '/screens/league-members', params: { leagueId } })}
             >
               <Text style={[styles.membersTabBtnText, { color: teamPrimary }]}>👥 Members ({members.length})</Text>
             </TouchableOpacity>

@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useEffect, useState } from 'react';
@@ -8,6 +8,7 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function ProfileScreen() {
+  const { uid: viewUid } = useLocalSearchParams<{ uid?: string }>();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -38,14 +39,16 @@ export default function ProfileScreen() {
   const CONSOLES = ['PS5', 'Xbox Series X', 'Xbox Series S', 'ROG Xbox Ally', 'PC', 'Nintendo Switch 2', 'Nintendo Switch', 'Steam Deck'];
 
   const user = auth.currentUser;
+  const profileUid = viewUid || user?.uid;
+  const isOwnProfile = !viewUid || viewUid === user?.uid;
 
   useEffect(() => { loadProfile(); }, []);
 
   const loadProfile = async () => {
-    if (!user) return;
+    if (!profileUid) return;
     setLoading(true);
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid));
+      const snap = await getDoc(doc(db, 'users', profileUid));
       if (snap.exists()) {
         const data = snap.data();
         setProfile(data);
@@ -69,7 +72,7 @@ export default function ProfileScreen() {
   };
 
   const saveProfile = async () => {
-    if (!user) return;
+    if (!profileUid) return;
     setSaving(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
@@ -134,12 +137,14 @@ export default function ProfileScreen() {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity onPress={() => editing ? saveProfile() : setEditing(true)}>
+          {isOwnProfile ? (
+            <TouchableOpacity onPress={() => editing ? saveProfile() : setEditing(true)}>
             {saving
               ? <ActivityIndicator color="#00ff87" size="small" />
               : <Text style={styles.editText}>{editing ? 'Save' : 'Edit'}</Text>
             }
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ) : <View style={{ width: 60 }} />}
         </View>
 
         {/* Avatar */}

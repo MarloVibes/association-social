@@ -91,14 +91,16 @@ export default function FriendsScreen() {
 
   const renderFriend = ({ item }: { item: any }) => (
     <TouchableOpacity
+      onPress={() => router.push({ pathname: '/screens/profile', params: { uid: item.uid } })}
       onLongPress={() =>
         Alert.alert(item.displayName, 'What would you like to do?', [
+          { text: 'View Profile', onPress: () => router.push({ pathname: '/screens/profile', params: { uid: item.uid } }) },
           { text: 'Remove Friend', style: 'destructive', onPress: () => removeFriend(item.uid, item.displayName) },
           { text: 'Block / Report', style: 'destructive', onPress: () => blockAndReport(item.uid, item.displayName, () => loadData()) },
           { text: 'Cancel', style: 'cancel' },
         ])
       }
-      activeOpacity={1}
+      activeOpacity={0.8}
     >
       <View style={styles.userCard}>
         <View style={styles.userAvatar}>
