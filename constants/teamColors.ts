@@ -4,7 +4,7 @@ export const TEAM_COLORS: Record<string, [string, string, string]> = {
   // Current Teams
   ATL: ['#C8102E', '#FDB927', '#ffffff'],
   BOS: ['#007A33', '#BA9653', '#ffffff'],
-  BKN: ['#000000', '#ffffff', '#ffffff'],
+  BKN: ['#BDBDBD', '#000000', '#ffffff'],
   CHA: ['#1D1160', '#00788C', '#ffffff'],
   CHI: ['#CE1141', '#000000', '#ffffff'],
   CLE: ['#860038', '#FDBB30', '#ffffff'],
@@ -16,7 +16,7 @@ export const TEAM_COLORS: Record<string, [string, string, string]> = {
   IND: ['#002D62', '#FDBB30', '#ffffff'],
   LAC: ['#C8102E', '#1D428A', '#ffffff'],
   LAL: ['#552583', '#FDB927', '#ffffff'],
-  MEM: ['#5D76A9', '#12173F', '#ffffff'],
+  MEM: ['#5D76A9', '#7399C6', '#ffffff'],
   MIA: ['#98002E', '#F9A01B', '#ffffff'],
   MIL: ['#00471B', '#EEE1C6', '#ffffff'],
   MIN: ['#0C2340', '#236192', '#ffffff'],
@@ -30,14 +30,14 @@ export const TEAM_COLORS: Record<string, [string, string, string]> = {
   SAC: ['#5A2D81', '#63727A', '#ffffff'],
   SAS: ['#C4CED4', '#6D6E71', '#ffffff'],
   TOR: ['#CE1141', '#000000', '#ffffff'],
-  UTA: ['#002B5C', '#F9A01B', '#ffffff'],
+  UTA: ['#F9A01B', '#002B5C', '#ffffff'],
   WAS: ['#002B5C', '#E31837', '#ffffff'],
 
   // Historical/Defunct Teams
   SEA: ['#00653A', '#FFC200', '#ffffff'],  // Seattle SuperSonics
-  NJN: ['#002A60', '#BEC0C2', '#ffffff'],  // New Jersey Nets
+  NJN: ['#BEC0C2', '#002A60', '#ffffff'],  // New Jersey Nets
   NOH: ['#0C2340', '#C8102E', '#ffffff'],  // New Orleans Hornets
-  NOK: ['#0C2340', '#C8102E', '#ffffff'],  // New Orleans/OKC Hornets
+  NOK: ['#C8102E', '#0C2340', '#ffffff'],  // New Orleans/OKC Hornets
   VAN: ['#00B2A9', '#1D1160', '#ffffff'],  // Vancouver Grizzlies
   KCK: ['#5A2D81', '#63727A', '#ffffff'],  // Kansas City Kings
   CHA_old: ['#00788C', '#1D1160', '#ffffff'], // Charlotte Hornets (original)

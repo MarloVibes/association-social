@@ -43,7 +43,15 @@ export default function LeagueScreen() {
   const teamAbbr = myTeam?.abbreviation || '';
   const teamColors = getTeamColors(teamAbbr || 'ATL', currentYear);
   const teamPrimary = teamColors[0];
-  const teamSecondary = teamColors[1];
+  const teamSecondary = teamColors[1] || '#ffffff';
+  const hexToLum = (hex: string) => {
+    if (!hex || !hex.startsWith('#') || hex.length < 7) return 0.5;
+    const r = parseInt(hex.slice(1,3), 16) / 255;
+    const g = parseInt(hex.slice(3,5), 16) / 255;
+    const b = parseInt(hex.slice(5,7), 16) / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
 
   useEffect(() => {
     if (!leagueId) return;
@@ -184,11 +192,11 @@ export default function LeagueScreen() {
         {/* Header */}
         <View style={[styles.header, { backgroundColor: teamAbbr ? teamPrimary + '22' : '#0a0a0a', borderBottomColor: teamAbbr ? teamPrimary + '44' : '#1a1a1a' }]}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.backText, { color: teamPrimary || '#00ff87' }]}>← Back</Text>
+            <Text style={[styles.backText, { color: teamText }]}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (
             <View style={[styles.commBadge, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}>
-              <Text style={[styles.commBadgeText, { color: teamPrimary }]}>Commissioner</Text>
+              <Text style={[styles.commBadgeText, { color: teamText }]}>Commissioner</Text>
             </View>
           )}
         </View>
@@ -213,13 +221,13 @@ export default function LeagueScreen() {
               style={[styles.membersTabBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
               onPress={() => router.push({ pathname: '/screens/league-members', params: { leagueId } })}
             >
-              <Text style={[styles.membersTabBtnText, { color: teamPrimary }]}>👥 Members ({members.length})</Text>
+              <Text style={[styles.membersTabBtnText, { color: teamText }]}>👥 Members ({members.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.findGMsBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
-              <Text style={[styles.findGMsBtnText, { color: teamPrimary }]}>🔍 Find GMs</Text>
+              <Text style={[styles.findGMsBtnText, { color: teamText }]}>🔍 Find GMs</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -241,7 +249,7 @@ export default function LeagueScreen() {
           <View style={[styles.myTeamCard, { borderColor: teamPrimary + "88", backgroundColor: teamPrimary + "11" }]}>
             <View style={styles.myTeamCardHeader}>
               <View>
-                <Text style={[styles.myTeamCardLabel, { color: teamPrimary }]}>My Team</Text>
+                <Text style={[styles.myTeamCardLabel, { color: teamText }]}>My Team</Text>
                 <Text style={[styles.myTeamCardName, { color: teamSecondary }]}>{myTeam.name}</Text>
                 <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
               </View>
@@ -259,7 +267,7 @@ export default function LeagueScreen() {
               <View style={styles.myTeamPlayers}>
                 {myTeam.players.slice(0, 3).map((p: any) => (
                   <View key={p.player_id} style={styles.myTeamPlayerRow}>
-                    <Text style={[styles.myTeamPlayerPos, { color: teamPrimary }]}>{p.position}</Text>
+                    <Text style={[styles.myTeamPlayerPos, { color: teamText }]}>{p.position}</Text>
                     <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
                     <Text style={styles.myTeamPlayerJersey}>#{p.jersey_number}</Text>
                   </View>
@@ -344,13 +352,13 @@ export default function LeagueScreen() {
               style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
-              <Text style={[styles.inviteBtnText, { color: teamPrimary }]}>📨 Send League Invite</Text>
+              <Text style={[styles.inviteBtnText, { color: teamText }]}>📨 Send League Invite</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.advanceSeasonBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
             >
-              <Text style={[styles.advanceSeasonBtnText, { color: teamPrimary }]}>⏩ Advance Season</Text>
+              <Text style={[styles.advanceSeasonBtnText, { color: teamText }]}>⏩ Advance Season</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.deleteBtn, { marginTop: 10 }]} onPress={confirmDelete}>
               <Text style={styles.deleteBtnText}>Delete League</Text>
