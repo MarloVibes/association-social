@@ -236,6 +236,7 @@ const styles = StyleSheet.create({
   notifText: { color: '#cccccc', fontSize: 14, lineHeight: 20 },
   notifBold: { color: '#ffffff', fontWeight: '700' },
   notifTime: { color: '#555', fontSize: 11, marginTop: 4 },
+  notifPreview: { color: '#888', fontSize: 12, fontStyle: 'italic', marginTop: 2 },
   notifLink: { color: '#ff9900', fontSize: 11, marginTop: 2, fontWeight: '600' },
   emptyContainer: { alignItems: 'center', paddingTop: 80, gap: 16 },
   emptyIcon: { fontSize: 48 },

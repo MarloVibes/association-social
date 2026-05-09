@@ -27,6 +27,10 @@ export default function RootLayout() {
         <Stack.Screen name="screens/join-league" />
         <Stack.Screen name="screens/notifications" />
         <Stack.Screen name="screens/profile" />
+        <Stack.Screen name="screens/trade-channel" />
+        <Stack.Screen name="screens/league-members" />
+        <Stack.Screen name="screens/advance-season" />
+        <Stack.Screen name="screens/team-select" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

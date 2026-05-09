@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
@@ -24,6 +24,7 @@ export default function DashboardScreen() {
   const [leagues, setLeagues] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loadingLeagues, setLoadingLeagues] = useState(true);
+  const signingOut = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingInvites, setPendingInvites] = useState(0);
@@ -93,7 +94,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/(tabs)/auth');
+        router.replace('/');
         return;
       }
       await loadData(user.uid);
@@ -121,7 +122,7 @@ export default function DashboardScreen() {
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); router.replace('/(tabs)/auth'); } },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); } },
     ]);
   };
 

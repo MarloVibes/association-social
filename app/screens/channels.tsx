@@ -5,11 +5,9 @@ import GlobalNav from '@/components/GlobalNav';
 
 const CHANNELS = [
   { id: 'league-chat', label: 'League Chat', icon: '💬', desc: 'General conversation', commOnly: false },
-  { id: 'trade-center', label: 'Trade Center', icon: '🔄', desc: 'Propose and discuss trades', commOnly: false },
-  { id: 'announcements', label: 'Announcements', icon: '📣', desc: 'Commissioner updates', commOnly: false },
-  { id: 'league-rules', label: 'League Rules', icon: '📋', desc: 'Official league rules', commOnly: false },
-  { id: 'trade-block', label: 'Trade Block', icon: '🏷️', desc: 'Players available for trade', commOnly: false },
-  { id: 'polls', label: 'Voting Polls', icon: '🗳️', desc: 'League votes and decisions', commOnly: false },
+  { id: 'trade-center', label: 'Trade Center', icon: '🔄', desc: 'List players · Trade block · Propose deals', commOnly: false },
+  { id: 'announcements', label: 'League News', icon: '📰', desc: 'Announcements from the commissioner', commOnly: false },
+  { id: 'league-rules', label: 'League Rules', icon: '📋', desc: 'Official league rules', commOnly: false },  { id: 'polls', label: 'Voting Polls', icon: '🗳️', desc: 'League votes and decisions', commOnly: false },
   { id: 'ban-list', label: 'Gamertag Ban List', icon: '🚫', desc: 'Banned players and accounts', commOnly: false },
   { id: 'reset-requests', label: 'Game Reset Requests', icon: '🔁', desc: 'Request game resets', commOnly: false },
   { id: 'highlights', label: 'Highlights & Box Scores', icon: '🎬', desc: 'Share clips and game results', commOnly: false },
