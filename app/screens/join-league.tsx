@@ -52,7 +52,16 @@ export default function JoinLeagueScreen() {
       }
       setAlreadyMember(memberSet);
       setAlreadyRequested(requestSet);
-      setLeagues(allLeagues);
+
+      // Load commissioner names
+      const enriched = await Promise.all(allLeagues.map(async (league: any) => {
+        try {
+          const commSnap = await getDoc(doc(db, 'users', league.commissionerId));
+          const commData = commSnap.data() || {};
+          return { ...league, commDisplayName: commData.displayName || '', commUsername: commData.username || '' };
+        } catch { return league; }
+      }));
+      setLeagues(enriched);
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -128,7 +137,10 @@ export default function JoinLeagueScreen() {
   };
 
   const filteredLeagues = leagues.filter(l => {
-    const matchSearch = !search || l.name?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search ||
+      l.name?.toLowerCase().includes(search.toLowerCase()) ||
+      l.commDisplayName?.toLowerCase().includes(search.toLowerCase()) ||
+      l.commUsername?.toLowerCase().includes(search.toLowerCase());
     const matchSport = filterSport === 'all' || l.sport === filterSport;
     const matchEra = filterEra === 'all' || l.era === filterEra;
     return matchSearch && matchSport && matchEra;
@@ -161,6 +173,11 @@ export default function JoinLeagueScreen() {
           <Text style={styles.leagueMetaText}>{era}</Text>
           <Text style={styles.leagueMetaDot}>·</Text>
           <Text style={styles.leagueMetaText}>{item.mode} mode</Text>
+        </View>
+        <View style={styles.commRow}>
+          <Text style={styles.commLabel}>Commissioner: </Text>
+          <Text style={styles.commName}>{item.commDisplayName || 'Unknown'}</Text>
+          {item.commUsername ? <Text style={styles.commUsername}> @{item.commUsername}</Text> : null}
         </View>
         <View style={styles.leagueFooter}>
           <Text style={styles.leagueMemberCount}>👥 {members} member{members !== 1 ? 's' : ''}</Text>
@@ -258,6 +275,10 @@ export default function JoinLeagueScreen() {
                   <Text style={styles.modalInfoValue}>{selectedLeague.mode}</Text>
                 </View>
                 <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Commissioner</Text>
+                  <Text style={styles.modalInfoValue}>{selectedLeague.commDisplayName || 'Unknown'}{selectedLeague.commUsername ? ' (@' + selectedLeague.commUsername + ')' : ''}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
                   <Text style={styles.modalInfoLabel}>Members</Text>
                   <Text style={styles.modalInfoValue}>{selectedLeague.members?.length || 1} GMs</Text>
                 </View>
@@ -348,6 +369,10 @@ const styles = StyleSheet.create({
   memberBadgeText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   requestedBadge: { backgroundColor: '#2a1a00', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   requestedBadgeText: { color: '#F5A623', fontSize: 11, fontWeight: '700' },
+  commRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' },
+  commLabel: { color: '#555', fontSize: 11 },
+  commName: { color: '#aaa', fontSize: 11, fontWeight: '600' },
+  commUsername: { color: '#666', fontSize: 11 },
   tapToView: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyIcon: { fontSize: 48 },

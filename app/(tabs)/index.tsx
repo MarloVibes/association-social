@@ -25,7 +25,7 @@ export default function LandingScreen() {
         Animated.spring(ballScale, { toValue: 1, tension: 40, friction: 6, useNativeDriver: true }),
       ]),
       Animated.delay(200),
-      // ASSOCIATION fades in
+      // FRANCHISE fades in
       Animated.parallel([
         Animated.timing(titleOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
         Animated.timing(titleY, { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -71,7 +71,7 @@ export default function LandingScreen() {
 
         {/* ASSOCIATION */}
         <Animated.Text style={[styles.titleTop, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
-          ASSOCIATION
+          FRANCHISE
         </Animated.Text>
 
         {/* SOCIAL */}
