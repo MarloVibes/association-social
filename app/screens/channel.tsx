@@ -54,6 +54,8 @@ export default function ChannelScreen() {
   const [newBanEntry, setNewBanEntry] = useState('');
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [newResetRequest, setNewResetRequest] = useState('');
+  const [bulletinEditMode, setBulletinEditMode] = useState(false);
+  const [selectedBulletins, setSelectedBulletins] = useState<string[]>([]);
   const flatListRef = useRef<FlatList>(null);
 
   const user = auth.currentUser;
@@ -61,7 +63,7 @@ export default function ChannelScreen() {
   const isCommOrCoComm = user?.uid === commissionerId || coComms.includes(user?.uid || '');
 
   // Channels that use chat-style messages
-  const isChatChannel = ['league-chat', 'trade-talk', 'announcements', 'trade-block', 'highlights'].includes(channelId);
+  const isChatChannel = ['league-chat', 'trade-talk', 'trade-block', 'highlights', 'announcements'].includes(channelId);
   const canPost = channelId === 'announcements' ? isCommOrCoComm : true;
 
   useEffect(() => {
@@ -517,6 +519,119 @@ export default function ChannelScreen() {
     );
   }
 
+  // ── League News Bulletin Board ──────────────────────────────
+  if (channelId === 'announcements') {
+    return (
+      <View style={styles.bulletinContainer}>
+        <View style={styles.bulletinHeader}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.bulletinBack}>← Back</Text>
+          </TouchableOpacity>
+          <View style={styles.bulletinHeaderCenter}>
+            <Text style={styles.bulletinHeaderTitle}>📰 League News</Text>
+          </View>
+          <View style={styles.bulletinHeaderBtns}>
+            {isCommOrCoComm && (
+              <TouchableOpacity style={styles.bulletinEditBtn} onPress={() => { setBulletinEditMode(!bulletinEditMode); setSelectedBulletins([]); }}>
+                <Text style={styles.bulletinEditBtnText}>{bulletinEditMode ? 'Done' : 'Edit'}</Text>
+              </TouchableOpacity>
+            )}
+            {isCommOrCoComm && bulletinEditMode && (
+              <TouchableOpacity
+                style={[styles.bulletinDeleteBtn, selectedBulletins.length === 0 && { opacity: 0.4 }]}
+                onPress={async () => {
+                  if (selectedBulletins.length === 0) return;
+                  Alert.alert('Delete ' + selectedBulletins.length + ' bulletin(s)?', '', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: async () => {
+                      const { deleteDoc } = await import('firebase/firestore');
+                      for (const id of selectedBulletins) {
+                        await deleteDoc(doc(db, 'leagues', leagueId, 'channels', channelId, 'messages', id));
+                      }
+                      setSelectedBulletins([]);
+                      setBulletinEditMode(false);
+                    }},
+                  ]);
+                }}
+              >
+                <Text style={styles.bulletinDeleteBtnText}>{selectedBulletins.length > 0 ? '🗑 (' + selectedBulletins.length + ')' : '🗑 Select'}</Text>
+              </TouchableOpacity>
+            )}
+            {isCommOrCoComm && !bulletinEditMode && (
+              <TouchableOpacity style={styles.bulletinPostBtn} onPress={() => setShowCreatePoll(true)}>
+                <Text style={styles.bulletinPostBtnText}>+ Post</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.bulletinContent}>
+          {messages.length === 0 ? (
+            <View style={styles.bulletinEmpty}>
+              <Text style={styles.bulletinEmptyIcon}>📌</Text>
+              <Text style={styles.bulletinEmptyText}>No announcements yet</Text>
+              {isCommOrCoComm && <Text style={styles.bulletinEmptyHint}>Tap + Post to pin a bulletin</Text>}
+            </View>
+          ) : (
+            messages.slice().reverse().map((item, i) => {
+              const sender = members[item.uid];
+              const colors = ['#f5e6c8','#ffd6d6','#d6f5d6','#d6e8ff','#fff3cd','#f0d6ff'];
+              const cardColor = colors[i % colors.length];
+              const isSelected = selectedBulletins.includes(item.id);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.85}
+                  style={[styles.bulletinCard, { backgroundColor: cardColor }, isSelected && styles.bulletinCardSelected]}
+                  onPress={() => {
+                    if (!bulletinEditMode) return;
+                    setSelectedBulletins(prev =>
+                      prev.includes(item.id) ? prev.filter(x => x !== item.id) : [...prev, item.id]
+                    );
+                  }}
+                >
+                  {bulletinEditMode && (
+                    <View style={[styles.bulletinCheckbox, isSelected && styles.bulletinCheckboxChecked]}>
+                      {isSelected && <Text style={styles.bulletinCheckMark}>✓</Text>}
+                    </View>
+                  )}
+                  <View style={styles.bulletinPin} />
+                  <Text style={styles.bulletinCardText}>{item.text}</Text>
+                  {item.photoUrl && <Image source={{ uri: item.photoUrl }} style={styles.bulletinPhoto} />}
+                  <View style={styles.bulletinCardFooter}>
+                    <Text style={styles.bulletinCardAuthor}>— {sender?.displayName || 'Commissioner'}{sender?.teamName ? ' · ' + sender.teamName : ''}</Text>
+                    <Text style={styles.bulletinCardTime}>{formatTime(item.createdAt)}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+        {isCommOrCoComm && showCreatePoll && (
+          <View style={styles.bulletinModal}>
+            <View style={styles.bulletinModalInner}>
+              <Text style={styles.bulletinModalTitle}>📌 New Bulletin</Text>
+              <TextInput style={styles.bulletinModalInput} placeholder="Write your announcement..." placeholderTextColor="#888" value={pollQuestion} onChangeText={setPollQuestion} multiline autoFocus />
+              <View style={styles.bulletinModalBtns}>
+                <TouchableOpacity style={styles.bulletinModalCancel} onPress={() => { setShowCreatePoll(false); setPollQuestion(''); }}>
+                  <Text style={styles.bulletinModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bulletinModalPost} onPress={async () => {
+                  if (!pollQuestion.trim()) return;
+                  await sendMessage(pollQuestion.trim());
+                  setPollQuestion('');
+                  setShowCreatePoll(false);
+                }}>
+                  <Text style={styles.bulletinModalPostText}>📌 Pin It</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+        <GlobalNav />
+      </View>
+    );
+  }
+
   // ── Chat Channels (league-chat, trade-talk, announcements, trade-block, highlights) ──
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -721,4 +836,42 @@ const styles = StyleSheet.create({
   gifGrid: { padding: 8 },
   gifItem: { flex: 1, margin: 4 },
   gifThumb: { width: '100%', height: 120, borderRadius: 8 },
+
+  bulletinContainer: { flex: 1, backgroundColor: '#8B6914' },
+  bulletinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#5C3D11', borderBottomWidth: 3, borderBottomColor: '#3a2408' },
+  bulletinBack: { color: '#FFD700', fontSize: 15, fontWeight: '700', width: 60 },
+  bulletinHeaderCenter: { flex: 1, alignItems: 'center' },
+  bulletinHeaderTitle: { color: '#FFD700', fontSize: 18, fontWeight: '900' },
+  bulletinHeaderBtns: { flexDirection: 'row', gap: 8, alignItems: 'center', width: 120, justifyContent: 'flex-end' },
+  bulletinEditBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  bulletinEditBtnText: { color: '#FFD700', fontSize: 12, fontWeight: '700' },
+  bulletinDeleteBtn: { backgroundColor: '#cc2222', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  bulletinDeleteBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  bulletinPostBtn: { backgroundColor: '#FFD700', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  bulletinPostBtnText: { color: '#3a2408', fontSize: 13, fontWeight: '800' },
+  bulletinContent: { padding: 16, paddingBottom: 100, gap: 16 },
+  bulletinEmpty: { alignItems: 'center', paddingTop: 80, gap: 12 },
+  bulletinEmptyIcon: { fontSize: 48 },
+  bulletinEmptyText: { color: '#f5e6c8', fontSize: 16, fontWeight: '700' },
+  bulletinEmptyHint: { color: '#c8a87a', fontSize: 13 },
+  bulletinCard: { borderRadius: 4, padding: 20, shadowColor: '#000', shadowOffset: { width: 2, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 6, position: 'relative' },
+  bulletinCardSelected: { borderWidth: 3, borderColor: '#cc2222' },
+  bulletinCheckbox: { position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#5C3D11', backgroundColor: 'rgba(255,255,255,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  bulletinCheckboxChecked: { backgroundColor: '#cc2222', borderColor: '#cc2222' },
+  bulletinCheckMark: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  bulletinPin: { position: 'absolute', top: -8, left: '50%', width: 16, height: 16, borderRadius: 8, backgroundColor: '#cc2222', borderWidth: 2, borderColor: '#ff4444', marginLeft: -8, zIndex: 1 },
+  bulletinCardText: { color: '#2a1a00', fontSize: 16, lineHeight: 24, marginTop: 8 },
+  bulletinPhoto: { width: '100%', height: 200, borderRadius: 4, marginTop: 12 },
+  bulletinCardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', paddingTop: 8 },
+  bulletinCardAuthor: { color: '#5C3D11', fontSize: 12, fontWeight: '700', fontStyle: 'italic' },
+  bulletinCardTime: { color: '#8B6914', fontSize: 11 },
+  bulletinModal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
+  bulletinModalInner: { backgroundColor: '#f5e6c8', borderRadius: 8, padding: 20 },
+  bulletinModalTitle: { fontSize: 18, fontWeight: '800', color: '#3a2408', marginBottom: 16 },
+  bulletinModalInput: { backgroundColor: '#fff', borderRadius: 6, padding: 14, fontSize: 15, color: '#2a1a00', minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#c8a87a' },
+  bulletinModalBtns: { flexDirection: 'row', gap: 12, marginTop: 16 },
+  bulletinModalCancel: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 6, borderWidth: 1, borderColor: '#8B6914' },
+  bulletinModalCancelText: { color: '#8B6914', fontWeight: '700' },
+  bulletinModalPost: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 6, backgroundColor: '#5C3D11' },
+  bulletinModalPostText: { color: '#FFD700', fontWeight: '800', fontSize: 15 },
 });
