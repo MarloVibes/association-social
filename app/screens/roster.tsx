@@ -101,6 +101,7 @@ export default function RosterScreen() {
 
   const freeAgents = useMemo(() => {
     const isDraftMode = league?.mode === 'draft';
+    const isRandomMode = league?.mode === 'random' || league?.mode === 'current';
     return allEraPlayers.filter(p => {
       const pid = p.player_id || p.id;
       const matchesSearch = !search || (p.full_name || '').toLowerCase().includes(search.toLowerCase());
@@ -111,7 +112,12 @@ export default function RosterScreen() {
         const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
         return matchesSearch && matchesPos && !isTaken;
       }
-      // In random/current mode - show only teamless or dropped players
+      // In random/current mode - show all untaken players
+      if (isRandomMode) {
+        const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
+        return matchesSearch && matchesPos && !isTaken;
+      }
+      // Legacy - teamless or dropped players
       const hasNoTeam = !p.team || p.team === '';
       const wasDropped = !takenPlayerNames.has(p.full_name || '') && !takenPlayerIds.has(pid) && p.team && droppedPlayerNames.has(p.full_name || '');
       return matchesSearch && matchesPos && (hasNoTeam || wasDropped);

@@ -57,6 +57,7 @@ export default function ChannelScreen() {
   const [banSeverity, setBanSeverity] = useState('Banned');
   const [expandedBan, setExpandedBan] = useState<string | null>(null);
   const [showBanForm, setShowBanForm] = useState(false);
+  const [editingBan, setEditingBan] = useState<any>(null);
   const [banProfileSearch, setBanProfileSearch] = useState('');
   const [banProfileResults, setBanProfileResults] = useState<any[]>([]);
   const [banLinkedProfile, setBanLinkedProfile] = useState<any>(null);
@@ -682,18 +683,31 @@ export default function ChannelScreen() {
                     </View>
                     <Text style={[styles.wantedPlatform, { color: sev.color }]}>{entry.platform || 'PSN'}</Text>
                     {isCommOrCoComm && (
-                      <TouchableOpacity onPress={async () => {
-                        Alert.alert('Remove ' + entry.gamertag + '?', '', [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Remove', style: 'destructive', onPress: async () => {
-                            const { deleteDoc } = await import('firebase/firestore');
-                            await deleteDoc(doc(db, 'leagues', leagueId, 'channels', 'ban-list', 'entries', entry.id));
-                            setBanList(prev => prev.filter(e => e.id !== entry.id));
-                          }},
-                        ]);
-                      }}>
-                        <Text style={styles.wantedRemove}>✕</Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity onPress={() => {
+                          setEditingBan(entry);
+                          setNewBanEntry(entry.gamertag);
+                          setBanPlatform(entry.platform || 'PSN');
+                          setBanReason(entry.reason || '');
+                          setBanSeverity(entry.severity || 'Banned');
+                          setBanLinkedProfile(entry.linkedProfile || null);
+                          setShowBanForm(true);
+                        }}>
+                          <Text style={styles.wantedEdit}>✏️</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={async () => {
+                          Alert.alert('Remove ' + entry.gamertag + '?', '', [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: async () => {
+                              const { deleteDoc } = await import('firebase/firestore');
+                              await deleteDoc(doc(db, 'leagues', leagueId, 'channels', 'ban-list', 'entries', entry.id));
+                              setBanList(prev => prev.filter(e => e.id !== entry.id));
+                            }},
+                          ]);
+                        }}>
+                          <Text style={styles.wantedRemove}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                   <Text style={styles.wantedGamertag}>{entry.gamertag}</Text>
@@ -725,16 +739,31 @@ export default function ChannelScreen() {
               <TouchableOpacity onPress={() => { setShowBanForm(false); setBanLinkedProfile(null); setBanProfileSearch(''); setBanProfileResults([]); }}>
                 <Text style={styles.wantedModalCancel}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.wantedModalTitle}>Add to Ban List</Text>
+              <Text style={styles.wantedModalTitle}>{editingBan ? 'Edit Ban Entry' : 'Add to Ban List'}</Text>
               <TouchableOpacity onPress={async () => {
                 if (!newBanEntry.trim()) return;
-                await addBanEntry();
+                if (editingBan) {
+                  // Update existing ban
+                  await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'ban-list', 'entries', editingBan.id), {
+                    gamertag: newBanEntry.trim(),
+                    platform: banPlatform,
+                    reason: banReason,
+                    severity: banSeverity,
+                    linkedProfile: banLinkedProfile || null,
+                  });
+                  setBanList(prev => prev.map(e => e.id === editingBan.id ? { ...e, gamertag: newBanEntry.trim(), platform: banPlatform, reason: banReason, severity: banSeverity, linkedProfile: banLinkedProfile || null } : e));
+                  setEditingBan(null);
+                } else {
+                  await addBanEntry();
+                }
                 setShowBanForm(false);
+                setNewBanEntry('');
                 setBanReason('');
                 setBanSeverity('Banned');
                 setBanPlatform('PSN');
+                setBanLinkedProfile(null);
               }}>
-                <Text style={styles.wantedModalPost}>Ban</Text>
+                <Text style={styles.wantedModalPost}>{editingBan ? 'Update' : 'Ban'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.wantedModalContent}>
@@ -913,7 +942,22 @@ export default function ChannelScreen() {
             </View>
             <ScrollView contentContainerStyle={styles.resetModalContent}>
               <Text style={styles.resetModalLabel}>GAME DATE *</Text>
-              <TextInput style={styles.resetModalInput} placeholder='MM/DD/YYYY' placeholderTextColor='#555' value={resetGameDate} onChangeText={setResetGameDate} keyboardType='numbers-and-punctuation' />
+              <TextInput
+                style={styles.resetModalInput}
+                placeholder='MM/DD/YY'
+                placeholderTextColor='#555'
+                value={resetGameDate}
+                keyboardType='number-pad'
+                maxLength={8}
+                onChangeText={(text) => {
+                  // Auto-insert slashes
+                  const digits = text.replace(/\D/g, '');
+                  let formatted = digits;
+                  if (digits.length >= 3) formatted = digits.slice(0,2) + '/' + digits.slice(2);
+                  if (digits.length >= 5) formatted = digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4,6);
+                  setResetGameDate(formatted);
+                }}
+              />
 
               <Text style={styles.resetModalLabel}>OPPONENT TEAM *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
@@ -1658,6 +1702,7 @@ const styles = StyleSheet.create({
   wantedSeverityBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   wantedSeverityText: { fontSize: 11, fontWeight: '800' },
   wantedPlatform: { flex: 1, fontSize: 11, fontWeight: '700' },
+  wantedEdit: { fontSize: 16 },
   wantedRemove: { color: '#ff4444', fontSize: 18, fontWeight: '700' },
   wantedGamertag: { color: '#ffffff', fontSize: 22, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
   wantedAddedBy: { color: '#886666', fontSize: 11, marginBottom: 4 },
