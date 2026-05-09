@@ -68,6 +68,7 @@ export default function CreateLeagueScreen() {
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
+        privacy: 'private',
         currentYear: sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : 2024,
         currentSeason: sport === 'nba' ? (era === 'magic_bird' ? '1983-84' : era === 'jordan' ? '1991-92' : era === 'kobe' ? '2002-03' : era === 'lebron' ? '2010-11' : era === 'steph' ? '2016-17' : '2024-25') : '2024-25',
         sport,

@@ -355,6 +355,18 @@ export default function LeagueScreen() {
               <Text style={[styles.inviteBtnText, { color: teamText }]}>📨 Send League Invite</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              onPress={async () => {
+                const newPrivacy = league.privacy === 'public' ? 'private' : 'public';
+                await updateDoc(doc(db, 'leagues', leagueId), { privacy: newPrivacy });
+                setLeague((prev: any) => ({ ...prev, privacy: newPrivacy }));
+              }}
+            >
+              <Text style={[styles.inviteBtnText, { color: teamText }]}>
+                {league.privacy === 'public' ? '🟢 Public League (tap to make Private)' : '🔒 Private League (tap to make Public)'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.advanceSeasonBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
             >
