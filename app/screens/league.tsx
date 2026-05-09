@@ -191,7 +191,7 @@ export default function LeagueScreen() {
 
         {/* Header */}
         <View style={[styles.header, { backgroundColor: teamAbbr ? teamPrimary + '22' : '#0a0a0a', borderBottomColor: teamAbbr ? teamPrimary + '44' : '#1a1a1a' }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
             <Text style={[styles.backText, { color: teamText }]}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (

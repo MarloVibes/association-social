@@ -76,7 +76,9 @@ export default function ChannelScreen() {
         setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       });
-      return () => unsub();
+
+
+  return () => unsub();
     }
 
     if (channelId === 'league-rules') loadRules();
@@ -89,10 +91,22 @@ export default function ChannelScreen() {
     const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
     if (!leagueSnap.exists()) return;
     const memberIds: string[] = leagueSnap.data().members || [];
+
+    // Load team data for each member
+    const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+    const teamsByGm: Record<string, any> = {};
+    teamsSnap.docs.forEach(d => {
+      const td = d.data();
+      if (td.gmId) teamsByGm[td.gmId] = td;
+    });
+
     const profiles = await Promise.all(
       memberIds.map(async uid => {
         const snap = await getDoc(doc(db, 'users', uid));
-        return snap.exists() ? { uid, ...snap.data() } : { uid, displayName: 'Unknown GM' };
+        const team = teamsByGm[uid];
+        return snap.exists()
+          ? { uid, ...snap.data(), teamName: team?.name || '', teamAbbr: team?.abbreviation || '' }
+          : { uid, displayName: 'Unknown GM', teamName: '', teamAbbr: '' };
       })
     );
     const map: Record<string, any> = {};
@@ -197,10 +211,10 @@ export default function ChannelScreen() {
     loadResetRequests();
   };
 
-  const sendMessage = async (overrideText?: string, gifUrl?: string) => {
+  const sendMessage = async (overrideText?: string, gifUrl?: string, photoUrl?: string) => {
     if (!user) return;
     const content = overrideText ?? text.trim();
-    if (!content && !gifUrl) return;
+    if (!content && !gifUrl && !photoUrl) return;
     setSending(true);
     setText('');
     try {
@@ -208,6 +222,7 @@ export default function ChannelScreen() {
         uid: user.uid,
         text: content || '',
         gifUrl: gifUrl || null,
+        photoUrl: photoUrl || null,
         createdAt: serverTimestamp(),
       });
     } catch (e: any) {
@@ -245,24 +260,18 @@ export default function ChannelScreen() {
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.uid === user?.uid;
     const sender = members[item.uid];
+    const senderName = sender?.displayName || 'GM';
+    const teamName = sender?.teamName || '';
+    const label = teamName ? senderName + ' (' + teamName + ')' : senderName;
     return (
-      <TouchableOpacity
-        onLongPress={() => {
-          if (!isMe) blockAndReport(item.uid, sender?.displayName || 'this user');
-        }}
-        activeOpacity={1}
-      >
+      <TouchableOpacity onLongPress={() => { if (!isMe) blockAndReport(item.uid, senderName); }} activeOpacity={1}>
         <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-          {!isMe && (
-            <View style={styles.msgAvatar}>
-              <Text style={styles.msgAvatarText}>{sender?.displayName?.[0]?.toUpperCase() || '?'}</Text>
-            </View>
-          )}
-          <View style={styles.msgContent}>
-            {!isMe && <Text style={styles.msgSender}>{sender?.displayName || 'GM'}</Text>}
+          <View style={[styles.msgContent, isMe && styles.msgContentMe]}>
+            {!isMe && <Text style={styles.msgSender}>{label}</Text>}
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
               {item.text ? <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.text}</Text> : null}
-              {item.gifUrl ? <Image source={{ uri: item.gifUrl }} style={styles.gifImage} resizeMode="cover" /> : null}
+              {item.gifUrl ? <Image source={{ uri: item.gifUrl }} style={styles.gifImage} resizeMode='cover' /> : null}
+              {item.photoUrl ? <Image source={{ uri: item.photoUrl }} style={styles.chatPhoto} resizeMode='cover' /> : null}
               <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>{formatTime(item.createdAt)}</Text>
             </View>
           </View>
@@ -509,28 +518,60 @@ export default function ChannelScreen() {
   }
 
   // ── Chat Channels (league-chat, trade-talk, announcements, trade-block, highlights) ──
+  const pickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission needed', 'Please allow photo library access.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false, quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    try {
+      const uri = result.assets[0].uri;
+      const blob = await (await fetch(uri)).blob();
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const storage = getStorage();
+      const storageRef = ref(storage, 'chat_photos/' + user?.uid + '_' + Date.now() + '.jpg');
+      await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(storageRef);
+      await sendMessage('', undefined, url);
+    } catch (e: any) { Alert.alert('Upload failed', e.message); }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
+      {/* Basketball Court Background */}
+      <View style={styles.courtBg} pointerEvents='none'>
+        <View style={styles.courtFloor} />
+        <View style={styles.courtLine} />
+        <View style={styles.centerCircle} />
+        <View style={styles.centerDot} />
+        <View style={styles.paintTop} />
+        <View style={styles.paintBottom} />
+        <View style={styles.ftCircleTop} />
+        <View style={styles.ftCircleBottom} />
+        <View style={styles.threeTop} />
+        <View style={styles.threeBottom} />
+        <View style={styles.courtDark} />
+      </View>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{channelIcon} {channelLabel}</Text>
-          <Text style={styles.headerSub}>{leagueName}</Text>
+          <Text style={styles.headerIcon}>{channelIcon || '💬'}</Text>
+          <View>
+            <Text style={styles.headerTitle}>{channelLabel || 'League Chat'}</Text>
+            <Text style={styles.headerSub}>{leagueName}</Text>
+          </View>
         </View>
         <View style={{ width: 60 }} />
       </View>
-
-      {channelId === 'announcements' && !isCommOrCoComm && (
-        <View style={styles.readOnlyBanner}>
-          <Text style={styles.readOnlyText}>📣 Read only — only commissioners can post here</Text>
-        </View>
-      )}
 
       <FlatList
         ref={flatListRef}
@@ -546,180 +587,138 @@ export default function ChannelScreen() {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
       />
 
-      {showEmoji && (
-        <View style={styles.emojiPanel}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.emojiGrid}>
-              {EMOJI_LIST.map(e => (
-                <TouchableOpacity key={e} style={styles.emojiBtn} onPress={() => { setText(prev => prev + e); setShowEmoji(false); }}>
-                  <Text style={styles.emojiText}>{e}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
       {canPost && (
         <View style={styles.inputBar}>
-          <TouchableOpacity style={styles.inputAction} onPress={() => { setShowEmoji(!showEmoji); setShowGiphy(false); }}>
-            <Text style={styles.inputActionText}>😊</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
-            <Text style={styles.inputActionText}>GIF</Text>
+            <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
           </TouchableOpacity>
-          {channelId === 'highlights' && (
-            <TouchableOpacity style={styles.inputAction} onPress={async () => {
-              await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images });
-              Alert.alert('Coming soon', 'Photo uploads require Firebase Storage setup.');
-            }}>
-              <Text style={styles.inputActionText}>📷</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.inputAction} onPress={pickPhoto}>
+            <Text style={styles.inputActionIcon}>📷</Text>
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
-            placeholder={channelId === 'highlights' ? 'Share a highlight or box score...' : 'Message...'}
-            placeholderTextColor="#555"
             value={text}
             onChangeText={setText}
+            placeholder='Message...'
+            placeholderTextColor='#555'
             multiline
-            maxLength={1000}
           />
           <TouchableOpacity
-            style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!text.trim() && !sending) && styles.sendBtnDisabled]}
             onPress={() => sendMessage()}
             disabled={!text.trim() || sending}
           >
-            {sending ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.sendBtnText}>↑</Text>}
+            <Text style={styles.sendBtnText}>↑</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <Modal visible={showGiphy} animationType="slide" presentationStyle="pageSheet">
+      {/* GIF Modal */}
+      <Modal visible={showGiphy} animationType='slide' presentationStyle='pageSheet'>
         <View style={styles.giphyModal}>
           <View style={styles.giphyHeader}>
-            <Text style={styles.giphyTitle}>Search GIFs</Text>
-            <TouchableOpacity onPress={() => { setShowGiphy(false); setGiphySearch(''); setGifs([]); }}>
+            <TouchableOpacity onPress={() => { setShowGiphy(false); setGifs([]); setGiphySearch(''); }}>
               <Text style={styles.giphyClose}>✕</Text>
             </TouchableOpacity>
+            <Text style={styles.giphyTitle}>Search GIFs</Text>
+            <View style={{ width: 40 }} />
           </View>
           <TextInput
             style={styles.giphyInput}
-            placeholder="Search Giphy..."
-            placeholderTextColor="#555"
             value={giphySearch}
             onChangeText={searchGiphy}
+            placeholder='Search GIPHY...'
+            placeholderTextColor='#555'
             autoFocus
-            autoCorrect={false}
           />
-          {giphyLoading && <ActivityIndicator color="#00ff87" style={{ marginTop: 20 }} />}
-          <FlatList
-            data={gifs}
-            keyExtractor={item => item.id}
-            numColumns={2}
-            contentContainerStyle={styles.gifGrid}
-            renderItem={({ item }) => {
-              const url = item.images?.fixed_height?.url;
-              if (!url) return null;
-              return (
-                <TouchableOpacity style={styles.gifItem} onPress={() => sendGif(url)}>
-                  <Image source={{ uri: url }} style={styles.gifThumb} resizeMode="cover" />
-                </TouchableOpacity>
-              );
-            }}
-            ListEmptyComponent={giphySearch.length >= 2 && !giphyLoading ? <Text style={styles.giphyEmpty}>No GIFs found</Text> : null}
-          />
+          {giphyLoading ? <ActivityIndicator color='#F5A623' style={{ marginTop: 20 }} /> : (
+            <FlatList
+              data={gifs}
+              numColumns={2}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.gifGrid}
+              renderItem={({ item }) => {
+                const url = item.images?.fixed_height?.url;
+                if (!url) return null;
+                return (
+                  <TouchableOpacity onPress={() => sendGif(url)} style={styles.gifItem}>
+                    <Image source={{ uri: url }} style={styles.gifThumb} />
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
         </View>
       </Modal>
-          <GlobalNav />
+      <GlobalNav />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
-  headerCenter: { alignItems: 'center', flex: 1 },
-  headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  headerSub: { color: '#555', fontSize: 12, marginTop: 2 },
-  editText: { color: '#00ff87', fontSize: 14, fontWeight: '600' },
-  saveText: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
-  readOnlyBanner: { backgroundColor: '#1a1500', paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2a2500' },
-  readOnlyText: { color: '#888855', fontSize: 13 },
-  messageList: { paddingHorizontal: 16, paddingVertical: 12, flexGrow: 1 },
-  emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 16 },
-  emptyText: { color: '#444', fontSize: 14 },
-  msgRow: { marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end' },
+  container: { flex: 1, backgroundColor: '#0a0600' },
+
+  // Court background
+  courtBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  courtFloor: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#8B4513', opacity: 0.45 },
+  courtDark: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', opacity: 0.60 },
+  courtLine: { position: 'absolute', top: '48%', left: 20, right: 20, height: 2, backgroundColor: '#ffffff', opacity: 0.35 },
+  centerCircle: { position: 'absolute', alignSelf: 'center', top: '38%', width: 150, height: 150, borderRadius: 75, borderWidth: 2, borderColor: '#ffffff', opacity: 0.3 },
+  centerDot: { position: 'absolute', alignSelf: 'center', top: '46%', width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', opacity: 0.2 },
+  paintTop: { position: 'absolute', alignSelf: 'center', top: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#ffffff', opacity: 0.22, backgroundColor: 'rgba(255,255,255,0.03)' },
+  paintBottom: { position: 'absolute', alignSelf: 'center', bottom: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#ffffff', opacity: 0.22, backgroundColor: 'rgba(255,255,255,0.03)' },
+  ftCircleTop: { position: 'absolute', alignSelf: 'center', top: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
+  ftCircleBottom: { position: 'absolute', alignSelf: 'center', bottom: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
+  threeTop: { position: 'absolute', alignSelf: 'center', top: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
+  threeBottom: { position: 'absolute', alignSelf: 'center', bottom: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
+
+  // Header
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  backText: { color: '#F5A623', fontSize: 15, fontWeight: '600', width: 60 },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIcon: { fontSize: 20 },
+  headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  headerSub: { color: '#888', fontSize: 11, textAlign: 'center' },
+
+  // Messages
+  messageList: { paddingHorizontal: 12, paddingVertical: 16, paddingBottom: 80, flexGrow: 1 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 14 },
+  msgRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-end' },
   msgRowMe: { flexDirection: 'row-reverse' },
-  msgAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  msgAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
-  msgContent: { maxWidth: '78%' },
-  msgSender: { color: '#666', fontSize: 11, marginBottom: 4, marginLeft: 4 },
-  bubble: { backgroundColor: '#1a1a1a', borderRadius: 18, borderBottomLeftRadius: 4, padding: 12 },
-  bubbleMe: { backgroundColor: '#00ff87', borderRadius: 18, borderBottomRightRadius: 4 },
-  bubbleThem: {},
+  msgContent: { flex: 1, maxWidth: '78%' },
+  msgContentMe: { alignItems: 'flex-end' },
+  msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 4 },
+  msgSender: { color: '#F5A623', fontSize: 11, fontWeight: '700', marginBottom: 3, marginLeft: 4 },
+  msgTeamBadge: { fontSize: 10, fontWeight: '800' },
+  bubble: { borderRadius: 18, padding: 10, borderWidth: 1 },
+  bubbleMe: { backgroundColor: '#1a1000', borderColor: '#F5A62355', borderBottomRightRadius: 4 },
+  bubbleThem: { backgroundColor: 'rgba(30,30,30,0.92)', borderColor: 'rgba(255,255,255,0.1)', borderBottomLeftRadius: 4 },
   msgText: { color: '#ffffff', fontSize: 15, lineHeight: 20 },
-  msgTextMe: { color: '#000000' },
-  msgTime: { color: '#555', fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
-  msgTimeMe: { color: '#00662a' },
-  gifImage: { width: 200, height: 150, borderRadius: 12, marginTop: 4 },
-  emojiPanel: { backgroundColor: '#1a1a1a', borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingVertical: 8 },
-  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, gap: 4 },
-  emojiBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  emojiText: { fontSize: 24 },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 28 : 10, borderTopWidth: 1, borderTopColor: '#1a1a1a', backgroundColor: '#0a0a0a', gap: 8 },
+  msgTextMe: { color: '#fff3e0' },
+  msgTime: { color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 4, textAlign: 'right' },
+  msgTimeMe: { color: 'rgba(245,166,35,0.5)' },
+  gifImage: { width: 200, height: 150, borderRadius: 10 },
+  chatPhoto: { width: 200, height: 200, borderRadius: 10, marginTop: 4 },
+
+  // Input
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 30 : 10, backgroundColor: 'rgba(0,0,0,0.85)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', gap: 8 },
   inputAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  inputActionText: { fontSize: 20 },
-  input: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: '#2a2a2a' },
-  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  inputActionIcon: { fontSize: 20 },
+  gifBtnBox: { backgroundColor: '#1a1000', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#F5A623' },
+  gifBtnText: { color: '#F5A623', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(245,166,35,0.25)' },
+  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },
   sendBtnText: { color: '#000', fontSize: 18, fontWeight: '800' },
-  giphyModal: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 20 },
-  giphyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 16 },
-  giphyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  giphyClose: { color: '#888', fontSize: 20 },
-  giphyInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 12 },
-  gifGrid: { paddingHorizontal: 12, paddingBottom: 40 },
-  gifItem: { flex: 1, margin: 4, borderRadius: 10, overflow: 'hidden' },
-  gifThumb: { width: '100%', height: 140 },
-  giphyEmpty: { color: '#555', textAlign: 'center', marginTop: 40, fontSize: 14 },
-  rulesScroll: { flex: 1 },
-  rulesContent: { padding: 20 },
-  rulesText: { color: '#cccccc', fontSize: 15, lineHeight: 24 },
-  rulesInput: { color: '#ffffff', fontSize: 15, lineHeight: 24, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', minHeight: 300, textAlignVertical: 'top' },
-  pollList: { padding: 20, gap: 16 },
-  pollCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#2a2a2a' },
-  pollQuestion: { color: '#ffffff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  pollMeta: { color: '#555', fontSize: 12, marginBottom: 14 },
-  pollOption: { backgroundColor: '#111', borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', overflow: 'hidden', position: 'relative' },
-  pollOptionSelected: { borderColor: '#00ff87' },
-  pollBar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#0a2a1a', borderRadius: 10 },
-  pollOptionText: { color: '#aaa', fontSize: 14, flex: 1, zIndex: 1 },
-  pollOptionTextSelected: { color: '#00ff87', fontWeight: '600' },
-  pollPct: { color: '#555', fontSize: 12, zIndex: 1 },
-  modalContainer: { flex: 1, backgroundColor: '#0a0a0a' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  modalTitle: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  modalContent: { padding: 20, gap: 12 },
-  modalLabel: { color: '#aaa', fontSize: 13, fontWeight: '600', textTransform: 'uppercase', marginBottom: 4 },
-  modalInput: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a' },
-  addOptionBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  addOptionBtnText: { color: '#888', fontSize: 14 },
-  actionBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
-  actionBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  banInputRow: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  banInput: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a' },
-  banAddBtn: { backgroundColor: '#ff3333', borderRadius: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  banAddBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  banList: { padding: 20, gap: 10 },
-  banEntry: { backgroundColor: '#1a0a0a', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#3a1a1a' },
-  banEntryText: { color: '#ff6666', fontSize: 15, fontWeight: '600', marginBottom: 4 },
-  banEntryMeta: { color: '#555', fontSize: 12 },
-  resetCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', gap: 8 },
-  resetCardApproved: { borderColor: '#00ff87', backgroundColor: '#0a1a0a' },
-  resetDesc: { color: '#ffffff', fontSize: 14 },
-  resetMeta: { color: '#555', fontSize: 12 },
-  approveBtn: { backgroundColor: '#0a2a1a', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87' },
-  approveBtnText: { color: '#00ff87', fontSize: 13, fontWeight: '700' },
+
+  // GIF Modal
+  giphyModal: { flex: 1, backgroundColor: '#0a0a0a' },
+  giphyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 56, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  giphyClose: { color: '#ff4444', fontSize: 18, fontWeight: '700', width: 40 },
+  giphyTitle: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
+  giphyInput: { margin: 16, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a' },
+  gifGrid: { padding: 8 },
+  gifItem: { flex: 1, margin: 4 },
+  gifThumb: { width: '100%', height: 120, borderRadius: 8 },
 });
