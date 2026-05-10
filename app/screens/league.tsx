@@ -295,54 +295,47 @@ export default function LeagueScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Activity Feed */}
-        {/* League Activity Carousel */}
+        {/* League Activity Feed */}
         <View style={styles.activityCarouselHeader}>
           <Text style={styles.sectionTitle}>League Activity</Text>
-          {activity.length > 1 && (
-            <View style={styles.activityNav}>
-              <TouchableOpacity
-                onPress={() => setActivityIndex(i => Math.max(0, i - 1))}
-                style={[styles.activityNavBtn, activityIndex === 0 && styles.activityNavBtnDisabled]}
-              >
-                <Text style={styles.activityNavText}>‹</Text>
-              </TouchableOpacity>
-              <Text style={styles.activityNavCount}>{activityIndex + 1}/{activity.length}</Text>
-              <TouchableOpacity
-                onPress={() => setActivityIndex(i => Math.min(activity.length - 1, i + 1))}
-                style={[styles.activityNavBtn, activityIndex === activity.length - 1 && styles.activityNavBtnDisabled]}
-              >
-                <Text style={styles.activityNavText}>›</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          <Text style={styles.activityCount}>{activity.length} event{activity.length !== 1 ? 's' : ''}</Text>
         </View>
         {activity.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No activity yet. Pick up your first player!</Text>
           </View>
-        ) : (() => {
-          const item = activity[activityIndex];
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.activityCarouselCard}
-              onPress={() => item.type === 'trade_listing' && item.leagueId && router.push({ pathname: '/screens/trade-channel', params: { leagueId: item.leagueId, channelId: 'trade-center' } })}
-              activeOpacity={item.type === 'trade_listing' ? 0.7 : 1}
-            >
-              <View style={[styles.activityDot, (item.type === 'trade_listing' || item.type === 'tradeblock') && styles.activityDotTrade]} />
-              <View style={styles.activityContent}>
-                <Text style={styles.activityMessage}>{item.message}</Text>
-                {item.type === 'trade_listing' && (
-                  <Text style={styles.activityLink}>Tap to view Trade Center →</Text>
-                )}
-                <Text style={styles.activityTime}>
-                  {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : ''}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })()}
+        ) : (
+          <View style={styles.activityList}>
+            {activity.map((item) => {
+              const typeIcon = item.type === 'pickup' || item.type === 'sign' ? '✍️' :
+                item.type === 'drop' ? '❌' :
+                item.type === 'tradeblock' ? '🔄' :
+                item.type === 'trade_listing' ? '💰' :
+                item.type === 'join' ? '👋' :
+                item.type === 'announcement' ? '📰' :
+                item.type === 'reset_request' ? '🔁' : '📋';
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.activityItem}
+                  onPress={() => {
+                    if (item.type === 'trade_listing') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
+                  }}
+                  activeOpacity={item.type === 'trade_listing' ? 0.7 : 1}
+                >
+                  <Text style={styles.activityIcon}>{typeIcon}</Text>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityMessage}>{item.message}</Text>
+                    {item.type === 'trade_listing' && <Text style={styles.activityLink}>Tap to view →</Text>}
+                    <Text style={styles.activityTime}>
+                      {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Commissioner Controls */}
         {isCommissioner && (
@@ -441,6 +434,10 @@ const styles = StyleSheet.create({
   memberHint: { color: '#333', fontSize: 12, marginBottom: 14 },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center' },
+  activityCount: { color: '#555', fontSize: 12 },
+  activityList: { backgroundColor: '#1a1a1a', borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden' },
+  activityItem: { flexDirection: 'row', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: '#111', alignItems: 'flex-start' },
+  activityIcon: { fontSize: 18, width: 28, textAlign: 'center', marginTop: 1 },
   activityCarouselHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   activityNav: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   activityNavBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },

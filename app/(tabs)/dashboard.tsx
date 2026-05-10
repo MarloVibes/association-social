@@ -218,34 +218,7 @@ export default function DashboardScreen() {
             </>
           )}
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-          </View>
 
-          {recentActivity.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No activity yet. Join a league and pick up some players!</Text>
-            </View>
-          ) : (
-            <View style={styles.activityFeed}>
-              {recentActivity.map((item) => (
-                <TouchableOpacity
-                  key={item.leagueId + item.id}
-                  style={styles.activityItem}
-                  onPress={() => router.push({ pathname: '/screens/league', params: { leagueId: item.leagueId } })}
-                >
-                  <View style={[styles.activityDot, item.type === 'tradeblock' && styles.activityDotTrade]} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityMessage}>{item.message}</Text>
-                    <View style={styles.activityMeta}>
-                      <Text style={styles.activityLeague}>{SPORT_EMOJI[item.sport] || '🏆'} {item.leagueName}</Text>
-                      <Text style={styles.activityTime}>{formatTime(item.createdAt)}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
           <View style={{ height: 20 }} />
         </View>
       </ScrollView>

@@ -264,6 +264,20 @@ export default function RosterScreen() {
           uid: auth.currentUser?.uid,
           createdAt: serverTimestamp(),
         });
+        // Notify all league members
+        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+        const memberIds: string[] = leagueSnap.data()?.members || [];
+        for (const memberId of memberIds) {
+          if (memberId === auth.currentUser?.uid) continue;
+          await updateDoc(doc(db, 'users', memberId), {
+            notifications: arrayUnion({
+              type: 'tradeblock',
+              leagueId,
+              message: (teamData.name || 'A GM') + ' added ' + (player.full_name || player.name) + ' to the trade block',
+              createdAt: new Date().toISOString(),
+            })
+          });
+        }
       }
       Alert.alert(
         isOnBlock ? 'Removed' : 'Added to Trade Block',
