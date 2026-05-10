@@ -13,6 +13,12 @@ export default function NotificationsScreen() {
   const user = auth.currentUser;
 
   useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(() => markAllRead(), 2000);
+    return () => clearTimeout(timer);
+  }, [user]);
+
 
   const loadAll = async () => {
     if (!user) return;
@@ -132,7 +138,7 @@ export default function NotificationsScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>
-        <View style={{ width: 60 }} />
+        <TouchableOpacity onPress={markAllRead}><Text style={styles.markAllText}>✓ All Read</Text></TouchableOpacity>
       </View>
 
       {loading ? (
@@ -207,7 +213,12 @@ export default function NotificationsScreen() {
                         <Text style={styles.notifLink}>View trade talks →</Text>
                       </TouchableOpacity>
                     )}
-                    {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && <Text style={styles.notifText}>{n.message || n.type}</Text>}
+                    {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && (
+                      <TouchableOpacity onPress={() => { if (n.leagueId) router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } }); }}>
+                        <Text style={styles.notifText}>{n.message || n.type}</Text>
+                        {n.leagueId && <Text style={styles.notifLink}>View League →</Text>}
+                      </TouchableOpacity>
+                    )}
                     <Text style={styles.notifTime}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</Text>
                   </View>
                 </View>

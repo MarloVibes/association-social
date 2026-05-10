@@ -86,6 +86,7 @@ export default function ChannelScreen() {
   const [resetProofUrl, setResetProofUrl] = useState('');
   const [leagueTeams, setLeagueTeams] = useState<any[]>([]);
   const [bulletinEditMode, setBulletinEditMode] = useState(false);
+  const [bulletinLoaded, setBulletinLoaded] = useState(false);
   const [selectedBulletins, setSelectedBulletins] = useState<string[]>([]);
   const flatListRef = useRef<FlatList>(null);
 
@@ -106,7 +107,9 @@ export default function ChannelScreen() {
         orderBy('createdAt', 'asc')
       );
       const unsub = onSnapshot(q, snap => {
-        setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const newMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMessages(newMsgs);
+        setBulletinLoaded(true);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       });
 
@@ -1171,7 +1174,11 @@ export default function ChannelScreen() {
           </View>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.bulletinContent}>
-          {messages.length === 0 ? (
+          {!bulletinLoaded ? (
+            <View style={styles.bulletinEmpty}>
+              <ActivityIndicator color='#FFD700' size='large' />
+            </View>
+          ) : messages.length === 0 ? (
             <View style={styles.bulletinEmpty}>
               <Text style={styles.bulletinEmptyIcon}>📌</Text>
               <Text style={styles.bulletinEmptyText}>No announcements yet</Text>

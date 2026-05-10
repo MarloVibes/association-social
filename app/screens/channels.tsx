@@ -41,13 +41,13 @@ export default function ChannelsScreen() {
 
       <ScrollView contentContainerStyle={styles.list}>
         {CHANNELS.map(channel => {
-          const isLocked = channel.id === 'announcements' && !isCommOrCoComm;
+          const isLocked = false; // All members can read all channels
           return (
             <TouchableOpacity
               key={channel.id}
               style={[styles.channelCard, isLocked && styles.channelCardLocked]}
               onPress={() => {
-                if (isLocked) return;
+                // All members can view channels
                 if (channel.id === 'trade-center' || channel.id === 'trade-block') {
                   router.push({
                     pathname: '/screens/trade-channel',
