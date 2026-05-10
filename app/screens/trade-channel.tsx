@@ -101,7 +101,7 @@ export default function TradeChannelScreen() {
   const [loading, setLoading] = useState(true);
   const [proposeModal, setProposeModal] = useState<any>(null);
   const [selectedOffers, setSelectedOffers] = useState<any[]>([]);
-  const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'list' | null>(null);
+  const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
   const user = auth.currentUser;
 
   useEffect(() => { loadData(); }, []);
@@ -232,7 +232,7 @@ export default function TradeChannelScreen() {
             </View>
             {/* Interested In (listings you posted) */}
             <View style={styles.col}>
-              <Text style={styles.colTitle}>LISTED FOR TRADE</Text>
+              <Text style={styles.colTitle}>TARGET LIST</Text>
               {[0,1,2,3,4,5].map(i => {
                 const myListings = listings.filter((l: any) => l.fromUid === user?.uid);
                 const l = myListings[i];
@@ -261,7 +261,7 @@ export default function TradeChannelScreen() {
                     ])
                   } />
                 ) : (
-                  <PlayerSlot key={i} empty onPress={() => setRosterModal('list')} />
+                  <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
                 );
               })}
             </View>
@@ -329,55 +329,48 @@ export default function TradeChannelScreen() {
             <TouchableOpacity onPress={() => setRosterModal(null)}>
               <Text style={styles.modalCancel}>Done</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{rosterModal === 'block' ? 'Set Trade Block' : rosterModal === 'list' ? 'List for Trade' : 'Set Untouchables'}</Text>
+            <Text style={styles.modalTitle}>{rosterModal === 'block' ? 'Set Trade Block' : rosterModal === 'target' ? 'Set Target List' : 'Set Untouchables'}</Text>
             <View style={{ width: 50 }} />
           </View>
           <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalHint}>Tap players to toggle them {rosterModal === 'block' ? 'on/off trade block' : rosterModal === 'list' ? 'on/off the trade listing' : 'as untouchable'}</Text>
-            {myRoster.map((p: any, i: number) => {
+            <Text style={styles.modalHint}>Tap players to toggle them {rosterModal === 'block' ? 'on/off trade block' : rosterModal === 'target' ? 'on/off your target list' : 'as untouchable'}</Text>
+            {(() => {
+              const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
+              const allLeaguePlayers = rosterModal === 'target'
+                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
+                : myRoster;
+              return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
-              const isSelected = rosterModal === 'block' ? tradeBlock.includes(pid) : rosterModal === 'list' ? listings.some((l: any) => l.fromUid === user?.uid && (l.player?.player_id || l.player?.full_name) === pid && l.status === 'available') : untouchables.includes(pid);
+              const isSelected = rosterModal === 'block' ? tradeBlock.includes(pid) : rosterModal === 'target' ? (myTeam?.targetList || []).includes(pid) : untouchables.includes(pid);
               return (
                 <TouchableOpacity
                   key={i}
-                  style={[styles.rosterRow, isSelected && (rosterModal === 'block' ? styles.rosterRowBlock : rosterModal === 'list' ? styles.rosterRowBlock : styles.rosterRowUntouchable)]}
+                  style={[styles.rosterRow, isSelected && (rosterModal === 'block' ? styles.rosterRowBlock : rosterModal === 'target' ? styles.rosterRowTarget : styles.rosterRowUntouchable)]}
                   onPress={async () => {
                     if (rosterModal === 'block') {
                       const newList = tradeBlock.includes(pid) ? tradeBlock.filter(x => x !== pid) : [...tradeBlock, pid];
                       setTradeBlock(newList);
                       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { tradeBlock: newList });
-                    } else if (rosterModal === 'list') {
-                      // Post or remove from trade channel
-                      const existing = listings.find((l: any) => l.fromUid === user?.uid && (l.player?.player_id || l.player?.full_name) === pid);
-                      if (existing) {
-                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages', existing.id), { status: 'cancelled' });
-                        // Remove activity
-                        if (existing.activityId) {
-                          try { await deleteDoc(doc(db, 'leagues', leagueId, 'activity', existing.activityId)); } catch(e) {}
-                        }
-                      } else {
-                        await addDoc(collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'), {
-                          type: 'trade_listing',
-                          player: p,
-                          fromUid: user?.uid,
-                          fromTeamId: myTeamId,
-                          fromTeamName: myTeam?.name || '',
-                          createdAt: serverTimestamp(),
-                          status: 'available',
-                        });
-                      }
+                    } else if (rosterModal === 'target') {
+                      const currentTargets = myTeam?.targetList || [];
+                      const newTargets = currentTargets.includes(pid) ? currentTargets.filter((x: string) => x !== pid) : [...currentTargets, pid];
+                      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { targetList: newTargets });
+                      setMyTeam((prev: any) => ({ ...prev, targetList: newTargets }));
                     } else {
-                      toggleUntouchable(pid);
+                      // Untouchables
+                      const newList = untouchables.includes(pid) ? untouchables.filter((x: string) => x !== pid) : [...untouchables, pid];
+                      setUntouchables(newList);
+                      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
                     }
                   }}
                 >
                   <Text style={styles.rosterRowPos}>{p.position}</Text>
-                  <Text style={styles.rosterRowName}>{p.full_name}</Text>
+                  <Text style={styles.rosterRowName}>{p.full_name}{p.teamName ? ' · ' + p.teamName : ''}</Text>
                   <PlaystyleBadge player={p} />
                   {isSelected && <Text style={styles.rosterCheck}>✓</Text>}
                 </TouchableOpacity>
               );
-            })}
+            });})()}
           </ScrollView>
         </View>
       </Modal>
@@ -401,7 +394,12 @@ export default function TradeChannelScreen() {
               <Text style={styles.wantTeam}>{proposeModal?.fromTeamName || proposeModal?.teamName}</Text>
             </View>
             <Text style={styles.modalLabel}>YOU OFFER (select from your roster)</Text>
-            {myRoster.map((p: any, i: number) => {
+            {(() => {
+              const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
+              const allLeaguePlayers = rosterModal === 'target'
+                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
+                : myRoster;
+              return allLeaguePlayers.map((p: any, i: number) => {
               const selected = selectedOffers.some(o => (o.player_id || o.full_name) === (p.player_id || p.full_name));
               return (
                 <TouchableOpacity
@@ -418,7 +416,7 @@ export default function TradeChannelScreen() {
                   {selected && <Text style={styles.offerCheck}>✓</Text>}
                 </TouchableOpacity>
               );
-            })}
+            });})()}
           </ScrollView>
         </View>
       </Modal>
@@ -455,6 +453,7 @@ const styles = StyleSheet.create({
   playerSlotName: { color: '#fff', fontSize: 10, fontWeight: '700', marginBottom: 2 },
 
   untouchableSlot: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
+  targetSlot: { borderColor: '#4444ff', backgroundColor: '#0a0a1a' },
   availableContent: { padding: 16, paddingBottom: 100 },
   listingCard: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#222' },
   listingTeam: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
@@ -488,6 +487,7 @@ const styles = StyleSheet.create({
   wantTeam: { color: '#666', fontSize: 12, marginTop: 2 },
   rosterRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 8 },
   rosterRowBlock: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  rosterRowTarget: { borderColor: '#4444ff', backgroundColor: '#0a0a2a' },
   rosterRowUntouchable: { borderColor: '#ff4444', backgroundColor: '#2a0a0a' },
   rosterRowPos: { color: '#888', fontSize: 11, fontWeight: '700', width: 28 },
   rosterRowName: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
