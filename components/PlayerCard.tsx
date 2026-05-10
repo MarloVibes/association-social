@@ -316,7 +316,7 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                 <View style={styles.actionBtns}>
                   <TouchableOpacity style={[styles.actionBtn, onTradeBlock && styles.actionBtnActive]} onPress={handleTradeBlock}>
                     <Text style={styles.actionBtnIcon}>🔄</Text>
-                    <Text style={[styles.actionBtnText, onTradeBlock && styles.actionBtnTextActive]}>{onTradeBlock ? 'Remove from Block' : 'Trade Block'}</Text>
+                    <Text style={[styles.actionBtnText, onTradeBlock && styles.actionBtnTextActive]}>{onTradeBlock ? '✓ On Trade Block' : 'Add to Trade Block'}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={handleUntouchable}>
                     <Text style={styles.actionBtnIcon}>🔒</Text>

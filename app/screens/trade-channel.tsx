@@ -102,6 +102,7 @@ export default function TradeChannelScreen() {
   const [proposeModal, setProposeModal] = useState<any>(null);
   const [selectedOffers, setSelectedOffers] = useState<any[]>([]);
   const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
+  const [blockSort, setBlockSort] = useState<'team' | 'position'>('team');
   const user = auth.currentUser;
 
   useEffect(() => { loadData(); }, []);
@@ -212,7 +213,7 @@ export default function TradeChannelScreen() {
           <Text style={[styles.tabText, activeTab === 'block' && styles.tabTextActive]}>MY TRADE BLOCK</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'available' && styles.tabActive]} onPress={() => setActiveTab('available')}>
-          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>AVAILABLE ({listings.length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
+          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>ON THE BLOCK ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
         </TouchableOpacity>
       </View>
 
@@ -278,41 +279,55 @@ export default function TradeChannelScreen() {
           </View>
         </ScrollView>
       ) : (
+        {/* Sort Controls */}
+        <View style={styles.sortRow}>
+          <Text style={styles.sortLabel}>Sort by:</Text>
+          <TouchableOpacity style={[styles.sortBtn, blockSort === 'team' && styles.sortBtnActive]} onPress={() => setBlockSort('team')}>
+            <Text style={[styles.sortBtnText, blockSort === 'team' && styles.sortBtnTextActive]}>Team</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.sortBtn, blockSort === 'position' && styles.sortBtnActive]} onPress={() => setBlockSort('position')}>
+            <Text style={[styles.sortBtnText, blockSort === 'position' && styles.sortBtnTextActive]}>Position</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView contentContainerStyle={styles.availableContent}>
-          {/* Trade Listings from other GMs */}
-          {listings.filter((l: any) => l.fromUid !== user?.uid).map((item: any) => (
-            <View key={item.id} style={styles.listingCard}>
-              <Text style={styles.listingTeam}>{item.fromTeamName}</Text>
-              <View style={styles.listingRow}>
-                <PlayerSlot player={item.player} style={{ flex: 1 }} />
-                <View style={styles.listingBtns}>
-                  <TouchableOpacity style={styles.proposeBtn} onPress={() => { setProposeModal(item); setSelectedOffers([]); }}>
-                    <Text style={styles.proposeBtnText}>🤝 Propose</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.dmBtn} onPress={() => router.push({ pathname: '/screens/dm', params: { uid: item.fromUid, name: item.fromTeamName } })}>
-                    <Text style={styles.dmBtnText}>💬 DM</Text>
-                  </TouchableOpacity>
+          {/* Combined & Sorted Trade Block */}
+          {(() => {
+            const allAvail = [
+              ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
+                key: l.id, teamName: l.fromTeamName, player: l.player, uid: l.fromUid,
+                onOffer: () => { setProposeModal(l); setSelectedOffers([]); },
+                onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
+              })),
+              ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
+                key: 'tb_' + i, teamName: p.teamName, player: p, uid: p.gmId,
+                onOffer: () => { setProposeModal({ ...p, fromUid: p.gmId, fromTeamId: p.teamId, fromTeamName: p.teamName }); setSelectedOffers([]); },
+                onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
+              })),
+            ];
+            const sorted = [...allAvail].sort((a, b) => {
+              if (blockSort === 'team') return (a.teamName || '').localeCompare(b.teamName || '');
+              const posOrder: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
+              const aPos = posOrder[a.player?.position || ''] || 9;
+              const bPos = posOrder[b.player?.position || ''] || 9;
+              return aPos - bPos;
+            });
+            return sorted.map(item => (
+              <View key={item.key} style={styles.listingCard}>
+                <Text style={styles.listingTeam}>{item.teamName}</Text>
+                <View style={styles.listingRow}>
+                  <PlayerSlot player={item.player} style={{ flex: 1 }} />
+                  <View style={styles.listingBtns}>
+                    <TouchableOpacity style={styles.proposeBtn} onPress={item.onOffer}>
+                      <Text style={styles.proposeBtnText}>🤝 Offer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.dmBtn} onPress={item.onDM}>
+                      <Text style={styles.dmBtnText}>💬 DM</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-          {/* Trade Block from other teams */}
-          {allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((item: any, i: number) => (
-            <View key={i} style={styles.listingCard}>
-              <Text style={styles.listingTeam}>{item.teamName} · Trade Block</Text>
-              <View style={styles.listingRow}>
-                <PlayerSlot player={item} style={{ flex: 1 }} />
-                <View style={styles.listingBtns}>
-                  <TouchableOpacity style={styles.proposeBtn} onPress={() => { setProposeModal({ ...item, fromUid: item.gmId, fromTeamId: item.teamId, fromTeamName: item.teamName }); setSelectedOffers([]); }}>
-                    <Text style={styles.proposeBtnText}>🤝 Offer</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.dmBtn} onPress={() => router.push({ pathname: '/screens/dm', params: { uid: item.gmId, name: item.teamName } })}>
-                    <Text style={styles.dmBtnText}>💬 DM</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          ))}
+            ));
+          })()}
           {listings.filter((l: any) => l.fromUid !== user?.uid).length === 0 && allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length === 0 && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>📢</Text>
@@ -497,4 +512,11 @@ const styles = StyleSheet.create({
   offerPos: { color: '#888', fontSize: 11, fontWeight: '700', width: 28 },
   offerName: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
   offerCheck: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
+
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#111' },
+  sortLabel: { color: '#555', fontSize: 12 },
+  sortBtn: { borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#1a1a1a' },
+  sortBtnActive: { borderColor: '#F5A623', backgroundColor: '#2a1a00' },
+  sortBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
+  sortBtnTextActive: { color: '#F5A623', fontWeight: '700' },
 });

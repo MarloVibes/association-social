@@ -136,8 +136,7 @@ export default function RosterScreen() {
     if (isOwned) {
       // My player — trade, block, untouchable, drop
       Alert.alert(player.full_name || player.name, 'What would you like to do?', [
-        { text: '🔄 List for Trade', onPress: () => postToTradeChannel(player) },
-        { text: '📋 Trade Block', onPress: () => toggleTradeBlock(player) },
+        { text: '🔄 Trade Block', onPress: () => toggleTradeBlock(player) },
         { text: '🔒 Untouchable', onPress: () => toggleUntouchable(player) },
         { text: '❌ Drop', style: 'destructive', onPress: () => handleDropPlayer(player) },
         { text: 'Cancel', style: 'cancel' },
