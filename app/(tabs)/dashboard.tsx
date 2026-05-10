@@ -39,7 +39,11 @@ export default function DashboardScreen() {
       const profileData = userSnap.data();
       setProfile(profileData);
       setPendingRequests((profileData.friendRequestsReceived || []).length);
-      setPendingInvites((profileData.leagueInvites || []).length);
+      // Count all unread notifications
+      const allNotifs = profileData.notifications || [];
+      const unreadCount = allNotifs.filter((n: any) => !n.read).length;
+      const leagueInviteCount = (profileData.leagueInvites || []).length;
+      setPendingInvites(unreadCount + leagueInviteCount);
 
       const leagueIds: string[] = profileData.leagues || [];
       if (leagueIds.length === 0) {

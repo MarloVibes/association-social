@@ -13,7 +13,7 @@ export default function GlobalNav({ pendingRequests = 0, pendingInvites = 0 }: P
         <Text style={styles.btnIcon}>🏠</Text>
         <Text style={styles.btnLabel}>Home</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.btn} onPress={() => router.push('/screens/friends')}>
+      <TouchableOpacity style={styles.btn} onPress={() => router.navigate('/screens/friends')}>
         <View style={styles.iconWrap}>
           <Text style={styles.btnIcon}>👥</Text>
           {pendingRequests > 0 && (
@@ -24,7 +24,7 @@ export default function GlobalNav({ pendingRequests = 0, pendingInvites = 0 }: P
         </View>
         <Text style={styles.btnLabel}>Friends</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.btn} onPress={() => router.push('/screens/notifications')}>
+      <TouchableOpacity style={styles.btn} onPress={() => router.navigate('/screens/notifications')}>
         <View style={styles.iconWrap}>
           <Text style={styles.btnIcon}>🔔</Text>
           {pendingInvites > 0 && (
@@ -35,7 +35,7 @@ export default function GlobalNav({ pendingRequests = 0, pendingInvites = 0 }: P
         </View>
         <Text style={styles.btnLabel}>Alerts</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.btn} onPress={() => router.push('/screens/search-users')}>
+      <TouchableOpacity style={styles.btn} onPress={() => router.navigate('/screens/search-users')}>
         <Text style={styles.btnIcon}>🔍</Text>
         <Text style={styles.btnLabel}>Search</Text>
       </TouchableOpacity>

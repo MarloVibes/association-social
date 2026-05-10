@@ -43,6 +43,7 @@ export default function ChannelScreen() {
   const [giphySearch, setGiphySearch] = useState('');
   const [gifs, setGifs] = useState<any[]>([]);
   const [giphyLoading, setGiphyLoading] = useState(false);
+  const [pendingGif, setPendingGif] = useState<string | null>(null);
   const [rulesContent, setRulesContent] = useState('');
   const [editingRules, setEditingRules] = useState(false);
   const [rulesText, setRulesText] = useState('');
@@ -64,6 +65,9 @@ export default function ChannelScreen() {
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [newResetRequest, setNewResetRequest] = useState('');
   const [showResetForm, setShowResetForm] = useState(false);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputingReq, setDisputingReq] = useState<any>(null);
+  const [disputeReason, setDisputeReason] = useState('');
   const [highlights, setHighlights] = useState<any[]>([]);
   const [showHighlightForm, setShowHighlightForm] = useState(false);
   const [highlightType, setHighlightType] = useState<'highlight'|'boxscore'|'clip'>('highlight');
@@ -315,7 +319,7 @@ export default function ChannelScreen() {
     setShowGiphy(false);
     setGiphySearch('');
     setGifs([]);
-    sendMessage('', gifUrl);
+    setPendingGif(gifUrl);
   };
 
   const formatTime = (ts: any) => {
@@ -879,23 +883,64 @@ export default function ChannelScreen() {
                   {req.proofUrl && (
                     <Image source={{ uri: req.proofUrl }} style={styles.resetProofImage} resizeMode='cover' />
                   )}
-                  {isCommOrCoComm && req.status === 'pending' && (
-                    <View style={styles.resetActions}>
-                      <TouchableOpacity style={styles.resetApproveBtn} onPress={() => approveResetRequest(req.id)}>
-                        <Text style={styles.resetApproveBtnText}>✅ Approve</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.resetDenyBtn} onPress={async () => {
-                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', req.id), { status: 'denied' });
-                        // Notify requester
-                        await updateDoc(doc(db, 'users', req.requestedBy), {
-                          notifications: arrayUnion({ type: 'reset_denied', leagueId, message: 'Your game reset request was denied', createdAt: new Date().toISOString() })
-                        });
-                        loadResetRequests();
-                      }}>
-                        <Text style={styles.resetDenyBtnText}>❌ Deny</Text>
-                      </TouchableOpacity>
+                  {req.dispute && (
+                    <View style={styles.resetDisputeBox}>
+                      <Text style={styles.resetDisputeLabel}>⚠️ DISPUTED</Text>
+                      <Text style={styles.resetDisputeText}>{req.dispute}</Text>
                     </View>
                   )}
+                  <View style={styles.resetActions}>
+                    {isCommOrCoComm && req.status === 'pending' && (
+                      <>
+                        <TouchableOpacity style={styles.resetApproveBtn} onPress={() => approveResetRequest(req.id)}>
+                          <Text style={styles.resetApproveBtnText}>✅ Approve</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.resetDenyBtn} onPress={async () => {
+                          await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', req.id), { status: 'denied' });
+                          await updateDoc(doc(db, 'users', req.requestedBy), {
+                            notifications: arrayUnion({ type: 'reset_denied', leagueId, message: 'Your game reset request was denied', createdAt: new Date().toISOString() })
+                          });
+                          loadResetRequests();
+                        }}>
+                          <Text style={styles.resetDenyBtnText}>❌ Deny</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {isMe && req.status === 'pending' && (
+                      <TouchableOpacity style={styles.resetCancelBtn} onPress={() => {
+                        Alert.alert('Cancel Request?', 'Are you sure you want to cancel this reset request?', [
+                          { text: 'No', style: 'cancel' },
+                          { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+                            const { deleteDoc } = await import('firebase/firestore');
+                            await deleteDoc(doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', req.id));
+                            loadResetRequests();
+                          }},
+                        ]);
+                      }}>
+                        <Text style={styles.resetCancelBtnText}>🗑 Cancel Request</Text>
+                      </TouchableOpacity>
+                    )}
+                    {!isMe && req.status === 'pending' && !req.dispute && (
+                      <TouchableOpacity style={styles.resetDisputeBtn} onPress={() => { setDisputingReq(req); setShowDisputeModal(true); }}>
+                        <Text style={styles.resetDisputeBtnText}>⚠️ Dispute</Text>
+                      </TouchableOpacity>
+                    )}
+                    {req.dispute && req.disputedBy === user?.uid && (
+                      <TouchableOpacity style={styles.resetCancelBtn} onPress={() => {
+                        Alert.alert('Cancel Dispute?', 'Remove your dispute on this request?', [
+                          { text: 'No', style: 'cancel' },
+                          { text: 'Yes', style: 'destructive', onPress: async () => {
+                            await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', req.id), {
+                              dispute: null, disputedBy: null
+                            });
+                            loadResetRequests();
+                          }},
+                        ]);
+                      }}>
+                        <Text style={styles.resetCancelBtnText}>↩ Cancel Dispute</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               );
             })
@@ -915,17 +960,36 @@ export default function ChannelScreen() {
                   Alert.alert('Required', 'Please fill in date, opponent and reason.');
                   return;
                 }
-                setNewResetRequest(resetReason === 'Other' ? resetCustomReason : resetReason);
-                await submitResetRequest();
-                // Notify commissioner
+                const reasonText = resetReason === 'Other' ? resetCustomReason : resetReason;
+                if (!user) return;
+                await addDoc(collection(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests'), {
+                  gameDate: resetGameDate,
+                  opponent: resetOpponent,
+                  reason: reasonText,
+                  proofUrl: resetProofUrl || null,
+                  requestedBy: user.uid,
+                  status: 'pending',
+                  createdAt: serverTimestamp(),
+                });
+                // Notify commissioner and opponent
                 const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
                 const commId = leagueSnap.data()?.commissionerId;
+                const myName = members[user?.uid || '']?.displayName || 'A GM';
+                const notifMsg = myName + ' requested a game reset vs ' + resetOpponent;
                 if (commId) {
                   await updateDoc(doc(db, 'users', commId), {
+                    notifications: arrayUnion({ type: 'reset_request', leagueId, message: notifMsg, createdAt: new Date().toISOString() })
+                  });
+                }
+                // Notify opponent GM
+                const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+                const oppTeam = teamsSnap.docs.find(d => d.data().name === resetOpponent);
+                if (oppTeam && oppTeam.data().gmId && oppTeam.data().gmId !== commId) {
+                  await updateDoc(doc(db, 'users', oppTeam.data().gmId), {
                     notifications: arrayUnion({
-                      type: 'reset_request',
+                      type: 'reset_request_opponent',
                       leagueId,
-                      message: (members[user?.uid || '']?.displayName || 'A GM') + ' requested a game reset vs ' + resetOpponent,
+                      message: myName + ' submitted a reset request for your game',
                       createdAt: new Date().toISOString(),
                     })
                   });
@@ -936,6 +1000,7 @@ export default function ChannelScreen() {
                 setResetReason('');
                 setResetCustomReason('');
                 setResetProofUrl('');
+                loadResetRequests();
               }}>
                 <Text style={styles.resetModalSubmit}>Submit</Text>
               </TouchableOpacity>
@@ -1004,6 +1069,55 @@ export default function ChannelScreen() {
                 )}
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </Modal>
+        {/* Dispute Modal */}
+        <Modal visible={showDisputeModal} animationType='slide' presentationStyle='pageSheet'>
+          <View style={styles.resetModal}>
+            <View style={styles.resetModalHeader}>
+              <TouchableOpacity onPress={() => { setShowDisputeModal(false); setDisputeReason(''); }}>
+                <Text style={styles.resetModalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.resetModalTitle}>Dispute Request</Text>
+              <TouchableOpacity onPress={async () => {
+                if (!disputeReason.trim() || !disputingReq) return;
+                await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', disputingReq.id), {
+                  dispute: disputeReason.trim(),
+                  disputedBy: user?.uid,
+                });
+                // Notify commissioner
+                const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+                const commId = leagueSnap.data()?.commissionerId;
+                if (commId) {
+                  await updateDoc(doc(db, 'users', commId), {
+                    notifications: arrayUnion({
+                      type: 'reset_disputed',
+                      leagueId,
+                      message: (members[user?.uid || '']?.displayName || 'A GM') + ' disputed a game reset request',
+                      createdAt: new Date().toISOString(),
+                    })
+                  });
+                }
+                setShowDisputeModal(false);
+                setDisputeReason('');
+                setDisputingReq(null);
+                loadResetRequests();
+              }}>
+                <Text style={styles.resetModalSubmit}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 20 }}>
+              <Text style={styles.resetModalLabel}>WHY ARE YOU DISPUTING?</Text>
+              <TextInput
+                style={[styles.resetModalInput, { minHeight: 120, textAlignVertical: 'top' }]}
+                placeholder='Explain why this reset should not be approved...'
+                placeholderTextColor='#555'
+                value={disputeReason}
+                onChangeText={setDisputeReason}
+                multiline
+                autoFocus
+              />
+            </View>
           </View>
         </Modal>
         <GlobalNav />
@@ -1425,6 +1539,16 @@ export default function ChannelScreen() {
       />
 
       {canPost && (
+        <View>
+          {pendingGif && (
+            <View style={styles.pendingGifRow}>
+              <Image source={{ uri: pendingGif }} style={styles.pendingGifThumb} resizeMode='cover' />
+              <TouchableOpacity style={styles.pendingGifRemove} onPress={() => setPendingGif(null)}>
+                <Text style={styles.pendingGifRemoveText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.pendingGifLabel}>GIF ready · Add a caption or send</Text>
+            </View>
+          )}
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
             <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
@@ -1441,12 +1565,13 @@ export default function ChannelScreen() {
             multiline
           />
           <TouchableOpacity
-            style={[styles.sendBtn, (!text.trim() && !sending) && styles.sendBtnDisabled]}
-            onPress={() => sendMessage()}
-            disabled={!text.trim() || sending}
+            style={[styles.sendBtn, (!text.trim() && !pendingGif && !sending) && styles.sendBtnDisabled]}
+            onPress={() => { sendMessage(undefined, pendingGif || undefined); setPendingGif(null); }}
+            disabled={(!text.trim() && !pendingGif) || sending}
           >
             <Text style={styles.sendBtnText}>↑</Text>
           </TouchableOpacity>
+        </View>
         </View>
       )}
 
@@ -1846,4 +1971,19 @@ const styles = StyleSheet.create({
   hlResultBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
   hlScoreInputRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   hlScoreDash: { color: '#555', fontSize: 24, fontWeight: '800' },
+
+  pendingGifRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: 'rgba(0,0,0,0.8)', borderTopWidth: 1, borderTopColor: 'rgba(245,166,35,0.3)' },
+  pendingGifThumb: { width: 60, height: 45, borderRadius: 6 },
+  pendingGifRemove: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
+  pendingGifRemoveText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  pendingGifLabel: { flex: 1, color: '#888', fontSize: 11 },
+
+  resetDisputeBox: { backgroundColor: '#2a1a00', borderRadius: 8, padding: 10, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: '#F5A623' },
+  resetDisputeLabel: { color: '#F5A623', fontSize: 10, fontWeight: '800', marginBottom: 4 },
+  resetDisputeText: { color: '#ccaa88', fontSize: 13 },
+  resetDisputeBtn: { flex: 1, backgroundColor: '#2a1a00', borderRadius: 8, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#F5A623' },
+  resetDisputeBtnText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
+
+  resetCancelBtn: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#444' },
+  resetCancelBtnText: { color: '#888', fontSize: 13, fontWeight: '700' },
 });

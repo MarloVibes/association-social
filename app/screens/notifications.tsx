@@ -105,6 +105,26 @@ export default function NotificationsScreen() {
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
+  const markAllRead = async () => {
+    if (!user) return;
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    const notifs = snap.data()?.notifications || [];
+    const updated = notifs.map((n: any) => ({ ...n, read: true }));
+    await updateDoc(doc(db, 'users', user.uid), { notifications: updated });
+  };
+
+  const markOneRead = async (idx: number) => {
+    if (!user) return;
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    const notifs = snap.data()?.notifications || [];
+    // Find by reverse index since we display reversed
+    const realIdx = notifs.length - 1 - idx;
+    if (notifs[realIdx]) {
+      notifs[realIdx] = { ...notifs[realIdx], read: true };
+      await updateDoc(doc(db, 'users', user.uid), { notifications: notifs });
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -230,6 +250,8 @@ const styles = StyleSheet.create({
   inviteInfo: { flex: 1 },
   inviteName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   inviteMeta: { color: '#888', fontSize: 12, marginTop: 2 },
+  markAllText: { color: '#F5A623', fontSize: 12, fontWeight: '700' },
+  notifCardUnread: { borderLeftWidth: 3, borderLeftColor: '#F5A623', backgroundColor: '#1a1500' },
   notifCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   notifIcon: { fontSize: 22 },
   notifInfo: { flex: 1 },

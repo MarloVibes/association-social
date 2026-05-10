@@ -10,6 +10,11 @@ type Props = {
   teamId: string;
   visible: boolean;
   onClose: () => void;
+  isOwned?: boolean;       // true = my player, false = opponent's player, undefined = free agent
+  onAddToTargetList?: () => void;
+  onOfferTrade?: () => void;
+  onDrop?: () => void;
+  onSign?: () => void;
 };
 
 const POSITION_COLORS: Record<string, string> = {
@@ -101,7 +106,7 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
   }));
 }
 
-export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose }: Props) {
+export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [onTradeBlock, setOnTradeBlock] = useState(false);
@@ -131,6 +136,29 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
     } catch (e) { console.error(e); }
     setLoading(false);
   };
+
+  const [onUntouchable, setOnUntouchable] = useState(false);
+
+  useEffect(() => {
+    if (!player || !leagueId || !teamId) return;
+    const pid = player.player_id || player.full_name;
+    getDoc(doc(db, 'leagues', leagueId, 'teams', teamId)).then(snap => {
+      if (snap.exists()) setOnUntouchable((snap.data().untouchables || []).includes(pid));
+    });
+  }, [player, leagueId, teamId]);
+
+  const handleUntouchable = async () => {
+    if (!player || !leagueId || !teamId) return;
+    const pid = player.player_id || player.full_name;
+    if (onUntouchable) {
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { untouchables: arrayRemove(pid) });
+      setOnUntouchable(false);
+    } else {
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { untouchables: arrayUnion(pid) });
+      setOnUntouchable(true);
+    }
+  };
+
 
   const handleTradeBlock = async () => {
     const pid = player.player_id || player.full_name;
@@ -283,16 +311,46 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                 </View>
               )}
 
-              {/* Trade Block */}
-              {teamId && (
-                <TouchableOpacity
-                  style={[styles.tradeBtn, onTradeBlock && styles.tradeBtnActive]}
-                  onPress={handleTradeBlock}
-                >
-                  <Text style={[styles.tradeBtnText, onTradeBlock && styles.tradeBtnTextActive]}>
-                    {onTradeBlock ? '🔄 Remove from Trade Block' : '🔄 Add to Trade Block'}
-                  </Text>
-                </TouchableOpacity>
+              {/* Action Buttons based on context */}
+              {isOwned === true && (
+                <View style={styles.actionBtns}>
+                  <TouchableOpacity style={[styles.actionBtn, onTradeBlock && styles.actionBtnActive]} onPress={handleTradeBlock}>
+                    <Text style={styles.actionBtnIcon}>🔄</Text>
+                    <Text style={[styles.actionBtnText, onTradeBlock && styles.actionBtnTextActive]}>{onTradeBlock ? 'Remove from Block' : 'Trade Block'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handleUntouchable}>
+                    <Text style={styles.actionBtnIcon}>🔒</Text>
+                    <Text style={styles.actionBtnText}>{onUntouchable ? 'Remove Untouchable' : 'Untouchable'}</Text>
+                  </TouchableOpacity>
+                  {onDrop && (
+                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDanger]} onPress={onDrop}>
+                      <Text style={styles.actionBtnIcon}>❌</Text>
+                      <Text style={[styles.actionBtnText, { color: '#ff4444' }]}>Drop Player</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {isOwned === false && (
+                <View style={styles.actionBtns}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={onAddToTargetList}>
+                    <Text style={styles.actionBtnIcon}>🎯</Text>
+                    <Text style={styles.actionBtnText}>Add to Target List</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnTrade]} onPress={onOfferTrade}>
+                    <Text style={styles.actionBtnIcon}>🤝</Text>
+                    <Text style={[styles.actionBtnText, { color: '#F5A623' }]}>Offer Trade</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {isOwned === undefined && (
+                <View style={styles.actionBtns}>
+                  {onSign && (
+                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSign]} onPress={onSign}>
+                      <Text style={styles.actionBtnIcon}>✍️</Text>
+                      <Text style={[styles.actionBtnText, { color: '#00ff87' }]}>Sign Player</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
             </>
           )}
@@ -347,6 +405,24 @@ const styles = StyleSheet.create({
   expandedStatLabel: { color: '#555', fontSize: 9, fontWeight: '700', marginTop: 2 },
   noData: { alignItems: 'center', padding: 40 },
   noDataText: { color: '#444', fontSize: 13, textAlign: 'center' },
+  actionBtns: { paddingHorizontal: 20, paddingBottom: 30, gap: 10 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#2a2a2a' },
+  actionBtnActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  actionBtnDanger: { borderColor: '#ff444433' },
+  actionBtnTrade: { borderColor: '#F5A62333' },
+  actionBtnSign: { borderColor: '#00ff8733', backgroundColor: '#0a1a0a' },
+  actionBtnIcon: { fontSize: 20 },
+  actionBtnText: { color: '#cccccc', fontSize: 14, fontWeight: '600' },
+  actionBtnTextActive: { color: '#00ff87' },
+  actionBtns: { paddingHorizontal: 20, paddingBottom: 30, gap: 10 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#2a2a2a' },
+  actionBtnActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  actionBtnDanger: { borderColor: '#ff444433' },
+  actionBtnTrade: { borderColor: '#F5A62333' },
+  actionBtnSign: { borderColor: '#00ff8733', backgroundColor: '#0a1a0a' },
+  actionBtnIcon: { fontSize: 20 },
+  actionBtnText: { color: '#cccccc', fontSize: 14, fontWeight: '600' },
+  actionBtnTextActive: { color: '#00ff87' },
   tradeBtn: { marginHorizontal: 16, marginTop: 8, backgroundColor: '#1a1a2a', borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#4444ff' },
   tradeBtnActive: { backgroundColor: '#2a1a0a', borderColor: '#ff9900' },
   tradeBtnText: { color: '#8888ff', fontSize: 15, fontWeight: '700' },

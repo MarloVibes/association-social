@@ -124,17 +124,66 @@ export default function RosterScreen() {
     });
   }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter]);
 
-  const handlePlayerAction = (player: any) => {
-    Alert.alert(
-      player.full_name || player.name,
-      'What would you like to do?',
-      [
-        { text: '🔄 Trade', onPress: () => postToTradeChannel(player) },
+  const handlePlayerAction = (player: any, isOwned: boolean | undefined = true) => {
+    if (isOwned === undefined) {
+      // Free agent
+      Alert.alert(player.full_name || player.name, 'Free Agent', [
+        { text: '✍️ Sign Player', onPress: () => handleAddPlayer(player) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (isOwned) {
+      // My player — trade, block, untouchable, drop
+      Alert.alert(player.full_name || player.name, 'What would you like to do?', [
+        { text: '🔄 List for Trade', onPress: () => postToTradeChannel(player) },
         { text: '📋 Trade Block', onPress: () => toggleTradeBlock(player) },
+        { text: '🔒 Untouchable', onPress: () => toggleUntouchable(player) },
         { text: '❌ Drop', style: 'destructive', onPress: () => handleDropPlayer(player) },
         { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+      ]);
+    } else {
+      // Opponent's player — target or propose trade
+      Alert.alert(player.full_name || player.name, 'What would you like to do?', [
+        { text: '🎯 Add to Target List', onPress: () => addToTargetList(player) },
+        { text: '🤝 Offer Trade', onPress: () => offerTrade(player) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  };
+
+  const toggleUntouchable = async (player: any) => {
+    const user = auth.currentUser;
+    if (!user || !teamId) return;
+    try {
+      const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+      const current = teamSnap.data()?.untouchables || [];
+      const pid = player.player_id || player.full_name;
+      const updated = current.includes(pid) ? current.filter((x: string) => x !== pid) : [...current, pid];
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { untouchables: updated });
+      Alert.alert(current.includes(pid) ? 'Removed from Untouchables' : 'Added to Untouchables', player.full_name);
+    } catch(e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const addToTargetList = async (player: any) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      // Find my team
+      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      const myTeam = teamsSnap.docs.find(d => d.data().gmId === user.uid);
+      if (!myTeam) { Alert.alert('No team', 'You need a team to add targets.'); return; }
+      const current = myTeam.data().targetList || [];
+      const pid = player.player_id || player.full_name;
+      if (current.includes(pid)) { Alert.alert('Already targeted', player.full_name + ' is already on your target list.'); return; }
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeam.id), { targetList: [...current, pid] });
+      Alert.alert('🎯 Added to Target List', player.full_name);
+    } catch(e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const offerTrade = async (player: any) => {
+    // Navigate to trade center with player pre-selected
+    router.push({ pathname: '/screens/trade-channel', params: { leagueId, leagueName, channelId: 'trade-center', targetPlayer: JSON.stringify(player) } });
   };
 
   const postToTradeChannel = async (player: any) => {
@@ -200,11 +249,22 @@ export default function RosterScreen() {
     const pid = player.player_id || player.id;
     try {
       const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
-      const tradeBlock = teamSnap.data()?.tradeBlock || [];
+      const teamData = teamSnap.data() || {};
+      const tradeBlock = teamData.tradeBlock || [];
       const isOnBlock = tradeBlock.includes(pid);
       await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), {
         tradeBlock: isOnBlock ? tradeBlock.filter((p: string) => p !== pid) : [...tradeBlock, pid],
       });
+      // Post to league activity feed
+      if (!isOnBlock) {
+        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+          type: 'tradeblock',
+          message: (teamData.name || 'A GM') + ' added ' + (player.full_name || player.name) + ' to the trade block',
+          leagueId,
+          uid: auth.currentUser?.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
       Alert.alert(
         isOnBlock ? 'Removed' : 'Added to Trade Block',
         (player.full_name || player.name) + (isOnBlock ? ' removed from trade block.' : ' added to trade block.')
@@ -212,7 +272,18 @@ export default function RosterScreen() {
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
-  const handleAddPlayer = async (player: any) => {
+  const handleAddPlayer = (player: any) => {
+    Alert.alert(
+      '✍️ Sign ' + (player.full_name || player.name) + '?',
+      'Add this player to your roster?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign', onPress: () => confirmAddPlayer(player) },
+      ]
+    );
+  };
+
+  const confirmAddPlayer = async (player: any) => {
     const pid = player.player_id || player.id;
     if (myPlayerIds.includes(pid)) {
       Alert.alert('Already on roster', player.full_name + ' is already on your team.');
@@ -226,7 +297,8 @@ export default function RosterScreen() {
         type: 'pickup',
         playerName: player.full_name || player.name,
         uid: auth.currentUser?.uid,
-        message: 'picked up ' + (player.full_name || player.name),
+        teamName: team?.name || '',
+        message: (team?.name || 'A GM') + ' signed ' + (player.full_name || player.name),
         createdAt: serverTimestamp(),
       });
       setMyPlayerIds(prev => [...prev, pid]);
@@ -247,6 +319,15 @@ export default function RosterScreen() {
           const pid = player.player_id || player.id;
           const newPlayers = (team?.players || []).filter((p: any) => (p.player_id || p.id) !== pid);
           await updateDoc(doc(db, 'leagues', leagueId, 'teams', teamId), { players: newPlayers });
+          // Post to activity feed
+          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+            type: 'drop',
+            playerName: player.full_name || player.name,
+            uid: auth.currentUser?.uid,
+            teamName: team?.name || '',
+            message: (team?.name || 'A GM') + ' dropped ' + (player.full_name || player.name),
+            createdAt: serverTimestamp(),
+          });
           setMyPlayerIds(prev => prev.filter(id => id !== pid));
           setTakenPlayerIds(prev => { const s = new Set(prev); s.delete(pid); return s; });
           setTakenPlayerNames(prev => { const s = new Set(prev); s.delete(player.full_name || ''); return s; });
@@ -333,7 +414,11 @@ export default function RosterScreen() {
         renderItem={({ item }) => {
           const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
           return (
-            <TouchableOpacity style={styles.playerCard} onPress={() => setSelectedPlayer(item)} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.playerCard} onPress={() => setSelectedPlayer(item)} onLongPress={() => {
+              const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
+              const isOpponent = !onMyTeam && (item.teamName || (item.team && item.team !== ''));
+              handlePlayerAction(item, !isOpponent);
+            }} activeOpacity={0.7}>
               <View style={styles.playerAvatar}>
                 <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
               </View>
@@ -351,12 +436,15 @@ export default function RosterScreen() {
                 </View>
               </View>
               {activeTab === 'my_team' ? (
-                <TouchableOpacity style={styles.moveBtn} onPress={(e) => { e.stopPropagation?.(); handlePlayerAction(item); }}>
+                <TouchableOpacity style={styles.moveBtn} onPress={(e) => { e.stopPropagation?.(); handlePlayerAction(item, true); }}>
                   <Text style={styles.moveBtnText}>⇄</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.addBtn} onPress={(e) => { e.stopPropagation?.(); handleAddPlayer(item); }}>
-                  <Text style={styles.addBtnText}>+ Add</Text>
+                <TouchableOpacity style={styles.addBtn} onPress={(e) => {
+                  e.stopPropagation?.();
+                  handleAddPlayer(item);
+                }}>
+                  <Text style={styles.addBtnText}>+ Sign</Text>
                 </TouchableOpacity>
               )}
             </TouchableOpacity>
@@ -370,6 +458,31 @@ export default function RosterScreen() {
         teamId={teamId}
         visible={!!selectedPlayer}
         onClose={() => setSelectedPlayer(null)}
+        isOwned={selectedPlayer ? (() => {
+          const pid = selectedPlayer.player_id || selectedPlayer.id;
+          if (myPlayerIds.includes(pid)) return true;
+          // Check if on another team's roster
+          const isFreeAgent = activeTab === 'free_agents';
+          if (isFreeAgent) return undefined;
+          // On someone else's team
+          return false;
+        })() : undefined}
+        onDrop={selectedPlayer && myPlayerIds.includes(selectedPlayer.player_id || selectedPlayer.id) ? () => {
+          setSelectedPlayer(null);
+          handleDropPlayer(selectedPlayer);
+        } : undefined}
+        onSign={selectedPlayer && !myPlayerIds.includes(selectedPlayer.player_id || selectedPlayer.id) && !selectedPlayer.team && !selectedPlayer.teamName ? () => {
+          setSelectedPlayer(null);
+          handleAddPlayer(selectedPlayer);
+        } : undefined}
+        onAddToTargetList={selectedPlayer ? () => {
+          setSelectedPlayer(null);
+          addToTargetList(selectedPlayer);
+        } : undefined}
+        onOfferTrade={selectedPlayer ? () => {
+          setSelectedPlayer(null);
+          offerTrade(selectedPlayer);
+        } : undefined}
       />
       <GlobalNav />
     </View>
