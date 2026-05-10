@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -102,7 +102,9 @@ export default function TradeChannelScreen() {
   const [proposeModal, setProposeModal] = useState<any>(null);
   const [selectedOffers, setSelectedOffers] = useState<any[]>([]);
   const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
-  const [blockSort, setBlockSort] = useState<'team' | 'position'>('team');
+  const [blockSort, setBlockSort] = useState<string>('team');
+  const [targetSearch, setTargetSearch] = useState('');
+  const [targetPosFilter, setTargetPosFilter] = useState('ALL');
   const user = auth.currentUser;
 
   useEffect(() => { loadData(); }, []);
@@ -279,15 +281,26 @@ export default function TradeChannelScreen() {
           </View>
         </ScrollView>
       ) : (
-        {/* Sort Controls */}
+        <>
+        {/* Filter Controls */}
         <View style={styles.sortRow}>
-          <Text style={styles.sortLabel}>Sort by:</Text>
-          <TouchableOpacity style={[styles.sortBtn, blockSort === 'team' && styles.sortBtnActive]} onPress={() => setBlockSort('team')}>
-            <Text style={[styles.sortBtnText, blockSort === 'team' && styles.sortBtnTextActive]}>Team</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.sortBtn, blockSort === 'position' && styles.sortBtnActive]} onPress={() => setBlockSort('position')}>
-            <Text style={[styles.sortBtnText, blockSort === 'position' && styles.sortBtnTextActive]}>Position</Text>
-          </TouchableOpacity>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
+              <Text style={styles.sortLabel}>Team:</Text>
+              {['All', ...allTeams.filter((t: any) => t.gmId !== user?.uid).map((t: any) => t.abbreviation || t.name?.slice(0,3).toUpperCase())].map(tm => (
+                <TouchableOpacity key={tm} style={[styles.sortBtn, (blockSort === tm || (tm === 'All' && blockSort === 'team')) && styles.sortBtnActive]} onPress={() => setBlockSort(tm === 'All' ? 'team' : tm)}>
+                  <Text style={[styles.sortBtnText, (blockSort === tm || (tm === 'All' && blockSort === 'team')) && styles.sortBtnTextActive]}>{tm}</Text>
+                </TouchableOpacity>
+              ))}
+              <View style={{ width: 1, backgroundColor: '#333', marginHorizontal: 4 }} />
+              <Text style={styles.sortLabel}>Pos:</Text>
+              {['PG','SG','SF','PF','C'].map(pos => (
+                <TouchableOpacity key={pos} style={[styles.sortBtn, blockSort === pos && styles.sortBtnActive]} onPress={() => setBlockSort(blockSort === pos ? 'team' : pos)}>
+                  <Text style={[styles.sortBtnText, blockSort === pos && styles.sortBtnTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
         </View>
         <ScrollView contentContainerStyle={styles.availableContent}>
           {/* Combined & Sorted Trade Block */}
@@ -304,13 +317,19 @@ export default function TradeChannelScreen() {
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
             ];
-            const sorted = [...allAvail].sort((a, b) => {
-              if (blockSort === 'team') return (a.teamName || '').localeCompare(b.teamName || '');
-              const posOrder: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
-              const aPos = posOrder[a.player?.position || ''] || 9;
-              const bPos = posOrder[b.player?.position || ''] || 9;
-              return aPos - bPos;
+            const POSITIONS = ['PG','SG','SF','PF','C'];
+            const isPositionFilter = POSITIONS.includes(blockSort);
+            const isTeamFilter = !isPositionFilter && blockSort !== 'team';
+            const filtered = allAvail.filter(item => {
+              if (isPositionFilter) return (item.player?.position || '').includes(blockSort);
+              if (isTeamFilter) {
+                const abbr = item.teamName?.slice(0,3).toUpperCase();
+                const fullMatch = item.teamName?.toUpperCase().includes(blockSort.toUpperCase());
+                return abbr === blockSort || fullMatch;
+              }
+              return true;
             });
+            const sorted = [...filtered].sort((a, b) => (a.teamName || '').localeCompare(b.teamName || ''));
             return sorted.map(item => (
               <View key={item.key} style={styles.listingCard}>
                 <Text style={styles.listingTeam}>{item.teamName}</Text>
@@ -335,6 +354,7 @@ export default function TradeChannelScreen() {
             </View>
           )}
         </ScrollView>
+        </>
       )}
 
       {/* Roster Picker Modal for Trade Block / Untouchables */}
@@ -349,10 +369,35 @@ export default function TradeChannelScreen() {
           </View>
           <ScrollView contentContainerStyle={styles.modalContent}>
             <Text style={styles.modalHint}>Tap players to toggle them {rosterModal === 'block' ? 'on/off trade block' : rosterModal === 'target' ? 'on/off your target list' : 'as untouchable'}</Text>
+            {rosterModal === 'target' && (
+              <View style={styles.modalSearchRow}>
+                <TextInput
+                  style={styles.modalSearchInput}
+                  placeholder='Search players...'
+                  placeholderTextColor='#555'
+                  value={targetSearch}
+                  onChangeText={setTargetSearch}
+                />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
+                  <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 8 }}>
+                    {['ALL','PG','SG','SF','PF','C'].map(p => (
+                      <TouchableOpacity key={p} style={[styles.sortBtn, targetPosFilter === p && styles.sortBtnActive]} onPress={() => setTargetPosFilter(p)}>
+                        <Text style={[styles.sortBtnText, targetPosFilter === p && styles.sortBtnTextActive]}>{p}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
             {(() => {
               const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
               const allLeaguePlayers = rosterModal === 'target'
                 ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
+                    .filter((p: any) => {
+                      const matchSearch = !targetSearch || (p.full_name || '').toLowerCase().includes(targetSearch.toLowerCase());
+                      const matchPos = targetPosFilter === 'ALL' || (p.position || '').includes(targetPosFilter);
+                      return matchSearch && matchPos;
+                    })
                 : myRoster;
               return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
@@ -519,4 +564,7 @@ const styles = StyleSheet.create({
   sortBtnActive: { borderColor: '#F5A623', backgroundColor: '#2a1a00' },
   sortBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
   sortBtnTextActive: { color: '#F5A623', fontWeight: '700' },
+
+  modalSearchRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  modalSearchInput: { backgroundColor: '#1a1a1a', borderRadius: 10, padding: 10, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a' },
 });
