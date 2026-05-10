@@ -214,9 +214,23 @@ export default function NotificationsScreen() {
                       </TouchableOpacity>
                     )}
                     {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && (
-                      <TouchableOpacity onPress={() => { if (n.leagueId) router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } }); }}>
+                      <TouchableOpacity onPress={() => {
+                        if (!n.leagueId) return;
+                        if (n.type === 'tradeblock' || n.type === 'trade_listing')
+                          router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
+                        else if (n.type === 'reset_request' || n.type === 'reset_request_opponent' || n.type === 'reset_disputed')
+                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: '', coCommissioners: '[]' } });
+                        else if (n.type === 'announcement')
+                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'announcements', channelLabel: 'League News', channelIcon: '📰', commissionerId: '', coCommissioners: '[]' } });
+                        else
+                          router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
+                      }}>
                         <Text style={styles.notifText}>{n.message || n.type}</Text>
-                        {n.leagueId && <Text style={styles.notifLink}>View League →</Text>}
+                        {n.leagueId && <Text style={styles.notifLink}>
+                          {n.type === 'tradeblock' ? 'View Trade Center →' :
+                           n.type === 'reset_request' || n.type === 'reset_request_opponent' ? 'View Reset Requests →' :
+                           n.type === 'announcement' ? 'View League News →' : 'View League →'}
+                        </Text>}
                       </TouchableOpacity>
                     )}
                     <Text style={styles.notifTime}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</Text>
