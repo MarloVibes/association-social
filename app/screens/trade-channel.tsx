@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle } from '@/constants/playstyle';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
@@ -65,6 +66,7 @@ export default function TradeChannelScreen() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
+  const [selectedAvailPlayer, setSelectedAvailPlayer] = useState<{ player: any; uid: string; teamId: string; teamName: string } | null>(null);
   const [blockSort, setBlockSort] = useState<string>('team');
   const [targetSearch, setTargetSearch] = useState('');
   const [targetPosFilter, setTargetPosFilter] = useState('ALL');
@@ -355,7 +357,11 @@ export default function TradeChannelScreen() {
               <View key={item.key} style={styles.listingCard}>
                 <Text style={styles.listingTeam}>{item.teamName}</Text>
                 <View style={styles.listingRow}>
-                  <PlayerSlot player={item.player} style={{ flex: 1 }} />
+                  <PlayerSlot
+                    player={item.player}
+                    style={{ flex: 1 }}
+                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: (item.player?.teamId || ''), teamName: item.teamName || '' })}
+                  />
                   <View style={styles.listingBtns}>
                     <TouchableOpacity style={styles.proposeBtn} onPress={item.onOffer}>
                       <Text style={styles.proposeBtnText}>🤝 Offer</Text>
@@ -455,6 +461,20 @@ export default function TradeChannelScreen() {
           </ScrollView>
         </View>
       </Modal>
+      <PlayerCard
+        player={selectedAvailPlayer?.player || null}
+        era={myTeam?.era || 'current'}
+        leagueId={leagueId}
+        teamId={selectedAvailPlayer?.teamId || ''}
+        visible={!!selectedAvailPlayer}
+        onClose={() => setSelectedAvailPlayer(null)}
+        isOwned={selectedAvailPlayer ? false : undefined}
+        onOfferTrade={selectedAvailPlayer ? () => {
+          const sel = selectedAvailPlayer;
+          setSelectedAvailPlayer(null);
+          router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: sel.uid, otherTeamId: sel.teamId, otherTeamName: sel.teamName, prefillPlayer: JSON.stringify(sel.player || {}) } });
+        } : undefined}
+      />
 
       {/* Propose Trade Modal */}
       <GlobalNav />
