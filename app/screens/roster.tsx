@@ -208,6 +208,7 @@ export default function RosterScreen() {
           otherUid: ownerTeam.gmId,
           otherTeamId: ownerTeam.id,
           otherTeamName: ownerTeam.name || 'Opponent',
+          prefillPlayer: JSON.stringify(player),
         },
       });
     } catch (e: any) { Alert.alert('Error', e.message); }

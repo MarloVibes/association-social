@@ -242,7 +242,7 @@ export default function NotificationsScreen() {
               {notifications.map((n: any, i: number) => (
                 <View key={i} style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
-                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : '🔔'}
+                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : '🔔'}
                   </Text>
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
@@ -256,7 +256,9 @@ export default function NotificationsScreen() {
                     {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && (
                       <TouchableOpacity onPress={() => {
                         if (!n.leagueId) return;
-                        if (n.type === 'tradeblock' || n.type === 'trade_listing')
+                        if (n.type === 'trade_offer' || n.type === 'trade_executed' || n.type === 'trade_declined' || n.type === 'trade_cancelled')
+                          router.push({ pathname: '/screens/trade-room', params: { leagueId: n.leagueId, otherUid: n.otherUid || n.fromUid || '', otherTeamId: n.otherTeamId || '', otherTeamName: n.otherTeamName || n.fromTeamName || '' } });
+                        else if (n.type === 'tradeblock' || n.type === 'trade_listing')
                           router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
                         else if (n.type === 'reset_request' || n.type === 'reset_request_opponent' || n.type === 'reset_disputed')
                           router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: '', coCommissioners: '[]' } });
@@ -267,7 +269,10 @@ export default function NotificationsScreen() {
                       }}>
                         <Text style={styles.notifText}>{n.message || n.type}</Text>
                         {n.leagueId && <Text style={styles.notifLink}>
-                          {n.type === 'tradeblock' ? 'View Trade Center →' :
+                          {n.type === 'trade_offer' ? 'Review Offer →' :
+                           n.type === 'trade_executed' ? 'View Trade →' :
+                           n.type === 'trade_declined' || n.type === 'trade_cancelled' ? 'View Room →' :
+                           n.type === 'tradeblock' ? 'View Trade Center →' :
                            n.type === 'reset_request' || n.type === 'reset_request_opponent' ? 'View Reset Requests →' :
                            n.type === 'announcement' ? 'View League News →' : 'View League →'}
                         </Text>}

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -103,6 +103,7 @@ export default function TradeChannelScreen() {
   const [blockSort, setBlockSort] = useState<string>('team');
   const [targetSearch, setTargetSearch] = useState('');
   const [targetPosFilter, setTargetPosFilter] = useState('ALL');
+  const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const user = auth.currentUser;
 
   useEffect(() => { loadData(); }, []);
@@ -117,6 +118,52 @@ export default function TradeChannelScreen() {
     });
     return () => unsub();
   }, [leagueId]);
+
+  // Active Trade Rooms: rooms I'm host or guest of, in active states
+  useEffect(() => {
+    if (!leagueId || !user?.uid) return;
+    const ACTIVE = ['open', 'live', 'pushed', 'countered'];
+    const hostQ = query(
+      collection(db, 'leagues', leagueId, 'trade_rooms'),
+      where('hostUid', '==', user.uid),
+      limit(20)
+    );
+    const guestQ = query(
+      collection(db, 'leagues', leagueId, 'trade_rooms'),
+      where('guestUid', '==', user.uid),
+      limit(20)
+    );
+    let hostRooms: any[] = [];
+    let guestRooms: any[] = [];
+    const merge = () => {
+      const all = [...hostRooms, ...guestRooms].filter(r => ACTIVE.includes(r.status));
+      // Priority: pushed-to-me=0, live=1, pushed-by-me/countered=2, open=3
+      const priority = (r: any) => {
+        if ((r.status === 'pushed' || r.status === 'countered') && r.senderUid && r.senderUid !== user.uid) return 0;
+        if (r.status === 'live') return 1;
+        if (r.status === 'pushed' || r.status === 'countered') return 2;
+        return 3;
+      };
+      all.sort((a, b) => {
+        const pa = priority(a);
+        const pb = priority(b);
+        if (pa !== pb) return pa - pb;
+        const ta = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+        const tb = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+        return tb - ta;
+      });
+      setActiveRooms(all);
+    };
+    const unsubHost = onSnapshot(hostQ, snap => {
+      hostRooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      merge();
+    });
+    const unsubGuest = onSnapshot(guestQ, snap => {
+      guestRooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      merge();
+    });
+    return () => { unsubHost(); unsubGuest(); };
+  }, [leagueId, user?.uid]);
 
   const loadData = async () => {
     setLoading(true);
@@ -179,6 +226,44 @@ export default function TradeChannelScreen() {
         <Text style={styles.title}>🔁 Trade Center</Text>
         <Text style={styles.teamName}>{myTeam?.name || ''}</Text>
       </View>
+
+      {/* Active Trade Rooms */}
+      {activeRooms.length > 0 && (
+        <View style={styles.activeRoomsBanner}>
+          <Text style={styles.activeRoomsTitle}>ACTIVE TRADE ROOMS ({activeRooms.length})</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12 }}>
+              {activeRooms.map((r: any) => {
+                const otherIsHost = r.hostUid !== user?.uid;
+                const oUid = otherIsHost ? r.hostUid : r.guestUid;
+                const oTeamId = otherIsHost ? r.hostTeamId : r.guestTeamId;
+                const oTeamName = otherIsHost ? r.hostTeamName : r.guestTeamName;
+                let label = 'Idle';
+                let labelColor = '#888';
+                if ((r.status === 'pushed' || r.status === 'countered') && r.senderUid && r.senderUid !== user?.uid) { label = 'Offer Received'; labelColor = '#F5A623'; }
+                else if (r.status === 'live') { label = 'Live'; labelColor = '#00ff87'; }
+                else if (r.status === 'pushed' || r.status === 'countered') { label = 'Offer Sent'; labelColor = '#8888ff'; }
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={styles.activeRoomCard}
+                    onPress={() => router.push({
+                      pathname: '/screens/trade-room',
+                      params: { leagueId, otherUid: oUid, otherTeamId: oTeamId, otherTeamName: oTeamName || 'Opponent' },
+                    })}
+                  >
+                    <Text style={styles.activeRoomTeam} numberOfLines={1}>{oTeamName || 'Opponent'}</Text>
+                    <View style={styles.activeRoomStatusRow}>
+                      <View style={[styles.activeRoomDot, { backgroundColor: labelColor }]} />
+                      <Text style={[styles.activeRoomStatus, { color: labelColor }]}>{label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+      )}
 
       {/* Tabs */}
       <View style={styles.tabRow}>
@@ -279,12 +364,12 @@ export default function TradeChannelScreen() {
             const allAvail = [
               ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
                 key: l.id, teamName: l.fromTeamName, player: l.player, uid: l.fromUid,
-                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '' } }),
+                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '', prefillPlayer: JSON.stringify(l.player || {}) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
               })),
               ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
                 key: 'tb_' + i, teamName: p.teamName, player: p, uid: p.gmId,
-                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '' } }),
+                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '', prefillPlayer: JSON.stringify(p) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
             ];
@@ -419,6 +504,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: 1 },
   teamName: { color: '#888', fontSize: 11, width: 80, textAlign: 'right' },
   tabRow: { flexDirection: 'row', backgroundColor: '#111', borderBottomWidth: 1, borderBottomColor: '#222' },
+  activeRoomsBanner: { paddingVertical: 10, backgroundColor: '#0d0d0d', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  activeRoomsTitle: { color: '#888', fontSize: 10, fontWeight: '800', letterSpacing: 1, paddingHorizontal: 16, marginBottom: 8 },
+  activeRoomCard: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#2a2a2a', minWidth: 140 },
+  activeRoomTeam: { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  activeRoomStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  activeRoomDot: { width: 6, height: 6, borderRadius: 3 },
+  activeRoomStatus: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: '#00ff87' },
   tabText: { color: '#555', fontSize: 11, fontWeight: '800', letterSpacing: 1 },

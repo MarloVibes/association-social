@@ -41,7 +41,7 @@ function PlayerChip({ player, onRemove, locked }: { player: any; onRemove?: () =
 }
 
 export default function TradeRoomScreen() {
-  const params = useLocalSearchParams<{ leagueId: string; otherUid: string; otherTeamId: string; otherTeamName: string }>();
+  const params = useLocalSearchParams<{ leagueId: string; otherUid: string; otherTeamId: string; otherTeamName: string; prefillPlayer?: string }>();
   const leagueId = String(params.leagueId || '');
   const otherUid = String(params.otherUid || '');
   const otherTeamId = String(params.otherTeamId || '');
@@ -142,6 +142,29 @@ export default function TradeRoomScreen() {
     return () => unsub();
   }, [leagueId, roomId]);
 
+  // Prefill opponent's side with a requested player (if passed via route)
+  useEffect(() => {
+    if (!room) return;
+    if (room.status === 'cancelled' || room.status === 'executed') return;
+    const raw = params.prefillPlayer;
+    if (!raw) return;
+    try {
+      const pre = JSON.parse(String(raw));
+      if (!pre || !pre.full_name) return;
+      const offerKey = isHost ? 'guestOffer' : 'hostOffer';
+      const current = room[offerKey] || [];
+      const alreadyThere = current.some((p: any) => getPlayerKey(p) === getPlayerKey(pre));
+      if (alreadyThere) return;
+      if (current.length >= MAX_PER_SIDE) return;
+      updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+        [offerKey]: [...current, pre],
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) { /* ignore */ }
+    // Only run on first room load when prefillPlayer is present
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!room, params.prefillPlayer]);
+
   // Heartbeat: write my presence every 10s
   useEffect(() => {
     if (!leagueId || !roomId || !myUid) return;
@@ -188,7 +211,7 @@ export default function TradeRoomScreen() {
   const isLive = otherPresenceFresh && room.status !== 'pushed' && room.status !== 'countered' && room.status !== 'cancelled' && room.status !== 'executed';
   const anyConfirmed = myConfirmed || otherConfirmed;
   const canEditMySide = !isPushedByMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
-  const canEditOtherSide = isLive && !anyConfirmed;
+  const canEditOtherSide = !isPushedByMe && !isPushedToMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
 
   const updateRoom = async (patch: any) => {
     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
@@ -291,6 +314,9 @@ export default function TradeRoomScreen() {
             type: 'trade_executed',
             leagueId,
             roomId,
+            otherUid: myUid,
+            otherTeamId: myTeam?.id || '',
+            otherTeamName: myTeam?.name || '',
             createdAt: new Date().toISOString(),
             message: 'Your trade with ' + (myTeam?.name || 'opponent') + ' has been completed.',
           }),
@@ -320,6 +346,9 @@ export default function TradeRoomScreen() {
           roomId,
           fromUid: myUid,
           fromTeamName: myTeam?.name || '',
+          otherUid: myUid,
+          otherTeamId: myTeam?.id || '',
+          otherTeamName: myTeam?.name || '',
           createdAt: new Date().toISOString(),
           message: (myTeam?.name || 'A GM') + ' sent you a trade offer.',
         }),
@@ -346,6 +375,9 @@ export default function TradeRoomScreen() {
               type: 'trade_declined',
               leagueId,
               roomId,
+              otherUid: myUid,
+              otherTeamId: myTeam?.id || '',
+              otherTeamName: myTeam?.name || '',
               createdAt: new Date().toISOString(),
               message: (myTeam?.name || 'A GM') + ' declined your trade offer.',
             }),
@@ -378,6 +410,9 @@ export default function TradeRoomScreen() {
                 type: 'trade_cancelled',
                 leagueId,
                 roomId,
+                otherUid: myUid,
+                otherTeamId: myTeam?.id || '',
+                otherTeamName: myTeam?.name || '',
                 createdAt: new Date().toISOString(),
                 message: (myTeam?.name || 'A GM') + ' cancelled the trade room.',
               }),
