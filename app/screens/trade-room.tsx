@@ -61,6 +61,9 @@ export default function TradeRoomScreen() {
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [leagueEra, setLeagueEra] = useState<string>('');
+  const [tradeApronTolerance, setTradeApronTolerance] = useState<number>(1.25);
+  const [commissionerCanOverride, setCommissionerCanOverride] = useState<boolean>(false);
+  const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
@@ -151,11 +154,16 @@ export default function TradeRoomScreen() {
     return () => { cancelled = true; };
   }, [leagueId, roomId, myUid, otherUid]);
 
-  // Load league era to know if salary UI should be shown
+  // Load league era + salary settings
   useEffect(() => {
     if (!leagueId) return;
     getDoc(doc(db, 'leagues', leagueId)).then(snap => {
-      if (snap.exists()) setLeagueEra((snap.data() as any).era || 'current');
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setLeagueEra(data.era || 'current');
+        setTradeApronTolerance(typeof data.tradeApronTolerance === 'number' ? data.tradeApronTolerance : 1.25);
+        setCommissionerCanOverride(!!data.commissionerCanOverride);
+      }
     }).catch(() => {});
   }, [leagueId]);
 
@@ -227,6 +235,23 @@ export default function TradeRoomScreen() {
   const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + (p?.salary || 0), 0);
   const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
   const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
+
+  const checkSalaryBalance = () => {
+    if (leagueEra !== 'current') return { passes: true, hostShortfall: 0, guestShortfall: 0, skipped: true };
+    const hostOut = sumSalary(room?.hostOffer || []);
+    const guestOut = sumSalary(room?.guestOffer || []);
+    if (hostOut === 0 && guestOut === 0) return { passes: true, hostShortfall: 0, guestShortfall: 0, skipped: true };
+    const hostCovered = (hostOut * tradeApronTolerance + 100000) >= guestOut;
+    const guestCovered = (guestOut * tradeApronTolerance + 100000) >= hostOut;
+    const hostShortfall = hostCovered ? 0 : Math.ceil((guestOut - 100000) / tradeApronTolerance - hostOut);
+    const guestShortfall = guestCovered ? 0 : Math.ceil((hostOut - 100000) / tradeApronTolerance - guestOut);
+    return { passes: hostCovered && guestCovered, hostShortfall, guestShortfall, skipped: false };
+  };
+
+  const salaryCheck = checkSalaryBalance();
+  const myIsHost = isHost;
+  const myShortfall = myIsHost ? salaryCheck.hostShortfall : salaryCheck.guestShortfall;
+  const otherShortfall = myIsHost ? salaryCheck.guestShortfall : salaryCheck.hostShortfall;
   const myOfferKey = isHost ? 'hostOffer' : 'guestOffer';
   const otherOfferKey = isHost ? 'guestOffer' : 'hostOffer';
   const myConfirmKey = isHost ? 'hostConfirmed' : 'guestConfirmed';
@@ -279,6 +304,18 @@ export default function TradeRoomScreen() {
   };
 
   const handleConfirm = async () => {
+    if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
+      const myNeed = myShortfall;
+      const theirNeed = otherShortfall;
+      const messages = [];
+      if (myNeed > 0) messages.push('Your side needs ~$' + (myNeed / 1000000).toFixed(1) + 'M more outgoing');
+      if (theirNeed > 0) messages.push('Their side needs ~$' + (theirNeed / 1000000).toFixed(1) + 'M more outgoing');
+      Alert.alert(
+        'Salary check failed',
+        messages.join('\n') + '\n\n(Both sides must satisfy ' + (tradeApronTolerance * 100).toFixed(0) + '% rule.)'
+      );
+      return;
+    }
     if (myOffer.length === 0 && otherOffer.length === 0) {
       Alert.alert('Empty trade', 'Add at least one player.');
       return;
@@ -555,6 +592,18 @@ export default function TradeRoomScreen() {
               <Text style={styles.totalValue}>{fmtMoney(sumSalary(myOffer))}</Text>
             </View>
           ) : null}
+          {leagueEra === 'current' && !salaryCheck.skipped ? (
+            <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes ? '#00ff87' : '#ff4444' }]}>
+              <Text style={[styles.balanceText, { color: salaryCheck.passes ? '#00ff87' : '#ff4444' }]}>
+                {salaryCheck.passes
+                  ? '✓ Salary check OK (' + (tradeApronTolerance * 100).toFixed(0) + '% rule)'
+                  : '✗ Salary mismatch — ' + (myShortfall > 0 ? 'you need ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : 'they need ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing')}
+              </Text>
+              {room?.salaryOverrideApplied ? (
+                <Text style={styles.balanceOverrideText}>🔓 Commissioner override applied</Text>
+              ) : null}
+            </View>
+          ) : null}
           {canEditMySide && myOffer.length < MAX_PER_SIDE ? (
             <TouchableOpacity style={styles.addBtn} onPress={() => setPickerOpen(true)}>
               <Text style={styles.addBtnText}>+ ADD PLAYER</Text>
@@ -713,6 +762,9 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1a1a1a', paddingHorizontal: 4 },
   totalLabel: { color: '#666', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
   totalValue: { color: '#00ff87', fontSize: 14, fontWeight: '900' },
+  balanceRow: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1 },
+  balanceText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  balanceOverrideText: { color: '#F5A623', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   chipRemove: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
   chipRemoveText: { color: '#ff4444', fontSize: 16, fontWeight: '800' },
 

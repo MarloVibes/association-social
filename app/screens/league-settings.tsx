@@ -33,6 +33,9 @@ export default function LeagueSettingsScreen() {
   const [maxPlayersPerTrade, setMaxPlayersPerTrade] = useState('6');
   const [paused, setPaused] = useState(false);
   const [archived, setArchived] = useState(false);
+  const [salaryCap, setSalaryCap] = useState('154647000');
+  const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
+  const [commissionerCanOverride, setCommissionerCanOverride] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
 
   useEffect(() => { loadData(); }, [leagueId]);
@@ -57,6 +60,9 @@ export default function LeagueSettingsScreen() {
       setMaxPlayersPerTrade(String(data.maxPlayersPerTrade || 6));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
+      setSalaryCap(String(data.salaryCap || 154647000));
+      setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
+      setCommissionerCanOverride(!!data.commissionerCanOverride);
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
   };
@@ -104,6 +110,9 @@ export default function LeagueSettingsScreen() {
     if (!name.trim()) { Alert.alert('Name required', 'League name cannot be empty.'); return; }
     const max = parseInt(maxPlayersPerTrade, 10);
     if (isNaN(max) || max < 1 || max > 15) { Alert.alert('Invalid', 'Max players per trade must be between 1 and 15.'); return; }
+    const capNum = parseInt(salaryCap.replace(/[^0-9]/g, ''), 10) || 154647000;
+    const tolNum = parseFloat(tradeApronTolerance) || 1.25;
+    if (tolNum < 1.0 || tolNum > 2.0) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
     await saveField({
       name: name.trim(),
       description: description.trim(),
@@ -111,6 +120,9 @@ export default function LeagueSettingsScreen() {
       inviteCode: privacy === 'private' ? inviteCode.trim() : '',
       tradeApprovalMode,
       maxPlayersPerTrade: max,
+      salaryCap: capNum,
+      tradeApronTolerance: tolNum,
+      commissionerCanOverride,
     }, 'League settings updated.');
   };
 
@@ -252,6 +264,45 @@ export default function LeagueSettingsScreen() {
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>How many players each side can put on the table in a Trade Room (1-15).</Text>
+        </View>
+
+        {/* Salary Cap */}
+        <Text style={styles.sectionLabel}>SALARY CAP (CURRENT ERA ONLY)</Text>
+        <View style={styles.card}>
+          <Text style={styles.fieldLabel}>League Salary Cap (USD)</Text>
+          <TextInput
+            style={styles.input}
+            value={salaryCap}
+            onChangeText={setSalaryCap}
+            keyboardType='number-pad'
+            placeholder='154647000'
+            placeholderTextColor='#555'
+          />
+          <Text style={styles.helper}>2025-26 NBA cap is $154.6M. Change for custom leagues.</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Trade Tolerance Multiplier</Text>
+          <TextInput
+            style={styles.input}
+            value={tradeApronTolerance}
+            onChangeText={setTradeApronTolerance}
+            keyboardType='decimal-pad'
+            placeholder='1.25'
+            placeholderTextColor='#555'
+          />
+          <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
+
+          <View style={[styles.toggleRow, { marginTop: 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Allow Commissioner Override</Text>
+              <Text style={styles.toggleDesc}>Lets commissioners force-execute trades that fail the salary check</Text>
+            </View>
+            <Switch
+              value={commissionerCanOverride}
+              onValueChange={setCommissionerCanOverride}
+              trackColor={{ false: '#333', true: '#00ff8788' }}
+              thumbColor={commissionerCanOverride ? '#00ff87' : '#666'}
+            />
+          </View>
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveBasics} disabled={saving}>
