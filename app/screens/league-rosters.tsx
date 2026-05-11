@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { getTeamColors, getTeamLogoUrl } from '@/constants/teamColors';
 
@@ -11,6 +12,7 @@ const firebaseConfig = {
 };
 if (!getApps().length) initializeApp(firebaseConfig);
 const db = getFirestore();
+const auth = getAuth();
 
 export default function LeagueRostersScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -29,10 +31,15 @@ export default function LeagueRostersScreen() {
         }
         const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
         const list = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        // Sort: owned teams first, then alphabetical
+        // Sort: my team first, then owned (alphabetical), then unowned (alphabetical)
+        const myUid = auth.currentUser?.uid;
         list.sort((a, b) => {
-          const aOwned = !!a.ownerUid;
-          const bOwned = !!b.ownerUid;
+          const aIsMine = a.gmId === myUid;
+          const bIsMine = b.gmId === myUid;
+          if (aIsMine && !bIsMine) return -1;
+          if (!aIsMine && bIsMine) return 1;
+          const aOwned = !!a.gmId;
+          const bOwned = !!b.gmId;
           if (aOwned && !bOwned) return -1;
           if (!aOwned && bOwned) return 1;
           return (a.name || '').localeCompare(b.name || '');
@@ -62,7 +69,7 @@ export default function LeagueRostersScreen() {
       {teams.map(team => {
         const colors = getTeamColors(team.abbr || 'ATL', currentYear);
         const logo = getTeamLogoUrl(team.abbr || 'ATL', currentYear);
-        const isOwned = !!team.ownerUid;
+        const isOwned = !!team.gmId;
         return (
           <TouchableOpacity
             key={team.id}
@@ -71,7 +78,12 @@ export default function LeagueRostersScreen() {
           >
             <Image source={{ uri: logo }} style={styles.teamLogo} />
             <View style={styles.teamInfo}>
-              <Text style={styles.teamName}>{team.name || team.abbr}</Text>
+              <View style={styles.teamNameRow}>
+                <Text style={styles.teamName}>{team.name || team.abbr}</Text>
+                {team.gmId === auth.currentUser?.uid ? (
+                  <View style={styles.yourTeamBadge}><Text style={styles.yourTeamBadgeText}>YOUR TEAM</Text></View>
+                ) : null}
+              </View>
               <Text style={styles.teamMeta}>
                 {team.wins || 0}–{team.losses || 0} · {isOwned ? '🧑 ' + (team.gmName || 'GM') : '🤖 Unowned'}
               </Text>
@@ -99,6 +111,9 @@ const styles = StyleSheet.create({
   teamLogo: { width: 40, height: 40, marginRight: 12 },
   teamInfo: { flex: 1 },
   teamName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  teamNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  yourTeamBadge: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  yourTeamBadgeText: { color: '#00ff87', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   teamMeta: { color: '#ccc', fontSize: 12, marginTop: 2 },
   rosterCount: { color: '#888', fontSize: 11, marginTop: 1 },
   chevron: { color: '#666', fontSize: 22, fontWeight: '400' },

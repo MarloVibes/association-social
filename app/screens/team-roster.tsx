@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle, comparePlayersByTier } from '@/constants/playstyle';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -24,6 +25,7 @@ export default function TeamRosterScreen() {
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
   const [leagueEra, setLeagueEra] = useState<string>('');
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const myUid = auth.currentUser?.uid;
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function TeamRosterScreen() {
           setTeam({ id: teamSnap.id, ...teamSnap.data() });
         }
         // Compute which of this team's players are locked in active trades
-        const targetUid = teamSnap.data()?.ownerUid;
+        const targetUid = teamSnap.data()?.gmId;
         if (targetUid) {
           const ACTIVE = ['open', 'live', 'pushed', 'countered'];
           const hostQ = query(collection(db, 'leagues', leagueId, 'trade_rooms'), where('hostUid', '==', targetUid));
@@ -87,8 +89,8 @@ export default function TeamRosterScreen() {
 
   const colors = getTeamColors(team.abbr || 'ATL', currentYear);
   const logo = getTeamLogoUrl(team.abbr || 'ATL', currentYear);
-  const isOwned = !!team.ownerUid;
-  const isMyTeam = team.ownerUid === myUid;
+  const isOwned = !!team.gmId;
+  const isMyTeam = team.gmId === myUid;
   const untouchables: string[] = team.untouchables || [];
   const tradeBlock: string[] = team.tradeBlock || [];
   const players: any[] = team.players || [];
@@ -103,7 +105,7 @@ export default function TeamRosterScreen() {
       Alert.alert('In Trade', player.full_name + ' is currently in an active trade negotiation. Try again later.');
       return;
     }
-    if (!team.ownerUid) {
+    if (!team.gmId) {
       Alert.alert('Unowned Team', 'This team has no GM. Trading with unowned teams is not yet supported.');
       return;
     }
@@ -116,7 +118,7 @@ export default function TeamRosterScreen() {
       pathname: '/screens/trade-room',
       params: {
         leagueId,
-        otherUid: team.ownerUid,
+        otherUid: team.gmId,
         otherTeamId: team.id,
         otherTeamName: team.name || '',
         prefillPlayer: pid,
@@ -160,7 +162,7 @@ export default function TeamRosterScreen() {
             }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         return (
-          <View key={pid + i} style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]}>
+          <TouchableOpacity key={pid + i} style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
             {brefId ? (
               <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.photo} />
             ) : (
@@ -187,15 +189,29 @@ export default function TeamRosterScreen() {
               {isLocked && !isUntouchable && !isOnBlock ? <Text style={styles.lockReason}>⏳ In active trade</Text> : null}
             </View>
             {canTrade ? (
-              <TouchableOpacity style={styles.tradeBtn} onPress={() => handleProposeTrade(p)}>
+              <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
                 <Text style={styles.tradeBtnText}>Propose Trade</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
+          </TouchableOpacity>
         );
       })}
 
       <View style={{ height: 60 }} />
+      <PlayerCard
+        player={selectedPlayer}
+        era={leagueEra}
+        leagueId={leagueId}
+        teamId={team?.id || ''}
+        visible={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        isOwned={selectedPlayer ? (team?.gmId === myUid) : undefined}
+        onOfferTrade={selectedPlayer && team?.gmId && team.gmId !== myUid ? () => {
+          const p = selectedPlayer;
+          setSelectedPlayer(null);
+          handleProposeTrade(p);
+        } : undefined}
+      />
     </ScrollView>
   );
 }
