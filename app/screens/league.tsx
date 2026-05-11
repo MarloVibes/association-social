@@ -195,9 +195,12 @@ export default function LeagueScreen() {
             <Text style={[styles.backText, { color: teamText }]}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (
-            <View style={[styles.commBadge, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}>
-              <Text style={[styles.commBadgeText, { color: teamText }]}>Commissioner</Text>
-            </View>
+            <TouchableOpacity
+              style={[styles.commBadge, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+              onPress={() => router.push({ pathname: '/screens/league-settings', params: { leagueId } })}
+            >
+              <Text style={[styles.commBadgeText, { color: teamText }]}>⚙️ Settings</Text>
+            </TouchableOpacity>
           )}
         </View>
 
