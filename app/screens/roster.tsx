@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { useMemo, useEffect, useState } from 'react';
+import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -23,6 +23,7 @@ export default function RosterScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState<'default' | 'first' | 'last'>('default');
   const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
   const [league, setLeague] = useState<any>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
@@ -30,6 +31,11 @@ export default function RosterScreen() {
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
   useEffect(() => { loadData(); }, [teamId, eraKey]);
+
+  // Refresh when returning to this screen (e.g., after creating a player)
+  useFocusEffect(
+    useCallback(() => { loadData(); }, [teamId, eraKey])
+  );
 
   const loadData = async () => {
     if (!teamId) return;
@@ -85,7 +91,11 @@ export default function RosterScreen() {
         leagueFreeAgents.push(...players);
       });
 
-      setAllEraPlayers([...poolPlayers, ...leagueFreeAgents]);
+      // Load custom players created in this league
+      const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));
+      const customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
+
+      setAllEraPlayers([...poolPlayers, ...leagueFreeAgents, ...customPlayers]);
     } catch (e) {
       console.error(e);
     }
@@ -104,7 +114,11 @@ export default function RosterScreen() {
     const isRandomMode = league?.mode === 'random' || league?.mode === 'current';
     return allEraPlayers.filter(p => {
       const pid = p.player_id || p.id;
-      const matchesSearch = !search || (p.full_name || '').toLowerCase().includes(search.toLowerCase());
+      const q = search.toLowerCase().trim();
+      const matchesSearch = !q
+        || (p.full_name || '').toLowerCase().startsWith(q)
+        || (p.first_name || '').toLowerCase().startsWith(q)
+        || (p.last_name || '').toLowerCase().startsWith(q);
       const pos = p.position || '';
       const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
       // In draft mode - show ALL players not already on a roster
@@ -121,8 +135,18 @@ export default function RosterScreen() {
       const hasNoTeam = !p.team || p.team === '';
       const wasDropped = !takenPlayerNames.has(p.full_name || '') && !takenPlayerIds.has(pid) && p.team && droppedPlayerNames.has(p.full_name || '');
       return matchesSearch && matchesPos && (hasNoTeam || wasDropped);
+    }).sort((a, b) => {
+      if (sortBy === 'first') {
+        return (a.first_name || a.full_name || '').localeCompare(b.first_name || b.full_name || '');
+      }
+      if (sortBy === 'last') {
+        const aLast = a.last_name || (a.full_name || '').split(' ').slice(-1)[0] || '';
+        const bLast = b.last_name || (b.full_name || '').split(' ').slice(-1)[0] || '';
+        return aLast.localeCompare(bLast);
+      }
+      return 0;
     });
-  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter]);
+  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter, sortBy]);
 
   const handlePlayerAction = (player: any, isOwned: boolean | undefined = true) => {
     if (isOwned === undefined) {
@@ -421,6 +445,18 @@ export default function RosterScreen() {
 
       {activeTab === 'free_agents' && (
         <>
+          <TouchableOpacity
+            style={styles.createPlayerBanner}
+            onPress={() => router.push({ pathname: '/screens/create-player', params: { leagueId, era: league?.currentSeason || '' } })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.createPlayerBannerIcon}>+</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.createPlayerBannerTitle}>Create Player</Text>
+              <Text style={styles.createPlayerBannerSub}>Add a custom player to the free agent pool</Text>
+            </View>
+            <Text style={styles.createPlayerBannerArrow}>›</Text>
+          </TouchableOpacity>
           <TextInput
             style={styles.searchInput}
             placeholder='Search free agents...'
@@ -436,6 +472,22 @@ export default function RosterScreen() {
                 onPress={() => setPosFilter(pos)}
               >
                 <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.sortRow}>
+            <Text style={styles.sortLabel}>SORT</Text>
+            {[
+              { key: 'default', label: 'Default' },
+              { key: 'first', label: 'First Name' },
+              { key: 'last', label: 'Last Name' },
+            ].map(s => (
+              <TouchableOpacity
+                key={s.key}
+                style={[styles.sortBtn, sortBy === s.key && styles.sortBtnActive]}
+                onPress={() => setSortBy(s.key as any)}
+              >
+                <Text style={[styles.sortBtnText, sortBy === s.key && styles.sortBtnTextActive]}>{s.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -548,6 +600,17 @@ const styles = StyleSheet.create({
   posBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
   posBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
   posBtnTextActive: { color: '#00ff87' },
+  sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
+  sortLabel: { color: '#666', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 4 },
+  sortBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1a1a1a', borderRadius: 999, borderWidth: 1, borderColor: '#2a2a2a' },
+  sortBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
+  sortBtnText: { color: '#888', fontSize: 11, fontWeight: '700' },
+  sortBtnTextActive: { color: '#00ff87' },
+  createPlayerBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginHorizontal: 16, marginTop: 4, marginBottom: 10, gap: 12 },
+  createPlayerBannerIcon: { color: '#00ff87', fontSize: 28, fontWeight: '900', width: 30, textAlign: 'center' },
+  createPlayerBannerTitle: { color: '#00ff87', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+  createPlayerBannerSub: { color: '#88bb99', fontSize: 11, marginTop: 2 },
+  createPlayerBannerArrow: { color: '#00ff87', fontSize: 22, fontWeight: '300' },
   listContent: { paddingHorizontal: 20, paddingBottom: 100 },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },

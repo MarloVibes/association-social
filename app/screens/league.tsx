@@ -52,6 +52,7 @@ export default function LeagueScreen() {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
+  const teamNameColor = hexToLum(teamSecondary) < 0.35 || hexToLum(teamSecondary) > 0.95 ? '#ffffff' : teamSecondary;
 
   useEffect(() => {
     if (!leagueId) return;
@@ -253,7 +254,7 @@ export default function LeagueScreen() {
             <View style={styles.myTeamCardHeader}>
               <View>
                 <Text style={[styles.myTeamCardLabel, { color: teamText }]}>My Team</Text>
-                <Text style={[styles.myTeamCardName, { color: teamSecondary }]}>{myTeam.name}</Text>
+                <Text style={[styles.myTeamCardName, { color: teamNameColor }]}>{myTeam.name}</Text>
                 <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
               </View>
               <TouchableOpacity
