@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -153,6 +154,38 @@ export default function NotificationsScreen() {
     }
   };
 
+  const deleteNotification = async (n: any, idx: number) => {
+    if (!user) return;
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const notifs = snap.data()?.notifications || [];
+      // We display notifications reversed; idx is the reversed index, compute real
+      const realIdx = notifs.length - 1 - idx;
+      if (realIdx < 0 || realIdx >= notifs.length) return;
+      const next = [...notifs.slice(0, realIdx), ...notifs.slice(realIdx + 1)];
+      await updateDoc(doc(db, 'users', user.uid), { notifications: next });
+      setNotifications(prev => prev.filter((_, i) => i !== idx));
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const clearAllActivity = () => {
+    if (notifications.length === 0) return;
+    Alert.alert(
+      'Clear all notifications?',
+      'This will remove all activity notifications. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear All', style: 'destructive', onPress: async () => {
+          if (!user) return;
+          try {
+            await updateDoc(doc(db, 'users', user.uid), { notifications: [] });
+            setNotifications([]);
+          } catch (e: any) { Alert.alert('Error', e.message); }
+        }},
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -160,7 +193,10 @@ export default function NotificationsScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>
-        <TouchableOpacity onPress={markAllRead}><Text style={styles.markAllText}>✓ All Read</Text></TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={markAllRead}><Text style={styles.markAllText}>✓ All Read</Text></TouchableOpacity>
+          <TouchableOpacity onPress={clearAllActivity} style={{ marginLeft: 12 }}><Text style={styles.clearAllText}>🗑️</Text></TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -240,7 +276,17 @@ export default function NotificationsScreen() {
             <>
               <Text style={styles.sectionTitle}>Activity</Text>
               {notifications.map((n: any, i: number) => (
-                <View key={i} style={styles.notifCard}>
+                <Swipeable
+                  key={i}
+                  renderRightActions={() => (
+                    <View style={styles.swipeDelete}>
+                      <Text style={styles.swipeDeleteText}>Delete</Text>
+                    </View>
+                  )}
+                  onSwipeableOpen={() => deleteNotification(n, i)}
+                  rightThreshold={60}
+                >
+                <View style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
                     {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : '🔔'}
                   </Text>
@@ -281,6 +327,7 @@ export default function NotificationsScreen() {
                     <Text style={styles.notifTime}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</Text>
                   </View>
                 </View>
+                </Swipeable>
               ))}
             </>
           )}
@@ -338,4 +385,8 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', paddingTop: 80, gap: 16 },
   emptyIcon: { fontSize: 48 },
   emptyText: { color: '#555', fontSize: 15 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  clearAllText: { fontSize: 16 },
+  swipeDelete: { backgroundColor: '#ff4444', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, marginBottom: 10, borderRadius: 14 },
+  swipeDeleteText: { color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
 });
