@@ -1,7 +1,8 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { getPlaystyle, comparePlayersByTier } from '@/constants/playstyle';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
@@ -95,7 +96,22 @@ export default function RosterScreen() {
       const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));
       const customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
 
-      setAllEraPlayers([...poolPlayers, ...leagueFreeAgents, ...customPlayers]);
+      // Enrich players with era_stats so playstyles compute correctly
+      try {
+        const eraKey = (leagueSnap.exists() && (leagueSnap.data() as any).era) || 'current';
+        const statsSnap = await getDoc(doc(db, 'era_stats', eraKey));
+        const statsMap: Record<string, any> = {};
+        if (statsSnap.exists()) {
+          (statsSnap.data().players || []).forEach((p: any) => { statsMap[p.name] = p; });
+        }
+        const enrichedPool = [...poolPlayers, ...leagueFreeAgents, ...customPlayers].map(p => ({
+          ...p, ...(statsMap[p.full_name] || {}),
+        }));
+        setAllEraPlayers(enrichedPool);
+      } catch (e) {
+        console.error('era_stats enrich failed', e);
+        setAllEraPlayers([...poolPlayers, ...leagueFreeAgents, ...customPlayers]);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -105,8 +121,17 @@ export default function RosterScreen() {
   const myTeamPlayers = useMemo(() => {
     if (!team) return [];
     const players = team.players || [];
-    if (players.length > 0 && typeof players[0] === 'object') return players;
-    return allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
+    let list: any[];
+    if (players.length > 0 && typeof players[0] === 'object') {
+      // Enrich team players with era_stats too
+      list = players.map((p: any) => {
+        const enriched = allEraPlayers.find(ep => ep.full_name === p.full_name);
+        return enriched ? { ...p, ...enriched } : p;
+      });
+    } else {
+      list = allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
+    }
+    return [...list].sort(comparePlayersByTier);
   }, [team, allEraPlayers, myPlayerIds]);
 
   const freeAgents = useMemo(() => {
@@ -507,17 +532,55 @@ export default function RosterScreen() {
         }
         renderItem={({ item }) => {
           const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
+          const pid = item.player_id || item.id;
+          const isMine = activeTab === 'my_team';
+          const myUntouchables: string[] = (team?.untouchables || []) as string[];
+          const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
+          const isUntouchable = isMine && myUntouchables.includes(pid);
+          const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
           return (
-            <TouchableOpacity style={styles.playerCard} onPress={() => setSelectedPlayer(item)} onLongPress={() => {
-              const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
-              const isOpponent = !onMyTeam && (item.teamName || (item.team && item.team !== ''));
-              handlePlayerAction(item, !isOpponent);
-            }} activeOpacity={0.7}>
-              <View style={styles.playerAvatar}>
-                <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
-              </View>
+            <TouchableOpacity
+              style={[
+                styles.playerCard,
+                isUntouchable && styles.playerCardUntouchable,
+                isOnBlock && styles.playerCardOnBlock,
+              ]}
+              onPress={() => setSelectedPlayer(item)}
+              onLongPress={() => {
+                const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
+                const isOpponent = !onMyTeam && (item.teamName || (item.team && item.team !== ''));
+                handlePlayerAction(item, !isOpponent);
+              }}
+              activeOpacity={0.7}
+            >
+              {(() => {
+                let brefId = item.bref_id || '';
+                if (!brefId && item.player_id) {
+                  const m = String(item.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i);
+                  if (m) brefId = m[1];
+                }
+                return brefId ? (
+                  <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.playerHeadshot} />
+                ) : (
+                  <View style={styles.playerAvatar}>
+                    <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
+                  </View>
+                );
+              })()}
               <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>{item.full_name || item.name}</Text>
+                <View style={styles.playerNameRow}>
+                  <Text style={styles.playerName}>{item.full_name || item.name}</Text>
+                  {(() => {
+                    const ps = getPlaystyle(item);
+                    return (
+                      <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
+                        <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+                {isUntouchable ? <Text style={styles.playerStatusRed}>🔒 Untouchable</Text> : null}
+                {isOnBlock ? <Text style={styles.playerStatusBlue}>💼 On Block</Text> : null}
                 <View style={styles.playerMetaRow}>
                   <Text style={styles.playerMeta}>
                     {[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
@@ -615,7 +678,15 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },
   playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
+  playerCardUntouchable: { borderWidth: 1, borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
+  playerCardOnBlock: { borderWidth: 1, borderColor: '#3B82F6', backgroundColor: '#0a1530' },
+  playerStatusRed: { color: '#ff4444', fontSize: 10, fontWeight: '700', marginTop: 2 },
+  playerStatusBlue: { color: '#3B82F6', fontSize: 10, fontWeight: '700', marginTop: 2 },
+  playerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  tierBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  tierBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   playerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  playerHeadshot: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
   playerAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   playerInfo: { flex: 1 },
   playerName: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 3 },

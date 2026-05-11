@@ -57,12 +57,14 @@ export default function TradeRoomScreen() {
   const [myTeam, setMyTeam] = useState<any>(null);
   const [myRoster, setMyRoster] = useState<any[]>([]);
   const [otherRoster, setOtherRoster] = useState<any[]>([]);
+  const [otherUntouchables, setOtherUntouchables] = useState<string[]>([]);
   const [lockedPlayerKeys, setLockedPlayerKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [leagueEra, setLeagueEra] = useState<string>('');
   const [tradeApronTolerance, setTradeApronTolerance] = useState<number>(1.25);
   const [commissionerCanOverride, setCommissionerCanOverride] = useState<boolean>(false);
+  const [leagueCommUids, setLeagueCommUids] = useState<string[]>([]);
   const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
@@ -85,7 +87,10 @@ export default function TradeRoomScreen() {
           setMyTeam(mine);
           setMyRoster(mine.players || []);
         }
-        if (theirs) setOtherRoster(theirs.players || []);
+        if (theirs) {
+          setOtherRoster(theirs.players || []);
+          setOtherUntouchables(theirs.untouchables || []);
+        }
 
         const roomRef = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
         const roomSnap = await getDoc(roomRef);
@@ -109,6 +114,19 @@ export default function TradeRoomScreen() {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
+          // If a prefill player was requested via deep link, add them to the other side's offer
+          if (params.prefillPlayer && theirs) {
+            const found = (theirs.players || []).find((p: any) => (p.player_id || p.bref_id || p.full_name) === params.prefillPlayer);
+            if (found) {
+              const newRoomData = await getDoc(roomRef);
+              if (newRoomData.exists()) {
+                const d = newRoomData.data() as any;
+                const theirIsHost = d.hostUid === otherUid;
+                const fieldKey = theirIsHost ? 'hostOffer' : 'guestOffer';
+                await updateDoc(roomRef, { [fieldKey]: [found], updatedAt: serverTimestamp() });
+              }
+            }
+          }
         } else {
           // Auto-reset terminal rooms when re-entered (cancelled or executed)
           const existingData = roomSnap.data() as any;
@@ -163,6 +181,8 @@ export default function TradeRoomScreen() {
         setLeagueEra(data.era || 'current');
         setTradeApronTolerance(typeof data.tradeApronTolerance === 'number' ? data.tradeApronTolerance : 1.25);
         setCommissionerCanOverride(!!data.commissionerCanOverride);
+        const comms: string[] = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
+        setLeagueCommUids(comms);
       }
     }).catch(() => {});
   }, [leagueId]);
@@ -303,6 +323,108 @@ export default function TradeRoomScreen() {
     });
   };
 
+  // Fire override review request: writes pendingOverrideReview flag + notifies commissioners
+  const requestOverrideReview = async () => {
+    try {
+      await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+        pendingOverrideReview: true,
+        overrideRequestedBy: myUid,
+        overrideRequestedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      // Notify all commissioners of the league
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const lData = (leagueSnap.data() || {}) as any;
+      const commIds: string[] = [lData.commissionerId, ...(lData.coCommissioners || [])].filter(Boolean);
+      const myName = myTeam?.name || 'A GM';
+      const otherName = otherTeamName || 'opponent';
+      const note = {
+        type: 'trade_override_review',
+        leagueId,
+        roomId,
+        otherUid,
+        otherTeamId,
+        otherTeamName,
+        fromUid: myUid,
+        fromTeamName: myTeam?.name || '',
+        createdAt: new Date().toISOString(),
+        message: myName + ' wants to trade with ' + otherName + ' but salaries do not match. Review required.',
+      };
+      for (const cid of commIds) {
+        if (cid === myUid) continue;
+        try { await updateDoc(doc(db, 'users', cid), { notifications: arrayUnion(note) }); } catch (e) {}
+      }
+      Alert.alert('Sent', 'Commissioner has been notified for review.');
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const approveOverride = async () => {
+    Alert.alert('Approve Override?', 'Both sides will be able to confirm this trade even though the salary check fails.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Approve', onPress: async () => {
+        try {
+          const requesterUid = room?.overrideRequestedBy || '';
+          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+            salaryOverrideApplied: true,
+            pendingOverrideReview: false,
+            overrideApprovedBy: myUid,
+            overrideApprovedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          if (requesterUid) {
+            try {
+              await updateDoc(doc(db, 'users', requesterUid), {
+                notifications: arrayUnion({
+                  type: 'trade_override_approved',
+                  leagueId,
+                  roomId,
+                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
+                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
+                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
+                  createdAt: new Date().toISOString(),
+                  message: 'Commissioner approved your override. Both sides can confirm now.',
+                }),
+              });
+            } catch (e) {}
+          }
+        } catch (e: any) { Alert.alert('Error', e.message); }
+      } },
+    ]);
+  };
+
+  const denyOverride = async () => {
+    Alert.alert('Deny Override?', 'The requester will be notified that this trade was not approved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Deny', style: 'destructive', onPress: async () => {
+        try {
+          const requesterUid = room?.overrideRequestedBy || '';
+          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+            pendingOverrideReview: false,
+            overrideDeniedBy: myUid,
+            overrideDeniedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          if (requesterUid) {
+            try {
+              await updateDoc(doc(db, 'users', requesterUid), {
+                notifications: arrayUnion({
+                  type: 'trade_override_denied',
+                  leagueId,
+                  roomId,
+                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
+                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
+                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
+                  createdAt: new Date().toISOString(),
+                  message: 'Commissioner denied your salary override request.',
+                }),
+              });
+            } catch (e) {}
+          }
+        } catch (e: any) { Alert.alert('Error', e.message); }
+      } },
+    ]);
+  };
+
   const handleConfirm = async () => {
     if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
       const myNeed = myShortfall;
@@ -310,10 +432,24 @@ export default function TradeRoomScreen() {
       const messages = [];
       if (myNeed > 0) messages.push('Your side needs ~$' + (myNeed / 1000000).toFixed(1) + 'M more outgoing');
       if (theirNeed > 0) messages.push('Their side needs ~$' + (theirNeed / 1000000).toFixed(1) + 'M more outgoing');
-      Alert.alert(
-        'Salary check failed',
-        messages.join('\n') + '\n\n(Both sides must satisfy ' + (tradeApronTolerance * 100).toFixed(0) + '% rule.)'
-      );
+      const body = messages.join('\n') + '\n\n(Both sides must satisfy ' + (tradeApronTolerance * 100).toFixed(0) + '% rule.)';
+
+      if (commissionerCanOverride) {
+        if (room?.pendingOverrideReview) {
+          Alert.alert('Pending Review', 'A commissioner is already reviewing this trade. Wait for their decision.');
+          return;
+        }
+        Alert.alert(
+          'Salary check failed',
+          body + '\n\nSend this trade to a commissioner for review?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Send for Review', onPress: () => requestOverrideReview() },
+          ]
+        );
+      } else {
+        Alert.alert('Salary check failed', body);
+      }
       return;
     }
     if (myOffer.length === 0 && otherOffer.length === 0) {
@@ -593,14 +729,27 @@ export default function TradeRoomScreen() {
             </View>
           ) : null}
           {leagueEra === 'current' && !salaryCheck.skipped ? (
-            <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes ? '#00ff87' : '#ff4444' }]}>
-              <Text style={[styles.balanceText, { color: salaryCheck.passes ? '#00ff87' : '#ff4444' }]}>
-                {salaryCheck.passes
-                  ? '✓ Salary check OK (' + (tradeApronTolerance * 100).toFixed(0) + '% rule)'
-                  : '✗ Salary mismatch — ' + (myShortfall > 0 ? 'you need ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : 'they need ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing')}
+            <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
+              <Text style={[styles.balanceText, { color: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
+                {room?.salaryOverrideApplied
+                  ? '✓ Commissioner override approved — salary check bypassed'
+                  : salaryCheck.passes
+                    ? '✓ Salary check OK (' + (tradeApronTolerance * 100).toFixed(0) + '% rule)'
+                    : '✗ Salary mismatch — ' + (myShortfall > 0 ? 'you need ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : 'they need ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing')}
               </Text>
-              {room?.salaryOverrideApplied ? (
-                <Text style={styles.balanceOverrideText}>🔓 Commissioner override applied</Text>
+              {room?.pendingOverrideReview && !room?.salaryOverrideApplied ? (
+                <Text style={styles.balanceOverrideText}>⏳ Pending commissioner review</Text>
+              ) : null}
+              {/* Commissioner-only review buttons */}
+              {leagueCommUids.includes(myUid || '') && room?.pendingOverrideReview && !room?.salaryOverrideApplied ? (
+                <View style={styles.overrideBtnRow}>
+                  <TouchableOpacity style={styles.overrideApproveBtn} onPress={approveOverride}>
+                    <Text style={styles.overrideApproveText}>🔓 Approve Override</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.overrideDenyBtn} onPress={denyOverride}>
+                    <Text style={styles.overrideDenyText}>Deny</Text>
+                  </TouchableOpacity>
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -672,7 +821,8 @@ export default function TradeRoomScreen() {
               const key = getPlayerKey(p);
               const onTable = otherOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = theirLockedKeys.has(key);
-              const disabled = onTable || lockedElsewhere;
+              const isUntouchable = otherUntouchables.includes(key);
+              const disabled = onTable || lockedElsewhere || isUntouchable;
               return (
                 <TouchableOpacity
                   key={key + i}
@@ -684,6 +834,7 @@ export default function TradeRoomScreen() {
                   <Text style={styles.pickerName}>{p.full_name}</Text>
                   {onTable ? <Text style={styles.pickerTag}>ON TABLE</Text> : null}
                   {lockedElsewhere && !onTable ? <Text style={styles.pickerTagWarn}>IN OTHER ROOM</Text> : null}
+                  {isUntouchable && !onTable && !lockedElsewhere ? <Text style={styles.pickerTagWarn}>🔒 UNTOUCHABLE</Text> : null}
                 </TouchableOpacity>
               );
             })}
@@ -765,6 +916,11 @@ const styles = StyleSheet.create({
   balanceRow: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1 },
   balanceText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   balanceOverrideText: { color: '#F5A623', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
+  overrideBtnRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
+  overrideApproveBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  overrideApproveText: { color: '#00ff87', fontSize: 12, fontWeight: '800' },
+  overrideDenyBtn: { backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  overrideDenyText: { color: '#ff4444', fontSize: 12, fontWeight: '800' },
   chipRemove: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
   chipRemoveText: { color: '#ff4444', fontSize: 16, fontWeight: '800' },
 

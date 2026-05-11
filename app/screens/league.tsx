@@ -95,34 +95,6 @@ export default function LeagueScreen() {
     return () => unsubscribe();
   }, [leagueId]);
 
-  const confirmDelete = () => {
-    Alert.alert(
-      'Delete League',
-      'Are you sure you want to delete this league? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const batch = writeBatch(db);
-              for (const member of members) {
-                batch.update(doc(db, 'users', member.uid), { leagues: arrayRemove(leagueId) });
-              }
-              batch.delete(doc(db, 'leagues', leagueId));
-              await batch.commit();
-              router.replace('/(tabs)/dashboard');
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const handleLeaveLeague = async () => {
     if (!user) return;
@@ -378,6 +350,13 @@ export default function LeagueScreen() {
           );
         })()}
 
+        <TouchableOpacity
+          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
+          onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
+        >
+          <Text style={[styles.rostersBtnText, { color: teamText }]}>📋 League Rosters</Text>
+        </TouchableOpacity>
+
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
@@ -405,9 +384,6 @@ export default function LeagueScreen() {
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
             >
               <Text style={[styles.advanceSeasonBtnText, { color: teamText }]}>⏩ Advance Season</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.deleteBtn, { marginTop: 10 }]} onPress={confirmDelete}>
-              <Text style={styles.deleteBtnText}>Delete League</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -507,6 +483,8 @@ const styles = StyleSheet.create({
   inviteBtnText: { fontSize: 15, fontWeight: '700' },
   advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
+  rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12 },
+  rostersBtnText: { fontSize: 15, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
   deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },

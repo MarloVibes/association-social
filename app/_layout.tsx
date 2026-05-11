@@ -33,6 +33,8 @@ export default function RootLayout() {
           <Stack.Screen name="screens/trade-room" />
           <Stack.Screen name="screens/league-members" />
           <Stack.Screen name="screens/league-settings" />
+          <Stack.Screen name="screens/league-rosters" />
+          <Stack.Screen name="screens/team-roster" />
           <Stack.Screen name="screens/create-player" />
           <Stack.Screen name="screens/advance-season" />
           <Stack.Screen name="screens/team-select" />
