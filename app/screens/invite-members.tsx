@@ -14,6 +14,7 @@ export default function InviteMembersScreen() {
   const [invited, setInvited] = useState<string[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [league, setLeague] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
@@ -30,7 +31,7 @@ export default function InviteMembersScreen() {
   useEffect(() => {
     if (!leagueId) return;
     const unsub = onSnapshot(collection(db, 'leagues', leagueId, 'sent_invites'), async (snap) => {
-      const sentDocs = snap.docs.map(d => ({ uid: d.id, ...d.data() } as any));
+      const sentDocs = snap.docs.map(d => ({ uid: d.id, ...d.data() } as any)).filter((d: any) => !d.status || d.status === 'pending');
       const hydrated = await Promise.all(
         sentDocs.map(async (s: any) => {
           if (s.displayName && s.username) return s;
@@ -54,6 +55,35 @@ export default function InviteMembersScreen() {
       setJoinRequests(requests);
     });
     return () => unsub();
+  }, [leagueId]);
+
+  // History: resolved items (accepted/declined/rescinded) from both subcollections
+  useEffect(() => {
+    if (!leagueId) return;
+    const RESOLVED = ['accepted', 'declined', 'rescinded'];
+    let received: any[] = [];
+    let sent: any[] = [];
+    const merge = () => {
+      const all = [...received, ...sent].sort((a, b) => {
+        const ta = a.resolvedAt?.toMillis ? a.resolvedAt.toMillis() : 0;
+        const tb = b.resolvedAt?.toMillis ? b.resolvedAt.toMillis() : 0;
+        return tb - ta;
+      });
+      setHistory(all);
+    };
+    const unsubR = onSnapshot(collection(db, 'leagues', leagueId, 'join_requests'), (snap) => {
+      received = snap.docs
+        .map(d => ({ id: d.id, kind: 'received', ...d.data() } as any))
+        .filter((r: any) => RESOLVED.includes(r.status));
+      merge();
+    });
+    const unsubS = onSnapshot(collection(db, 'leagues', leagueId, 'sent_invites'), (snap) => {
+      sent = snap.docs
+        .map(d => ({ id: d.id, kind: 'sent', ...d.data() } as any))
+        .filter((r: any) => RESOLVED.includes(r.status));
+      merge();
+    });
+    return () => { unsubR(); unsubS(); };
   }, [leagueId]);
 
   const loadData = async () => {
@@ -134,7 +164,10 @@ export default function InviteMembersScreen() {
               leagueInvites: arrayRemove(invite),
             });
           }
-          await deleteDoc(doc(db, 'leagues', leagueId, 'sent_invites', targetUid));
+          await updateDoc(doc(db, 'leagues', leagueId, 'sent_invites', targetUid), {
+            status: 'rescinded',
+            resolvedAt: serverTimestamp(),
+          });
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
     ]);
@@ -152,7 +185,11 @@ export default function InviteMembersScreen() {
           createdAt: new Date().toISOString(),
         }),
       });
-      await deleteDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id));
+      await updateDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id), {
+        status: 'accepted',
+        resolvedAt: serverTimestamp(),
+        resolvedBy: user?.uid || '',
+      });
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -166,7 +203,11 @@ export default function InviteMembersScreen() {
           createdAt: new Date().toISOString(),
         }),
       });
-      await deleteDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id));
+      await updateDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id), {
+        status: 'declined',
+        resolvedAt: serverTimestamp(),
+        resolvedBy: user?.uid || '',
+      });
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -322,6 +363,34 @@ export default function InviteMembersScreen() {
                       </TouchableOpacity>
                     </View>
                   ))}
+                </>
+              )}
+              {history.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: (joinRequests.length > 0 || pendingInvites.length > 0) ? 20 : 0 }]}>🕓 History ({history.length})</Text>
+                  {history.map((item: any) => {
+                    const name = item.displayName || item.username || 'Unknown';
+                    const isReceived = item.kind === 'received';
+                    let badge = { label: 'Resolved', color: '#888', bg: '#1a1a1a', border: '#333' };
+                    if (item.status === 'accepted') badge = { label: '✓ Accepted', color: '#00ff87', bg: '#0a2a1a', border: '#00ff87' };
+                    else if (item.status === 'declined') badge = { label: '✕ Declined', color: '#ff4444', bg: '#2a0a0a', border: '#ff4444' };
+                    else if (item.status === 'rescinded') badge = { label: '↩ Rescinded', color: '#F5A623', bg: '#2a1a00', border: '#F5A623' };
+                    const when = item.resolvedAt?.toMillis ? new Date(item.resolvedAt.toMillis()).toLocaleDateString() : '';
+                    return (
+                      <View key={item.id} style={[styles.userRow, { opacity: 0.85 }]}>
+                        <View style={styles.userAvatar}>
+                          <Text style={styles.userAvatarText}>{name[0]?.toUpperCase() || '?'}</Text>
+                        </View>
+                        <View style={styles.userInfo}>
+                          <Text style={styles.userName}>{name}</Text>
+                          <Text style={styles.userUsername}>{isReceived ? 'Requested to join' : 'Invited'} · {when}</Text>
+                        </View>
+                        <View style={[styles.pendingBadge, { backgroundColor: badge.bg, borderWidth: 1, borderColor: badge.border }]}>
+                          <Text style={[styles.pendingBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </>
               )}
             </>

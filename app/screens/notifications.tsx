@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -89,7 +89,11 @@ export default function NotificationsScreen() {
           createdAt: new Date().toISOString(),
         }),
       });
-      await deleteDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id));
+      await updateDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id), {
+        status: 'accepted',
+        resolvedAt: serverTimestamp(),
+        resolvedBy: user?.uid || '',
+      });
       setJoinRequests(prev => prev.filter(r => r.id !== req.id));
       Alert.alert('Accepted!', req.displayName + ' has been added to ' + req.leagueName);
     } catch (e: any) { Alert.alert('Error', e.message); }
@@ -106,7 +110,11 @@ export default function NotificationsScreen() {
           createdAt: new Date().toISOString(),
         }),
       });
-      await deleteDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id));
+      await updateDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id), {
+        status: 'declined',
+        resolvedAt: serverTimestamp(),
+        resolvedBy: user?.uid || '',
+      });
       setJoinRequests(prev => prev.filter(r => r.id !== req.id));
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
@@ -141,17 +149,6 @@ export default function NotificationsScreen() {
     const notifs = snap.data()?.notifications || [];
     const updated = notifs.map((n: any) => ({ ...n, read: true }));
     await updateDoc(doc(db, 'users', user.uid), { notifications: updated });
-  };
-
-  const markOneRead = async (idx: number) => {
-    if (!user) return;
-    const snap = await getDoc(doc(db, 'users', user.uid));
-    const notifs = snap.data()?.notifications || [];
-    const realIdx = notifs.length - 1 - idx;
-    if (notifs[realIdx]) {
-      notifs[realIdx] = { ...notifs[realIdx], read: true };
-      await updateDoc(doc(db, 'users', user.uid), { notifications: notifs });
-    }
   };
 
   const deleteNotification = async (n: any, idx: number) => {
