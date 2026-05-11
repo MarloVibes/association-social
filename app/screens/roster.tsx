@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { getPlaystyle, comparePlayersByTier } from '@/constants/playstyle';
+import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
@@ -28,6 +28,8 @@ export default function RosterScreen() {
   const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
   const [league, setLeague] = useState<any>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+  const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
+  const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
 
@@ -51,7 +53,11 @@ export default function RosterScreen() {
       }
 
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-      if (leagueSnap.exists()) setLeague(leagueSnap.data());
+      if (leagueSnap.exists()) {
+        const ldata = leagueSnap.data();
+        setLeague(ldata);
+        if (ldata.currentYear) setCurrentYear(ldata.currentYear);
+      }
 
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const taken = new Set<string>();
@@ -108,6 +114,27 @@ export default function RosterScreen() {
           ...p, ...(statsMap[p.full_name] || {}),
         }));
         setAllEraPlayers(enrichedPool);
+
+        // Fetch profiles for tier-by-year computation
+        try {
+          // Use teamSnap from earlier in the function (already loaded at the top)
+          const teamSnapData = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+          const myPlayerObjs = (teamSnapData.exists() ? (teamSnapData.data() as any).players : []) || [];
+          const brefIds: string[] = myPlayerObjs
+            .map((p: any) => p.bref_id || (p.player_id ? String(p.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i)?.[1] : null))
+            .filter(Boolean);
+          if (brefIds.length > 0) {
+            const profileSnaps = await Promise.all(brefIds.map(bid => getDoc(doc(db, 'player_profiles', bid as string))));
+            const profMap: Record<string, any> = {};
+            profileSnaps.forEach(snap => {
+              if (snap.exists()) {
+                const pdata = snap.data() as any;
+                profMap[pdata.full_name] = pdata;
+              }
+            });
+            setProfilesByName(profMap);
+          }
+        } catch (e) { console.error('profile fetch failed', e); }
       } catch (e) {
         console.error('era_stats enrich failed', e);
         setAllEraPlayers([...poolPlayers, ...leagueFreeAgents, ...customPlayers]);
@@ -131,7 +158,7 @@ export default function RosterScreen() {
     } else {
       list = allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
     }
-    return [...list].sort(comparePlayersByTier);
+    return [...list].sort(comparePlayersByTierForYear(profilesByName, currentYear));
   }, [team, allEraPlayers, myPlayerIds]);
 
   const freeAgents = useMemo(() => {
@@ -571,7 +598,7 @@ export default function RosterScreen() {
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
                   {(() => {
-                    const ps = getPlaystyle(item);
+                    const ps = getPlaystyleForYear(item, profilesByName[item.full_name], currentYear);
                     return (
                       <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                         <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import PlayerCard from '@/components/PlayerCard';
-import { getPlaystyle, comparePlayersByTier } from '@/constants/playstyle';
+import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
@@ -26,6 +26,7 @@ export default function TeamRosterScreen() {
   const [leagueEra, setLeagueEra] = useState<string>('');
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+  const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
   const myUid = auth.currentUser?.uid;
 
   useEffect(() => {
@@ -74,8 +75,22 @@ export default function TeamRosterScreen() {
             const enrichedPlayers = (teamData.players || []).map((p: any) => ({
               ...p, ...(statsMap[p.full_name] || {}),
             }));
-            enrichedPlayers.sort(comparePlayersByTier);
+            enrichedPlayers.sort(comparePlayersByTierForYear({}, currentYear));
             setTeam({ id: teamSnap.id, ...teamData, players: enrichedPlayers });
+
+            // Fetch player_profiles for year-specific tier badges
+            const brefIds: string[] = enrichedPlayers
+              .map((p: any) => p.bref_id || (p.player_id ? String(p.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i)?.[1] : null))
+              .filter(Boolean);
+            const profileSnaps = await Promise.all(brefIds.map(bid => getDoc(doc(db, 'player_profiles', bid as string))));
+            const profMap: Record<string, any> = {};
+            profileSnaps.forEach((snap, i) => {
+              if (snap.exists()) {
+                const data = snap.data() as any;
+                profMap[data.full_name] = data;
+              }
+            });
+            setProfilesByName(profMap);
           }
         } catch (e) { console.error('team enrich failed', e); }
       } catch (e) { console.error(e); }
@@ -172,7 +187,7 @@ export default function TeamRosterScreen() {
               <View style={styles.playerHeaderRow}>
                 <Text style={styles.playerPos}>{p.position || '?'}</Text>
                 {(() => {
-                  const ps = getPlaystyle(p);
+                  const ps = getPlaystyleForYear(p, profilesByName[p.full_name], currentYear);
                   return (
                     <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                       <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>

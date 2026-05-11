@@ -6,6 +6,7 @@ export type PlaystyleLabel =
   | 'PLAYMAKER' | 'REBOUNDER' | 'SHOT BLOCKER' | 'LOCKDOWN'
   | '3&D' | 'SHARPSHOOTER' | 'TWO-WAY'
   | 'INTERIOR' | 'FLOOR GENERAL'
+  | 'ROOKIE' | 'SOPHOMORE' | '3RD YEAR' | '4TH YEAR'
   | 'ROLE PLAYER';
 
 export interface Playstyle {
@@ -67,6 +68,10 @@ const SORT_RANK: Record<PlaystyleLabel, number> = {
   'TWO-WAY': 3,
   'INTERIOR': 3,
   'FLOOR GENERAL': 3,
+  'ROOKIE': 3.5,
+  'SOPHOMORE': 3.5,
+  '3RD YEAR': 3.5,
+  '4TH YEAR': 3.5,
   'ROLE PLAYER': 4,
 };
 
@@ -82,4 +87,86 @@ export function comparePlayersByTier(a: any, b: any): number {
   const ppgA = parseFloat(a?.ppg) || 0;
   const ppgB = parseFloat(b?.ppg) || 0;
   return ppgB - ppgA;
+}
+
+// Find the season entry matching a league's currentYear.
+// currentYear is the START year (e.g., 2010 = season "2010-11").
+export function getSeasonForYear(profile: any, currentYear: number | undefined): any | null {
+  if (!profile || !currentYear) return null;
+  const seasons = profile.seasons || [];
+  // Year format in profile is "YYYY-YY" — match against the start year
+  const targetYearStr = String(currentYear);
+  const exact = seasons.find((s: any) => s.year && s.year.startsWith(targetYearStr + '-'));
+  if (exact) return exact;
+  // Fallback: closest year not exceeding currentYear (player retired or hadn't entered yet)
+  const sorted = seasons
+    .filter((s: any) => s.year)
+    .sort((a: any, b: any) => parseInt(a.year) - parseInt(b.year));
+  let best = null;
+  for (const s of sorted) {
+    const startYr = parseInt(s.year);
+    if (startYr <= currentYear) best = s;
+  }
+  return best;
+}
+
+// Compute which career year a player is in (1-indexed) based on the league's currentYear.
+// Returns 0 if no profile or no match.
+export function getCareerYear(profile: any, currentYear: number | undefined): number {
+  if (!profile || !currentYear) return 0;
+  const seasons = (profile.seasons || []).filter((s: any) => s.year).sort(
+    (a: any, b: any) => parseInt(a.year) - parseInt(b.year)
+  );
+  const targetYearStr = String(currentYear);
+  for (let i = 0; i < seasons.length; i++) {
+    if (seasons[i].year.startsWith(targetYearStr + '-')) return i + 1;
+  }
+  return 0;
+}
+
+const YEAR_LABELS: Record<number, PlaystyleLabel> = {
+  1: 'ROOKIE', 2: 'SOPHOMORE', 3: '3RD YEAR', 4: '4TH YEAR',
+};
+const YEAR_COLOR = '#00ccff';
+
+// Compute playstyle using year-specific stats when profile + currentYear are provided.
+// If the result would be ROLE PLAYER AND the player is in years 1-4, replace with year tag.
+// Falls back to the static getPlaystyle(player) if no season match.
+export function getPlaystyleForYear(player: any, profile: any, currentYear: number | undefined): Playstyle {
+  const season = getSeasonForYear(profile, currentYear);
+  if (!season) return getPlaystyle(player);
+  const synthetic = {
+    ...player,
+    ppg: season.ppg,
+    apg: season.apg,
+    rpg: season.rpg,
+    spg: season.spg,
+    bpg: season.bpg,
+    fg3_pct: season.fg3_pct,
+    fg_pct: season.fg_pct,
+  };
+  const tier = getPlaystyle(synthetic);
+  // Graduation logic: only override ROLE PLAYER for early-career players
+  if (tier.label === 'ROLE PLAYER') {
+    const careerYear = getCareerYear(profile, currentYear);
+    if (careerYear >= 1 && careerYear <= 4) {
+      return { label: YEAR_LABELS[careerYear], color: YEAR_COLOR };
+    }
+  }
+  return tier;
+}
+
+export function comparePlayersByTierForYear(profilesByName: Record<string, any>, currentYear: number | undefined) {
+  return (a: any, b: any): number => {
+    const profA = profilesByName[a.full_name];
+    const profB = profilesByName[b.full_name];
+    const rankA = SORT_RANK[getPlaystyleForYear(a, profA, currentYear).label] ?? 4;
+    const rankB = SORT_RANK[getPlaystyleForYear(b, profB, currentYear).label] ?? 4;
+    if (rankA !== rankB) return rankA - rankB;
+    const sA = getSeasonForYear(profA, currentYear);
+    const sB = getSeasonForYear(profB, currentYear);
+    const ppgA = parseFloat(sA?.ppg ?? a?.ppg) || 0;
+    const ppgB = parseFloat(sB?.ppg ?? b?.ppg) || 0;
+    return ppgB - ppgA;
+  };
 }
