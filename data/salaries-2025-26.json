@@ -4,7 +4,7 @@
   "apron_1": 195945000,
   "apron_2": 207824000,
   "last_updated": "2025-11-01",
-  "default_for_unmatched": 2500000,
+  "default_for_unmatched": 1272870,
   "notes": "Salaries are best-effort 2025-26 cap hits. Commissioner can override per-league. Unmatched players default to ~$2.5M (mid-level exception ballpark).",
   "players": {
     "trae young": 45995750,
@@ -377,5 +377,6 @@
     "jamir watkins": 1955377,
     "kel\\'el ware": 3700000,
     "jaden hardy": 2273239
-  }
+  },
+  "minimum_salary_note": "Players using this value are on rookie/league minimum scale (~$1.27M for 2025-26). Displayed as '$Min' on chips for clarity."
 }

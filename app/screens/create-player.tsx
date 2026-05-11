@@ -52,6 +52,7 @@ export default function CreatePlayerScreen() {
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [age, setAge] = useState('');
+  const [salary, setSalary] = useState('');
   const [bio, setBio] = useState('');
 
   const [seasons, setSeasons] = useState<Season[]>([emptySeason(params.era || '2024-25')]);
@@ -159,6 +160,7 @@ export default function CreatePlayerScreen() {
         age: age ? parseInt(age, 10) : null,
         photo_url: photoUrl,
         bio: bio.trim(),
+        salary: salary ? parseInt(salary.replace(/[^0-9]/g, ''), 10) : 0,
         seasons: seasonsClean,
         awards,
         isCustom: true,
@@ -251,6 +253,9 @@ export default function CreatePlayerScreen() {
           </View>
           <Text style={styles.fieldLabel}>Age</Text>
           <TextInput style={styles.input} value={age} onChangeText={setAge} keyboardType='number-pad' placeholder='22' placeholderTextColor='#555' />
+          <Text style={styles.fieldLabel}>Salary (USD per year)</Text>
+          <TextInput style={styles.input} value={salary} onChangeText={setSalary} keyboardType='number-pad' placeholder='e.g. 25000000' placeholderTextColor='#555' />
+          <Text style={styles.helper}>Enter the player's annual cap hit. Used for trade balance math.</Text>
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput style={[styles.input, styles.textArea]} value={bio} onChangeText={setBio} multiline placeholder='Optional backstory...' placeholderTextColor='#555' />
         </View>
@@ -356,6 +361,7 @@ const styles = StyleSheet.create({
   fieldLabel: { color: '#888', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' },
   input: { backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 8 },
   textArea: { height: 70, textAlignVertical: 'top' },
+  helper: { color: '#666', fontSize: 11, marginTop: -4, marginBottom: 8, fontStyle: 'italic' },
   posRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   posBtn: { flex: 1, paddingVertical: 10, backgroundColor: '#1a1a1a', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   posBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },

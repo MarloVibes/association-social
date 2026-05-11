@@ -30,6 +30,7 @@ function PlayerChip({ player, onRemove, locked }: { player: any; onRemove?: () =
       <View style={styles.chipInfo}>
         <Text style={styles.chipPos}>{player?.position || '?'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{player?.full_name}</Text>
+        {player?.salary > 0 ? <Text style={styles.chipSalary}>{player.salary <= 1272870 ? '$Min' : '$' + (player.salary / 1000000).toFixed(1) + 'M'}</Text> : null}
       </View>
       {onRemove && !locked ? (
         <TouchableOpacity style={styles.chipRemove} onPress={onRemove}>
@@ -59,6 +60,7 @@ export default function TradeRoomScreen() {
   const [lockedPlayerKeys, setLockedPlayerKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [leagueEra, setLeagueEra] = useState<string>('');
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
@@ -104,6 +106,22 @@ export default function TradeRoomScreen() {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
+        } else {
+          // Auto-reset terminal rooms when re-entered (cancelled or executed)
+          const existingData = roomSnap.data() as any;
+          if (existingData.status === 'cancelled' || existingData.status === 'executed') {
+            await updateDoc(roomRef, {
+              status: 'open',
+              hostOffer: [],
+              guestOffer: [],
+              hostConfirmed: false,
+              guestConfirmed: false,
+              senderUid: null,
+              cancelReason: null,
+              executedAt: null,
+              updatedAt: serverTimestamp(),
+            });
+          }
         }
 
         // Compute locked players: scan my other active trade rooms in this league
@@ -132,6 +150,14 @@ export default function TradeRoomScreen() {
     })();
     return () => { cancelled = true; };
   }, [leagueId, roomId, myUid, otherUid]);
+
+  // Load league era to know if salary UI should be shown
+  useEffect(() => {
+    if (!leagueId) return;
+    getDoc(doc(db, 'leagues', leagueId)).then(snap => {
+      if (snap.exists()) setLeagueEra((snap.data() as any).era || 'current');
+    }).catch(() => {});
+  }, [leagueId]);
 
   // Real-time room listener
   useEffect(() => {
@@ -197,6 +223,10 @@ export default function TradeRoomScreen() {
     );
   }
 
+  const MIN_SALARY = 1272870;
+  const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + (p?.salary || 0), 0);
+  const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
+  const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
   const myOfferKey = isHost ? 'hostOffer' : 'guestOffer';
   const otherOfferKey = isHost ? 'guestOffer' : 'hostOffer';
   const myConfirmKey = isHost ? 'hostConfirmed' : 'guestConfirmed';
@@ -493,6 +523,12 @@ export default function TradeRoomScreen() {
             </TouchableOpacity>
           ) : null}
           {otherConfirmed ? <Text style={styles.confirmBadge}>✓ CONFIRMED</Text> : null}
+          {otherOffer.length > 0 && leagueEra === 'current' ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>OUT</Text>
+              <Text style={styles.totalValue}>{fmtMoney(sumSalary(otherOffer))}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.divider}>
@@ -513,6 +549,12 @@ export default function TradeRoomScreen() {
               />
             ))
           )}
+          {myOffer.length > 0 && leagueEra === 'current' ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>OUT</Text>
+              <Text style={styles.totalValue}>{fmtMoney(sumSalary(myOffer))}</Text>
+            </View>
+          ) : null}
           {canEditMySide && myOffer.length < MAX_PER_SIDE ? (
             <TouchableOpacity style={styles.addBtn} onPress={() => setPickerOpen(true)}>
               <Text style={styles.addBtnText}>+ ADD PLAYER</Text>
@@ -667,6 +709,10 @@ const styles = StyleSheet.create({
   chipInfo: { flex: 1 },
   chipPos: { color: '#888', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   chipName: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  chipSalary: { color: '#00ff87', fontSize: 10, fontWeight: '700', marginTop: 1 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1a1a1a', paddingHorizontal: 4 },
+  totalLabel: { color: '#666', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  totalValue: { color: '#00ff87', fontSize: 14, fontWeight: '900' },
   chipRemove: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
   chipRemoveText: { color: '#ff4444', fontSize: 16, fontWeight: '800' },
 
