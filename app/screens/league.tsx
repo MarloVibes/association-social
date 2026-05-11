@@ -38,7 +38,7 @@ export default function LeagueScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const user = auth.currentUser;
-  const isCommissioner = league?.commissionerId === user?.uid;
+  const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
   const currentYear = league?.currentYear || 2024;
   const teamAbbr = myTeam?.abbreviation || '';
   const teamColors = getTeamColors(teamAbbr || 'ATL', currentYear);

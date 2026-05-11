@@ -39,10 +39,13 @@ export default function LeagueMembersScreen() {
     setLoading(false);
   };
 
-  const isCommissioner = commissionerId === user?.uid || league?.commissionerId === user?.uid;
+  const coComms: string[] = league?.coCommissioners || [];
+  const isFounder = commissionerId === user?.uid || league?.commissionerId === user?.uid;
+  const isCommissioner = isFounder || coComms.includes(user?.uid || '');
 
   const bootMember = (member: any) => {
     if (member.uid === user?.uid) { Alert.alert('Cannot boot yourself'); return; }
+    if (member.uid === league?.commissionerId) { Alert.alert('Cannot boot the league founder.'); return; }
     Alert.alert(
       'Boot ' + member.displayName + '?',
       'This will remove them from the league and release their team.',
@@ -68,6 +71,57 @@ export default function LeagueMembersScreen() {
             }
             setMembers(prev => prev.filter(m => m.uid !== member.uid));
             Alert.alert('Booted', member.displayName + ' has been removed from the league.');
+          } catch (e: any) { Alert.alert('Error', e.message); }
+        }},
+      ]
+    );
+  };
+
+  const promoteToCoComm = (member: any) => {
+    if (member.uid === league?.commissionerId) { Alert.alert('Already the commissioner.'); return; }
+    Alert.alert(
+      'Promote ' + (member.displayName || '@' + member.username) + '?',
+      'They will have commissioner-level permissions in this league.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Promote', onPress: async () => {
+          try {
+            await updateDoc(doc(db, 'leagues', leagueId), { coCommissioners: arrayUnion(member.uid) });
+            await updateDoc(doc(db, 'users', member.uid), {
+              notifications: arrayUnion({
+                type: 'cocomm_promoted',
+                leagueId,
+                leagueName: league?.name || '',
+                message: 'You were promoted to Co-Commissioner in ' + (league?.name || 'the league') + '.',
+                createdAt: new Date().toISOString(),
+              }),
+            });
+            setLeague((prev: any) => ({ ...prev, coCommissioners: [...(prev?.coCommissioners || []), member.uid] }));
+          } catch (e: any) { Alert.alert('Error', e.message); }
+        }},
+      ]
+    );
+  };
+
+  const demoteCoComm = (member: any) => {
+    Alert.alert(
+      'Demote ' + (member.displayName || '@' + member.username) + '?',
+      'They will lose commissioner permissions.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Demote', style: 'destructive', onPress: async () => {
+          try {
+            await updateDoc(doc(db, 'leagues', leagueId), { coCommissioners: arrayRemove(member.uid) });
+            await updateDoc(doc(db, 'users', member.uid), {
+              notifications: arrayUnion({
+                type: 'cocomm_demoted',
+                leagueId,
+                leagueName: league?.name || '',
+                message: 'You are no longer Co-Commissioner in ' + (league?.name || 'the league') + '.',
+                createdAt: new Date().toISOString(),
+              }),
+            });
+            setLeague((prev: any) => ({ ...prev, coCommissioners: (prev?.coCommissioners || []).filter((u: string) => u !== member.uid) }));
           } catch (e: any) { Alert.alert('Error', e.message); }
         }},
       ]
@@ -114,6 +168,7 @@ export default function LeagueMembersScreen() {
                     <View style={styles.memberNameRow}>
                       <Text style={styles.memberName}>{item.displayName}</Text>
                       {isComm && <View style={styles.commBadge}><Text style={styles.commBadgeText}>Commissioner</Text></View>}
+                      {!isComm && coComms.includes(item.uid) && <View style={styles.coCommBadge}><Text style={styles.coCommBadgeText}>Co-Commissioner</Text></View>}
                     </View>
                     <Text style={styles.memberUsername}>@{item.username}</Text>
                     {team && <Text style={styles.memberTeam}>🏀 {team.name}</Text>}
@@ -125,6 +180,22 @@ export default function LeagueMembersScreen() {
                     >
                       <Text style={styles.dmBtnText}>💬</Text>
                     </TouchableOpacity>
+                    {isCommissioner && !isComm && !coComms.includes(item.uid) && (
+                      <TouchableOpacity
+                        style={styles.promoteBtn}
+                        onPress={(e) => { e.stopPropagation?.(); promoteToCoComm(item); }}
+                      >
+                        <Text style={styles.promoteBtnText}>🏛️</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isFounder && coComms.includes(item.uid) && (
+                      <TouchableOpacity
+                        style={styles.demoteBtn}
+                        onPress={(e) => { e.stopPropagation?.(); demoteCoComm(item); }}
+                      >
+                        <Text style={styles.demoteBtnText}>⬇️</Text>
+                      </TouchableOpacity>
+                    )}
                     {isCommissioner && !isComm && (
                       <TouchableOpacity
                         style={styles.bootBtn}
@@ -167,4 +238,10 @@ const styles = StyleSheet.create({
   dmBtnText: { fontSize: 16 },
   bootBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
   bootBtnText: { fontSize: 16 },
+  coCommBadge: { backgroundColor: '#2a2200', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#F5A623' },
+  coCommBadgeText: { color: '#F5A623', fontSize: 10, fontWeight: '700' },
+  promoteBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a2200', borderWidth: 1, borderColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
+  promoteBtnText: { fontSize: 16 },
+  demoteBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a00', borderWidth: 1, borderColor: '#888800', alignItems: 'center', justifyContent: 'center' },
+  demoteBtnText: { fontSize: 16 },
 });
