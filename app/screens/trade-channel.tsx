@@ -99,8 +99,6 @@ export default function TradeChannelScreen() {
   const [allTeams, setAllTeams] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [proposeModal, setProposeModal] = useState<any>(null);
-  const [selectedOffers, setSelectedOffers] = useState<any[]>([]);
   const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
   const [blockSort, setBlockSort] = useState<string>('team');
   const [targetSearch, setTargetSearch] = useState('');
@@ -160,33 +158,6 @@ export default function TradeChannelScreen() {
     const newList = untouchables.includes(pid) ? untouchables.filter(p => p !== pid) : [...untouchables, pid];
     setUntouchables(newList);
     await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
-  };
-
-  const handleProposeTrade = async () => {
-    if (!proposeModal || selectedOffers.length === 0) {
-      Alert.alert('Select players to offer');
-      return;
-    }
-    try {
-      await addDoc(collection(db, 'leagues', leagueId, 'trade_proposals'), {
-        fromUid: user?.uid,
-        fromTeamId: myTeamId,
-        fromTeamName: myTeam?.name,
-        toUid: proposeModal.fromUid || proposeModal.gmId,
-        toTeamId: proposeModal.fromTeamId || proposeModal.teamId,
-        toTeamName: proposeModal.fromTeamName || proposeModal.teamName,
-        offeredPlayers: selectedOffers,
-        requestedPlayer: proposeModal.player || proposeModal,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, 'users', proposeModal.fromUid || proposeModal.gmId), {
-        notifications: [{ type: 'trade_proposal', leagueId, fromName: myTeam?.name, playerName: (proposeModal.player || proposeModal)?.full_name, createdAt: new Date().toISOString() }],
-      });
-      Alert.alert('Trade Proposed!', 'Your offer has been sent.');
-      setProposeModal(null);
-      setSelectedOffers([]);
-    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean);
@@ -308,12 +279,12 @@ export default function TradeChannelScreen() {
             const allAvail = [
               ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
                 key: l.id, teamName: l.fromTeamName, player: l.player, uid: l.fromUid,
-                onOffer: () => { setProposeModal(l); setSelectedOffers([]); },
+                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '' } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
               })),
               ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
                 key: 'tb_' + i, teamName: p.teamName, player: p, uid: p.gmId,
-                onOffer: () => { setProposeModal({ ...p, fromUid: p.gmId, fromTeamId: p.teamId, fromTeamName: p.teamName }); setSelectedOffers([]); },
+                onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '' } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
             ];
@@ -436,51 +407,6 @@ export default function TradeChannelScreen() {
       </Modal>
 
       {/* Propose Trade Modal */}
-      <Modal visible={!!proposeModal} animationType='slide' presentationStyle='pageSheet'>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setProposeModal(null); setSelectedOffers([]); }}>
-              <Text style={styles.modalCancel}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Propose Trade</Text>
-            <TouchableOpacity onPress={handleProposeTrade}>
-              <Text style={styles.modalSend}>Send</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalLabel}>YOU WANT</Text>
-            <View style={styles.wantCard}>
-              <Text style={styles.wantName}>{(proposeModal?.player || proposeModal)?.full_name}</Text>
-              <Text style={styles.wantTeam}>{proposeModal?.fromTeamName || proposeModal?.teamName}</Text>
-            </View>
-            <Text style={styles.modalLabel}>YOU OFFER (select from your roster)</Text>
-            {(() => {
-              const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
-              const allLeaguePlayers = rosterModal === 'target'
-                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
-                : myRoster;
-              return allLeaguePlayers.map((p: any, i: number) => {
-              const selected = selectedOffers.some(o => (o.player_id || o.full_name) === (p.player_id || p.full_name));
-              return (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.offerRow, selected && styles.offerRowSelected]}
-                  onPress={() => selected
-                    ? setSelectedOffers(prev => prev.filter(o => (o.player_id || o.full_name) !== (p.player_id || p.full_name)))
-                    : setSelectedOffers(prev => [...prev, p])
-                  }
-                >
-                  <Text style={styles.offerPos}>{p.position}</Text>
-                  <Text style={styles.offerName}>{p.full_name}</Text>
-                  <PlaystyleBadge player={p} />
-                  {selected && <Text style={styles.offerCheck}>✓</Text>}
-                </TouchableOpacity>
-              );
-            });})()}
-          </ScrollView>
-        </View>
-      </Modal>
-
       <GlobalNav />
     </View>
   );

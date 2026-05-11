@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
-import { getAuth } from 'firebase/auth';
-import { doc, getFirestore, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -38,11 +37,10 @@ export default function ProfileSetupScreen() {
       if (!user) throw new Error('Not logged in');
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
-        email: user.email,
+        email: user.email || '',
         displayName: displayName.trim(),
         username: username.trim(),
         usernameLower: username.trim().toLowerCase(),
-        email: auth.currentUser?.email || '',
         age,
         gender,
         gamerTag,
@@ -51,15 +49,12 @@ export default function ProfileSetupScreen() {
         favSports,
         plan,
         createdAt: new Date().toISOString(),
-        // Leagues
         leagues: [],
-        // Social
         friends: [],
         friendRequestsSent: [],
         friendRequestsReceived: [],
         blockedUsers: [],
         dmEnabled: true,
-        // Social media links
         socials: {
           twitch: '',
           youtube: '',
@@ -92,7 +87,7 @@ export default function ProfileSetupScreen() {
         <TextInput style={styles.input} placeholder="Your name" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
 
         <Text style={styles.label}>Username *</Text>
-        <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={v => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))} autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="words" />
 
         <Text style={styles.label}>Age</Text>
         <TextInput style={styles.input} placeholder="Your age" placeholderTextColor="#555" value={age} onChangeText={setAge} keyboardType="number-pad" />
@@ -107,7 +102,7 @@ export default function ProfileSetupScreen() {
         </View>
 
         <Text style={styles.label}>Gamer Tag</Text>
-        <TextInput style={styles.input} placeholder="PSN / Xbox / EA ID" placeholderTextColor="#555" value={gamerTag} onChangeText={setGamerTag} autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="PSN / Xbox / EA ID" placeholderTextColor="#555" value={gamerTag} onChangeText={setGamerTag} autoCapitalize="words" />
 
         <Text style={styles.label}>Console</Text>
         <View style={styles.optionRow}>
@@ -139,11 +134,11 @@ export default function ProfileSetupScreen() {
         <TextInput style={[styles.input, styles.textArea]} placeholder="Tell the league about yourself..." placeholderTextColor="#555" value={bio} onChangeText={setBio} multiline />
 
         <Text style={styles.label}>Social Media (Optional)</Text>
-        <TextInput style={styles.input} placeholder="Twitch username" placeholderTextColor="#555" autoCapitalize="none" />
-        <TextInput style={styles.input} placeholder="YouTube channel" placeholderTextColor="#555" autoCapitalize="none" />
-        <TextInput style={styles.input} placeholder="Twitter / X handle" placeholderTextColor="#555" autoCapitalize="none" />
-        <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="none" />
-        <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Twitch username" placeholderTextColor="#555" autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="YouTube channel" placeholderTextColor="#555" autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="Twitter / X handle" placeholderTextColor="#555" autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="words" />
 
         <Text style={styles.label}>Choose Your Plan</Text>
         <TouchableOpacity style={[styles.planCard, plan === 'trial' && styles.planCardActive]} onPress={() => setPlan('trial')}>

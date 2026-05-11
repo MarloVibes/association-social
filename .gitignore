@@ -12,3 +12,6 @@ expo-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+
+# Expo build output
+dist/

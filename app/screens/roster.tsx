@@ -181,8 +181,36 @@ export default function RosterScreen() {
   };
 
   const offerTrade = async (player: any) => {
-    // Navigate to trade center with player pre-selected
-    router.push({ pathname: '/screens/trade-channel', params: { leagueId, leagueName, channelId: 'trade-center', targetPlayer: JSON.stringify(player) } });
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      // Find which team in this league owns this player
+      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const pid = player.player_id || player.full_name;
+      const ownerTeam = teams.find((t: any) => (t.players || []).some((p: any) => (p.player_id || p.full_name) === pid));
+      if (!ownerTeam) {
+        Alert.alert('Free Agent', 'This player is not on a team. Sign them instead of trading.');
+        return;
+      }
+      if (ownerTeam.gmId === user.uid) {
+        Alert.alert('Your player', 'You already own this player.');
+        return;
+      }
+      if (!ownerTeam.gmId) {
+        Alert.alert('No GM', 'This team has no GM yet.');
+        return;
+      }
+      router.push({
+        pathname: '/screens/trade-room',
+        params: {
+          leagueId,
+          otherUid: ownerTeam.gmId,
+          otherTeamId: ownerTeam.id,
+          otherTeamName: ownerTeam.name || 'Opponent',
+        },
+      });
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   const postToTradeChannel = async (player: any) => {

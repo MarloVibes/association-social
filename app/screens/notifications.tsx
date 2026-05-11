@@ -30,7 +30,6 @@ export default function NotificationsScreen() {
         setInvites(data.leagueInvites || []);
         setNotifications((data.notifications || []).reverse());
       }
-      // Load join requests for leagues where user is commissioner
       const leaguesSnap = await getDocs(query(collection(db, 'leagues'), where('commissionerId', '==', user.uid)));
       const allRequests: any[] = [];
       for (const leagueDoc of leaguesSnap.docs) {
@@ -111,6 +110,30 @@ export default function NotificationsScreen() {
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
+  const confirmAccept = (req: any) => {
+    const who = req.username ? '@' + req.username : req.displayName;
+    Alert.alert(
+      'Accept Request',
+      'Accept ' + who + ' request to join ' + req.leagueName + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Accept', onPress: () => acceptJoinRequest(req) },
+      ]
+    );
+  };
+
+  const confirmDecline = (req: any) => {
+    const who = req.username ? '@' + req.username : req.displayName;
+    Alert.alert(
+      'Decline Request',
+      'Decline ' + who + ' request to join ' + req.leagueName + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Decline', style: 'destructive', onPress: () => denyJoinRequest(req) },
+      ]
+    );
+  };
+
   const markAllRead = async () => {
     if (!user) return;
     const snap = await getDoc(doc(db, 'users', user.uid));
@@ -123,7 +146,6 @@ export default function NotificationsScreen() {
     if (!user) return;
     const snap = await getDoc(doc(db, 'users', user.uid));
     const notifs = snap.data()?.notifications || [];
-    // Find by reverse index since we display reversed
     const realIdx = notifs.length - 1 - idx;
     if (notifs[realIdx]) {
       notifs[realIdx] = { ...notifs[realIdx], read: true };
@@ -148,31 +170,50 @@ export default function NotificationsScreen() {
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
 
-          {/* Join Requests - Commissioner Only */}
           {joinRequests.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Join Requests</Text>
               {joinRequests.map((req: any) => (
-                <View key={req.id} style={styles.joinRequestCard}>
+                <TouchableOpacity
+                  key={req.id}
+                  style={styles.joinRequestCard}
+                  activeOpacity={0.85}
+                  onPress={() => router.push({
+                    pathname: '/screens/invite-members',
+                    params: { leagueId: req.leagueDocId, leagueName: req.leagueName || '', tab: 'invitations' },
+                  })}
+                >
                   <View style={styles.joinRequestInfo}>
-                    <Text style={styles.joinRequestName}>{req.displayName}</Text>
-                    <Text style={styles.joinRequestMeta}>@{req.username} wants to join</Text>
-                    <Text style={styles.joinRequestLeague}>🏆 {req.leagueName}</Text>
+                    <Text style={styles.joinRequestMessage}>
+                      <Text
+                        style={styles.joinRequestNameLink}
+                        onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/screens/profile', params: { uid: req.fromUid || req.uid } }); }}
+                      >
+                        {req.username ? '@' + req.username : req.displayName}
+                      </Text>
+                      <Text style={styles.joinRequestText}> has requested to join </Text>
+                      <Text style={styles.joinRequestLeagueLink}>{req.leagueName}</Text>
+                    </Text>
                   </View>
                   <View style={styles.joinRequestActions}>
-                    <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptJoinRequest(req)}>
+                    <TouchableOpacity
+                      style={styles.acceptBtn}
+                      onPress={(e) => { e.stopPropagation?.(); confirmAccept(req); }}
+                    >
                       <Text style={styles.acceptBtnText}>✓</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.denyBtn} onPress={() => denyJoinRequest(req)}>
+                    <TouchableOpacity
+                      style={styles.denyBtn}
+                      onPress={(e) => { e.stopPropagation?.(); confirmDecline(req); }}
+                    >
                       <Text style={styles.denyBtnText}>✕</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </>
           )}
 
-          {/* League Invites */}
           {invites.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>League Invites</Text>
@@ -195,7 +236,6 @@ export default function NotificationsScreen() {
             </>
           )}
 
-          {/* General Notifications */}
           {notifications.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Activity</Text>
@@ -261,6 +301,11 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 20, paddingBottom: 100 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#ffffff', marginBottom: 12, marginTop: 8 },
+  joinRequestMessage: { fontSize: 14, lineHeight: 20, color: '#ffffff', flexWrap: 'wrap' },
+  joinRequestNameLink: { color: '#F5A623', fontWeight: '800', textDecorationLine: 'underline' },
+  joinRequestText: { color: '#cccccc' },
+  joinRequestLeagueLink: { color: '#00ff87', fontWeight: '700' },
+  joinRequestSub: { color: '#555', fontSize: 11, marginTop: 4 },
   joinRequestCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 12 },
   joinRequestInfo: { flex: 1 },
   joinRequestName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },

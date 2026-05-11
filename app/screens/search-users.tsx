@@ -26,8 +26,8 @@ export default function SearchUsersScreen() {
       // Search by username
       const q = query(
         collection(db, 'users'),
-        where('username', '>=', searchText),
-        where('username', '<=', searchText + '\uf8ff')
+        where('usernameLower', '>=', searchText),
+        where('usernameLower', '<=', searchText + '\uf8ff')
       );
       const snap = await getDocs(q);
       let users = snap.docs.map(d => ({ uid: d.id, ...d.data() }));

@@ -1,24 +1,60 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function InviteMembersScreen() {
-  const { leagueId, leagueName } = useLocalSearchParams<{ leagueId: string; leagueName: string }>();
+  const { leagueId, leagueName, tab } = useLocalSearchParams<{ leagueId: string; leagueName: string; tab?: string }>();
   const [friends, setFriends] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [members, setMembers] = useState<string[]>([]);
   const [invited, setInvited] = useState<string[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [league, setLeague] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'invite' | 'pending'>('invite');
+  const [activeTab, setActiveTab] = useState<'invite' | 'invitations'>(tab === 'invitations' || tab === 'pending' ? 'invitations' : 'invite');
   const user = auth.currentUser;
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    if (tab === 'invitations' || tab === 'pending') setActiveTab('invitations');
+  }, [tab]);
+
+  // Real-time listener for sent invites
+  useEffect(() => {
+    if (!leagueId) return;
+    const unsub = onSnapshot(collection(db, 'leagues', leagueId, 'sent_invites'), async (snap) => {
+      const sentDocs = snap.docs.map(d => ({ uid: d.id, ...d.data() } as any));
+      const hydrated = await Promise.all(
+        sentDocs.map(async (s: any) => {
+          if (s.displayName && s.username) return s;
+          const u = await getDoc(doc(db, 'users', s.uid));
+          return { uid: s.uid, displayName: u.data()?.displayName, username: u.data()?.username, ...s };
+        })
+      );
+      setPendingInvites(hydrated);
+      setInvited(hydrated.map((i: any) => i.uid));
+    });
+    return () => unsub();
+  }, [leagueId]);
+
+  // Real-time listener for incoming join requests
+  useEffect(() => {
+    if (!leagueId) return;
+    const unsub = onSnapshot(collection(db, 'leagues', leagueId, 'join_requests'), (snap) => {
+      const requests = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter((r: any) => !r.status || r.status === 'pending');
+      setJoinRequests(requests);
+    });
+    return () => unsub();
+  }, [leagueId]);
 
   const loadData = async () => {
     if (!user) return;
@@ -30,30 +66,14 @@ export default function InviteMembersScreen() {
       ]);
       const myData = myDoc.data() || {};
       const leagueData = leagueDoc.data() || {};
+      setLeague({ id: leagueDoc.id, ...leagueData });
       setMembers(leagueData.members || []);
 
-      // Load friends
       const friendIds = myData.friends || [];
       const friendProfiles = await Promise.all(
         friendIds.map((uid: string) => getDoc(doc(db, 'users', uid)))
       );
       setFriends(friendProfiles.filter(d => d.exists()).map(d => ({ uid: d.id, ...d.data() })));
-
-      // Load pending invites
-      const allInvited: any[] = [];
-      const allUserIds = [...new Set([...friendIds, ...(leagueData.members || [])])];
-      for (const uid of allUserIds) {
-        const userSnap = await getDoc(doc(db, 'users', uid));
-        if (userSnap.exists()) {
-          const invites = userSnap.data()?.leagueInvites || [];
-          const myInvite = invites.find((i: any) => i.leagueId === leagueId);
-          if (myInvite) {
-            allInvited.push({ uid, displayName: userSnap.data()?.displayName, username: userSnap.data()?.username });
-          }
-        }
-      }
-      setPendingInvites(allInvited);
-      setInvited(allInvited.map((i: any) => i.uid));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -64,8 +84,8 @@ export default function InviteMembersScreen() {
     try {
       const q = query(
         collection(db, 'users'),
-        where('username', '>=', text.toLowerCase()),
-        where('username', '<=', text.toLowerCase() + '\uf8ff')
+        where('usernameLower', '>=', text.toLowerCase()),
+        where('usernameLower', '<=', text.toLowerCase() + '')
       );
       const snap = await getDocs(q);
       const results = snap.docs
@@ -79,6 +99,7 @@ export default function InviteMembersScreen() {
     setSending(targetUid);
     try {
       const myData = (await getDoc(doc(db, 'users', user!.uid))).data() || {};
+      const targetData = (await getDoc(doc(db, 'users', targetUid))).data() || {};
       await updateDoc(doc(db, 'users', targetUid), {
         leagueInvites: arrayUnion({
           leagueId,
@@ -87,8 +108,14 @@ export default function InviteMembersScreen() {
           inviterName: myData.displayName || user!.email,
         }),
       });
-      setInvited(prev => [...prev, targetUid]);
-      setPendingInvites(prev => [...prev, { uid: targetUid, displayName }]);
+      await setDoc(doc(db, 'leagues', leagueId, 'sent_invites', targetUid), {
+        uid: targetUid,
+        displayName: targetData.displayName || displayName,
+        username: targetData.username || '',
+        inviterId: user!.uid,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
       Alert.alert('Invite Sent!', displayName + ' has been invited to ' + (leagueName || 'the league'));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setSending(null);
@@ -107,14 +134,68 @@ export default function InviteMembersScreen() {
               leagueInvites: arrayRemove(invite),
             });
           }
-          setInvited(prev => prev.filter(uid => uid !== targetUid));
-          setPendingInvites(prev => prev.filter(i => i.uid !== targetUid));
+          await deleteDoc(doc(db, 'leagues', leagueId, 'sent_invites', targetUid));
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
     ]);
   };
 
+  const acceptRequest = async (req: any) => {
+    try {
+      await updateDoc(doc(db, 'leagues', leagueId), { members: arrayUnion(req.uid) });
+      await updateDoc(doc(db, 'users', req.uid), {
+        leagues: arrayUnion(leagueId),
+        notifications: arrayUnion({
+          type: 'join_accepted',
+          leagueId,
+          leagueName: league?.name || leagueName || '',
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      await deleteDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id));
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const denyRequest = async (req: any) => {
+    try {
+      await updateDoc(doc(db, 'users', req.uid), {
+        notifications: arrayUnion({
+          type: 'join_denied',
+          leagueId,
+          leagueName: league?.name || leagueName || '',
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      await deleteDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id));
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const confirmAcceptRequest = (req: any) => {
+    const who = req.username ? '@' + req.username : (req.displayName || 'this user');
+    Alert.alert(
+      'Accept Request',
+      'Accept ' + who + ' request to join ' + (league?.name || leagueName || 'this league') + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Accept', onPress: () => acceptRequest(req) },
+      ]
+    );
+  };
+
+  const confirmDenyRequest = (req: any) => {
+    const who = req.username ? '@' + req.username : (req.displayName || 'this user');
+    Alert.alert(
+      'Decline Request',
+      'Decline ' + who + ' request to join ' + (league?.name || leagueName || 'this league') + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Decline', style: 'destructive', onPress: () => denyRequest(req) },
+      ]
+    );
+  };
+
   const displayList = search.length >= 2 ? searchResults : friends;
+  const totalInvitations = joinRequests.length + pendingInvites.length;
 
   return (
     <View style={styles.container}>
@@ -130,8 +211,8 @@ export default function InviteMembersScreen() {
         <TouchableOpacity style={[styles.tab, activeTab === 'invite' && styles.tabActive]} onPress={() => setActiveTab('invite')}>
           <Text style={[styles.tabText, activeTab === 'invite' && styles.tabTextActive]}>Invite</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'pending' && styles.tabActive]} onPress={() => setActiveTab('pending')}>
-          <Text style={[styles.tabText, activeTab === 'pending' && styles.tabTextActive]}>Pending ({pendingInvites.length})</Text>
+        <TouchableOpacity style={[styles.tab, activeTab === 'invitations' && styles.tabActive]} onPress={() => setActiveTab('invitations')}>
+          <Text style={[styles.tabText, activeTab === 'invitations' && styles.tabTextActive]}>Invitations ({totalInvitations})</Text>
         </TouchableOpacity>
       </View>
 
@@ -194,27 +275,58 @@ export default function InviteMembersScreen() {
           )}
         </>
       ) : (
-        <FlatList
-          data={pendingInvites}
-          keyExtractor={item => item.uid}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.emptyText}>No pending invites</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.userRow}>
-              <View style={styles.userAvatar}>
-                <Text style={styles.userAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
-              </View>
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>{item.displayName}</Text>
-                <Text style={styles.userUsername}>@{item.username}</Text>
-              </View>
-              <View style={styles.pendingBadge}><Text style={styles.pendingBadgeText}>Pending</Text></View>
-              <TouchableOpacity style={styles.rescindBtn} onPress={() => rescindInvite(item.uid, item.displayName)}>
-                <Text style={styles.rescindBtnText}>Rescind</Text>
-              </TouchableOpacity>
-            </View>
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {totalInvitations === 0 ? (
+            <Text style={styles.emptyText}>No invitations yet</Text>
+          ) : (
+            <>
+              {joinRequests.length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>📥 Received ({joinRequests.length})</Text>
+                  {joinRequests.map((req: any) => (
+                    <View key={req.id} style={styles.userRow}>
+                      <View style={styles.userAvatar}>
+                        <Text style={styles.userAvatarText}>{(req.displayName || req.username || '?')[0]?.toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.userInfo}>
+                        <Text style={styles.userName}>{req.displayName || req.username}</Text>
+                        {req.username ? <Text style={styles.userUsername}>@{req.username}</Text> : null}
+                      </View>
+                      <View style={styles.actionBtns}>
+                        <TouchableOpacity style={styles.acceptBtn} onPress={() => confirmAcceptRequest(req)}>
+                          <Text style={styles.acceptBtnText}>✓</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.denyBtn} onPress={() => confirmDenyRequest(req)}>
+                          <Text style={styles.denyBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+              {pendingInvites.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: joinRequests.length > 0 ? 20 : 0 }]}>📤 Sent ({pendingInvites.length})</Text>
+                  {pendingInvites.map((item: any) => (
+                    <View key={item.uid} style={styles.userRow}>
+                      <View style={styles.userAvatar}>
+                        <Text style={styles.userAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                      </View>
+                      <View style={styles.userInfo}>
+                        <Text style={styles.userName}>{item.displayName}</Text>
+                        <Text style={styles.userUsername}>@{item.username}</Text>
+                      </View>
+                      <View style={styles.pendingBadge}><Text style={styles.pendingBadgeText}>Pending</Text></View>
+                      <TouchableOpacity style={styles.rescindBtn} onPress={() => rescindInvite(item.uid, item.displayName)}>
+                        <Text style={styles.rescindBtnText}>Rescind</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </>
+              )}
+            </>
           )}
-        />
+        </ScrollView>
       )}
       <GlobalNav />
     </View>
@@ -234,6 +346,7 @@ const styles = StyleSheet.create({
   searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 8 },
   listContent: { paddingHorizontal: 20, paddingBottom: 100 },
   listLabel: { color: '#666', fontSize: 12, fontWeight: '600', marginBottom: 10, textTransform: 'uppercase' },
+  sectionLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800', marginBottom: 10, marginTop: 4 },
   emptyText: { color: '#555', fontSize: 14, textAlign: 'center', paddingTop: 40 },
   userRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
   userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
@@ -249,4 +362,9 @@ const styles = StyleSheet.create({
   memberBadgeText: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
   pendingBadge: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   pendingBadgeText: { color: '#8888ff', fontSize: 12, fontWeight: '600' },
+  actionBtns: { flexDirection: 'row', gap: 6 },
+  acceptBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  acceptBtnText: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
+  denyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', alignItems: 'center', justifyContent: 'center' },
+  denyBtnText: { color: '#ff4444', fontSize: 16, fontWeight: '700' },
 });

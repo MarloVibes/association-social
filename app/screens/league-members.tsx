@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayRemove, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -11,9 +11,12 @@ export default function LeagueMembersScreen() {
   const [teams, setTeams] = useState<any[]>([]);
   const [league, setLeague] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [commissionerId, setCommissionerId] = useState('');
   const user = auth.currentUser;
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -22,6 +25,7 @@ export default function LeagueMembersScreen() {
       if (!leagueSnap.exists()) return;
       const leagueData = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
+      setCommissionerId(leagueData.commissionerId || '');
 
       const memberIds = leagueData.members || [];
       const memberProfiles = await Promise.all(
@@ -35,7 +39,7 @@ export default function LeagueMembersScreen() {
     setLoading(false);
   };
 
-  const isCommissioner = league?.commissionerId === user?.uid;
+  const isCommissioner = commissionerId === user?.uid || league?.commissionerId === user?.uid;
 
   const bootMember = (member: any) => {
     if (member.uid === user?.uid) { Alert.alert('Cannot boot yourself'); return; }
@@ -46,22 +50,18 @@ export default function LeagueMembersScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Boot', style: 'destructive', onPress: async () => {
           try {
-            // Remove from league members
             await updateDoc(doc(db, 'leagues', leagueId), {
               members: arrayRemove(member.uid),
             });
-            // Remove league from user
             await updateDoc(doc(db, 'users', member.uid), {
               leagues: arrayRemove(leagueId),
             });
-            // Delete their team
             const memberTeam = teams.find(t => t.gmId === member.uid);
             if (memberTeam) {
               await updateDoc(doc(db, 'leagues', leagueId, 'teams', memberTeam.id), {
                 gmId: '',
                 players: [],
               });
-              // Remove from takenTeams
               await updateDoc(doc(db, 'leagues', leagueId), {
                 takenTeams: arrayRemove(memberTeam.teamId),
               });
@@ -89,56 +89,58 @@ export default function LeagueMembersScreen() {
       {loading ? (
         <ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 60 }} />
       ) : (
-        <FlatList
-          data={members}
-          keyExtractor={item => item.uid}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
-            const team = getMemberTeam(item.uid);
-            const isComm = item.uid === league?.commissionerId;
-            return (
-              <TouchableOpacity
-                style={styles.memberCard}
-                onPress={() => router.push({ pathname: '/screens/profile', params: { uid: item.uid } })}
-                activeOpacity={0.8}
-              >
-                {item.photoUrl ? (
-                  <Image source={{ uri: item.photoUrl }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
-                  </View>
-                )}
-                <View style={styles.memberInfo}>
-                  <View style={styles.memberNameRow}>
-                    <Text style={styles.memberName}>{item.displayName}</Text>
-                    {isComm && <View style={styles.commBadge}><Text style={styles.commBadgeText}>Commissioner</Text></View>}
-                  </View>
-                  <Text style={styles.memberUsername}>@{item.username}</Text>
-                  {team && <Text style={styles.memberTeam}>🏀 {team.name}</Text>}
-                </View>
-                <View style={styles.memberActions}>
-                  <TouchableOpacity
-                    style={styles.dmBtn}
-                    onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/screens/dm', params: { uid: item.uid, name: item.displayName } }); }}
-                  >
-                    <Text style={styles.dmBtnText}>💬</Text>
-                  </TouchableOpacity>
-                  {isCommissioner && !isComm && (
-                    <TouchableOpacity
-                      style={styles.bootBtn}
-                      onPress={(e) => { e.stopPropagation?.(); bootMember(item); }}
-                    >
-                      <Text style={styles.bootBtnText}>🧹</Text>
-                    </TouchableOpacity>
+        <>
+          <FlatList
+            data={members}
+            keyExtractor={item => item.uid}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => {
+              const team = getMemberTeam(item.uid);
+              const isComm = item.uid === league?.commissionerId;
+              return (
+                <TouchableOpacity
+                  style={styles.memberCard}
+                  onPress={() => router.push({ pathname: '/screens/profile', params: { uid: item.uid } })}
+                  activeOpacity={0.8}
+                >
+                  {item.photoUrl ? (
+                    <Image source={{ uri: item.photoUrl }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                    </View>
                   )}
-                </View>
-              </TouchableOpacity>
-            );
-          }}
-        />
+                  <View style={styles.memberInfo}>
+                    <View style={styles.memberNameRow}>
+                      <Text style={styles.memberName}>{item.displayName}</Text>
+                      {isComm && <View style={styles.commBadge}><Text style={styles.commBadgeText}>Commissioner</Text></View>}
+                    </View>
+                    <Text style={styles.memberUsername}>@{item.username}</Text>
+                    {team && <Text style={styles.memberTeam}>🏀 {team.name}</Text>}
+                  </View>
+                  <View style={styles.memberActions}>
+                    <TouchableOpacity
+                      style={styles.dmBtn}
+                      onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/screens/dm', params: { uid: item.uid, name: item.displayName } }); }}
+                    >
+                      <Text style={styles.dmBtnText}>💬</Text>
+                    </TouchableOpacity>
+                    {isCommissioner && !isComm && (
+                      <TouchableOpacity
+                        style={styles.bootBtn}
+                        onPress={(e) => { e.stopPropagation?.(); bootMember(item); }}
+                      >
+                        <Text style={styles.bootBtnText}>👢</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <GlobalNav />
+        </>
       )}
-      <GlobalNav />
     </View>
   );
 }
