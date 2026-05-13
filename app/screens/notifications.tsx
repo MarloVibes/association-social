@@ -285,11 +285,14 @@ export default function NotificationsScreen() {
                 >
                 <View style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
-                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : n.type === 'trade_override_review' ? '🔓' : n.type === 'trade_override_approved' ? '✅' : n.type === 'trade_override_denied' ? '❌' : '🔔'}
+                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : n.type === 'trade_override_review' ? '🔓' : n.type === 'trade_override_approved' ? '✅' : n.type === 'trade_override_denied' ? '❌' : n.type === 'custom_player_submitted' ? '📝' : n.type === 'custom_player_approved' ? '✅' : n.type === 'custom_player_denied' ? '❌' : '🔔'}
                   </Text>
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
                     {n.type === 'join_denied' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was denied.</Text>}
+                    {n.type === 'custom_player_submitted' && <Text style={styles.notifText}><Text style={styles.notifBold}>{n.playerName}</Text> submitted for review</Text>}
+                    {n.type === 'custom_player_approved' && <Text style={styles.notifText}>Your player <Text style={styles.notifBold}>{n.playerName}</Text> was approved!</Text>}
+                    {n.type === 'custom_player_denied' && <Text style={styles.notifText}>Your player <Text style={styles.notifBold}>{n.playerName}</Text> was denied.</Text>}
                     {n.type === 'trade_listing' && (
                       <TouchableOpacity onPress={() => router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-talk' } })}>
                         <Text style={styles.notifText}>{n.message}</Text>
@@ -301,6 +304,10 @@ export default function NotificationsScreen() {
                         if (!n.leagueId) return;
                         if (n.type === 'trade_offer' || n.type === 'trade_executed' || n.type === 'trade_declined' || n.type === 'trade_cancelled' || n.type === 'trade_override_review' || n.type === 'trade_override_approved' || n.type === 'trade_override_denied')
                           router.push({ pathname: '/screens/trade-room', params: { leagueId: n.leagueId, otherUid: n.otherUid || n.fromUid || '', otherTeamId: n.otherTeamId || '', otherTeamName: n.otherTeamName || n.fromTeamName || '' } });
+                        else if (n.type === 'custom_player_submitted')
+                          router.push({ pathname: '/screens/pending-players', params: { leagueId: n.leagueId } });
+                        else if (n.type === 'custom_player_approved' || n.type === 'custom_player_denied')
+                          router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
                         else if (n.type === 'tradeblock' || n.type === 'trade_listing')
                           router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
                         else if (n.type === 'reset_request' || n.type === 'reset_request_opponent' || n.type === 'reset_disputed')

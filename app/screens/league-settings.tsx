@@ -52,6 +52,16 @@ export default function LeagueSettingsScreen() {
       }
       const data = snap.data() as any;
       setLeague({ id: snap.id, ...data });
+      const myUid2 = auth.currentUser?.uid;
+      const commUids3 = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
+      const isComm = !!myUid2 && commUids3.includes(myUid2);
+      setIsCommissioner(isComm);
+      if (isComm) {
+        try {
+          const ps = await getDocs(collection(db, 'leagues', leagueId, 'pending_players'));
+          setPendingCount(ps.size);
+        } catch (e) { /* ignore */ }
+      }
       setName(data.name || '');
       setDescription(data.description || '');
       setPrivacy(data.privacy || 'private');
@@ -326,6 +336,19 @@ export default function LeagueSettingsScreen() {
             </View>
             <Switch value={archived} onValueChange={toggleArchive} trackColor={{ false: '#333', true: '#ff444488' }} thumbColor={archived ? '#ff4444' : '#666'} />
           </View>
+          {isCommissioner && (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.toggleLabel}>👥 Player Submissions</Text>
+              <Text style={styles.toggleDesc}>Review pending custom player submissions from league members</Text>
+              <TouchableOpacity
+                style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }]}
+                onPress={() => router.push({ pathname: '/screens/pending-players', params: { leagueId } })}
+              >
+                <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>📋 PENDING APPROVALS{pendingCount > 0 ? ` (${pendingCount})` : ''}</Text>
+              </TouchableOpacity>
+            </>
+          )}
           {isFounder && (
             <>
               <View style={styles.divider} />

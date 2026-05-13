@@ -1,8 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, setDoc, addDoc, deleteDoc, getDoc} from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
-import { useState } from 'react';
+import { useState, useEffect} from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 
@@ -39,7 +39,37 @@ const emptySeason = (year: string): Season => ({
 });
 
 export default function CreatePlayerScreen() {
-  const params = useLocalSearchParams<{ leagueId: string; era?: string }>();
+  const params = useLocalSearchParams<{ leagueId: string; era?: string; pendingId?: string }>();
+  const [isCommissioner, setIsCommissioner] = useState(false);
+  const editingPendingId = params.pendingId || null;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const leagueSnap = await getDoc(doc(db, 'leagues', params.leagueId));
+        if (leagueSnap.exists()) {
+          const ld = leagueSnap.data() as any;
+          const myUid = auth.currentUser?.uid;
+          const commUids = [ld.commissionerId, ...(ld.coCommissioners || [])].filter(Boolean);
+          setIsCommissioner(!!myUid && commUids.includes(myUid));
+        }
+        if (editingPendingId) {
+          const pSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'pending_players', editingPendingId));
+          if (pSnap.exists()) {
+            const pd = pSnap.data() as any;
+            setName(pd.full_name || '');
+            setPosition(pd.position || 'PG');
+            setAge(String(pd.age || ''));
+            setHeight(pd.height || '');
+            setWeight(pd.weight || '');
+            if (pd.seasons && pd.seasons.length > 0) setSeasons(pd.seasons);
+            if (pd.photoUrl) setPhotoUri(pd.photoUrl);
+          }
+        }
+      } catch (e) { console.error('league/pending load failed', e); }
+    })();
+  }, [params.leagueId, editingPendingId]);
+
   const leagueId = params.leagueId;
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -168,8 +198,46 @@ export default function CreatePlayerScreen() {
         createdAt: serverTimestamp(),
       };
 
-      await setDoc(doc(db, 'leagues', leagueId, 'custom_players', playerId), playerDoc);
-      Alert.alert('Created', trimmedName + ' is now in the Free Agents pool.', [
+      if (isCommissioner) {
+        await setDoc(doc(db, 'leagues', leagueId, 'custom_players', playerId), playerDoc);
+        if (editingPendingId) {
+          const pSnap = await getDoc(doc(db, 'leagues', leagueId, 'pending_players', editingPendingId));
+          const submittedBy = pSnap.exists() ? (pSnap.data() as any).submittedBy : null;
+          await deleteDoc(doc(db, 'leagues', leagueId, 'pending_players', editingPendingId));
+          if (submittedBy) {
+            await addDoc(collection(db, 'users', submittedBy, 'notifications'), {
+              type: 'custom_player_approved', leagueId, playerName: playerDoc.full_name,
+              createdAt: serverTimestamp(), read: false,
+            });
+          }
+        }
+      } else {
+        const pendingId = editingPendingId || playerId;
+        await setDoc(doc(db, 'leagues', leagueId, 'pending_players', pendingId), {
+          ...playerDoc,
+          submittedBy: auth.currentUser?.uid,
+          submittedAt: serverTimestamp(),
+          status: 'pending',
+        });
+        const leagueSnap2 = await getDoc(doc(db, 'leagues', leagueId));
+        if (leagueSnap2.exists()) {
+          const ld2 = leagueSnap2.data() as any;
+          const commUids2: string[] = [ld2.commissionerId, ...(ld2.coCommissioners || [])].filter(Boolean);
+          await Promise.all(commUids2.map(uid =>
+            addDoc(collection(db, 'users', uid, 'notifications'), {
+              type: 'custom_player_submitted', leagueId, playerName: playerDoc.full_name,
+              submittedBy: auth.currentUser?.uid, pendingId,
+              createdAt: serverTimestamp(), read: false,
+            })
+          ));
+        }
+      }
+      const isApproved = isCommissioner;
+      const successTitle = isApproved ? 'Created' : 'Submitted for Review';
+      const successMsg = isApproved
+        ? trimmedName + ' is now in the Free Agents pool.'
+        : trimmedName + ' has been submitted for commissioner review.';
+      Alert.alert(successTitle, successMsg, [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
