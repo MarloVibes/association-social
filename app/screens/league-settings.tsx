@@ -52,16 +52,11 @@ export default function LeagueSettingsScreen() {
       }
       const data = snap.data() as any;
       setLeague({ id: snap.id, ...data });
-      const myUid2 = auth.currentUser?.uid;
-      const commUids3 = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
-      const isComm = !!myUid2 && commUids3.includes(myUid2);
-      setIsCommissioner(isComm);
-      if (isComm) {
-        try {
-          const ps = await getDocs(collection(db, 'leagues', leagueId, 'pending_players'));
-          setPendingCount(ps.size);
-        } catch (e) { /* ignore */ }
-      }
+      // Pending player count (only meaningful for commissioners but cheap to load)
+      try {
+        const ps = await getDocs(collection(db, 'leagues', leagueId, 'pending_players'));
+        setPendingCount(ps.size);
+      } catch (e) { /* ignore */ }
       setName(data.name || '');
       setDescription(data.description || '');
       setPrivacy(data.privacy || 'private');
@@ -78,6 +73,7 @@ export default function LeagueSettingsScreen() {
   };
 
   const isFounder = league?.commissionerId === user?.uid;
+  const [pendingCount, setPendingCount] = useState(0);
   const isCommissioner = isFounder || (league?.coCommissioners || []).includes(user?.uid || '');
 
   if (loading) {

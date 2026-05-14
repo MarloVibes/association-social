@@ -39,9 +39,10 @@ const emptySeason = (year: string): Season => ({
 });
 
 export default function CreatePlayerScreen() {
-  const params = useLocalSearchParams<{ leagueId: string; era?: string; pendingId?: string }>();
+  const params = useLocalSearchParams<{ leagueId: string; era?: string; pendingId?: string; customId?: string }>();
   const [isCommissioner, setIsCommissioner] = useState(false);
   const editingPendingId = params.pendingId || null;
+  const editingCustomId = params.customId || null;
 
   useEffect(() => {
     (async () => {
@@ -64,6 +65,19 @@ export default function CreatePlayerScreen() {
             setWeight(pd.weight || '');
             if (pd.seasons && pd.seasons.length > 0) setSeasons(pd.seasons);
             if (pd.photoUrl) setPhotoUri(pd.photoUrl);
+          }
+        }
+        if (editingCustomId) {
+          const cSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'custom_players', editingCustomId));
+          if (cSnap.exists()) {
+            const cd = cSnap.data() as any;
+            setName(cd.full_name || '');
+            setPosition(cd.position || 'PG');
+            setAge(String(cd.age || ''));
+            setHeight(cd.height || '');
+            setWeight(cd.weight || '');
+            if (cd.seasons && cd.seasons.length > 0) setSeasons(cd.seasons);
+            if (cd.photo_url) setPhotoUri(cd.photo_url);
           }
         }
       } catch (e) { console.error('league/pending load failed', e); }
@@ -198,7 +212,10 @@ export default function CreatePlayerScreen() {
         createdAt: serverTimestamp(),
       };
 
-      if (isCommissioner) {
+      if (editingCustomId) {
+        // Editing an already-approved custom player — write directly with the existing ID
+        await setDoc(doc(db, 'leagues', leagueId, 'custom_players', editingCustomId), { ...playerDoc, player_id: editingCustomId });
+      } else if (isCommissioner) {
         await setDoc(doc(db, 'leagues', leagueId, 'custom_players', playerId), playerDoc);
         if (editingPendingId) {
           const pSnap = await getDoc(doc(db, 'leagues', leagueId, 'pending_players', editingPendingId));
@@ -232,11 +249,14 @@ export default function CreatePlayerScreen() {
           ));
         }
       }
+      const isEditingExisting = !!editingCustomId;
       const isApproved = isCommissioner;
-      const successTitle = isApproved ? 'Created' : 'Submitted for Review';
-      const successMsg = isApproved
-        ? trimmedName + ' is now in the Free Agents pool.'
-        : trimmedName + ' has been submitted for commissioner review.';
+      const successTitle = isEditingExisting ? 'Updated' : (isApproved ? 'Created' : 'Submitted for Review');
+      const successMsg = isEditingExisting
+        ? trimmedName + ' has been updated.'
+        : (isApproved
+          ? trimmedName + ' is now in the Free Agents pool.'
+          : trimmedName + ' has been submitted for commissioner review.');
       Alert.alert(successTitle, successMsg, [
         { text: 'OK', onPress: () => router.back() },
       ]);

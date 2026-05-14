@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, Toucha
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
+import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 
 const POSITIONS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'];
 
@@ -29,6 +30,7 @@ export default function RosterScreen() {
   const [league, setLeague] = useState<any>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
+  const [isLeagueCommissioner, setIsLeagueCommissioner] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
@@ -57,6 +59,9 @@ export default function RosterScreen() {
         const ldata = leagueSnap.data();
         setLeague(ldata);
         if (ldata.currentYear) setCurrentYear(ldata.currentYear);
+        const myUid_ = auth.currentUser?.uid;
+        const commUids_ = [ldata.commissionerId, ...(ldata.coCommissioners || [])].filter(Boolean);
+        setIsLeagueCommissioner(!!myUid_ && commUids_.includes(myUid_));
       }
 
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
@@ -254,6 +259,44 @@ export default function RosterScreen() {
       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeam.id), { targetList: [...current, pid] });
       Alert.alert('🎯 Added to Target List', player.full_name);
     } catch(e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const handleDeleteCustomPlayer = async (p: any) => {
+    try {
+      const scan = await scanCustomPlayerReferences(leagueId, p);
+      const refLines: string[] = [];
+      if (scan.references.length > 0) {
+        scan.references.forEach(r => {
+          const flags = [
+            r.onRoster && 'roster',
+            r.onBlock && 'trade block',
+            r.untouchable && 'untouchables',
+            r.onTargetList && 'targets',
+          ].filter(Boolean).join(', ');
+          refLines.push('\u2022 ' + r.teamName + ' (' + flags + ')');
+        });
+      }
+      if (scan.activeTradeRooms > 0) {
+        refLines.push('\u2022 ' + scan.activeTradeRooms + ' active trade room' + (scan.activeTradeRooms === 1 ? '' : 's'));
+      }
+      const msg = refLines.length > 0
+        ? 'This player is referenced in:\n\n' + refLines.join('\n') + '\n\nThey will be removed from all of these. Cannot be undone.'
+        : 'This player has no roster or trade references. Cannot be undone.';
+      Alert.alert(
+        'Delete ' + p.full_name + '?',
+        msg,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              await executeCustomPlayerDelete(leagueId, p);
+              Alert.alert('Deleted', p.full_name + ' has been removed.');
+              loadData();
+            } catch (e: any) { Alert.alert('Error', e.message); }
+          }},
+        ]
+      );
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   const offerTrade = async (player: any) => {
@@ -666,6 +709,16 @@ export default function RosterScreen() {
         onOfferTrade={selectedPlayer ? () => {
           setSelectedPlayer(null);
           offerTrade(selectedPlayer);
+        } : undefined}
+        onEditCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === auth.currentUser?.uid || isLeagueCommissioner) ? () => {
+          const pid = selectedPlayer.player_id;
+          setSelectedPlayer(null);
+          router.push({ pathname: '/screens/create-player', params: { leagueId, era: (league as any)?.era || '2024-25', customId: pid } });
+        } : undefined}
+        onDeleteCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === auth.currentUser?.uid || isLeagueCommissioner) ? () => {
+          const p = selectedPlayer;
+          setSelectedPlayer(null);
+          handleDeleteCustomPlayer(p);
         } : undefined}
       />
       <GlobalNav />

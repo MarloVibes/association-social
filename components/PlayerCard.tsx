@@ -15,6 +15,8 @@ type Props = {
   onOfferTrade?: () => void;
   onDrop?: () => void;
   onSign?: () => void;
+  onEditCustom?: () => void;
+  onDeleteCustom?: () => void;
 };
 
 const POSITION_COLORS: Record<string, string> = {
@@ -106,7 +108,7 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
   }));
 }
 
-export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign }: Props) {
+export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [onTradeBlock, setOnTradeBlock] = useState(false);
@@ -348,6 +350,22 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                     <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSign]} onPress={onSign}>
                       <Text style={styles.actionBtnIcon}>✍️</Text>
                       <Text style={[styles.actionBtnText, { color: '#00ff87' }]}>Sign Player</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {(onEditCustom || onDeleteCustom) && (
+                <View style={[styles.actionBtns, { marginTop: 8 }]}>
+                  {onEditCustom && (
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6' }]} onPress={onEditCustom}>
+                      <Text style={styles.actionBtnIcon}>✎</Text>
+                      <Text style={[styles.actionBtnText, { color: '#3B82F6' }]}>Edit Player</Text>
+                    </TouchableOpacity>
+                  )}
+                  {onDeleteCustom && (
+                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDanger]} onPress={onDeleteCustom}>
+                      <Text style={styles.actionBtnIcon}>🗑</Text>
+                      <Text style={[styles.actionBtnText, { color: '#ff4444' }]}>Delete Player</Text>
                     </TouchableOpacity>
                   )}
                 </View>

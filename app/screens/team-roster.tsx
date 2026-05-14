@@ -41,6 +41,9 @@ export default function TeamRosterScreen() {
           const d = leagueSnap.data() as any;
           if (d.currentYear) setCurrentYear(d.currentYear);
           setLeagueEra(d.era || 'current');
+          const myUid_ = auth.currentUser?.uid;
+          const commUids_ = [d.commissionerId, ...(d.coCommissioners || [])].filter(Boolean);
+          setIsLeagueCommissioner(!!myUid_ && commUids_.includes(myUid_));
         }
         if (teamSnap.exists()) {
           setTeam({ id: teamSnap.id, ...teamSnap.data() });
@@ -109,6 +112,44 @@ export default function TeamRosterScreen() {
   const untouchables: string[] = team.untouchables || [];
   const tradeBlock: string[] = team.tradeBlock || [];
   const players: any[] = team.players || [];
+
+  const handleDeleteCustomPlayer = async (p: any) => {
+    try {
+      const scan = await scanCustomPlayerReferences(leagueId, p);
+      const refLines: string[] = [];
+      if (scan.references.length > 0) {
+        scan.references.forEach(r => {
+          const flags = [
+            r.onRoster && 'roster',
+            r.onBlock && 'trade block',
+            r.untouchable && 'untouchables',
+            r.onTargetList && 'targets',
+          ].filter(Boolean).join(', ');
+          refLines.push('\u2022 ' + r.teamName + ' (' + flags + ')');
+        });
+      }
+      if (scan.activeTradeRooms > 0) {
+        refLines.push('\u2022 ' + scan.activeTradeRooms + ' active trade room' + (scan.activeTradeRooms === 1 ? '' : 's'));
+      }
+      const msg = refLines.length > 0
+        ? 'This player is referenced in:\n\n' + refLines.join('\n') + '\n\nThey will be removed from all of these. Cannot be undone.'
+        : 'This player has no roster or trade references. Cannot be undone.';
+      Alert.alert(
+        'Delete ' + p.full_name + '?',
+        msg,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              await executeCustomPlayerDelete(leagueId, p);
+              Alert.alert('Deleted', p.full_name + ' has been removed.');
+              router.back();
+            } catch (e: any) { Alert.alert('Error', e.message); }
+          }},
+        ]
+      );
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
 
   const handleProposeTrade = (player: any) => {
     const pid = getPlayerKey(player);
