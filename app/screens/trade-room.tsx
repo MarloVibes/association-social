@@ -7,7 +7,7 @@ import GlobalNav from '@/components/GlobalNav';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
-const HEARTBEAT_INTERVAL_MS = 10 * 1000;
+const HEARTBEAT_INTERVAL_MS = 30 * 1000;
 
 function buildRoomId(uidA: string, uidB: string) {
   const [a, b] = [uidA, uidB].sort();
