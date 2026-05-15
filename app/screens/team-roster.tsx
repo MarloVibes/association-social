@@ -27,6 +27,7 @@ export default function TeamRosterScreen() {
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
+  const [isLeagueCommissioner, setIsLeagueCommissioner] = useState(false);
   const myUid = auth.currentUser?.uid;
 
   useEffect(() => {
@@ -191,7 +192,7 @@ export default function TeamRosterScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <View style={[styles.teamHeader, { backgroundColor: colors[0] + '22', borderColor: colors[0] }]}>
+      <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
         <Image source={{ uri: logo }} style={styles.teamLogo} />
         <View style={{ flex: 1 }}>
           <Text style={styles.teamName}>{team.name || team.abbr}</Text>
