@@ -164,8 +164,8 @@ export default function LeagueSettingsScreen() {
 
   const handleDelete = async () => {
     if (!isFounder) { Alert.alert('Founder only', 'Only the original commissioner can delete a league.'); return; }
-    if (deleteConfirm.trim() !== (league?.name || '').trim()) {
-      Alert.alert('Mismatch', 'Type the exact league name to confirm.');
+    if (deleteConfirm.trim().toUpperCase() !== 'DELETE') {
+      Alert.alert('Confirm deletion', 'Please type DELETE to confirm.');
       return;
     }
     Alert.alert(
@@ -350,16 +350,16 @@ export default function LeagueSettingsScreen() {
               <View style={styles.divider} />
               <Text style={[styles.toggleLabel, { color: '#ff4444', marginBottom: 4 }]}>Delete League</Text>
               <Text style={styles.toggleDesc}>Permanently remove this league and all its data. Cannot be undone.</Text>
-              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Type "{league?.name}" to confirm</Text>
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Type DELETE to confirm</Text>
               <TextInput
                 style={styles.input}
                 value={deleteConfirm}
                 onChangeText={setDeleteConfirm}
-                placeholder={league?.name}
+                placeholder='DELETE'
                 placeholderTextColor='#555'
-                autoCapitalize='none'
+                autoCapitalize='characters'
               />
-              <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving || deleteConfirm.trim() !== (league?.name || '').trim()}>
+              <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving || deleteConfirm.trim().toUpperCase() !== 'DELETE'}>
                 <Text style={styles.deleteBtnText}>DELETE LEAGUE</Text>
               </TouchableOpacity>
             </>
