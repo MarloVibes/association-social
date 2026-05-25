@@ -6,6 +6,7 @@ import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
+import LeagueAvatar from '@/components/LeagueAvatar';
 
 
 
@@ -178,12 +179,14 @@ export default function LeagueScreen() {
         </View>
 
         <View style={styles.leagueNameRow}>
-          {myTeam?.abbreviation && (
+          {myTeam?.abbreviation ? (
             <Image
               source={{ uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
               style={styles.leagueNameLogo}
               resizeMode='contain'
             />
+          ) : (
+            <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={44} />
           )}
           <Text style={[styles.leagueName, teamAbbr && { color: '#ffffff' }]}>{league.name}</Text>
         </View>
