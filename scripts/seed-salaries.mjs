@@ -20,7 +20,22 @@ function normalize(name) {
 }
 
 async function run() {
-  const salariesData = JSON.parse(readFileSync('./data/salaries-2025-26.json', 'utf8'));
+  // Accept season from CLI: node scripts/seed-salaries.mjs 2026-27
+  // Defaults to 2025-26 if no arg given
+  const season = process.argv[2] || '2025-26';
+  const filename = `./data/salaries-${season}.json`;
+  console.log('Seeding salaries from:', filename);
+
+  let salariesData;
+  try {
+    salariesData = JSON.parse(readFileSync(filename, 'utf8'));
+  } catch (e) {
+    console.error(`Could not read ${filename}`);
+    console.error('Expected file at:', filename);
+    console.error('Run with: node scripts/seed-salaries.mjs <season>');
+    console.error('Example: node scripts/seed-salaries.mjs 2026-27');
+    process.exit(1);
+  }
   const salaryMap = salariesData.players;
   const defaultSalary = salariesData.default_for_unmatched || 2500000;
 
