@@ -4,9 +4,10 @@ type Props = {
   photoUrl?: string;
   leagueName?: string;
   size?: number;
+  fallbackEmoji?: string;
 };
 
-export default function LeagueAvatar({ photoUrl, leagueName, size = 48 }: Props) {
+export default function LeagueAvatar({ photoUrl, leagueName, size = 48, fallbackEmoji }: Props) {
   const radius = size / 2;
   const fontSize = Math.floor(size * 0.45);
 
@@ -18,7 +19,7 @@ export default function LeagueAvatar({ photoUrl, leagueName, size = 48 }: Props)
     );
   }
 
-  const initial = (leagueName || '').trim().charAt(0).toUpperCase();
+  const initial = fallbackEmoji || (leagueName || '').trim().charAt(0).toUpperCase();
   return (
     <View style={[styles.circle, styles.placeholder, { width: size, height: size, borderRadius: radius }]}>
       <Text style={[styles.initial, { fontSize }]}>{initial || '🏆'}</Text>

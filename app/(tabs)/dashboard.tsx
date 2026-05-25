@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/fires
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import LeagueAvatar from '@/components/LeagueAvatar';
 import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -203,7 +204,12 @@ export default function DashboardScreen() {
                   onPress={() => router.push({ pathname: '/screens/league', params: { leagueId: league.id } })}
                 >
                   <View style={styles.leagueCardLeft}>
-                    <Text style={styles.leagueCardEmoji}>{SPORT_EMOJI[league.sport] || '🏆'}</Text>
+                    <LeagueAvatar
+                      photoUrl={league.photoUrl}
+                      leagueName={league.name}
+                      size={48}
+                      fallbackEmoji={SPORT_EMOJI[league.sport] || '🏆'}
+                    />
                   </View>
                   <View style={styles.leagueInfo}>
                     <Text style={styles.leagueName}>{league.name}</Text>

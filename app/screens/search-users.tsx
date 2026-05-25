@@ -3,6 +3,7 @@ import { arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where }
 import { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import LeagueAvatar from '@/components/LeagueAvatar';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -131,6 +132,7 @@ export default function SearchUsersScreen() {
             ) : (
               gmLeagues[item.uid].map((league: any) => (
                 <View key={league.id} style={styles.leagueRow}>
+                  <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={36} />
                   <View style={styles.leagueRowInfo}>
                     <Text style={styles.leagueRowName}>{league.name}</Text>
                     <Text style={styles.leagueRowMeta}>{league.sport?.toUpperCase()} · {league.members?.length || 1} members</Text>
