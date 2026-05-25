@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
@@ -80,7 +81,9 @@ export default function TeamRosterScreen() {
               ...p, ...(statsMap[p.full_name] || {}),
             }));
             enrichedPlayers.sort(comparePlayersByTierForYear({}, currentYear));
-            setTeam({ id: teamSnap.id, ...teamData, players: enrichedPlayers });
+        const _overrides = await loadSalaryOverrides(leagueId);
+        const _playersWithOverrides = (enrichedPlayers || []).map((_p: any) => ({ ..._p, salary: getEffectiveSalary(_p, _overrides) }));
+        setTeam({ id: teamSnap.id, ...teamData, players: _playersWithOverrides });
 
             // Fetch player_profiles for year-specific tier badges
             const brefIds: string[] = enrichedPlayers

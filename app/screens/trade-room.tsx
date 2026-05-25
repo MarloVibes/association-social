@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
+import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -18,7 +19,8 @@ function getPlayerKey(p: any) {
   return p?.player_id || p?.full_name || '';
 }
 
-function PlayerChip({ player, onRemove, locked }: { player: any; onRemove?: () => void; locked?: boolean }) {
+function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
+  const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
   const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
   return (
     <View style={[styles.chip, locked && styles.chipLocked]}>
@@ -30,7 +32,7 @@ function PlayerChip({ player, onRemove, locked }: { player: any; onRemove?: () =
       <View style={styles.chipInfo}>
         <Text style={styles.chipPos}>{player?.position || '?'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{player?.full_name}</Text>
-        {player?.salary > 0 ? <Text style={styles.chipSalary}>{player.salary <= 1272870 ? '$Min' : '$' + (player.salary / 1000000).toFixed(1) + 'M'}</Text> : null}
+        {effSalary > 0 ? <Text style={styles.chipSalary}>{effSalary <= 1272870 ? '$Min' : '$' + (effSalary / 1000000).toFixed(1) + 'M'}</Text> : null}
       </View>
       {onRemove && !locked ? (
         <TouchableOpacity style={styles.chipRemove} onPress={onRemove}>
@@ -54,6 +56,7 @@ export default function TradeRoomScreen() {
   const isHost = roomId.startsWith('room_' + myUid);
 
   const [room, setRoom] = useState<any>(null);
+  const [overridesMap, setOverridesMap] = useState<Record<string, number>>({});
   const [myTeam, setMyTeam] = useState<any>(null);
   const [myRoster, setMyRoster] = useState<any[]>([]);
   const [otherRoster, setOtherRoster] = useState<any[]>([]);
@@ -187,6 +190,14 @@ export default function TradeRoomScreen() {
     }).catch(() => {});
   }, [leagueId]);
 
+  useEffect(() => {
+    if (!leagueId) return;
+    (async () => {
+      const map = await loadSalaryOverrides(leagueId);
+      setOverridesMap(map);
+    })();
+  }, [leagueId]);
+
   // Real-time room listener
   useEffect(() => {
     if (!leagueId || !roomId) return;
@@ -252,7 +263,7 @@ export default function TradeRoomScreen() {
   }
 
   const MIN_SALARY = 1272870;
-  const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + (p?.salary || 0), 0);
+  const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + getEffectiveSalary(p, overridesMap), 0);
   const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
   const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
 
@@ -668,7 +679,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
-                onRemove={canEditOtherSide ? () => removePlayerFromOffer(p, 'theirs') : undefined}
+                onRemove={canEditOtherSide ? () = overrides={overridesMap} > removePlayerFromOffer(p, 'theirs') : undefined}
               />
             ))
           )}
@@ -718,7 +729,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
-                onRemove={canEditMySide ? () => removePlayerFromOffer(p, 'mine') : undefined}
+                onRemove={canEditMySide ? () = overrides={overridesMap} > removePlayerFromOffer(p, 'mine') : undefined}
               />
             ))
           )}
