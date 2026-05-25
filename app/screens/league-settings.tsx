@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -37,6 +39,8 @@ export default function LeagueSettingsScreen() {
   const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
   const [commissionerCanOverride, setCommissionerCanOverride] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => { loadData(); }, [leagueId]);
 
@@ -58,6 +62,7 @@ export default function LeagueSettingsScreen() {
         setPendingCount(ps.size);
       } catch (e) { /* ignore */ }
       setName(data.name || '');
+      setPhotoUrl(data.photoUrl || '');
       setDescription(data.description || '');
       setPrivacy(data.privacy || 'private');
       setInviteCode(data.inviteCode || '');
@@ -110,6 +115,29 @@ export default function LeagueSettingsScreen() {
       if (successMsg) Alert.alert('Saved', successMsg);
     } catch (e: any) { Alert.alert('Error', e.message); }
     setSaving(false);
+  };
+
+  const pickLeaguePhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission needed', 'Please allow photo library access.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setUploadingPhoto(true);
+    try {
+      const uri = result.assets[0].uri;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const storage = getStorage();
+      const sRef = storageRef(storage, 'leagues/' + leagueId + '/logo.jpg');
+      await uploadBytes(sRef, blob);
+      const url = await getDownloadURL(sRef);
+      setPhotoUrl(url);
+      await updateDoc(doc(db, 'leagues', leagueId!), { photoUrl: url });
+    } catch (e: any) { Alert.alert('Upload failed', e.message); }
+    setUploadingPhoto(false);
   };
 
   const handleSaveBasics = async () => {
@@ -207,6 +235,24 @@ export default function LeagueSettingsScreen() {
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps='handled'>
         <Text style={styles.sectionLabel}>BASICS</Text>
         <View style={styles.card}>
+          <Text style={styles.fieldLabel}>League Photo</Text>
+          <View style={styles.photoRow}>
+            <View style={styles.photoCircle}>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.photoImage} />
+              ) : (
+                <Text style={styles.photoPlaceholder}>🏆</Text>
+              )}
+            </View>
+            <TouchableOpacity style={styles.photoBtn} onPress={pickLeaguePhoto} disabled={uploadingPhoto}>
+              {uploadingPhoto ? (
+                <ActivityIndicator color='#fff' />
+              ) : (
+                <Text style={styles.photoBtnText}>{photoUrl ? 'Change Photo' : 'Add Photo'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.fieldLabel}>League Name</Text>
           <TextInput style={styles.input} value={name} onChangeText={setName} placeholder='My League' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Description</Text>
@@ -398,6 +444,12 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#1a1a1a', marginVertical: 4 },
   saveBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
   saveBtnText: { color: '#000', fontSize: 14, fontWeight: '900', letterSpacing: 2 },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 },
+  photoCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#2a2a2a' },
+  photoImage: { width: '100%', height: '100%' },
+  photoPlaceholder: { fontSize: 36 },
+  photoBtn: { backgroundColor: '#2a2a2a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#3a3a3a' },
+  photoBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   deleteBtn: { backgroundColor: '#2a0a0a', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 8, borderWidth: 1, borderColor: '#ff4444' },
   deleteBtnText: { color: '#ff4444', fontSize: 13, fontWeight: '800', letterSpacing: 2 },
   lockIcon: { fontSize: 48, marginBottom: 12 },
