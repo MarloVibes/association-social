@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="screens/league" />
+          <Stack.Screen name="screens/salary-overrides" />
           <Stack.Screen name="screens/roster" />
           <Stack.Screen name="screens/channels" />
           <Stack.Screen name="screens/channel" />

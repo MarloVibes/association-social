@@ -343,6 +343,13 @@ export default function LeagueSettingsScreen() {
           />
           <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
 
+          <TouchableOpacity
+            style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }]}
+            onPress={() => router.push({ pathname: '/screens/salary-overrides', params: { leagueId: leagueId! } })}
+          >
+            <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>💰 PLAYER SALARY OVERRIDES</Text>
+          </TouchableOpacity>
+
           <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.toggleLabel}>Allow Commissioner Override</Text>
