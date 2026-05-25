@@ -20,10 +20,15 @@ function normalize(name) {
 }
 
 async function run() {
-  // Accept season from CLI: node scripts/seed-salaries.mjs 2026-27
-  // Defaults to 2025-26 if no arg given
+  // Accept season + optional era from CLI:
+  //   node scripts/seed-salaries.mjs 2026-27          (writes to era_player_pools/current)
+  //   node scripts/seed-salaries.mjs kobe kobe        (writes to era_player_pools/kobe)
+  //   node scripts/seed-salaries.mjs jordan jordan    (writes to era_player_pools/jordan)
+  // Defaults to season 2025-26 and era 'current' if no args given
   const season = process.argv[2] || '2025-26';
+  const era = process.argv[3] || 'current';
   const filename = `./data/salaries-${season}.json`;
+  console.log('Era target:', era);
   console.log('Seeding salaries from:', filename);
 
   let salariesData;
@@ -43,10 +48,10 @@ async function run() {
   console.log('Default for unmatched:', defaultSalary);
   console.log('');
 
-  const poolRef = doc(db, 'era_player_pools', 'current');
+  const poolRef = doc(db, 'era_player_pools', era);
   const poolSnap = await getDoc(poolRef);
   if (!poolSnap.exists()) {
-    console.error('era_player_pools/current does not exist');
+    console.error(`era_player_pools/${era} does not exist`);
     process.exit(1);
   }
 
@@ -79,7 +84,7 @@ async function run() {
     unmatched.forEach(n => console.log('  - ' + n));
   }
   console.log('');
-  console.log('All players now have a salary field in era_player_pools/current');
+  console.log(`All players now have a salary field in era_player_pools/${era}`);
 }
 
 run().catch(e => { console.error(e); process.exit(1); });
