@@ -65,22 +65,21 @@ export default function RosterScreen() {
       }
 
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const taken = new Set<string>();
-      const takenNames = new Set<string>();
       const claimedAbbrs = new Set<string>();
+      const claimedPlayerIds = new Set<string>();
+      const claimedPlayerNames = new Set<string>();
       allTeamsSnap.docs.forEach(d => {
         const teamData = d.data();
         if (teamData.abbreviation) claimedAbbrs.add(teamData.abbreviation);
-        const players = teamData.players || [];
-        players.forEach((p: any) => {
-          const pid = p.player_id || p;
-          if (pid) taken.add(pid);
-          if (p.full_name) takenNames.add(p.full_name);
+        (teamData.players || []).forEach((p: any) => {
+          const pid = p.player_id;
+          if (pid) claimedPlayerIds.add(pid);
+          if (p.full_name) claimedPlayerNames.add(p.full_name);
         });
       });
-      setTakenPlayerIds(taken);
-      setTakenPlayerNames(takenNames);
       setClaimedTeamAbbrs(claimedAbbrs);
+      // Note: 'taken' and 'takenNames' are populated after we load the pool + free agents below.
+      // We defer this until pool data is available.
 
       // Load era player pool
       let poolPlayers: any[] = [];
@@ -98,10 +97,32 @@ export default function RosterScreen() {
       // Load league free agents (dropped players + draft classes unlocked by season advancement)
       const freeAgentsSnap = await getDocs(collection(db, 'leagues', leagueId, 'free_agents'));
       const leagueFreeAgents: any[] = [];
+      const freeAgentIds = new Set<string>();
+      const freeAgentNames = new Set<string>();
       freeAgentsSnap.docs.forEach(d => {
         const players = d.data().players || [];
         leagueFreeAgents.push(...players);
+        players.forEach((p: any) => {
+          if (p.player_id) freeAgentIds.add(p.player_id);
+          if (p.full_name) freeAgentNames.add(p.full_name);
+        });
       });
+
+      // Build 'taken' set from pool: every pool player is taken EXCEPT free agents.
+      // Then force-add anyone on a claimed team (in case trades moved them).
+      const taken = new Set<string>();
+      const takenNames = new Set<string>();
+      poolPlayers.forEach((p: any) => {
+        const pid = p.player_id;
+        if (pid && !freeAgentIds.has(pid) && !freeAgentNames.has(p.full_name || '')) {
+          taken.add(pid);
+          if (p.full_name) takenNames.add(p.full_name);
+        }
+      });
+      claimedPlayerIds.forEach(pid => taken.add(pid));
+      claimedPlayerNames.forEach(n => takenNames.add(n));
+      setTakenPlayerIds(taken);
+      setTakenPlayerNames(takenNames);
 
       // Load custom players created in this league
       const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));

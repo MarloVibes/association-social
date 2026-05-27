@@ -13,10 +13,11 @@ if (!getApps().length) initializeApp(firebaseConfig);
 const db = getFirestore();
 const auth = getAuth();
 
-const MIN_SALARY = 1272870; // NBA league minimum (matches existing app convention)
+const MIN_SALARY = 500000; // Override floor (below NBA min to allow buyouts / partial salaries)
 
 function formatSalary(n: number): string {
-  if (!n || n < MIN_SALARY) return '$Min';
+  if (!n) return '$Min';
+  if (n < 1000000) return '$' + Math.round(n / 1000) + 'K';
   return '$' + (n / 1000000).toFixed(1) + 'M';
 }
 
@@ -88,7 +89,7 @@ export default function SalaryOverridesScreen() {
     if (!editingPlayer) return;
     const num = Number(editingSalary.replace(/[^\d]/g, ''));
     if (!num || num < MIN_SALARY) {
-      Alert.alert('Invalid salary', `Salary must be at least $${(MIN_SALARY / 1000000).toFixed(1)}M.`);
+      Alert.alert('Invalid salary', `Salary must be at least $${Math.round(MIN_SALARY / 1000)}K.`);
       return;
     }
     setSaving(true);

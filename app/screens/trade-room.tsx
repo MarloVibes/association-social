@@ -679,7 +679,8 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
-                onRemove={canEditOtherSide ? () = overrides={overridesMap} > removePlayerFromOffer(p, 'theirs') : undefined}
+                onRemove={canEditOtherSide ? () => removePlayerFromOffer(p, 'theirs') : undefined}
+                overrides={overridesMap}
               />
             ))
           )}
@@ -729,7 +730,8 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
-                onRemove={canEditMySide ? () = overrides={overridesMap} > removePlayerFromOffer(p, 'mine') : undefined}
+                onRemove={canEditMySide ? () => removePlayerFromOffer(p, 'mine') : undefined}
+                overrides={overridesMap}
               />
             ))
           )}
