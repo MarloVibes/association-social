@@ -1,4 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -174,6 +175,33 @@ export default function DashboardScreen() {
             </View>
           ) : null}
 
+          <TouchableOpacity
+            onPress={() => router.push('/screens/my-mvp')}
+            activeOpacity={0.85}
+            style={styles.mvpButtonShadow}
+          >
+            <LinearGradient
+              colors={['#facc15', '#f59e0b', '#b45309']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.mvpButton}
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 0.6 }}
+                style={styles.mvpButtonGloss}
+                pointerEvents='none'
+              />
+              <Text style={styles.mvpButtonStar}>⭐</Text>
+              <View style={styles.mvpButtonInfo}>
+                <Text style={styles.mvpButtonTitle}>MY MVP</Text>
+                <Text style={styles.mvpButtonDesc}>Your players, your stats, your team</Text>
+              </View>
+              <Text style={styles.mvpButtonStar}>⭐</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Leagues</Text>
             <TouchableOpacity onPress={() => router.push('/screens/create-league')}>
@@ -251,6 +279,38 @@ const styles = StyleSheet.create({
   gmCardMeta: { fontSize: 13, color: '#4a8a4a' },
   findGMsBtn: { backgroundColor: '#1a3a1a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#00ff87' },
   findGMsBtnText: { color: '#00ff87', fontSize: 13, fontWeight: '600' },
+  mvpButtonShadow: {
+    marginBottom: 20,
+    borderRadius: 16,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  mvpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#fde68a',
+    overflow: 'hidden',
+  },
+  mvpButtonGloss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  mvpButtonStar: { fontSize: 24 },
+  mvpButtonInfo: { flex: 1, alignItems: 'center', marginHorizontal: 12 },
+  mvpButtonTitle: { color: '#000', fontSize: 22, fontWeight: '900', letterSpacing: 4, marginBottom: 2 },
+  mvpButtonDesc: { color: 'rgba(0,0,0,0.7)', fontSize: 12, fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
   sectionAction: { color: '#00ff87', fontSize: 14, fontWeight: '600' },
