@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { isMutuallyBlocked } from '@/utils/blockCheck';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
@@ -25,6 +26,7 @@ export default function MVPPlayersScreen() {
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [ownerName, setOwnerName] = useState('');
+  const [blockedState, setBlockedState] = useState<'unknown' | 'blocked' | 'ok'>('unknown');
 
   useEffect(() => {
     load();
@@ -34,6 +36,19 @@ export default function MVPPlayersScreen() {
     setLoading(true);
     try {
       if (!targetUid) { setPlayers([]); setLoading(false); return; }
+
+      // Silent block check: if viewing someone else's list and either party blocked, bail
+      if (!isOwnList && auth.currentUser) {
+        const blocked = await isMutuallyBlocked(auth.currentUser.uid, targetUid);
+        if (blocked) {
+          setBlockedState('blocked');
+          setPlayers([]);
+          setLoading(false);
+          return;
+        }
+      }
+      setBlockedState('ok');
+
       const q = query(collection(db, 'mvp_players'), where('ownerUid', '==', targetUid), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
       const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
@@ -46,6 +61,22 @@ export default function MVPPlayersScreen() {
       setPlayers([]);
     }
     setLoading(false);
+  }
+
+  // Silent block: render generic 'not available' state if mutually blocked
+  if (blockedState === 'blocked') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+          <Text style={{ color: '#666', fontSize: 36 }}>?</Text>
+        </View>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 6 }}>User not available</Text>
+        <Text style={{ color: '#666', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>This list is not available right now.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#1a1a1a', paddingHorizontal: 22, paddingVertical: 11, borderRadius: 8 }}>
+          <Text style={{ color: '#22c55e', fontSize: 14, fontWeight: '700' }}>← Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (

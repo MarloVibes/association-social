@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
@@ -10,6 +10,31 @@ import GlobalNav from '@/components/GlobalNav';
 export default function SearchUsersScreen() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<any[]>([]);
+  const [blockSet, setBlockSet] = useState<Set<string>>(new Set());
+
+  // Load block sets on mount: who I blocked + who blocked me
+  useEffect(() => {
+    const myUid = user?.uid;
+    if (!myUid) return;
+    (async () => {
+      try {
+        const meSnap = await getDoc(doc(db, 'users', myUid));
+        const myBlocked: string[] = meSnap.exists() ? (meSnap.data().blockedUsers || []) : [];
+
+        // Who blocked me?
+        const blockerQ = query(collection(db, 'users'), where('blockedUsers', 'array-contains', myUid));
+        const blockerSnap = await getDocs(blockerQ);
+        const blockerUids = blockerSnap.docs.map(d => d.id);
+
+        const combined = new Set([...myBlocked, ...blockerUids]);
+        setBlockSet(combined);
+      } catch (e) {
+        console.warn('block sets load failed', e);
+      }
+    })();
+  }, [user?.uid]);
+
+
   const [loading, setLoading] = useState(false);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friends, setFriends] = useState<string[]>([]);
@@ -42,7 +67,7 @@ export default function SearchUsersScreen() {
         emailUsers.forEach((u: any) => { if (!existingIds.has(u.uid)) users.push(u); });
       }
 
-      setResults(users.filter((u: any) => u.uid !== user?.uid));
+      setResults(users.filter((u: any) => u.uid !== user?.uid && !blockSet.has(u.uid)));
       if (user) {
         const myDoc = await getDoc(doc(db, 'users', user.uid));
         if (myDoc.exists()) {

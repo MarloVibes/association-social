@@ -2,8 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc, collection, doc, getDoc, onSnapshot,
-  orderBy, query, serverTimestamp, updateDoc, arrayUnion, getDocs
-} from 'firebase/firestore';
+  orderBy, query, serverTimestamp, updateDoc, arrayUnion, getDocs, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
@@ -35,6 +34,26 @@ export default function ChannelScreen() {
     }>();
 
   const [messages, setMessages] = useState<any[]>([]);
+  const [blockSet, setBlockSet] = useState<Set<string>>(new Set());
+
+  // Load block sets: who I blocked + who blocked me. Filter their messages out.
+  useEffect(() => {
+    const myUid = auth.currentUser?.uid;
+    if (!myUid) return;
+    (async () => {
+      try {
+        const meSnap = await getDoc(doc(db, 'users', myUid));
+        const myBlocked: string[] = meSnap.exists() ? (meSnap.data().blockedUsers || []) : [];
+        const blockerQ = query(collection(db, 'users'), where('blockedUsers', 'array-contains', myUid));
+        const blockerSnap = await getDocs(blockerQ);
+        const blockerUids = blockerSnap.docs.map(d => d.id);
+        setBlockSet(new Set([...myBlocked, ...blockerUids]));
+      } catch (e) {
+        console.warn('block sets load failed', e);
+      }
+    })();
+  }, []);
+
   const [members, setMembers] = useState<Record<string, any>>({});
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -1533,7 +1552,7 @@ export default function ChannelScreen() {
 
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={messages.filter((m: any) => !blockSet.has(m.uid))}
         keyExtractor={item => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}

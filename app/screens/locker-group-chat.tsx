@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Keyboard
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, where, getDocs } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
@@ -30,6 +30,26 @@ export default function LockerGroupChatScreen() {
 
   const [chat, setChat] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const [blockSet, setBlockSet] = useState<Set<string>>(new Set());
+
+  // Load block sets: who I blocked + who blocked me. Filter their messages out.
+  useEffect(() => {
+    const myUid = auth.currentUser?.uid;
+    if (!myUid) return;
+    (async () => {
+      try {
+        const meSnap = await getDoc(doc(db, 'users', myUid));
+        const myBlocked: string[] = meSnap.exists() ? (meSnap.data().blockedUsers || []) : [];
+        const blockerQ = query(collection(db, 'users'), where('blockedUsers', 'array-contains', myUid));
+        const blockerSnap = await getDocs(blockerQ);
+        const blockerUids = blockerSnap.docs.map(d => d.id);
+        setBlockSet(new Set([...myBlocked, ...blockerUids]));
+      } catch (e) {
+        console.warn('block sets load failed', e);
+      }
+    })();
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -164,7 +184,7 @@ export default function LockerGroupChatScreen() {
         </View>
       ) : (
         <FlatList
-          data={messages}
+          data={messages.filter((m: any) => !blockSet.has(m.uid))}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           inverted
