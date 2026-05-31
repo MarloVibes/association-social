@@ -616,9 +616,24 @@ export default function RosterScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {activeTab === 'my_team' ? 'No players on your roster yet.' : 'No free agents available.'}
-            </Text>
+            {activeTab === 'my_team' ? (
+              <Text style={styles.emptyText}>No players on your roster yet.</Text>
+            ) : (
+              <>
+                <Text style={styles.emptyText}>
+                  {league?.era === 'magic_bird'
+                    ? 'Free agency was extremely limited in the 1983-84 era.'
+                    : league?.era === 'jordan'
+                    ? 'Free agency was limited in the 1991-92 era.'
+                    : 'No free agents available right now.'}
+                </Text>
+                {(league?.era === 'magic_bird' || league?.era === 'jordan') && (
+                  <Text style={[styles.emptyText, { fontSize: 13, marginTop: 8, color: '#666' }]}>
+                    Players become available when teams drop them or when the season advances and a new draft class arrives.
+                  </Text>
+                )}
+              </>
+            )}
           </View>
         }
         renderItem={({ item }) => {
