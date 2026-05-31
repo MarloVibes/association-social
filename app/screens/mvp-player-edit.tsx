@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
@@ -152,6 +152,22 @@ export default function MVPPlayerEditScreen() {
     if (!position) { Alert.alert('Required', 'Position is required.'); return; }
     const ovrNum = Number(overall);
     if (!ovrNum || ovrNum < 1 || ovrNum > 99) { Alert.alert('Invalid', 'Overall must be between 1 and 99.'); return; }
+
+    // Enforce 10-card limit (only for new cards, not edits)
+    if (!isEdit) {
+      try {
+        const uid = auth.currentUser!.uid;
+        const countQ = query(collection(db, 'mvp_players'), where('ownerUid', '==', uid));
+        const countSnap = await getDocs(countQ);
+        if (countSnap.size >= 10) {
+          Alert.alert('Card limit reached', 'You can have up to 10 MVP cards. Delete one to add another.');
+          return;
+        }
+      } catch (e: any) {
+        Alert.alert('Error', 'Could not verify your card count. ' + e.message);
+        return;
+      }
+    }
 
     setSaving(true);
     try {

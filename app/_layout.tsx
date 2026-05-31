@@ -46,6 +46,7 @@ export default function RootLayout() {
           <Stack.Screen name="screens/mvp-proam" />
           <Stack.Screen name="screens/mvp-locker-room" />
           <Stack.Screen name="screens/mvp-stats" />
+          <Stack.Screen name="screens/mvp-player-view" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

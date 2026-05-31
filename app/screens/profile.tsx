@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -18,6 +18,8 @@ export default function ProfileScreen() {
 
   // Editable fields
   const [bio, setBio] = useState('');
+  const [mvpPlayers, setMvpPlayers] = useState<any[]>([]);
+  const [mvpLoading, setMvpLoading] = useState(true);
   const [gamerTag, setGamerTag] = useState('');
   const [twitch, setTwitch] = useState('');
   const [youtube, setYoutube] = useState('');
@@ -43,6 +45,30 @@ export default function ProfileScreen() {
   const isOwnProfile = !viewUid || viewUid === user?.uid;
 
   useEffect(() => { loadProfile(); }, []);
+
+  // Load MVP players for whoever's profile we're viewing
+  useEffect(() => {
+    const targetUid = viewUid || user?.uid;
+    if (!targetUid) { setMvpPlayers([]); setMvpLoading(false); return; }
+    (async () => {
+      setMvpLoading(true);
+      try {
+        const q = query(
+          collection(db, 'mvp_players'),
+          where('ownerUid', '==', targetUid),
+          orderBy('createdAt', 'desc'),
+          limit(3)
+        );
+        const snap = await getDocs(q);
+        setMvpPlayers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      } catch (e) {
+        console.warn('mvp fetch failed', e);
+        setMvpPlayers([]);
+      }
+      setMvpLoading(false);
+    })();
+  }, [viewUid, user?.uid]);
+
 
   const loadProfile = async () => {
     if (!profileUid) return;
@@ -196,6 +222,43 @@ export default function ProfileScreen() {
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>{bio || 'No bio yet'}</Text>
           </View>
+        )}
+
+        {/* My MVP Players preview */}
+        {!mvpLoading && mvpPlayers.length > 0 && (
+          <>
+            <View style={styles.mvpSectionHeader}>
+              <Text style={styles.sectionLabel}>{isOwnProfile ? 'My MVP Players' : 'MVP Players'}</Text>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/screens/mvp-players', params: viewUid ? { userId: viewUid } : {} })}>
+                <Text style={styles.mvpViewAll}>View All ({mvpPlayers.length === 3 ? '3+' : mvpPlayers.length})</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginBottom: 16 }}>
+              {mvpPlayers.map((p: any) => {
+                const isOwnCard = p.ownerUid === user?.uid;
+                const POS_COLORS: Record<string, string> = { PG: '#1d4ed8', SG: '#0891b2', SF: '#16a34a', PF: '#ca8a04', C: '#dc2626' };
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={styles.mvpPreviewCard}
+                    onPress={() => router.push({
+                      pathname: isOwnCard ? '/screens/mvp-player-edit' : '/screens/mvp-player-view',
+                      params: { playerId: p.id },
+                    })}
+                  >
+                    <View style={[styles.mvpOvrCircle, { backgroundColor: POS_COLORS[p.position] || '#666' }]}>
+                      <Text style={styles.mvpOvrText}>{p.overall}</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.mvpPlayerName}>{p.playerName || 'Unnamed'}</Text>
+                      <Text style={styles.mvpPlayerMeta}>{p.position} · {p.archetype || 'No archetype'}</Text>
+                    </View>
+                    <Text style={styles.mvpChevron}>›</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
         )}
 
         {/* Gamer Info */}
@@ -400,6 +463,14 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, color: '#666' },
   statDivider: { width: 1, height: 24, backgroundColor: '#2a2a2a' },
   sectionLabel: { fontSize: 13, fontWeight: '600', color: '#aaaaaa', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  mvpSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  mvpViewAll: { color: '#22c55e', fontSize: 13, fontWeight: '700' },
+  mvpPreviewCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#1a1a1a', marginBottom: 8 },
+  mvpOvrCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  mvpOvrText: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  mvpPlayerName: { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  mvpPlayerMeta: { color: '#aaa', fontSize: 12 },
+  mvpChevron: { color: '#666', fontSize: 22, fontWeight: '300' },
   infoCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
   infoLabel: { fontSize: 14, color: '#666' },

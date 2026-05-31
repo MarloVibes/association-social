@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
@@ -19,22 +19,28 @@ const POS_COLORS: Record<string, string> = {
 
 export default function MVPPlayersScreen() {
   const router = useRouter();
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
+  const targetUid = userId || auth.currentUser?.uid || '';
+  const isOwnList = targetUid === auth.currentUser?.uid;
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ownerName, setOwnerName] = useState('');
 
   useEffect(() => {
-    const unsubFocus = router.canGoBack ? load() : load();
-    return () => {};
-  }, []);
+    load();
+  }, [targetUid]);
 
   async function load() {
     setLoading(true);
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) { setPlayers([]); setLoading(false); return; }
-      const q = query(collection(db, 'mvp_players'), where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
+      if (!targetUid) { setPlayers([]); setLoading(false); return; }
+      const q = query(collection(db, 'mvp_players'), where('ownerUid', '==', targetUid), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      setPlayers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      setPlayers(list);
+      if (!isOwnList && list.length > 0) {
+        setOwnerName(list[0].ownerGamerTag || list[0].ownerUsername || '');
+      }
     } catch (e) {
       console.warn('load mvp players failed', e);
       setPlayers([]);
@@ -46,10 +52,14 @@ export default function MVPPlayersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>← Back</Text></TouchableOpacity>
-        <Text style={styles.title}>My Players</Text>
-        <TouchableOpacity onPress={() => router.push('/screens/mvp-player-edit')}>
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>{isOwnList ? 'My Players' : (ownerName ? ownerName + "'s Players" : 'Players')}</Text>
+        {isOwnList ? (
+          <TouchableOpacity onPress={() => router.push('/screens/mvp-player-edit')}>
+            <Text style={styles.addLink}>+ Add</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
       </View>
 
       {loading ? (
@@ -70,7 +80,7 @@ export default function MVPPlayersScreen() {
               <TouchableOpacity
                 key={p.id}
                 style={styles.playerCard}
-                onPress={() => router.push({ pathname: '/screens/mvp-player-edit', params: { playerId: p.id } })}
+                onPress={() => router.push({ pathname: isOwnList ? '/screens/mvp-player-edit' : '/screens/mvp-player-view', params: { playerId: p.id } })}
               >
                 <View style={[styles.ovrCircle, { backgroundColor: POS_COLORS[p.position] || '#666' }]}>
                   <Text style={styles.ovrText}>{p.overall}</Text>
