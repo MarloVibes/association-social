@@ -48,7 +48,16 @@ export default function PendingPlayersScreen() {
       { text: 'Approve', style: 'default', onPress: async () => {
           try {
             const { id, submittedBy, submittedAt, status, ...rest } = p;
-            await setDoc(doc(db, 'leagues', leagueId, 'custom_players', id), rest);
+            // Phase 4: write approved custom players to vault
+            await setDoc(doc(db, 'players', id), {
+              ...rest,
+              bref_id: id,
+              is_custom: true,
+              created_by_league: leagueId,
+              created_by_uid: submittedBy || '',
+              available_in: ['all'],
+              eras: ['all'],
+            });
             await deleteDoc(doc(db, 'leagues', leagueId, 'pending_players', id));
             if (submittedBy) {
               await addDoc(collection(db, 'users', submittedBy, 'notifications'), {

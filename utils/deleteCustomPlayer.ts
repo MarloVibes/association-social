@@ -94,8 +94,17 @@ export async function executeCustomPlayerDelete(
       await updateDoc(r.ref, { status: 'cancelled', cancelReason: 'player_deleted' });
     }
   }
-  // 3. Delete the custom_players doc
-  await deleteDoc(doc(db, 'leagues', leagueId, 'custom_players', pid));
+  // 3. Delete the custom_players doc — try vault first (Phase 4), fall back to old subcollection
+  try {
+    await deleteDoc(doc(db, 'players', pid));
+  } catch (e) {
+    console.warn('vault delete failed (non-critical)', e);
+  }
+  try {
+    await deleteDoc(doc(db, 'leagues', leagueId, 'custom_players', pid));
+  } catch (e) {
+    // Old subcollection may not have this doc post-migration; not an error
+  }
   // 4. Delete the photo if present
   if (player.photo_url) {
     try {

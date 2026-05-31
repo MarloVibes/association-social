@@ -38,6 +38,20 @@ const emptySeason = (year: string): Season => ({
   gp: '', ppg: '', apg: '', rpg: '', blk: '', stl: '', fg_pct: '', three_pct: '',
 });
 
+
+// Auto-format height on blur. User types digits, gets feet'inches".
+// Examples: "7" -> 7'0", "66" -> 6'6", "611" -> 6'11", "6-11" -> 6'11"
+function formatHeight(raw) {
+  if (!raw) return '';
+  if (raw.includes("'") || raw.includes('"')) return raw;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 1) return digits + "'0\"";
+  if (digits.length === 2) return digits[0] + "'" + digits[1] + '"';
+  if (digits.length === 3) return digits[0] + "'" + digits.slice(1) + '"';
+  return raw;
+}
+
 export default function CreatePlayerScreen() {
   const params = useLocalSearchParams<{ leagueId: string; era?: string; pendingId?: string; customId?: string }>();
   const [isCommissioner, setIsCommissioner] = useState(false);
@@ -68,7 +82,11 @@ export default function CreatePlayerScreen() {
           }
         }
         if (editingCustomId) {
-          const cSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'custom_players', editingCustomId));
+          // Dual-read: vault first, fall back to old subcollection
+          let cSnap = await getDoc(doc(db, 'players', editingCustomId));
+          if (!cSnap.exists()) {
+            cSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'custom_players', editingCustomId));
+          }
           if (cSnap.exists()) {
             const cd = cSnap.data() as any;
             setName(cd.full_name || '');
@@ -213,10 +231,28 @@ export default function CreatePlayerScreen() {
       };
 
       if (editingCustomId) {
-        // Editing an already-approved custom player — write directly with the existing ID
-        await setDoc(doc(db, 'leagues', leagueId, 'custom_players', editingCustomId), { ...playerDoc, player_id: editingCustomId });
+        // Editing an already-approved custom player — write to vault (Phase 4)
+        await setDoc(doc(db, 'players', editingCustomId), {
+          ...playerDoc,
+          player_id: editingCustomId,
+          bref_id: editingCustomId,
+          is_custom: true,
+          created_by_league: leagueId,
+          created_by_uid: auth.currentUser?.uid || '',
+          available_in: ['all'],
+          eras: ['all'],
+        }, { merge: true });
       } else if (isCommissioner) {
-        await setDoc(doc(db, 'leagues', leagueId, 'custom_players', playerId), playerDoc);
+        // Create new custom player in vault (Phase 4)
+        await setDoc(doc(db, 'players', playerId), {
+          ...playerDoc,
+          bref_id: playerId,
+          is_custom: true,
+          created_by_league: leagueId,
+          created_by_uid: auth.currentUser?.uid || '',
+          available_in: ['all'],
+          eras: ['all'],
+        });
         if (editingPendingId) {
           const pSnap = await getDoc(doc(db, 'leagues', leagueId, 'pending_players', editingPendingId));
           const submittedBy = pSnap.exists() ? (pSnap.data() as any).submittedBy : null;
@@ -332,7 +368,7 @@ export default function CreatePlayerScreen() {
             </View>
             <View style={styles.col}>
               <Text style={styles.fieldLabel}>Height</Text>
-              <TextInput style={styles.input} value={height} onChangeText={setHeight} placeholder='6-7' placeholderTextColor='#555' />
+              <TextInput style={styles.input} value={height} onChangeText={setHeight} onBlur={() => setHeight(formatHeight(height))} placeholder={`6'7"`} placeholderTextColor='#555' />
             </View>
             <View style={styles.col}>
               <Text style={styles.fieldLabel}>Weight</Text>

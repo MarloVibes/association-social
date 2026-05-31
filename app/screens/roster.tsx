@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
-import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc, query, where } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -108,6 +108,40 @@ export default function RosterScreen() {
         });
       });
 
+      // ALSO: load vault-tagged free agents for this league's era
+      // (players the vault marks with free_in_eras containing the era key)
+      const vaultEra = (leagueSnap.exists() && (leagueSnap.data() as any).era) || 'current';
+      try {
+        const vaultFAQ = query(collection(db, 'players'), where('free_in_eras', 'array-contains', vaultEra));
+        const vaultFASnap = await getDocs(vaultFAQ);
+        vaultFASnap.docs.forEach(d => {
+          const data = d.data() as any;
+          // Map vault doc to the player shape roster expects
+          const player = {
+            player_id: vaultEra + '_' + d.id,
+            bref_id: d.id,
+            full_name: data.full_name,
+            first_name: data.first_name || '',
+            last_name: data.last_name || '',
+            position: data.position || '',
+            team: '',     // free agent has no team
+            jersey_number: data.jersey_number || '',
+            age: 0,
+            birth_year: null,
+            salary: 0,
+            from_vault: true,
+          };
+          // Skip if this name is already in pool or leagueFreeAgents (avoid dupes)
+          if (!freeAgentNames.has(player.full_name)) {
+            leagueFreeAgents.push(player);
+            freeAgentIds.add(player.player_id);
+            freeAgentNames.add(player.full_name);
+          }
+        });
+      } catch (e) {
+        console.warn('vault free agents fetch failed', e);
+      }
+
       // Build 'taken' set from pool: every pool player is taken EXCEPT free agents.
       // Then force-add anyone on a claimed team (in case trades moved them).
       const taken = new Set<string>();
@@ -124,9 +158,22 @@ export default function RosterScreen() {
       setTakenPlayerIds(taken);
       setTakenPlayerNames(takenNames);
 
-      // Load custom players created in this league
-      const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));
-      const customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
+      // Load custom players created in this league (now in vault per Phase 4)
+      // Dual-read: vault first, fall back to old subcollection during migration
+      let customPlayers: any[] = [];
+      try {
+        const vaultCustomQ = query(
+          collection(db, 'players'),
+          where('is_custom', '==', true),
+          where('created_by_league', '==', leagueId)
+        );
+        const vaultCustomSnap = await getDocs(vaultCustomQ);
+        customPlayers = vaultCustomSnap.docs.map(d => ({ ...d.data() } as any));
+      } catch (e) {
+        console.warn('vault custom players fetch failed, falling back', e);
+        const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));
+        customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
+      }
 
       // Enrich players with era_stats so playstyles compute correctly
       try {
