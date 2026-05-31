@@ -51,6 +51,7 @@ export default function RootLayout() {
           <Stack.Screen name="screens/locker-group-create" />
           <Stack.Screen name="screens/locker-group-chat" />
           <Stack.Screen name="screens/locker-group-info" />
+          <Stack.Screen name="screens/blocked-users" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

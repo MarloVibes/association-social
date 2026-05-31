@@ -1,6 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { blockUser } from '@/constants/moderation';
+import { isMutuallyBlocked } from '@/utils/blockCheck';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -20,6 +22,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState('');
   const [mvpPlayers, setMvpPlayers] = useState<any[]>([]);
   const [mvpLoading, setMvpLoading] = useState(true);
+  const [blockedState, setBlockedState] = useState<'unknown' | 'blocked' | 'ok'>('unknown');
   const [gamerTag, setGamerTag] = useState('');
   const [twitch, setTwitch] = useState('');
   const [youtube, setYoutube] = useState('');
@@ -68,6 +71,21 @@ export default function ProfileScreen() {
       setMvpLoading(false);
     })();
   }, [viewUid, user?.uid]);
+  // Silent block check: when viewing someone else, check if either party
+  // has blocked the other. If so, render the silent 'user not found' state.
+  useEffect(() => {
+    const otherUid = viewUid;
+    const myUid = user?.uid;
+    if (!otherUid || !myUid || otherUid === myUid) {
+      setBlockedState('ok');
+      return;
+    }
+    (async () => {
+      const blocked = await isMutuallyBlocked(myUid, otherUid);
+      setBlockedState(blocked ? 'blocked' : 'ok');
+    })();
+  }, [viewUid, user?.uid]);
+
 
 
   const loadProfile = async () => {
@@ -125,7 +143,23 @@ export default function ProfileScreen() {
   };
 
   if (loading) {
+    // Silent block: render generic 'not found' state if mutually blocked
+  if (blockedState === 'blocked') {
     return (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+          <Text style={{ color: '#666', fontSize: 36 }}>?</Text>
+        </View>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 6 }}>User not available</Text>
+        <Text style={{ color: '#666', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>This profile is not available right now.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#1a1a1a', paddingHorizontal: 22, paddingVertical: 11, borderRadius: 8 }}>
+          <Text style={{ color: '#22c55e', fontSize: 14, fontWeight: '700' }}>← Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#00ff87" />
       </View>
@@ -437,6 +471,32 @@ export default function ProfileScreen() {
         <View style={{ height: 60 }} />
       </View>
           <GlobalNav />
+    {/* Bottom actions: Block (others) or Manage Blocked (own) */}
+    {!isOwnProfile && profileUid && (
+      <View style={{ marginTop: 30, marginBottom: 40 }}>
+        <TouchableOpacity
+          style={styles.blockUserBtn}
+          onPress={async () => {
+            const name = profile?.gamerTag || profile?.username || 'this user';
+            const did = await blockUser(profileUid, name);
+            if (did) {
+              Alert.alert('Blocked', `${name} has been blocked.`);
+              router.back();
+            }
+          }}
+        >
+          <Text style={styles.blockUserBtnText}>Block User</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+    {isOwnProfile && (
+      <TouchableOpacity
+        style={styles.manageBlockedLink}
+        onPress={() => router.push('/screens/blocked-users')}
+      >
+        <Text style={styles.manageBlockedText}>Manage Blocked Users ›</Text>
+      </TouchableOpacity>
+    )}
     </ScrollView>
   );
 }
@@ -465,6 +525,10 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 13, fontWeight: '600', color: '#aaaaaa', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
   mvpSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   mvpViewAll: { color: '#22c55e', fontSize: 13, fontWeight: '700' },
+  blockUserBtn: { backgroundColor: '#2a0a0a', padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#ff4444' },
+  blockUserBtnText: { color: '#ff4444', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  manageBlockedLink: { marginTop: 24, marginBottom: 40, padding: 14, alignItems: 'center' },
+  manageBlockedText: { color: '#888', fontSize: 14, fontWeight: '600' },
   mvpPreviewCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#1a1a1a', marginBottom: 8 },
   mvpOvrCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   mvpOvrText: { color: '#fff', fontSize: 17, fontWeight: '900' },

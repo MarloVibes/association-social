@@ -1,4 +1,4 @@
-import { addDoc, arrayUnion, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { auth, db } from './firebase';
 
@@ -26,9 +26,19 @@ export async function blockUser(targetUid: string, targetName: string): Promise<
           style: 'destructive',
           onPress: async () => {
             try {
+              // Add to block list + auto-unfriend mutually
               await updateDoc(doc(db, 'users', user.uid), {
                 blockedUsers: arrayUnion(targetUid),
+                friends: arrayRemove(targetUid),
               });
+              // Also remove ME from THEIR friends list (mutual unfriend on block)
+              try {
+                await updateDoc(doc(db, 'users', targetUid), {
+                  friends: arrayRemove(user.uid),
+                });
+              } catch (e) {
+                console.warn('mutual unfriend failed (non-critical)', e);
+              }
               resolve(true);
             } catch (e) {
               console.error(e);

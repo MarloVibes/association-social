@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
+import { isMutuallyBlocked } from '@/utils/blockCheck';
 import GlobalNav from '@/components/GlobalNav';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
@@ -47,6 +48,16 @@ export default function DMScreen() {
     if (!user || !dmId) return;
     const content = overrideText ?? text.trim();
     if (!content && !photoUrl && !gifUrl) return;
+
+    // Silent block enforcement: if mutually blocked, clear input and bail silently
+    if (otherUid) {
+      const blocked = await isMutuallyBlocked(user.uid, otherUid);
+      if (blocked) {
+        setText('');
+        return;
+      }
+    }
+
     setSending(true);
     setText('');
     try {
