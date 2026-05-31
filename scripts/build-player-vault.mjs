@@ -75,14 +75,34 @@ async function main() {
   const profilesSnap = await getDocs(collection(db, 'player_profiles'));
   console.log(`  ${profilesSnap.size} profile docs (includes _index meta doc)`);
 
-  const profileByName = new Map();    // normName -> profile doc
+  // Profile docs have empty 'name' fields (basketball-reference scraping bug).
+  // Index by bref_id (the doc id) so we can match against constructed bref_ids.
+  const profileByBrefId = new Map();
   for (const d of profilesSnap.docs) {
     if (d.id === '_index') continue;
-    const data = d.data();
-    if (!data.name) continue;
-    profileByName.set(normName(data.name), { bref_id: d.id, ...data });
+    profileByBrefId.set(d.id, { bref_id: d.id, ...d.data() });
   }
-  console.log(`  Indexed ${profileByName.size} profiles by name\n`);
+  console.log(`  Indexed ${profileByBrefId.size} profiles by bref_id\n`);
+
+  /**
+   * Construct candidate bref_ids from a player name.
+   * Basketball-reference format: first 5 letters of last name + first 2 letters of first + 2-digit suffix.
+   * Example: 'LeBron James' -> 'jamesle01', 'James Harden' -> 'hardeja01'
+   * Some have suffix 02, 03 if there are name collisions. We try 01-05.
+   */
+  function candidateBrefIds(firstName, lastName) {
+    const cleanFirst = (firstName || '').toLowerCase().replace(/[^a-z]/g, '');
+    const cleanLast = (lastName || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (!cleanFirst || !cleanLast) return [];
+    const lastPart = cleanLast.slice(0, 5);
+    const firstPart = cleanFirst.slice(0, 2);
+    const candidates = [];
+    for (let i = 1; i <= 5; i++) {
+      const suffix = String(i).padStart(2, '0');
+      candidates.push(lastPart + firstPart + suffix);
+    }
+    return candidates;
+  }
 
   // 3. Merge: build vault docs
   let matched = 0;
@@ -90,7 +110,15 @@ async function main() {
   const vaultDocs = [];
 
   for (const [key, slot] of playerByName.entries()) {
-    const profile = profileByName.get(key);
+    // Try to find a matching profile by constructing candidate bref_ids
+    let profile = null;
+    const candidates = candidateBrefIds(slot.first_name, slot.last_name);
+    for (const candidate of candidates) {
+      if (profileByBrefId.has(candidate)) {
+        profile = profileByBrefId.get(candidate);
+        break;
+      }
+    }
 
     let vaultId, vaultDoc;
     if (profile) {
@@ -98,7 +126,7 @@ async function main() {
       vaultId = profile.bref_id;
       vaultDoc = {
         bref_id: profile.bref_id,
-        full_name: profile.name || slot.full_name,
+        full_name: slot.full_name,  // Always trust era pool's full_name (profile.name is empty)
         first_name: slot.first_name,
         last_name: slot.last_name,
         position: profile.position || slot.sample_entry.position || '',
