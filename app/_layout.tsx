@@ -47,6 +47,10 @@ export default function RootLayout() {
           <Stack.Screen name="screens/mvp-locker-room" />
           <Stack.Screen name="screens/mvp-stats" />
           <Stack.Screen name="screens/mvp-player-view" />
+          <Stack.Screen name="screens/locker-console-chat" />
+          <Stack.Screen name="screens/locker-group-create" />
+          <Stack.Screen name="screens/locker-group-chat" />
+          <Stack.Screen name="screens/locker-group-info" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
