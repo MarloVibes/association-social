@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, getDocs, writeBatch } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
@@ -12,6 +12,31 @@ const firebaseConfig = {
 if (!getApps().length) initializeApp(firebaseConfig);
 const db = getFirestore();
 const auth = getAuth();
+
+
+// Recursively delete all messages in a group chat's messages subcollection.
+// Firestore client SDK can't delete subcollections directly, so we loop in batches.
+async function deleteAllChatMessages(chatId: string) {
+  try {
+    const msgsRef = collection(db, 'locker_groups', chatId, 'messages');
+    // Process in batches of 400 (Firestore limit is 500 ops per batch)
+    while (true) {
+      const snap = await getDocs(msgsRef);
+      if (snap.empty) break;
+      const batch = writeBatch(db);
+      let count = 0;
+      for (const d of snap.docs) {
+        batch.delete(d.ref);
+        count++;
+        if (count >= 400) break;
+      }
+      await batch.commit();
+      if (snap.size < 400) break; // last page
+    }
+  } catch (e) {
+    console.warn('message cleanup failed (non-critical)', e);
+  }
+}
 
 export default function LockerGroupInfoScreen() {
   const router = useRouter();
@@ -132,13 +157,30 @@ export default function LockerGroupInfoScreen() {
   }
 
   async function doLeave() {
-    if (!chatId || !myUid) return;
+    if (!chatId || !myUid || !chat) return;
     setBusy(true);
     try {
-      await updateDoc(doc(db, 'locker_groups', chatId), {
+      const currentMembers: string[] = chat.members || [];
+      const remaining = currentMembers.filter((m: string) => m !== myUid);
+
+      // CASE 1: Last member leaving — auto-delete the entire chat + messages
+      if (remaining.length === 0) {
+        await deleteAllChatMessages(chatId);
+        await deleteDoc(doc(db, 'locker_groups', chatId));
+        router.replace('/screens/mvp-locker-room');
+        return;
+      }
+
+      // CASE 2: Creator leaving — auto-transfer creator role to oldest remaining member
+      const updates: any = {
         members: arrayRemove(myUid),
-        memberCount: Math.max(0, (chat?.members?.length || 1) - 1),
-      });
+        memberCount: remaining.length,
+      };
+      if (chat.creatorUid === myUid) {
+        // Oldest remaining = first in members array (since arrays are append-only on add)
+        updates.creatorUid = remaining[0];
+      }
+      await updateDoc(doc(db, 'locker_groups', chatId), updates);
       router.replace('/screens/mvp-locker-room');
     } catch (e: any) {
       Alert.alert('Leave failed', e.message);
@@ -157,6 +199,8 @@ export default function LockerGroupInfoScreen() {
     if (!chatId) return;
     setBusy(true);
     try {
+      // Clean up messages subcollection first to avoid orphaned data
+      await deleteAllChatMessages(chatId);
       await deleteDoc(doc(db, 'locker_groups', chatId));
       router.replace('/screens/mvp-locker-room');
     } catch (e: any) {
