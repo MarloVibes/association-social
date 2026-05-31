@@ -89,14 +89,30 @@ export default function TeamRosterScreen() {
             const brefIds: string[] = enrichedPlayers
               .map((p: any) => p.bref_id || (p.player_id ? String(p.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i)?.[1] : null))
               .filter(Boolean);
-            const profileSnaps = await Promise.all(brefIds.map(bid => getDoc(doc(db, 'player_profiles', bid as string))));
+            // Dual-read pattern: vault first, profile fallback during migration
+            const vaultSnaps = await Promise.all(brefIds.map(bid => getDoc(doc(db, 'players', bid as string))));
             const profMap: Record<string, any> = {};
-            profileSnaps.forEach((snap, i) => {
+            const missingBrefIds: string[] = [];
+
+            vaultSnaps.forEach((snap, i) => {
               if (snap.exists()) {
                 const data = snap.data() as any;
                 profMap[data.full_name] = data;
+              } else {
+                missingBrefIds.push(brefIds[i] as string);
               }
             });
+
+            if (missingBrefIds.length > 0) {
+              const profileSnaps = await Promise.all(missingBrefIds.map(bid => getDoc(doc(db, 'player_profiles', bid))));
+              profileSnaps.forEach(snap => {
+                if (snap.exists()) {
+                  const data = snap.data() as any;
+                  if (data.full_name) profMap[data.full_name] = data;
+                }
+              });
+            }
+
             setProfilesByName(profMap);
           }
         } catch (e) { console.error('team enrich failed', e); }
