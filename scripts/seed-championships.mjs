@@ -83,11 +83,12 @@ async function main() {
 
       for (const player of players) {
         try {
-          const profileSnap = await getDoc(doc(db, 'player_profiles', player.bref_id));
+          // Phase 6b: vault is canonical source
+          const profileSnap = await getDoc(doc(db, 'players', player.bref_id));
           if (profileSnap.exists()) {
             const existing = profileSnap.data().accolades || [];
             if (!existing.includes(accolade)) {
-              await updateDoc(doc(db, 'player_profiles', player.bref_id), {
+              await updateDoc(doc(db, 'players', player.bref_id), {
                 accolades: arrayUnion(accolade),
               });
               total++;

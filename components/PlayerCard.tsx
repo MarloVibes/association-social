@@ -125,14 +125,10 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
       // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
   const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
       if (brefId) {
-        // Dual-read pattern: vault first, profile fallback during migration.
-        // Vault docs hold identity + career data per locked vault schema.
+        // Vault is the canonical source of truth (Phase 6b complete)
         const vaultSnap = await getDoc(doc(db, 'players', brefId));
         if (vaultSnap.exists()) {
           setProfile(vaultSnap.data());
-        } else {
-          const profileSnap = await getDoc(doc(db, 'player_profiles', brefId));
-          if (profileSnap.exists()) setProfile(profileSnap.data());
         }
       }
       if (teamId && leagueId) {

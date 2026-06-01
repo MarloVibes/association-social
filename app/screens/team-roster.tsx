@@ -85,7 +85,7 @@ export default function TeamRosterScreen() {
         const _playersWithOverrides = (enrichedPlayers || []).map((_p: any) => ({ ..._p, salary: getEffectiveSalary(_p, _overrides) }));
         setTeam({ id: teamSnap.id, ...teamData, players: _playersWithOverrides });
 
-            // Fetch player_profiles for year-specific tier badges
+            // Fetch vault data for year-specific tier badges
             const brefIds: string[] = enrichedPlayers
               .map((p: any) => p.bref_id || (p.player_id ? String(p.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i)?.[1] : null))
               .filter(Boolean);
@@ -102,16 +102,6 @@ export default function TeamRosterScreen() {
                 missingBrefIds.push(brefIds[i] as string);
               }
             });
-
-            if (missingBrefIds.length > 0) {
-              const profileSnaps = await Promise.all(missingBrefIds.map(bid => getDoc(doc(db, 'player_profiles', bid))));
-              profileSnaps.forEach(snap => {
-                if (snap.exists()) {
-                  const data = snap.data() as any;
-                  if (data.full_name) profMap[data.full_name] = data;
-                }
-              });
-            }
 
             setProfilesByName(profMap);
           }

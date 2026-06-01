@@ -211,17 +211,6 @@ export default function RosterScreen() {
               }
             });
 
-            // Fall back to player_profiles for any vault misses
-            if (missingBrefIds.length > 0) {
-              const profileSnaps = await Promise.all(missingBrefIds.map(bid => getDoc(doc(db, 'player_profiles', bid))));
-              profileSnaps.forEach(snap => {
-                if (snap.exists()) {
-                  const pdata = snap.data() as any;
-                  if (pdata.full_name) profMap[pdata.full_name] = pdata;
-                }
-              });
-            }
-
             setProfilesByName(profMap);
           }
         } catch (e) { console.error('profile fetch failed', e); }
