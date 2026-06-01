@@ -280,7 +280,7 @@ export default function TradeChannelScreen() {
       </View>
 
       {activeTab === 'block' ? (
-        <ScrollView contentContainerStyle={styles.blockContent}>
+        <ScrollView contentContainerStyle={[styles.blockContent, { paddingBottom: 90 }]}>
           {/* 3 Column Layout */}
           <View style={styles.threeCol}>
             {/* Trading Block */}

@@ -668,7 +668,7 @@ export default function TradeRoomScreen() {
         <Text style={styles.statusOpponent}>· {otherTeamName}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 90 }]}>
         {/* Their side */}
         <Text style={styles.sideLabel}>{otherTeamName.toUpperCase()} OFFERS ({otherOffer.length}/{MAX_PER_SIDE})</Text>
         <View style={styles.sideBox}>

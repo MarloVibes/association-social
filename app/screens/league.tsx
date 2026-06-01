@@ -160,7 +160,7 @@ export default function LeagueScreen() {
   const channelIcon = CHANNEL_ICON[league.sport] || '💬';
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
       <View style={styles.inner}>
 
         {/* Header */}

@@ -674,7 +674,7 @@ export default function RosterScreen() {
         </>
       )}
 
-      <FlatList
+      <FlatList contentContainerStyle={{ paddingBottom: 90 }}
         data={currentData}
         keyExtractor={(item) => String(item.player_id || item.id)}
         contentContainerStyle={styles.listContent}

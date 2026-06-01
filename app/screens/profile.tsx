@@ -190,7 +190,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
       <View style={styles.inner}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>

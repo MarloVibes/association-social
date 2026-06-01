@@ -39,7 +39,7 @@ export default function ChannelsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: 90 }]}>
         {CHANNELS.map(channel => {
           const isLocked = false; // All members can read all channels
           return (

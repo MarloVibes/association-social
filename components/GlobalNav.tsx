@@ -45,12 +45,17 @@ export default function GlobalNav({ pendingRequests = 0, pendingInvites = 0 }: P
 
 const styles = StyleSheet.create({
   bar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     backgroundColor: '#0a0a0a',
     borderTopWidth: 1,
     borderTopColor: '#1a1a1a',
     paddingBottom: 24,
     paddingTop: 10,
+    zIndex: 100,
   },
   btn: { flex: 1, alignItems: 'center', gap: 3 },
   iconWrap: { position: 'relative' },

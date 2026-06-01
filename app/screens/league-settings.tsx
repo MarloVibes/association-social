@@ -232,7 +232,7 @@ export default function LeagueSettingsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps='handled'>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 90 }]} keyboardShouldPersistTaps='handled'>
         <Text style={styles.sectionLabel}>BASICS</Text>
         <View style={styles.card}>
           <Text style={styles.fieldLabel}>League Photo</Text>

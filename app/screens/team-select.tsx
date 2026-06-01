@@ -207,7 +207,7 @@ export default function TeamSelectScreen() {
     return (
       <TouchableWithoutFeedback onPress={() => showReveal && selectedTeam && !saving ? handleConfirmTeam(selectedTeam) : undefined}>
         <View style={styles.container}>
-          <ScrollView style={{ flex: 1 }} scrollEnabled={!showReveal}>
+          <ScrollView style={{ flex: 1 }} scrollEnabled={!showReveal} contentContainerStyle={{ paddingBottom: 90 }}>
             <View style={styles.inner}>
               {!showReveal && (
                 <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -322,7 +322,7 @@ export default function TeamSelectScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={{ flex: 1 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 90 }}>
         <View style={styles.inner}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Text style={styles.backText}>← Back</Text>

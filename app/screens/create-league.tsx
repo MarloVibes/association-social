@@ -123,7 +123,7 @@ export default function CreateLeagueScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
       <View style={styles.inner}>
         <TouchableOpacity onPress={handleBack} style={styles.topBack}>
           <Text style={styles.topBackText}>← Back</Text>

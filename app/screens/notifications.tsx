@@ -201,7 +201,7 @@ export default function NotificationsScreen() {
           <ActivityIndicator size='large' color='#00ff87' />
         </View>
       ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingBottom: 90 }]}>
 
           {joinRequests.length > 0 && (
             <>
