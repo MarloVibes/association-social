@@ -135,3 +135,37 @@ Don't begin Phase 1 until:
 - 3+ uninterrupted weeks for methodical execution
 
 If priorities shift to launch features, park this until after launch.
+
+---
+
+## Update May 31, 2026 — Phase 5 Rejected
+
+Phase 5 (slim down era pools to lightweight team maps) was evaluated and **rejected** as architecturally incorrect for this app.
+
+### Why
+
+The plan assumed lazy-loading of individual player details. The actual screens render entire pool arrays at once (roster.tsx renders all 530 current-era players, team-select.tsx loads a full team's roster, etc.).
+
+Splitting identity into vault + joining at render time would mean:
+- Every roster screen load = 500+ extra Firestore reads
+- Every team selection = batch vault reads for a team's players
+- Production Firestore free tier (50K reads/day) blown through in hours by a few active users
+
+### What we kept
+
+- Phase 1 (build vault) — ✅ shipped
+- Phase 2 (PlayerCard reads vault) — ✅ shipped
+- Phase 3 (roster + team-roster dual-read) — ✅ shipped
+- Phase 4 (custom players in vault) — ✅ shipped
+- Phase 5 (slim era pools) — REJECTED. Era pools remain fat with full identity data.
+- Phase 6 (cleanup) — Adjusted scope. Only delete `player_profiles/*` and `leagues/*/custom_players/*`. Era pools stay as they are.
+
+### Updated source-of-truth model
+
+- **Identity data:** vault (`players/{bref_id}`) is the canonical source for editing/updating identity. Era pools have COPIES of identity data, which is fine — they're just denormalized for read perf.
+- **Per-era data:** stays in era pools (salary, team, jersey_number, age, season). Vault doesn't track these.
+- **Custom players:** vault with `is_custom: true` flag. Era pools don't store custom players.
+- **Free agents:** vault with `free_in_eras` tag.
+- **Career data:** vault (seasons, accolades, height, weight, birth_date).
+
+This is a denormalized read-heavy architecture. If we ever migrate to a different DB or care about perfect normalization, revisit. For Firestore + this app's read patterns, it's the right call.
