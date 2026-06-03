@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -72,6 +72,8 @@ export default function TradeRoomScreen() {
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
   const presenceTimerRef = useRef<any>(null);
 
   // Initial load + room creation
@@ -809,6 +811,51 @@ export default function TradeRoomScreen() {
           <Text style={styles.dividerText}>━━━━ THE TABLE ━━━━</Text>
         </View>
 
+        {isLive && !isTerminal && (
+          <View style={styles.tableChat}>
+            {(room.chat || []).slice(-4).map((m: any, i: number) => (
+              <View key={i} style={[styles.chatMsg, m.uid === myUid ? styles.chatMsgMine : styles.chatMsgTheirs]}>
+                <Text style={styles.chatMsgText}>{m.text}</Text>
+              </View>
+            ))}
+            <View style={styles.chatInputRow}>
+              <TextInput
+                value={chatInput}
+                onChangeText={setChatInput}
+                placeholder='Pass a note across the table...'
+                placeholderTextColor='#555'
+                style={styles.chatInput}
+                maxLength={140}
+                editable={!chatSending}
+              />
+              <TouchableOpacity
+                style={[styles.chatSendBtn, (!chatInput.trim() || chatSending) && { opacity: 0.4 }]}
+                disabled={!chatInput.trim() || chatSending}
+                onPress={async () => {
+                  const text = chatInput.trim();
+                  if (!text) return;
+                  setChatSending(true);
+                  try {
+                    const existing = room.chat || [];
+                    const newChat = [...existing, { uid: myUid, text, ts: Date.now() }].slice(-4);
+                    await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+                      chat: newChat,
+                      updatedAt: serverTimestamp(),
+                    });
+                    setChatInput('');
+                  } catch (e: any) {
+                    Alert.alert('Send failed', e.message);
+                  } finally {
+                    setChatSending(false);
+                  }
+                }}
+              >
+                <Text style={styles.chatSendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* My side */}
         <Text style={styles.sideLabel}>{(myTeam?.name || 'YOU').toUpperCase()} OFFERS ({myOffer.length}/{MAX_PER_SIDE})</Text>
         <View style={styles.sideBox}>
@@ -1039,6 +1086,15 @@ const styles = StyleSheet.create({
 
   footer: { position: 'absolute', bottom: 80, left: 0, right: 0, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0a0a0a', borderTopWidth: 1, borderTopColor: '#1a1a1a' },
   footerRow: { flexDirection: 'row', gap: 8 },
+  tableChat: { paddingHorizontal: 12, paddingVertical: 12, marginVertical: 8, marginHorizontal: 16, backgroundColor: '#0a0a0a', borderRadius: 12, borderWidth: 1, borderColor: '#1a1a1a', gap: 6 },
+  chatMsg: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, maxWidth: '80%' },
+  chatMsgMine: { backgroundColor: '#00ff8722', alignSelf: 'flex-end', borderColor: '#00ff87', borderWidth: 1 },
+  chatMsgTheirs: { backgroundColor: '#1a1a1a', alignSelf: 'flex-start', borderColor: '#2a2a2a', borderWidth: 1 },
+  chatMsgText: { color: '#ddd', fontSize: 13 },
+  chatInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  chatInput: { flex: 1, backgroundColor: '#1a1a1a', color: '#fff', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a' },
+  chatSendBtn: { backgroundColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  chatSendText: { color: '#000', fontWeight: '700', fontSize: 13 },
   footerNote: { color: '#666', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
 
   ctaBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },

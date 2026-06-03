@@ -268,7 +268,7 @@ export default function DashboardScreen() {
       >
         <View style={styles.inner}>
           <View style={styles.titleBlock}>
-            <Text style={styles.appTitle}>Franchise Social</Text>
+            <Text style={styles.appTitle} numberOfLines={1} adjustsFontSizeToFit>Franchise Social</Text>
             <Text style={styles.appSubtitle}>Main Menu</Text>
           </View>
           <View style={styles.header}>
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 16, fontWeight: '700', color: '#00ff87' },
   headerCenter: { flex: 1 },
   titleBlock: { alignItems: 'center', marginBottom: 20 },
-  appTitle: { color: '#00ff87', fontSize: 24, fontWeight: '800', letterSpacing: 0.5, textAlign: 'center' },
+  appTitle: { color: '#00ff87', fontSize: 22, fontWeight: '800', letterSpacing: 0, textAlign: 'center' },
   appSubtitle: { color: '#666', fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 4 },
   greeting: { fontSize: 12, color: '#888888' },
   name: { fontSize: 18, fontWeight: '800', color: '#ffffff' },

@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle } from '@/constants/playstyle';
-import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';

@@ -112,8 +112,8 @@ export default function LandingScreen() {
 
       <View style={styles.centerContent}>
         <Animated.View style={{ opacity: titleOpacity, transform: [{ translateY: titleY }] }}>
-          <Text style={styles.titleTop}>FRANCHISE</Text>
-          <Animated.Text style={[styles.titleBottom, { transform: [{ scale: accentPulse }] }]}>
+          <Text style={styles.titleTop} numberOfLines={1} adjustsFontSizeToFit>FRANCHISE</Text>
+          <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={[styles.titleBottom, { transform: [{ scale: accentPulse }] }]}>
             SOCIAL
           </Animated.Text>
           <View style={styles.divider} />
@@ -158,8 +158,8 @@ const styles = StyleSheet.create({
   tickerItem: { color: '#00ff87', fontSize: 11, fontWeight: '800', letterSpacing: 2, paddingHorizontal: 4 },
   tickerDot: { color: '#444', fontSize: 11 },
   centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  titleTop: { fontSize: 48, fontWeight: '900', color: '#ffffff', letterSpacing: 6, textAlign: 'center' },
-  titleBottom: { fontSize: 48, fontWeight: '900', color: '#00ff87', letterSpacing: 6, textAlign: 'center', textShadowColor: '#00ff87', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
+  titleTop: { fontSize: 42, fontWeight: '900', color: '#ffffff', letterSpacing: 4, textAlign: 'center' },
+  titleBottom: { fontSize: 42, fontWeight: '900', color: '#00ff87', letterSpacing: 4, textAlign: 'center', textShadowColor: '#00ff87', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
   divider: { height: 2, width: 60, backgroundColor: '#00ff87', alignSelf: 'center', marginTop: 18, marginBottom: 14 },
   tagline: { fontSize: 12, color: '#aaaaaa', textAlign: 'center', letterSpacing: 3, fontWeight: '600' },
   buttonsContainer: { paddingHorizontal: 32, gap: 12 },
