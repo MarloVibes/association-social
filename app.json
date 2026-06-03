@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +24,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -38,6 +44,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00ff87",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
@@ -55,6 +69,11 @@
     },
     "updates": {
       "url": "https://u.expo.dev/e6c2d061-fbb5-4035-b2b0-a9670cfe3b19"
+    },
+    "notification": {
+      "icon": "./assets/images/icon.png",
+      "color": "#00ff87",
+      "iosDisplayInForeground": true
     }
   }
 }

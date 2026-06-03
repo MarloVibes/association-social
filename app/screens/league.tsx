@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
@@ -43,10 +43,17 @@ export default function LeagueScreen() {
   const currentYear = league?.currentYear || 2024;
   const teamAbbr = myTeam?.abbreviation || '';
   const teamColors = getTeamColors(teamAbbr || 'ATL', currentYear);
-  const teamPrimary = teamColors[0];
+  const teamPrimary = teamColors[0] || '#1a1a1a';
   const teamSecondary = teamColors[1] || '#ffffff';
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const stickyOpacity = scrollY.interpolate({
+    inputRange: [100, 180],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
   const hexToLum = (hex: string) => {
-    if (!hex || !hex.startsWith('#') || hex.length < 7) return 0.5;
+    if (!hex || typeof hex !== 'string' || !hex.startsWith('#') || hex.length < 7) return 0.5;
     const r = parseInt(hex.slice(1,3), 16) / 255;
     const g = parseInt(hex.slice(3,5), 16) / 255;
     const b = parseInt(hex.slice(5,7), 16) / 255;
@@ -91,7 +98,7 @@ export default function LeagueScreen() {
     );
     const unsubscribe = onSnapshot(activityQuery, snap => {
       setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
     return () => unsubscribe();
   }, [leagueId]);
@@ -160,7 +167,32 @@ export default function LeagueScreen() {
   const channelIcon = CHANNEL_ICON[league.sport] || '💬';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <Animated.View
+        pointerEvents='box-none'
+        style={[styles.stickyHeader, { opacity: stickyOpacity, backgroundColor: teamAbbr ? teamPrimary : '#0a0a0a', borderBottomColor: teamAbbr ? teamPrimary : '#1a1a1a' }]}
+      >
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')} style={{ paddingHorizontal: 12 }}>
+          <Text style={[styles.stickyBack, { color: '#ffffff' }]}>←</Text>
+        </TouchableOpacity>
+        <Text style={[styles.stickyTitle, { color: '#ffffff' }]} numberOfLines={1}>{league.name}</Text>
+        {isCommissioner ? (
+          <TouchableOpacity onPress={() => router.push({ pathname: '/screens/league-settings', params: { leagueId } })} style={{ paddingHorizontal: 12 }}>
+            <Text style={[styles.stickyBack, { color: '#ffffff' }]}>⚙️</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+      </Animated.View>
+      <Animated.ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 90 }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
       <View style={styles.inner}>
 
         {/* Header */}
@@ -225,22 +257,21 @@ export default function LeagueScreen() {
 
         {/* My Team or Pick Team */}
         {myTeam ? (
-          <View style={[styles.myTeamCard, { borderColor: teamPrimary + "88", backgroundColor: teamPrimary + "11" }]}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.myTeamCard, { borderColor: teamPrimary + "88", backgroundColor: teamPrimary + "11" }]}
+            onPress={() => router.push({
+              pathname: '/screens/roster',
+              params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
+            })}
+          >
             <View style={styles.myTeamCardHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={[styles.myTeamCardLabel, { color: teamText }]}>My Team</Text>
                 <Text style={[styles.myTeamCardName, { color: teamNameColor }]}>{myTeam.name}</Text>
                 <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
               </View>
-              <TouchableOpacity
-                style={[styles.rosterBtn, { backgroundColor: teamPrimary }]}
-                onPress={() => router.push({
-                  pathname: '/screens/roster',
-                  params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
-                })}
-              >
-                <Text style={styles.rosterBtnText}>Roster</Text>
-              </TouchableOpacity>
+              <Text style={[styles.myTeamChevron, { color: teamText }]}>›</Text>
             </View>
             {myTeam.players?.length > 0 && (
               <View style={styles.myTeamPlayers}>
@@ -252,11 +283,11 @@ export default function LeagueScreen() {
                   </View>
                 ))}
                 {myTeam.players.length > 3 && (
-                  <Text style={styles.myTeamMorePlayers}>+{myTeam.players.length - 3} more players</Text>
+                  <Text style={[styles.myTeamMorePlayers, { color: teamText }]}>+{myTeam.players.length - 3} more players →</Text>
                 )}
               </View>
             )}
-          </View>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={styles.pickTeamBtn}
@@ -276,7 +307,7 @@ export default function LeagueScreen() {
 
         {/* League Activity Carousel */}
         <View style={styles.activityCarouselHeader}>
-          <Text style={styles.sectionTitle}>League Activity</Text>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
           {activity.length > 0 && (
             <View style={styles.activityNav}>
               <TouchableOpacity
@@ -354,7 +385,14 @@ export default function LeagueScreen() {
         })()}
 
         <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
+          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, marginTop: 0, marginBottom: 16 }]}
+          onPress={() => router.push({ pathname: '/screens/league-activity', params: { leagueId } })}
+        >
+          <Text style={[styles.rostersBtnText, { color: teamText }]}>📜 League Activity</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, marginTop: 0, marginBottom: 16 }]}
           onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
         >
           <Text style={[styles.rostersBtnText, { color: teamText }]}>📋 League Rosters</Text>
@@ -363,7 +401,7 @@ export default function LeagueScreen() {
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
-            <Text style={styles.sectionTitle}>Commissioner Controls</Text>
+            <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Commissioner Controls</Text>
             <TouchableOpacity
               style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
@@ -383,10 +421,10 @@ export default function LeagueScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.advanceSeasonBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary }]}
+              style={[styles.advanceSeasonBtn, { backgroundColor: '#2a1a00', borderColor: '#ffaa00', marginTop: 12 }]}
               onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
             >
-              <Text style={[styles.advanceSeasonBtnText, { color: teamText }]}>⏩ Advance Season</Text>
+              <Text style={[styles.advanceSeasonBtnText, { color: '#ffaa00' }]}>⏩ Advance Season</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -400,7 +438,8 @@ export default function LeagueScreen() {
         <View style={styles.spacer} />
       </View>
           <GlobalNav />
-    </ScrollView>
+      </Animated.ScrollView>
+    </View>
   );
 }
 
@@ -427,6 +466,7 @@ const styles = StyleSheet.create({
   channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
   myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
+  myTeamChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
   myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   myTeamCardLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
   myTeamCardName: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 2 },
@@ -481,12 +521,28 @@ const styles = StyleSheet.create({
   memberRole: { color: '#00ff87', fontSize: 12 },
   dmSmallBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
   dmSmallBtnText: { color: '#8888ff', fontSize: 12, fontWeight: '700' },
-  commSection: { marginBottom: 16 },
+  commSection: { marginTop: 32, marginBottom: 16, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#1a1a1a' },
+  stickyHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    paddingTop: 60,
+    paddingBottom: 12,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  stickyTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700' },
+  stickyBack: { fontSize: 22, fontWeight: '700' },
   inviteBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, marginBottom: 10 },
   inviteBtnText: { fontSize: 15, fontWeight: '700' },
   advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
-  rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12 },
+  rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
   deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },

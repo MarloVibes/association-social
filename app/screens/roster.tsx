@@ -291,6 +291,7 @@ export default function RosterScreen() {
     if (isOwned) {
       // My player — trade, block, untouchable, drop
       Alert.alert(player.full_name || player.name, 'What would you like to do?', [
+        { text: '🤝 Trade Player', onPress: () => tradeMyPlayer(player) },
         { text: '🔄 Trade Block', onPress: () => toggleTradeBlock(player) },
         { text: '🔒 Untouchable', onPress: () => toggleUntouchable(player) },
         { text: '❌ Drop', style: 'destructive', onPress: () => handleDropPlayer(player) },
@@ -323,14 +324,42 @@ export default function RosterScreen() {
     const user = auth.currentUser;
     if (!user) return;
     try {
-      // Find my team
+      // Find my team and all teams (to determine player's owner)
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const myTeam = teamsSnap.docs.find(d => d.data().gmId === user.uid);
+      const allTeams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const myTeam = allTeams.find(t => t.gmId === user.uid);
       if (!myTeam) { Alert.alert('No team', 'You need a team to add targets.'); return; }
-      const current = myTeam.data().targetList || [];
+      const current = myTeam.targetList || [];
       const pid = player.player_id || player.full_name;
       if (current.includes(pid)) { Alert.alert('Already targeted', player.full_name + ' is already on your target list.'); return; }
       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeam.id), { targetList: [...current, pid] });
+
+      // Find which team owns this player
+      const ownerTeam = allTeams.find((t: any) =>
+        (t.players || []).some((p: any) => (p.player_id || p.full_name) === pid)
+      );
+
+      // If owned by ANOTHER team, notify that team's GM only (no public activity)
+      if (ownerTeam && ownerTeam.gmId && ownerTeam.gmId !== user.uid) {
+        try {
+          await updateDoc(doc(db, 'users', ownerTeam.gmId), {
+            notifications: arrayUnion({
+              type: 'target_interest',
+              leagueId,
+              fromTeamId: myTeam.id,
+              fromTeamName: myTeam.name || 'A team',
+              playerName: player.full_name || player.name,
+              createdAt: new Date().toISOString(),
+              message: (myTeam.name || 'A team') + ' is interested in ' + (player.full_name || player.name),
+              read: false,
+            }),
+          });
+        } catch (e) {
+          console.warn('Failed to notify target owner', e);
+        }
+      }
+      // Free agent or own team: no notification, no activity log
+
       Alert.alert('🎯 Added to Target List', player.full_name);
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
@@ -371,6 +400,39 @@ export default function RosterScreen() {
         ]
       );
     } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const tradeMyPlayer = async (player: any) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const otherTeams = teams.filter((t: any) => t.gmId && t.gmId !== user.uid);
+      if (otherTeams.length === 0) {
+        Alert.alert('No teams to trade with', 'There are no other teams with GMs in this league.');
+        return;
+      }
+      const buttons: any[] = otherTeams.map((t: any) => ({
+        text: t.name || t.abbreviation || 'Team',
+        onPress: () => {
+          router.push({
+            pathname: '/screens/trade-room',
+            params: {
+              leagueId,
+              otherUid: t.gmId,
+              otherTeamId: t.id,
+              otherTeamName: t.name || 'Opponent',
+              prefillMyPlayer: JSON.stringify(player),
+            },
+          });
+        },
+      }));
+      buttons.push({ text: 'Cancel', style: 'cancel' });
+      Alert.alert('Trade ' + (player.full_name || player.name) + ' to...', 'Pick a team', buttons);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
   };
 
   const offerTrade = async (player: any) => {

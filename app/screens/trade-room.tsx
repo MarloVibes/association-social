@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -32,7 +32,7 @@ function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRe
       <View style={styles.chipInfo}>
         <Text style={styles.chipPos}>{player?.position || '?'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{player?.full_name}</Text>
-        {effSalary > 0 ? <Text style={styles.chipSalary}>{effSalary <= 1272870 ? '$Min' : '$' + (effSalary / 1000000).toFixed(1) + 'M'}</Text> : null}
+        <Text style={styles.chipSalary}>{effSalary > 0 ? (effSalary <= 1272870 ? '$Min' : '$' + (effSalary / 1000000).toFixed(1) + 'M') : '$—'}</Text>
       </View>
       {onRemove && !locked ? (
         <TouchableOpacity style={styles.chipRemove} onPress={onRemove}>
@@ -44,7 +44,7 @@ function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRe
 }
 
 export default function TradeRoomScreen() {
-  const params = useLocalSearchParams<{ leagueId: string; otherUid: string; otherTeamId: string; otherTeamName: string; prefillPlayer?: string }>();
+  const params = useLocalSearchParams<{ leagueId: string; otherUid: string; otherTeamId: string; otherTeamName: string; prefillPlayer?: string; prefillMyPlayer?: string }>();
   const leagueId = String(params.leagueId || '');
   const otherUid = String(params.otherUid || '');
   const otherTeamId = String(params.otherTeamId || '');
@@ -130,6 +130,25 @@ export default function TradeRoomScreen() {
               }
             }
           }
+
+          // Notify target team's GM that a trade room was opened
+          try {
+            await updateDoc(doc(db, 'users', otherUid), {
+              notifications: arrayUnion({
+                type: 'trade_room_opened',
+                leagueId,
+                roomId,
+                otherUid: myUid,
+                otherTeamId: mine?.id || '',
+                otherTeamName: mine?.name || 'A team',
+                createdAt: new Date().toISOString(),
+                message: (mine?.name || 'A team') + ' opened a trade room with you. Join to negotiate live.',
+                read: false,
+              }),
+            });
+          } catch (e) {
+            console.warn('Failed to notify target team of trade room', e);
+          }
         } else {
           // Auto-reset terminal rooms when re-entered (cancelled or executed)
           const existingData = roomSnap.data() as any;
@@ -201,9 +220,16 @@ export default function TradeRoomScreen() {
   // Real-time room listener
   useEffect(() => {
     if (!leagueId || !roomId) return;
+    let prevStatus: string | null = null;
     const unsub = onSnapshot(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), snap => {
+      const snapData = snap.data() as any;
+      if (snapData?.status === 'executed' && prevStatus && prevStatus !== 'executed') {
+        // Trade executed remotely — show alert and route back
+        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
+      }
+      prevStatus = snapData?.status || null;
       if (snap.exists()) setRoom({ id: snap.id, ...snap.data() });
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId, roomId]);
 
@@ -229,6 +255,28 @@ export default function TradeRoomScreen() {
     // Only run on first room load when prefillPlayer is present
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!room, params.prefillPlayer]);
+
+  // Prefill MY side with a player (from "Trade Player" button on roster)
+  useEffect(() => {
+    if (!room) return;
+    if (room.status === 'cancelled' || room.status === 'executed') return;
+    const raw = params.prefillMyPlayer;
+    if (!raw) return;
+    try {
+      const pre = JSON.parse(String(raw));
+      if (!pre || !pre.full_name) return;
+      const offerKey = isHost ? 'hostOffer' : 'guestOffer';
+      const current = room[offerKey] || [];
+      const alreadyThere = current.some((p: any) => getPlayerKey(p) === getPlayerKey(pre));
+      if (alreadyThere) return;
+      if (current.length >= MAX_PER_SIDE) return;
+      updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+        [offerKey]: [...current, pre],
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!room, params.prefillMyPlayer]);
 
   // Heartbeat: write my presence every 10s
   useEffect(() => {
@@ -437,6 +485,7 @@ export default function TradeRoomScreen() {
   };
 
   const handleConfirm = async () => {
+    console.log('[handleConfirm] called', { passes: salaryCheck.passes, overrideAppliedLocal, salaryOverrideApplied: room?.salaryOverrideApplied, myOfferLen: myOffer.length, otherOfferLen: otherOffer.length, anyConfirmed, myConfirmed });
     if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
       const myNeed = myShortfall;
       const theirNeed = otherShortfall;
@@ -521,7 +570,7 @@ export default function TradeRoomScreen() {
         return;
       }
       if (result?.executed) {
-        Alert.alert('Trade executed!', 'Players have been swapped.');
+        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => { console.log('Trade OK pressed - calling router.back()'); router.back(); } }]);
         // Notify other side
         await updateDoc(doc(db, 'users', otherUid), {
           notifications: arrayUnion({
@@ -535,6 +584,46 @@ export default function TradeRoomScreen() {
             message: 'Your trade with ' + (myTeam?.name || 'opponent') + ' has been completed.',
           }),
         });
+
+        // Log to league activity feed (visible on league screen + dashboard trade highlights)
+        try {
+          const hostNames = (result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean).join(', ') || 'players';
+          const guestNames = (result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean).join(', ') || 'players';
+          const activityMsg = (result.hostName || 'Team A') + ' traded ' + hostNames + ' to ' + (result.guestName || 'Team B') + ' for ' + guestNames;
+          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+            type: 'trade_executed',
+            message: activityMsg,
+            hostTeamId: room.hostTeamId,
+            guestTeamId: room.guestTeamId,
+            hostName: result.hostName,
+            guestName: result.guestName,
+            createdAt: serverTimestamp(),
+          });
+        } catch (e) {
+          console.warn('Failed to log trade to activity', e);
+        }
+
+        // Notify ALL league members (so non-participants get alerts too)
+        try {
+          const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+          const members: string[] = leagueSnap.data()?.members || [];
+          const message = (result.hostName || 'Team A') + ' and ' + (result.guestName || 'Team B') + ' completed a trade.';
+          for (const memberUid of members) {
+            if (memberUid === myUid || memberUid === otherUid) continue;
+            await updateDoc(doc(db, 'users', memberUid), {
+              notifications: arrayUnion({
+                type: 'trade_executed_league',
+                leagueId,
+                roomId,
+                createdAt: new Date().toISOString(),
+                message,
+                read: false,
+              }),
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to notify league members', e);
+        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -800,16 +889,22 @@ export default function TradeRoomScreen() {
                 <Text style={styles.ctaDeclineText}>Unconfirm</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={[styles.ctaBtn, styles.ctaAccept]} onPress={handleConfirm}>
+              <TouchableOpacity style={[styles.ctaBtn, styles.ctaAccept, !isLive && { opacity: 0.4 }]} onPress={handleConfirm} disabled={!isLive}>
                 <Text style={styles.ctaAcceptText}>Confirm</Text>
               </TouchableOpacity>
             )}
           </View>
-        ) : (
+        ) : (myOffer.length > 0 && otherOffer.length > 0) ? (
           <View style={styles.footerRow}>
-            <TouchableOpacity style={[styles.ctaBtn, styles.ctaAccept]} onPress={handleConfirm}>
+            <TouchableOpacity style={[styles.ctaBtn, styles.ctaAccept, !isLive && { opacity: 0.4 }]} onPress={handleConfirm} disabled={!isLive}>
               <Text style={styles.ctaAcceptText}>Confirm</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.ctaBtn, styles.ctaCounter]} onPress={handleSendOffer}>
+              <Text style={styles.ctaCounterText}>Send Offer</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.footerRow}>
             <TouchableOpacity style={[styles.ctaBtn, styles.ctaCounter]} onPress={handleSendOffer}>
               <Text style={styles.ctaCounterText}>Send Offer</Text>
             </TouchableOpacity>

@@ -40,7 +40,7 @@ export default function DMScreen() {
     const unsubscribe = onSnapshot(q, snap => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsubscribe();
   }, [dmId]);
 

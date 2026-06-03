@@ -1,13 +1,15 @@
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import GlobalNav from '@/components/GlobalNav';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { usePresence } from '@/hooks/usePresence';
 
 const SPORT_LABELS: Record<string, string> = {
   nba: 'NBA 2K',
@@ -22,6 +24,9 @@ const SPORT_EMOJI: Record<string, string> = {
 };
 
 export default function DashboardScreen() {
+  usePushNotifications();
+  usePresence();
+
   const [profile, setProfile] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
@@ -30,6 +35,9 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingInvites, setPendingInvites] = useState(0);
+  const [leagueInvites, setLeagueInvites] = useState<any[]>([]);
+  const [onlineFriends, setOnlineFriends] = useState<any[]>([]);
+  const [tradeHighlights, setTradeHighlights] = useState<any[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
     try {
@@ -45,11 +53,69 @@ export default function DashboardScreen() {
       const allNotifs = profileData.notifications || [];
       const unreadCount = allNotifs.filter((n: any) => !n.read).length;
       const leagueInviteCount = (profileData.leagueInvites || []).length;
+      setLeagueInvites(profileData.leagueInvites || []);
+
+      // Fetch online friends (lastActive within 5 minutes)
+      const friendUids: string[] = profileData.friends || [];
+      if (friendUids.length > 0) {
+        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        const online: any[] = [];
+        // Firestore 'in' query supports max 10, so batch if needed
+        for (let i = 0; i < friendUids.length; i += 10) {
+          const batch = friendUids.slice(i, i + 10);
+          try {
+            const friendDocs = await Promise.all(
+              batch.map(uid => getDoc(doc(db, 'users', uid)))
+            );
+            for (const fdoc of friendDocs) {
+              if (!fdoc.exists()) continue;
+              const fdata = fdoc.data();
+              const lastActive = fdata.lastActive?.toMillis?.();
+              if (lastActive && lastActive > fiveMinAgo) {
+                online.push({ uid: fdoc.id, displayName: fdata.displayName, username: fdata.username, photoUrl: fdata.photoUrl || null });
+              }
+            }
+          } catch {}
+        }
+        setOnlineFriends(online);
+      } else {
+        setOnlineFriends([]);
+      }
       setPendingInvites(unreadCount + leagueInviteCount);
 
       const leagueIds: string[] = profileData.leagues || [];
       if (leagueIds.length === 0) {
         setLeagues([]);
+
+      // Fetch recent trade block highlights across all leagues (last 7 days)
+      try {
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const allTrades: any[] = [];
+        for (const leagueId of leagueIds) {
+          try {
+            const actQ = query(
+              collection(db, 'leagues', leagueId, 'activity'),
+              orderBy('createdAt', 'desc')
+            );
+            const actSnap = await getDocs(actQ);
+            for (const d of actSnap.docs) {
+              const data: any = d.data();
+              if (data.type !== 'tradeblock' && data.type !== 'trade_listing') continue;
+              const createdMs = data.createdAt?.toMillis?.() || 0;
+              if (createdMs < sevenDaysAgo) continue;
+              allTrades.push({
+                id: d.id,
+                leagueId,
+                leagueName: leagueData.find((l: any) => l.id === leagueId)?.name || 'League',
+                ...data,
+              });
+            }
+          } catch {}
+        }
+        // Sort by recency, take top 5
+        allTrades.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        setTradeHighlights(allTrades.slice(0, 5));
+      } catch {}
         setRecentActivity([]);
         setLoadingLeagues(false);
         return;
@@ -141,6 +207,59 @@ export default function DashboardScreen() {
     return Math.floor(diff / 86400) + 'd ago';
   };
 
+
+  const handleAcceptInvite = async (invite: any) => {
+    const u = auth.currentUser;
+    if (!u) return;
+    try {
+      // Add user to league members
+      await updateDoc(doc(db, 'leagues', invite.leagueId), {
+        members: arrayUnion(u.uid),
+      });
+      // Add league to user's leagues list
+      await updateDoc(doc(db, 'users', u.uid), {
+        leagues: arrayUnion(invite.leagueId),
+        leagueInvites: arrayRemove(invite),
+      });
+      // Remove from league's sent_invites
+      try {
+        const { deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'leagues', invite.leagueId, 'sent_invites', u.uid));
+      } catch {}
+      Alert.alert('Joined!', 'Welcome to ' + invite.leagueName);
+      setLeagueInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
+      onRefresh();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const handleDeclineInvite = async (invite: any) => {
+    const u = auth.currentUser;
+    if (!u) return;
+    Alert.alert('Decline Invite', 'Decline invite to ' + invite.leagueName + '?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Decline',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await updateDoc(doc(db, 'users', u.uid), {
+              leagueInvites: arrayRemove(invite),
+            });
+            try {
+              const { deleteDoc } = await import('firebase/firestore');
+              await deleteDoc(doc(db, 'leagues', invite.leagueId, 'sent_invites', u.uid));
+            } catch {}
+            setLeagueInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.wrapper}>
       <ScrollView
@@ -148,6 +267,10 @@ export default function DashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#00ff87' colors={['#00ff87']} />}
       >
         <View style={styles.inner}>
+          <View style={styles.titleBlock}>
+            <Text style={styles.appTitle}>Franchise Social</Text>
+            <Text style={styles.appSubtitle}>Main Menu</Text>
+          </View>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.push('/screens/profile')}>
               <View style={styles.avatar}>
@@ -201,6 +324,55 @@ export default function DashboardScreen() {
               <Text style={styles.mvpButtonStar}>⭐</Text>
             </LinearGradient>
           </TouchableOpacity>
+
+          {onlineFriends.length > 0 && (
+            <View style={styles.onlineSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>🟢 Online Now</Text>
+                <Text style={styles.onlineCount}>{onlineFriends.length}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 4 }}>
+                {onlineFriends.map((f: any) => (
+                  <TouchableOpacity
+                    key={f.uid}
+                    style={styles.onlineFriendCard}
+                    onPress={() => router.push({ pathname: '/screens/profile', params: { uid: f.uid } })}
+                  >
+                    <View style={styles.onlineAvatarWrap}>
+                      <View style={styles.onlineAvatar}>
+                        <Text style={styles.onlineAvatarText}>{(f.displayName || '?')[0].toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.onlineDot} />
+                    </View>
+                    <Text style={styles.onlineName} numberOfLines={1}>{f.displayName || f.username || 'GM'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {tradeHighlights.length > 0 && (
+            <View style={styles.tradesSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>💰 Trade Block</Text>
+                <Text style={styles.tradesSubtitle}>Last 7 days</Text>
+              </View>
+              {tradeHighlights.map((t: any) => (
+                <TouchableOpacity
+                  key={t.leagueId + '-' + t.id}
+                  style={styles.tradeCard}
+                  onPress={() => router.push({ pathname: '/screens/trade-channel', params: { leagueId: t.leagueId, channelId: 'trade-center' } })}
+                >
+                  <Text style={styles.tradeIcon}>{t.type === 'trade_listing' ? '💰' : '🔄'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tradeMessage} numberOfLines={2}>{t.message}</Text>
+                    <Text style={styles.tradeLeague}>{t.leagueName} · {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : ''}</Text>
+                  </View>
+                  <Text style={styles.tradeChevron}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Leagues</Text>
@@ -269,6 +441,9 @@ const styles = StyleSheet.create({
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#1a1a1a', borderWidth: 2, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, fontWeight: '700', color: '#00ff87' },
   headerCenter: { flex: 1 },
+  titleBlock: { alignItems: 'center', marginBottom: 20 },
+  appTitle: { color: '#00ff87', fontSize: 24, fontWeight: '800', letterSpacing: 0.5, textAlign: 'center' },
+  appSubtitle: { color: '#666', fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 4 },
   greeting: { fontSize: 12, color: '#888888' },
   name: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
   signOutBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
@@ -313,6 +488,32 @@ const styles = StyleSheet.create({
   mvpButtonDesc: { color: 'rgba(0,0,0,0.7)', fontSize: 12, fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
+  invitesSection: { marginBottom: 24 },
+  invitesCount: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
+  inviteCard: { backgroundColor: '#0a1a0a', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#1a3a1a', marginBottom: 10 },
+  inviteInfo: { marginBottom: 12 },
+  inviteLeagueName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  inviteFrom: { color: '#888', fontSize: 13, marginTop: 2 },
+  inviteBtnRow: { flexDirection: 'row', gap: 10 },
+  inviteAcceptBtn: { flex: 1, backgroundColor: '#00ff87', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  inviteAcceptText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  inviteDeclineBtn: { flex: 1, backgroundColor: '#1a1a1a', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
+  inviteDeclineText: { color: '#888', fontWeight: '600', fontSize: 14 },
+  onlineSection: { marginBottom: 24 },
+  onlineCount: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
+  onlineFriendCard: { alignItems: 'center', width: 70 },
+  onlineAvatarWrap: { position: 'relative' },
+  onlineAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#00ff87' },
+  onlineAvatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00ff87', borderWidth: 2, borderColor: '#000' },
+  onlineName: { color: '#ccc', fontSize: 11, marginTop: 6, fontWeight: '600', textAlign: 'center' },
+  tradesSection: { marginBottom: 24 },
+  tradesSubtitle: { color: '#666', fontSize: 12, fontWeight: '500' },
+  tradeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#1a1a1a', marginBottom: 8, gap: 12 },
+  tradeIcon: { fontSize: 22 },
+  tradeMessage: { color: '#ddd', fontSize: 14, lineHeight: 18 },
+  tradeLeague: { color: '#666', fontSize: 11, marginTop: 3, fontWeight: '500' },
+  tradeChevron: { color: '#555', fontSize: 22, fontWeight: '300' },
   sectionAction: { color: '#00ff87', fontSize: 14, fontWeight: '600' },
   loadingCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 32, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },

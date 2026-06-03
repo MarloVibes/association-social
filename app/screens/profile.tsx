@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, deleteDoc, arrayRemove } from 'firebase/firestore';
+import { deleteUser, signOut } from 'firebase/auth';
 import { blockUser } from '@/constants/moderation';
 import { isMutuallyBlocked } from '@/utils/blockCheck';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -188,6 +189,58 @@ export default function ProfileScreen() {
     } catch (e: any) { Alert.alert('Upload failed', e.message); }
     setUploadingPhoto(false);
   };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your profile, leagues membership, and authentication. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            const u = auth.currentUser;
+            if (!u) return;
+            try {
+              // TODO: When subscriptions launch (RevenueCat / Stripe):
+              //   1. Cancel active subscription via RevenueCat API BEFORE deleting user
+              //   2. Wait for cancellation confirmation
+              //   3. Apple App Store requires this — submission will be rejected
+              //      if delete-account doesn't cancel billing.
+              //   Example: await Purchases.deleteUser() or call your backend
+              //   to revoke the subscription, then proceed.
+
+              // Remove user from all their leagues
+              const userLeagues: string[] = profile?.leagues || [];
+              for (const leagueId of userLeagues) {
+                try {
+                  await updateDoc(doc(db, 'leagues', leagueId), {
+                    members: arrayRemove(u.uid),
+                  });
+                } catch {}
+              }
+              // Delete the user's Firestore doc
+              await deleteDoc(doc(db, 'users', u.uid));
+              // Delete the auth account
+              await deleteUser(u);
+              Alert.alert('Account Deleted', 'Your account has been removed.');
+              router.replace('/');
+            } catch (e: any) {
+              Alert.alert(
+                'Delete Failed',
+                e.code === 'auth/requires-recent-login'
+                  ? 'Please sign out and sign back in, then try again.'
+                  : e.message
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
@@ -497,12 +550,25 @@ export default function ProfileScreen() {
         <Text style={styles.manageBlockedText}>Manage Blocked Users ›</Text>
       </TouchableOpacity>
     )}
+
+    {isOwnProfile && (
+      <View style={styles.dangerZone}>
+        <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+          <Text style={styles.deleteAccountText}>🗑️ Delete Account</Text>
+        </TouchableOpacity>
+      </View>
+    )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
+  dangerZone: { marginTop: 40, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#2a0a0a' },
+  dangerZoneTitle: { color: '#ff4444', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  deleteAccountBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: '#ff4444' },
+  deleteAccountText: { color: '#ff4444', fontSize: 15, fontWeight: '700' },
   loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
   inner: { padding: 24, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },

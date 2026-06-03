@@ -41,7 +41,7 @@ export default function InviteMembersScreen() {
       );
       setPendingInvites(hydrated);
       setInvited(hydrated.map((i: any) => i.uid));
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId]);
 
@@ -53,7 +53,7 @@ export default function InviteMembersScreen() {
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter((r: any) => !r.status || r.status === 'pending');
       setJoinRequests(requests);
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId]);
 
@@ -76,13 +76,13 @@ export default function InviteMembersScreen() {
         .map(d => ({ id: d.id, kind: 'received', ...d.data() } as any))
         .filter((r: any) => RESOLVED.includes(r.status));
       merge();
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     const unsubS = onSnapshot(collection(db, 'leagues', leagueId, 'sent_invites'), (snap) => {
       sent = snap.docs
         .map(d => ({ id: d.id, kind: 'sent', ...d.data() } as any))
         .filter((r: any) => RESOLVED.includes(r.status));
       merge();
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => { unsubR(); unsubS(); };
   }, [leagueId]);
 
@@ -267,7 +267,7 @@ export default function InviteMembersScreen() {
             onChangeText={handleSearch}
           />
           {loading ? <ActivityIndicator color='#00ff87' style={{ marginTop: 20 }} /> : (
-            <FlatList contentContainerStyle={{ paddingBottom: 90 }}
+            <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
               data={displayList}
               keyExtractor={item => item.uid}
               contentContainerStyle={styles.listContent}

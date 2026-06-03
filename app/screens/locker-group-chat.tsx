@@ -80,7 +80,7 @@ export default function LockerGroupChatScreen() {
         return;
       }
       setChat({ id: snap.id, ...data });
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
     const q = query(
       collection(db, 'locker_groups', chatId, 'messages'),
@@ -93,7 +93,7 @@ export default function LockerGroupChatScreen() {
     }, (err) => {
       console.warn('group chat listener', err);
       setLoading(false);
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
     return () => { unsubChat(); unsubMsgs(); };
   }, [chatId]);

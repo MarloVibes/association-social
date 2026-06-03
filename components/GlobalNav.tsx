@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   btn: { flex: 1, alignItems: 'center', gap: 3 },
   iconWrap: { position: 'relative' },
   btnIcon: { fontSize: 20 },
-  btnLabel: { fontSize: 10, color: '#555', fontWeight: '600' },
+  btnLabel: { fontSize: 11, color: '#888', fontWeight: '600' },
   badge: { position: 'absolute', top: -4, right: -8, backgroundColor: '#ff4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
 });

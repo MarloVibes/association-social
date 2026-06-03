@@ -144,7 +144,7 @@ export default function LeagueMembersScreen() {
         <ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 60 }} />
       ) : (
         <>
-          <FlatList contentContainerStyle={{ paddingBottom: 90 }}
+          <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
             data={members}
             keyExtractor={item => item.uid}
             contentContainerStyle={styles.listContent}

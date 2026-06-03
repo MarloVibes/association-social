@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
-import GlobalNav from '@/components/GlobalNav';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
@@ -130,7 +129,7 @@ export default function ChannelScreen() {
         setMessages(newMsgs);
         setBulletinLoaded(true);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      });
+      }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
 
   return () => unsub();
@@ -141,7 +140,7 @@ export default function ChannelScreen() {
     if (channelId === 'ban-list') loadBanList();
     if (channelId === 'highlights') {
       const q = query(collection(db, 'leagues', leagueId, 'channels', 'highlights', 'posts'), orderBy('createdAt', 'desc'));
-      const unsub = onSnapshot(q, snap => setHighlights(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      const unsub = onSnapshot(q, snap => setHighlights(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => { if (err.code !== 'permission-denied') console.error(err); });
       return () => unsub();
     }
     if (channelId === 'reset-requests') loadResetRequests();
@@ -316,6 +315,17 @@ export default function ChannelScreen() {
             }),
           });
         }
+
+        // Log to league activity feed
+        try {
+          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+            type: 'announcement',
+            message: '📰 News posted inside the league',
+            createdAt: serverTimestamp(),
+          });
+        } catch (e) {
+          console.warn('Failed to log announcement to activity', e);
+        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -448,7 +458,6 @@ export default function ChannelScreen() {
             </View>
           )}
         </ScrollView>
-        <GlobalNav />
       </View>
     );
   }
@@ -636,7 +645,6 @@ export default function ChannelScreen() {
             </ScrollView>
           </View>
         </Modal>
-        <GlobalNav />
       </View>
     );
   }
@@ -841,7 +849,6 @@ export default function ChannelScreen() {
             </ScrollView>
           </View>
         </Modal>
-        <GlobalNav />
       </View>
     );
   }
@@ -1142,7 +1149,6 @@ export default function ChannelScreen() {
             </View>
           </View>
         </Modal>
-        <GlobalNav />
       </View>
     );
   }
@@ -1259,7 +1265,6 @@ export default function ChannelScreen() {
             </View>
           </View>
         )}
-        <GlobalNav />
       </View>
     );
   }
@@ -1489,7 +1494,6 @@ export default function ChannelScreen() {
             </ScrollView>
           </View>
         </Modal>
-        <GlobalNav />
       </View>
     );
   }
@@ -1638,8 +1642,7 @@ export default function ChannelScreen() {
           )}
         </View>
       </Modal>
-      <GlobalNav />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
   );
 }
 

@@ -82,7 +82,7 @@ export default function TradeChannelScreen() {
     );
     const unsub = onSnapshot(q, snap => {
       setListings(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((m: any) => m.type === 'trade_listing' && m.status === 'available'));
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId]);
 
@@ -124,11 +124,11 @@ export default function TradeChannelScreen() {
     const unsubHost = onSnapshot(hostQ, snap => {
       hostRooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       merge();
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     const unsubGuest = onSnapshot(guestQ, snap => {
       guestRooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       merge();
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => { unsubHost(); unsubGuest(); };
   }, [leagueId, user?.uid]);
 
@@ -293,36 +293,27 @@ export default function TradeChannelScreen() {
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('block')} />;
               })}
             </View>
-            {/* Interested In (listings you posted) */}
+            {/* Target List (players from other teams you're watching) */}
             <View style={styles.col}>
               <Text style={styles.colTitle}>TARGET LIST</Text>
               {[0,1,2,3,4,5].map(i => {
-                const myListings = listings.filter((l: any) => l.fromUid === user?.uid);
-                const l = myListings[i];
-                return l ? (
-                  <PlayerSlot key={i} player={l.player} onPress={() =>
-                    Alert.alert('Remove listing?', l.player?.full_name, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Remove', style: 'destructive', onPress: async () => {
-                        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages', l.id), { status: 'cancelled' });
-                        // Remove activity entry
-                        if (l.activityId) {
-                          await deleteDoc(doc(db, 'leagues', leagueId, 'activity', l.activityId));
-                        }
-                        // Remove notifications from all members
-                        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-                        const members = leagueSnap.data()?.members || [];
-                        for (const memberId of members) {
-                          const userSnap = await getDoc(doc(db, 'users', memberId));
-                          const notifs = userSnap.data()?.notifications || [];
-                          const toRemove = notifs.filter((n: any) => n.listingId === l.id);
-                          for (const n of toRemove) {
-                            await updateDoc(doc(db, 'users', memberId), { notifications: arrayRemove(n) });
-                          }
-                        }
-                      }},
-                    ])
-                  } />
+                const targetIds: string[] = myTeam?.targetList || [];
+                const pid = targetIds[i];
+                // Find player across all teams
+                let targetPlayer: any = null;
+                let ownerTeamName = '';
+                if (pid) {
+                  for (const t of allTeams) {
+                    const found = (t.players || []).find((p: any) => (p.player_id || p.full_name) === pid);
+                    if (found) {
+                      targetPlayer = found;
+                      ownerTeamName = t.name || t.abbreviation || '';
+                      break;
+                    }
+                  }
+                }
+                return targetPlayer ? (
+                  <PlayerSlot key={i} player={targetPlayer} onPress={() => setRosterModal('target')} />
                 ) : (
                   <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
                 );
@@ -477,9 +468,36 @@ export default function TradeChannelScreen() {
                       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { tradeBlock: newList });
                     } else if (rosterModal === 'target') {
                       const currentTargets = myTeam?.targetList || [];
-                      const newTargets = currentTargets.includes(pid) ? currentTargets.filter((x: string) => x !== pid) : [...currentTargets, pid];
+                      const isAdding = !currentTargets.includes(pid);
+                      const newTargets = isAdding ? [...currentTargets, pid] : currentTargets.filter((x: string) => x !== pid);
                       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { targetList: newTargets });
                       setMyTeam((prev: any) => ({ ...prev, targetList: newTargets }));
+
+                      // On ADD only: notify owning team's GM if player is on a team (not free agent)
+                      if (isAdding) {
+                        const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
+                        const ownerTeam = allTeams.find((t: any) =>
+                          (t.players || []).some((p: any) => (p.player_id || p.full_name) === pid)
+                        );
+                        if (ownerTeam && ownerTeam.gmId && ownerTeam.gmId !== user?.uid) {
+                          try {
+                            await updateDoc(doc(db, 'users', ownerTeam.gmId), {
+                              notifications: arrayUnion({
+                                type: 'target_interest',
+                                leagueId,
+                                fromTeamId: myTeamId,
+                                fromTeamName: myTeam?.name || 'A team',
+                                playerName: player?.full_name || 'a player',
+                                createdAt: new Date().toISOString(),
+                                message: (myTeam?.name || 'A team') + ' is interested in ' + (player?.full_name || 'a player'),
+                                read: false,
+                              }),
+                            });
+                          } catch (e) {
+                            console.warn('Failed to notify target owner', e);
+                          }
+                        }
+                      }
                     } else {
                       // Untouchables
                       const newList = untouchables.includes(pid) ? untouchables.filter((x: string) => x !== pid) : [...untouchables, pid];

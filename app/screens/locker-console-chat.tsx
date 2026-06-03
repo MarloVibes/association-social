@@ -86,7 +86,7 @@ export default function LockerConsoleChatScreen() {
     }, (err) => {
       console.warn('console chat listener', err);
       setLoading(false);
-    });
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [consoleKey]);
 
