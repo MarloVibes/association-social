@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
@@ -10,6 +10,31 @@ export default function LeagueActivityScreen() {
   const [activity, setActivity] = useState<any[]>([]);
   const [league, setLeague] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'trades' | 'block' | 'signings' | 'other'>('all');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    if (!leagueId) return;
+    setRefreshing(true);
+    try {
+      const q = query(collection(db, 'leagues', leagueId, 'activity'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) { console.error(e); }
+    setRefreshing(false);
+  };
+
+  const FILTER_MAP: Record<string, string[]> = {
+    all: [],
+    trades: ['trade_executed', 'trade_listing'],
+    block: ['tradeblock'],
+    signings: ['pickup', 'sign', 'drop'],
+    other: ['join', 'announcement', 'reset_request'],
+  };
+
+  const filteredActivity = filter === 'all'
+    ? activity
+    : activity.filter(item => FILTER_MAP[filter].includes(item.type));
 
   useEffect(() => {
     if (!leagueId) return;
@@ -35,7 +60,7 @@ export default function LeagueActivityScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00ff87" colors={["#00ff87"]} />}>
         <View style={styles.inner}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()}>
@@ -45,13 +70,31 @@ export default function LeagueActivityScreen() {
             <View style={{ width: 60 }} />
           </View>
 
-          {activity.length === 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
+            {[
+              { key: 'all', label: '🌐 All' },
+              { key: 'trades', label: '🔄 Trades' },
+              { key: 'block', label: '💼 Trade Block' },
+              { key: 'signings', label: '✍️ Signings' },
+              { key: 'other', label: '📰 Other' },
+            ].map(f => (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.chip, filter === f.key && styles.chipActive]}
+                onPress={() => setFilter(f.key as any)}
+              >
+                <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {filteredActivity.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>No activity yet.</Text>
             </View>
           ) : (
             <View style={{ gap: 10 }}>
-              {activity.map((item: any) => {
+              {filteredActivity.map((item: any) => {
                 const typeIcon = item.type === 'pickup' || item.type === 'sign' ? '✍️' :
                   item.type === 'drop' ? '❌' :
                   item.type === 'tradeblock' ? '🔄' :
@@ -112,6 +155,12 @@ export default function LeagueActivityScreen() {
 }
 
 const styles = StyleSheet.create({
+  filterRow: { paddingVertical: 8, paddingHorizontal: 12, marginBottom: 8 },
+  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#1a1a1a' },
+  chipActive: { backgroundColor: '#00ff8722', borderColor: '#00ff87' },
+  chipText: { color: '#888', fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#00ff87' },
+
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   container: { flex: 1, backgroundColor: '#000' },
   inner: { padding: 24, paddingTop: 60 },

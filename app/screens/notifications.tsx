@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -10,6 +10,12 @@ export default function NotificationsScreen() {
   const [invites, setInvites] = useState<any[]>([]);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
+  };
   const [loading, setLoading] = useState(true);
   const user = auth.currentUser;
 
@@ -302,7 +308,7 @@ export default function NotificationsScreen() {
                     {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && (
                       <TouchableOpacity onPress={() => {
                         if (!n.leagueId) return;
-                        if (n.type === 'trade_offer' || n.type === 'trade_executed' || n.type === 'trade_declined' || n.type === 'trade_cancelled' || n.type === 'trade_override_review' || n.type === 'trade_override_approved' || n.type === 'trade_override_denied')
+                        if (n.type === 'trade_offer' || n.type === 'trade_executed' || n.type === 'trade_declined' || n.type === 'trade_cancelled' || n.type === 'trade_room_opened' || n.type === 'trade_override_review' || n.type === 'trade_override_approved' || n.type === 'trade_override_denied')
                           router.push({ pathname: '/screens/trade-room', params: { leagueId: n.leagueId, otherUid: n.otherUid || n.fromUid || '', otherTeamId: n.otherTeamId || '', otherTeamName: n.otherTeamName || n.fromTeamName || '' } });
                         else if (n.type === 'custom_player_submitted')
                           router.push({ pathname: '/screens/pending-players', params: { leagueId: n.leagueId } });
@@ -322,6 +328,7 @@ export default function NotificationsScreen() {
                           {n.type === 'trade_offer' ? 'Review Offer →' :
                            n.type === 'trade_executed' ? 'View Trade →' :
                            n.type === 'trade_declined' || n.type === 'trade_cancelled' ? 'View Room →' :
+                           n.type === 'trade_room_opened' ? 'Join Negotiation →' :
                            n.type === 'trade_override_review' ? 'Review Trade →' :
                            n.type === 'trade_override_approved' ? 'View Trade →' :
                            n.type === 'trade_override_denied' ? 'View Room →' :
