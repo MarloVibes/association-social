@@ -1,3 +1,4 @@
+import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -106,7 +107,20 @@ export default function TeamSelectScreen() {
     setLoading(true);
     try {
       const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
-      const teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+      let teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+      // Compute real player counts from the era_player_pools (the stale .players field has wrong counts)
+      try {
+        const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+        const allPoolPlayers = poolSnap.data()?.players || [];
+        teamList = teamList.map((t: any) => {
+          const realPlayers = allPoolPlayers.filter((p: any) => p.team === t.abbreviation);
+          return realPlayers.length > 0 ? { ...t, players: realPlayers } : t;
+        });
+      } catch (e) {
+        console.warn('Failed to load player pool for counts', e);
+      }
+
       setTeams(teamList);
       flipAnims.current = teamList.map(() => new Animated.Value(0));
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -171,6 +185,16 @@ export default function TeamSelectScreen() {
         }
         if (players.length === 0) players = team.players || [];
       }
+      // Ensure user is a league member BEFORE creating their team (required by rules)
+      // Skip if already a member (arrayUnion is no-op but rule denies non-changing updates)
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const existingMembers: string[] = leagueSnap.data()?.members || [];
+      if (!existingMembers.includes(user.uid)) {
+        await updateDoc(doc(db, 'leagues', leagueId), {
+          members: arrayUnion(user.uid),
+        });
+      }
+
       const teamDocId = leagueId + '_' + user.uid;
       await setDoc(doc(db, 'leagues', leagueId, 'teams', teamDocId), {
         gmId: user.uid,
@@ -181,13 +205,22 @@ export default function TeamSelectScreen() {
         players,
         tradeBlock: [],
       });
+
       await updateDoc(doc(db, 'leagues', leagueId), {
         takenTeams: arrayUnion(team.id),
       });
+
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          leagues: arrayUnion(leagueId),
+        });
+      } catch (e) {
+        console.warn('Failed to add league to user profile', e);
+      }
       router.dismissAll();
       router.replace({ pathname: '/screens/league', params: { leagueId } });
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e?.message || String(e));
       setSaving(false);
     }
   };
@@ -342,6 +375,11 @@ export default function TeamSelectScreen() {
                   disabled={taken}
                 >
                   <View style={[styles.teamColorBar, { backgroundColor: colors[0] }]} />
+                  <Image
+                    source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
+                    style={styles.teamRowLogo}
+                    resizeMode='contain'
+                  />
                   <View style={styles.teamRowInfo}>
                     <Text style={[styles.teamRowName, taken && styles.teamRowNameTaken]}>{team.full_name}</Text>
                     <Text style={styles.teamRowMeta}>{team.abbreviation} · {team.players?.length || 0} players</Text>
@@ -407,6 +445,7 @@ const styles = StyleSheet.create({
   teamRowTaken: { opacity: 0.35 },
   teamRowSelected: { borderColor: '#00ff87', borderWidth: 2 },
   teamColorBar: { width: 6, height: 64 },
+  teamRowLogo: { width: 40, height: 40, marginLeft: 10 },
   teamRowInfo: { flex: 1, paddingVertical: 14, paddingLeft: 14 },
   teamRowName: { color: '#ffffff', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   teamRowNameTaken: { color: '#555' },

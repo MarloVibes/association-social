@@ -3,7 +3,7 @@ import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSna
 import { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
-import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
+import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
@@ -59,6 +59,13 @@ export default function LeagueScreen() {
     const b = parseInt(hex.slice(5,7), 16) / 255;
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
+  // If team color is very dark (close to black), use white as visual fallback for borders/tints
+  const displayPrimary = hexToLum(teamPrimary) < 0.1 ? '#ffffff' : teamPrimary;
+  // Per-team theme overrides (button labels, borders, tints)
+  const teamTheme = getTeamTheme(myTeam?.abbreviation || teamAbbr, league?.era);
+  const titleColor = teamTheme.titleColor;
+  const borderColor = teamTheme.borderColor;
+  const tintColor = teamTheme.tintColor;
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
   const teamNameColor = hexToLum(teamSecondary) < 0.35 || hexToLum(teamSecondary) > 0.95 ? '#ffffff' : teamSecondary;
 
@@ -106,13 +113,32 @@ export default function LeagueScreen() {
 
   const handleLeaveLeague = async () => {
     if (!user) return;
-    Alert.alert('Leave League', 'Are you sure you want to leave this league?', [
+    Alert.alert('Leave League', 'You will lose your team and roster. Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
         style: 'destructive',
         onPress: async () => {
           try {
+            // Delete user's team in this league
+            const teamId = leagueId + '_' + user.uid;
+            let abbreviation = '';
+            try {
+              const teamSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+              if (teamSnap.exists()) {
+                abbreviation = teamSnap.data()?.abbreviation || '';
+                await deleteDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+              }
+            } catch {}
+            // Free up the team in takenTeams
+            if (abbreviation || myTeam?.teamId) {
+              try {
+                await updateDoc(doc(db, 'leagues', leagueId), {
+                  takenTeams: arrayRemove(myTeam?.teamId || abbreviation),
+                });
+              } catch {}
+            }
+            // Remove from members + user's leagues
             await updateDoc(doc(db, 'leagues', leagueId), { members: arrayRemove(user.uid) });
             await updateDoc(doc(db, 'users', user.uid), { leagues: arrayRemove(leagueId) });
             router.replace('/(tabs)/dashboard');
@@ -196,16 +222,16 @@ export default function LeagueScreen() {
       <View style={styles.inner}>
 
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: teamAbbr ? teamPrimary + '22' : '#0a0a0a', borderBottomColor: teamAbbr ? teamPrimary + '44' : '#1a1a1a' }]}>
+        <View style={[styles.header, { backgroundColor: teamAbbr ? tintColor + '22' : '#0a0a0a', borderBottomColor: teamAbbr ? teamTheme.borderColor : '#1a1a1a' }]}>
           <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
-            <Text style={[styles.backText, { color: teamText }]}>← Back</Text>
+            <Text style={[styles.backText, { color: titleColor }]}>← Back</Text>
           </TouchableOpacity>
           {isCommissioner && (
             <TouchableOpacity
-              style={[styles.commBadge, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+              style={[styles.commBadge, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
               onPress={() => router.push({ pathname: '/screens/league-settings', params: { leagueId } })}
             >
-              <Text style={[styles.commBadgeText, { color: teamText }]}>⚙️ Settings</Text>
+              <Text style={[styles.commBadgeText, { color: titleColor }]}>⚙️ Settings</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -213,14 +239,14 @@ export default function LeagueScreen() {
         <View style={styles.leagueNameRow}>
           {myTeam?.abbreviation ? (
             <Image
-              source={{ uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
+              source={getTeamLogoLocal(myTeam.abbreviation, league.era) || { uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
               style={styles.leagueNameLogo}
               resizeMode='contain'
             />
           ) : (
             <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={44} />
           )}
-          <Text style={[styles.leagueName, teamAbbr && { color: '#ffffff' }]}>{league.name}</Text>
+          <Text style={[styles.leagueName, teamAbbr && { color: titleColor }]}>{league.name}</Text>
         </View>
         <View style={styles.leagueMeta}>
           <View style={styles.sportChip}>
@@ -229,26 +255,26 @@ export default function LeagueScreen() {
           <Text style={styles.metaText}>{league.mode} mode</Text>
           <View style={styles.metaBtns}>
             <TouchableOpacity
-              style={[styles.membersTabBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              style={[styles.membersTabBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
               onPress={() => router.push({ pathname: '/screens/league-members', params: { leagueId } })}
             >
-              <Text style={[styles.membersTabBtnText, { color: teamText }]}>👥 Members ({members.length})</Text>
+              <Text style={[styles.membersTabBtnText, { color: titleColor }]}>👥 Members ({members.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.findGMsBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              style={[styles.findGMsBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
-              <Text style={[styles.findGMsBtnText, { color: teamText }]}>🔍 Find GMs</Text>
+              <Text style={[styles.findGMsBtnText, { color: titleColor }]}>🔍 Find GMs</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Channels — front and center */}
-        <TouchableOpacity style={[styles.channelsTab, { borderColor: teamPrimary + '44', backgroundColor: teamPrimary + '11' }]} onPress={goToChannels}>
+        <TouchableOpacity style={[styles.channelsTab, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '22' }]} onPress={goToChannels}>
           <View style={styles.channelsTabLeft}>
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
             <View>
-              <Text style={styles.channelsTabLabel}>{channelLabel}</Text>
+              <Text style={[styles.channelsTabLabel, { color: titleColor }]}>{channelLabel}</Text>
               <Text style={styles.channelsTabSub}>League Chat · Trade Center · Polls · and more</Text>
             </View>
           </View>
@@ -259,7 +285,7 @@ export default function LeagueScreen() {
         {myTeam ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.myTeamCard, { borderColor: teamPrimary + "88", backgroundColor: teamPrimary + "11" }]}
+            style={[styles.myTeamCard, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + "22" }]}
             onPress={() => router.push({
               pathname: '/screens/roster',
               params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
@@ -267,8 +293,8 @@ export default function LeagueScreen() {
           >
             <View style={styles.myTeamCardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.myTeamCardLabel, { color: teamText }]}>My Team</Text>
-                <Text style={[styles.myTeamCardName, { color: teamNameColor }]}>{myTeam.name}</Text>
+                <Text style={styles.myTeamCardLabel}>MY TEAM</Text>
+                <Text style={[styles.myTeamCardName, { color: titleColor }]}>{myTeam.name}</Text>
                 <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
               </View>
               <Text style={[styles.myTeamChevron, { color: teamText }]}>›</Text>
@@ -385,17 +411,17 @@ export default function LeagueScreen() {
         })()}
 
         <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, marginTop: 0, marginBottom: 16 }]}
+          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
           onPress={() => router.push({ pathname: '/screens/league-activity', params: { leagueId } })}
         >
-          <Text style={[styles.rostersBtnText, { color: teamText }]}>📜 League Activity</Text>
+          <Text style={[styles.rostersBtnText, { color: titleColor }]}>📜 League Activity</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary, marginTop: 0, marginBottom: 16 }]}
+          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
           onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
         >
-          <Text style={[styles.rostersBtnText, { color: teamText }]}>📋 League Rosters</Text>
+          <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
         </TouchableOpacity>
 
         {/* Commissioner Controls */}
@@ -403,13 +429,13 @@ export default function LeagueScreen() {
           <View style={styles.commSection}>
             <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Commissioner Controls</Text>
             <TouchableOpacity
-              style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
               <Text style={[styles.inviteBtnText, { color: teamText }]}>📨 Send League Invite</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.inviteBtn, { backgroundColor: teamPrimary + '22', borderColor: teamPrimary + '88' }]}
+              style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
               onPress={async () => {
                 const newPrivacy = league.privacy === 'public' ? 'private' : 'public';
                 await updateDoc(doc(db, 'leagues', leagueId), { privacy: newPrivacy });
@@ -447,7 +473,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   loadingContainer: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
   inner: { padding: 24, paddingTop: 60 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 2 },
   backText: { fontSize: 15, fontWeight: '600' },
   commBadge: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#00ff87' },
   commBadgeText: { color: '#00ff87', fontSize: 12, fontWeight: '600' },
@@ -458,17 +484,17 @@ const styles = StyleSheet.create({
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },
   metaText: { color: '#666', fontSize: 13 },
-  channelsTab: { backgroundColor: '#0a1a2a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a5a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  channelsTab: { backgroundColor: '#0a1a2a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 2, borderColor: '#1a3a5a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   channelsTabLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
   channelsTabIcon: { fontSize: 32 },
   channelsTabLabel: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 3 },
   channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
   channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
+  myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 2 },
   myTeamChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
   myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  myTeamCardLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  myTeamCardLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2, color: '#888' },
   myTeamCardName: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 2 },
   myTeamCardSub: { fontSize: 12, color: '#4a8a4a' },
   myTeamPlayers: { gap: 8 },

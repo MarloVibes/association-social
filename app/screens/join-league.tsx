@@ -104,8 +104,17 @@ export default function JoinLeagueScreen() {
           }),
         });
         setAlreadyMember(prev => new Set([...prev, league.id]));
-        Alert.alert('Joined!', 'You have joined ' + league.name + '!');
-        setSelectedLeague(null);
+        Alert.alert('Joined!', 'Pick your team to start playing.', [{ text: 'Pick Team', onPress: () => {
+          setSelectedLeague(null);
+          router.push({
+            pathname: '/screens/team-select',
+            params: {
+              leagueId: league.id,
+              eraKey: league.era || 'current',
+              isDraft: 'false',
+            },
+          });
+        }}]);
       } else {
         // Send join request
         await addDoc(collection(db, 'leagues', league.id, 'join_requests'), {

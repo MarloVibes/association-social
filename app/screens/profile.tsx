@@ -204,34 +204,91 @@ export default function ProfileScreen() {
             if (!u) return;
             try {
               // TODO: When subscriptions launch (RevenueCat / Stripe):
-              //   1. Cancel active subscription via RevenueCat API BEFORE deleting user
-              //   2. Wait for cancellation confirmation
-              //   3. Apple App Store requires this — submission will be rejected
-              //      if delete-account doesn't cancel billing.
-              //   Example: await Purchases.deleteUser() or call your backend
-              //   to revoke the subscription, then proceed.
+              //   Cancel active subscription via API BEFORE deleting user.
+              //   Apple App Store requires this for any subscription-based app.
 
-              // Remove user from all their leagues
               const userLeagues: string[] = profile?.leagues || [];
+
+              // For each league: handle commissioner transfer + team + member removal
               for (const leagueId of userLeagues) {
                 try {
-                  await updateDoc(doc(db, 'leagues', leagueId), {
-                    members: arrayRemove(u.uid),
-                  });
-                } catch {}
+                  const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+                  if (!leagueSnap.exists()) continue;
+                  const leagueData = leagueSnap.data() as any;
+                  const isCommissioner = leagueData.commissionerId === u.uid;
+                  const members: string[] = leagueData.members || [];
+                  const coComms: string[] = leagueData.coCommissioners || [];
+
+                  // If commissioner, transfer role before leaving
+                  if (isCommissioner) {
+                    // Pick successor: first co-commissioner, else oldest other member
+                    const successor = coComms.find(x => x !== u.uid)
+                      || members.find(x => x !== u.uid);
+
+                    if (successor) {
+                      // Transfer commissioner role + leave members in one update
+                      await updateDoc(doc(db, 'leagues', leagueId), {
+                        commissionerId: successor,
+                        members: members.filter(x => x !== u.uid),
+                        coCommissioners: coComms.filter(x => x !== u.uid && x !== successor),
+                      });
+                    } else {
+                      // No other members — delete the league entirely
+                      // First delete league's teams
+                      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+                      for (const t of teamsSnap.docs) {
+                        try { await deleteDoc(t.ref); } catch {}
+                      }
+                      // Then delete the league doc
+                      try { await deleteDoc(doc(db, 'leagues', leagueId)); } catch {}
+                      continue; // skip to next league
+                    }
+                  } else {
+                    // Just remove from members + coCommissioners
+                    await updateDoc(doc(db, 'leagues', leagueId), {
+                      members: arrayRemove(u.uid),
+                      coCommissioners: arrayRemove(u.uid),
+                    });
+                  }
+
+                  // Delete user's team in this league
+                  try {
+                    const teamId = leagueId + '_' + u.uid;
+                    await deleteDoc(doc(db, 'leagues', leagueId, 'teams', teamId));
+                  } catch {}
+                } catch (e) {
+                  console.warn('League cleanup failed for', leagueId, e);
+                }
               }
+
+              // Remove user from all friends arrays (search users who have them as friend)
+              try {
+                const friendsQ = query(collection(db, 'users'), where('friends', 'array-contains', u.uid));
+                const friendsSnap = await getDocs(friendsQ);
+                for (const fd of friendsSnap.docs) {
+                  try {
+                    await updateDoc(fd.ref, { friends: arrayRemove(u.uid) });
+                  } catch {}
+                }
+              } catch (e) {
+                console.warn('Friend cleanup failed', e);
+              }
+
               // Delete the user's Firestore doc
               await deleteDoc(doc(db, 'users', u.uid));
+
               // Delete the auth account
               await deleteUser(u);
-              Alert.alert('Account Deleted', 'Your account has been removed.');
+
+              Alert.alert('Account Deleted', 'Your account and all associated data have been removed.');
               router.replace('/');
             } catch (e: any) {
+              console.error('Delete account error:', e);
               Alert.alert(
                 'Delete Failed',
                 e.code === 'auth/requires-recent-login'
                   ? 'Please sign out and sign back in, then try again.'
-                  : e.message
+                  : (e.message || String(e))
               );
             }
           },
