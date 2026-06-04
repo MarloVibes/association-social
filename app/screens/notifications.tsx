@@ -207,7 +207,7 @@ export default function NotificationsScreen() {
           <ActivityIndicator size='large' color='#00ff87' />
         </View>
       ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingBottom: 90 }]}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingBottom: 90 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00ff87" colors={["#00ff87"]} />}>
 
           {joinRequests.length > 0 && (
             <>
