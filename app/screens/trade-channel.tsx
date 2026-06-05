@@ -463,9 +463,51 @@ export default function TradeChannelScreen() {
                   style={[styles.rosterRow, isSelected && (rosterModal === 'block' ? styles.rosterRowBlock : rosterModal === 'target' ? styles.rosterRowTarget : styles.rosterRowUntouchable)]}
                   onPress={async () => {
                     if (rosterModal === 'block') {
-                      const newList = tradeBlock.includes(pid) ? tradeBlock.filter(x => x !== pid) : [...tradeBlock, pid];
+                      const wasOnBlock = tradeBlock.includes(pid);
+                      const newList = wasOnBlock ? tradeBlock.filter(x => x !== pid) : [...tradeBlock, pid];
                       setTradeBlock(newList);
                       await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { tradeBlock: newList });
+
+                      // On ADD only: log to activity + notify all league members
+                      if (!wasOnBlock) {
+                        const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
+                        const playerName = player?.full_name || player?.name || 'a player';
+                        const myTeamName = myTeam?.name || 'A GM';
+
+                        // Activity log
+                        try {
+                          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+                            type: 'tradeblock',
+                            message: myTeamName + ' added ' + playerName + ' to the trade block',
+                            leagueId,
+                            uid: user?.uid,
+                            createdAt: serverTimestamp(),
+                          });
+                        } catch (e) { console.warn('activity log failed', e); }
+
+                        // Notify all league members
+                        try {
+                          const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+                          const memberIds: string[] = leagueSnap.data()?.members || [];
+                          const leagueNameFetched = leagueSnap.data()?.name || '';
+                          for (const memberId of memberIds) {
+                            if (memberId === user?.uid) continue;
+                            try {
+                              await updateDoc(doc(db, 'users', memberId), {
+                                notifications: arrayUnion({
+                                  type: 'tradeblock',
+                                  leagueId,
+                                  leagueName: leagueNameFetched,
+                                  message: myTeamName + ' added ' + playerName + ' to the trade block',
+                                  createdAt: new Date().toISOString(),
+                                })
+                              });
+                            } catch (innerErr) {
+                              console.warn('tradeblock notify failed for', memberId, innerErr);
+                            }
+                          }
+                        } catch (e) { console.warn('tradeblock notify outer fail', e); }
+                      }
                     } else if (rosterModal === 'target') {
                       const currentTargets = myTeam?.targetList || [];
                       const isAdding = !currentTargets.includes(pid);

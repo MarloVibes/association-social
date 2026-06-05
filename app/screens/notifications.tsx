@@ -63,6 +63,15 @@ export default function NotificationsScreen() {
         leagues: arrayUnion(invite.leagueId),
         leagueInvites: (await getDoc(doc(db, 'users', user.uid))).data()?.leagueInvites?.filter((i: any) => i.leagueId !== invite.leagueId) || [],
       });
+      // Clean up the invite/request docs so they don't resurface later
+      try { await deleteDoc(doc(db, 'leagues', invite.leagueId, 'sent_invites', user.uid)); } catch {}
+      try {
+        const reqs = await getDocs(query(
+          collection(db, 'leagues', invite.leagueId, 'join_requests'),
+          where('uid', '==', user.uid)
+        ));
+        await Promise.all(reqs.docs.map(d => deleteDoc(d.ref)));
+      } catch {}
       setInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
       router.push({ pathname: '/screens/league', params: { leagueId: invite.leagueId } });
     } catch (e: any) { Alert.alert('Error', e.message); }

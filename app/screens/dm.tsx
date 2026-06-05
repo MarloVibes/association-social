@@ -9,7 +9,6 @@ import {
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
 import { isMutuallyBlocked } from '@/utils/blockCheck';
-import GlobalNav from '@/components/GlobalNav';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
@@ -167,9 +166,9 @@ export default function DMScreen() {
         <View style={styles.emojiPanel}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.emojiGrid}>
-              {EMOJI_LIST.map(e => (
+              {EMOJI_LIST.map((e, i) => (
                 <TouchableOpacity
-                  key={e}
+                  key={i}
                   style={styles.emojiBtn}
                   onPress={() => { setText(prev => prev + e); setShowEmoji(false); }}
                 >
@@ -252,7 +251,6 @@ export default function DMScreen() {
           />
         </View>
       </Modal>
-          <GlobalNav />
     </KeyboardAvoidingView>
   );
 }

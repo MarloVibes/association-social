@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -53,6 +53,15 @@ export default function InviteMembersScreen() {
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter((r: any) => !r.status || r.status === 'pending');
       setJoinRequests(requests);
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
+    return () => unsub();
+  }, [leagueId]);
+
+  // Live league members → drop accepted/added users out of the pending lists
+  useEffect(() => {
+    if (!leagueId) return;
+    const unsub = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
+      setMembers(snap.data()?.members || []);
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId]);
@@ -236,7 +245,18 @@ export default function InviteMembersScreen() {
   };
 
   const displayList = search.length >= 2 ? searchResults : friends;
-  const totalInvitations = joinRequests.length + pendingInvites.length;
+  // Hide any pending entries for users who are already league members.
+  // Covers orphaned sent_invites / join_requests left at status:'pending'
+  // after an invite or request was accepted elsewhere.
+  const visibleRequests = useMemo(
+    () => joinRequests.filter((r: any) => !members.includes(r.uid)),
+    [joinRequests, members]
+  );
+  const visiblePending = useMemo(
+    () => pendingInvites.filter((p: any) => !members.includes(p.uid)),
+    [pendingInvites, members]
+  );
+  const totalInvitations = visibleRequests.length + visiblePending.length;
 
   return (
     <View style={styles.container}>
@@ -321,10 +341,10 @@ export default function InviteMembersScreen() {
             <Text style={styles.emptyText}>No invitations yet</Text>
           ) : (
             <>
-              {joinRequests.length > 0 && (
+              {visibleRequests.length > 0 && (
                 <>
-                  <Text style={styles.sectionLabel}>📥 Received ({joinRequests.length})</Text>
-                  {joinRequests.map((req: any) => (
+                  <Text style={styles.sectionLabel}>📥 Received ({visibleRequests.length})</Text>
+                  {visibleRequests.map((req: any) => (
                     <View key={req.id} style={styles.userRow}>
                       <View style={styles.userAvatar}>
                         <Text style={styles.userAvatarText}>{(req.displayName || req.username || '?')[0]?.toUpperCase()}</Text>
@@ -345,10 +365,10 @@ export default function InviteMembersScreen() {
                   ))}
                 </>
               )}
-              {pendingInvites.length > 0 && (
+              {visiblePending.length > 0 && (
                 <>
-                  <Text style={[styles.sectionLabel, { marginTop: joinRequests.length > 0 ? 20 : 0 }]}>📤 Sent ({pendingInvites.length})</Text>
-                  {pendingInvites.map((item: any) => (
+                  <Text style={[styles.sectionLabel, { marginTop: visibleRequests.length > 0 ? 20 : 0 }]}>📤 Sent ({visiblePending.length})</Text>
+                  {visiblePending.map((item: any) => (
                     <View key={item.uid} style={styles.userRow}>
                       <View style={styles.userAvatar}>
                         <Text style={styles.userAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
@@ -367,7 +387,7 @@ export default function InviteMembersScreen() {
               )}
               {history.length > 0 && (
                 <>
-                  <Text style={[styles.sectionLabel, { marginTop: (joinRequests.length > 0 || pendingInvites.length > 0) ? 20 : 0 }]}>🕓 History ({history.length})</Text>
+                  <Text style={[styles.sectionLabel, { marginTop: (visibleRequests.length > 0 || visiblePending.length > 0) ? 20 : 0 }]}>🕓 History ({history.length})</Text>
                   {history.map((item: any) => {
                     const name = item.displayName || item.username || 'Unknown';
                     const isReceived = item.kind === 'received';

@@ -220,6 +220,39 @@ export default function ChannelScreen() {
       createdBy: user?.uid,
       createdAt: serverTimestamp(),
     });
+
+    // Notify all league members of new poll
+    try {
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const memberIds: string[] = leagueSnap.data()?.members || [];
+      for (const memberId of memberIds) {
+        if (memberId === user?.uid) continue;
+        try {
+          await updateDoc(doc(db, 'users', memberId), {
+            notifications: arrayUnion({
+              type: 'new_poll',
+              leagueId,
+              leagueName: leagueName || '',
+              message: 'New poll posted',
+              preview: pollQuestion.trim().slice(0, 60),
+              createdAt: new Date().toISOString(),
+            }),
+          });
+        } catch (innerErr) {
+          console.warn('poll notify failed for', memberId, innerErr);
+        }
+      }
+    } catch (e) { console.warn('poll notify failed', e); }
+
+    // Log to league activity feed
+    try {
+      await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+        type: 'new_poll',
+        message: '🗳 New poll posted: ' + pollQuestion.trim().slice(0, 60),
+        createdAt: serverTimestamp(),
+      });
+    } catch (e: any) { console.error('POLL ACTIVITY FAILED:', e?.code, e?.message); Alert.alert('Activity log failed', e?.code + ': ' + e?.message); }
+
     setPollQuestion('');
     setPollOptions(['', '']);
     setShowCreatePoll(false);
@@ -248,6 +281,16 @@ export default function ChannelScreen() {
       addedBy: user?.uid,
       addedAt: serverTimestamp(),
     });
+
+    // Log to league activity feed
+    try {
+      await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+        type: 'ban_added',
+        message: '🚫 New entry added to ban list: ' + newBanEntry.trim().slice(0, 60),
+        createdAt: serverTimestamp(),
+      });
+    } catch (e: any) { console.error('BAN ACTIVITY FAILED:', e?.code, e?.message); Alert.alert('Activity log failed', e?.code + ': ' + e?.message); }
+
     setNewBanEntry('');
     loadBanList();
   };
@@ -296,21 +339,22 @@ export default function ChannelScreen() {
         createdAt: serverTimestamp(),
       });
 
-      // Notify all league members when commissioner posts an announcement
-      if (channelId === 'announcements') {
+      // Notify all league members when an announcement or rule update is posted
+      if (channelId === 'announcements' || channelId === 'league-rules') {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
         const memberIds: string[] = leagueSnap.data()?.members || [];
         const senderName = members[user.uid]?.displayName || 'Commissioner';
         const teamName = members[user.uid]?.teamName || '';
+        const isRules = channelId === 'league-rules';
         for (const memberId of memberIds) {
           if (memberId === user.uid) continue;
           await updateDoc(doc(db, 'users', memberId), {
             notifications: arrayUnion({
-              type: 'announcement',
+              type: isRules ? 'rules_updated' : 'announcement',
               leagueId,
               leagueName: leagueName || '',
-              message: (teamName ? teamName : senderName) + ' posted a new announcement',
-              preview: content ? content.slice(0, 60) : 'New bulletin posted',
+              message: isRules ? 'Rules have been updated' : ((teamName ? teamName : senderName) + ' posted a new announcement'),
+              preview: isRules ? 'Tap to view rules' : (content ? content.slice(0, 60) : 'New bulletin posted'),
               createdAt: new Date().toISOString(),
             }),
           });
@@ -318,13 +362,14 @@ export default function ChannelScreen() {
 
         // Log to league activity feed
         try {
+          const isRules = channelId === 'league-rules';
           await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-            type: 'announcement',
-            message: '📰 News posted inside the league',
+            type: isRules ? 'rules_updated' : 'announcement',
+            message: isRules ? '📋 League rules have been updated' : '📰 News posted inside the league',
             createdAt: serverTimestamp(),
           });
         } catch (e) {
-          console.warn('Failed to log announcement to activity', e);
+          console.warn('Failed to log to activity', e);
         }
       }
     } catch (e: any) {

@@ -225,7 +225,10 @@ export default function DashboardScreen() {
       try {
         const { deleteDoc } = await import('firebase/firestore');
         await deleteDoc(doc(db, 'leagues', invite.leagueId, 'sent_invites', u.uid));
-      } catch {}
+      } catch (e: any) {
+        console.error('sent_invite cleanup failed:', e?.code, e?.message);
+        Alert.alert('Cleanup failed', 'sent_invites: ' + (e?.code || 'unknown') + ' - ' + (e?.message || String(e)));
+      }
       Alert.alert('Joined!', 'Welcome to ' + invite.leagueName);
       setLeagueInvites(prev => prev.filter(i => i.leagueId !== invite.leagueId));
       onRefresh();

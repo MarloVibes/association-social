@@ -605,27 +605,6 @@ export default function TradeRoomScreen() {
           console.warn('Failed to log trade to activity', e);
         }
 
-        // Notify ALL league members (so non-participants get alerts too)
-        try {
-          const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-          const members: string[] = leagueSnap.data()?.members || [];
-          const message = (result.hostName || 'Team A') + ' and ' + (result.guestName || 'Team B') + ' completed a trade.';
-          for (const memberUid of members) {
-            if (memberUid === myUid || memberUid === otherUid) continue;
-            await updateDoc(doc(db, 'users', memberUid), {
-              notifications: arrayUnion({
-                type: 'trade_executed_league',
-                leagueId,
-                roomId,
-                createdAt: new Date().toISOString(),
-                message,
-                read: false,
-              }),
-            });
-          }
-        } catch (e) {
-          console.warn('Failed to notify league members', e);
-        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);

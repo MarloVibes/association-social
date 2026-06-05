@@ -550,16 +550,23 @@ export default function RosterScreen() {
         // Notify all league members
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
         const memberIds: string[] = leagueSnap.data()?.members || [];
+        const leagueNameFetched = leagueSnap.data()?.name || '';
         for (const memberId of memberIds) {
           if (memberId === auth.currentUser?.uid) continue;
-          await updateDoc(doc(db, 'users', memberId), {
-            notifications: arrayUnion({
-              type: 'tradeblock',
-              leagueId,
-              message: (teamData.name || 'A GM') + ' added ' + (player.full_name || player.name) + ' to the trade block',
-              createdAt: new Date().toISOString(),
-            })
-          });
+          try {
+            await updateDoc(doc(db, 'users', memberId), {
+              notifications: arrayUnion({
+                type: 'tradeblock',
+                leagueId,
+                leagueName: leagueNameFetched,
+                message: (teamData.name || 'A GM') + ' added ' + (player.full_name || player.name) + ' to the trade block',
+                createdAt: new Date().toISOString(),
+              })
+            });
+          } catch (innerErr: any) {
+            console.error('TRADEBLOCK NOTIFY FAILED:', memberId, innerErr?.code, innerErr?.message);
+            Alert.alert('Notify failed', memberId + ' — ' + (innerErr?.code || 'unknown') + ': ' + (innerErr?.message || String(innerErr)));
+          }
         }
       }
       Alert.alert(

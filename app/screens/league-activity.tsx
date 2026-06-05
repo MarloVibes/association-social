@@ -29,7 +29,7 @@ export default function LeagueActivityScreen() {
     trades: ['trade_executed', 'trade_listing'],
     block: ['tradeblock'],
     signings: ['pickup', 'sign', 'drop'],
-    other: ['join', 'announcement', 'reset_request'],
+    other: ['join', 'announcement', 'reset_request', 'rules_updated', 'new_poll', 'ban_added'],
   };
 
   const filteredActivity = filter === 'all'

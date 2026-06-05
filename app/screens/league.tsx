@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -141,6 +141,15 @@ export default function LeagueScreen() {
             // Remove from members + user's leagues
             await updateDoc(doc(db, 'leagues', leagueId), { members: arrayRemove(user.uid) });
             await updateDoc(doc(db, 'users', user.uid), { leagues: arrayRemove(leagueId) });
+            // Purge any leftover invite/request docs so they don't resurface
+            try { await deleteDoc(doc(db, 'leagues', leagueId, 'sent_invites', user.uid)); } catch {}
+            try {
+              const reqs = await getDocs(query(
+                collection(db, 'leagues', leagueId, 'join_requests'),
+                where('uid', '==', user.uid)
+              ));
+              await Promise.all(reqs.docs.map(d => deleteDoc(d.ref)));
+            } catch {}
             router.replace('/(tabs)/dashboard');
           } catch (e: any) {
             Alert.alert('Error', e.message);
