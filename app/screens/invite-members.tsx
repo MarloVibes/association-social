@@ -265,7 +265,9 @@ export default function InviteMembersScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Invite GMs</Text>
-        <View style={{ width: 60 }} />
+        <TouchableOpacity onPress={() => router.push({ pathname: '/screens/league-waitlist', params: { leagueId, leagueName: leagueName || '' } })}>
+          <Text style={styles.waitlistLink}>Waitlist</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabRow}>
@@ -426,6 +428,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
+  waitlistLink: { color: '#F5A623', fontSize: 14, fontWeight: '700', width: 60, textAlign: 'right' },
+  cpuTradesBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#15203a', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 14, borderWidth: 1, borderColor: '#3B82F6' },
+  cpuTradesBannerText: { color: '#7da7ff', fontSize: 14, fontWeight: '800' },
+  cpuTradesBannerArrow: { color: '#7da7ff', fontSize: 20, fontWeight: '400' },
   title: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
   tabRow: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },

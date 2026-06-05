@@ -325,6 +325,10 @@ export default function NotificationsScreen() {
                           router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
                         else if (n.type === 'tradeblock' || n.type === 'trade_listing')
                           router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
+                        else if (n.type === 'cpu_trade_request')
+                          router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId: n.leagueId } });
+                        else if (n.type === 'cpu_trade_result')
+                          router.push({ pathname: '/screens/league-rosters', params: { leagueId: n.leagueId } });
                         else if (n.type === 'reset_request' || n.type === 'reset_request_opponent' || n.type === 'reset_disputed')
                           router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: '', coCommissioners: '[]' } });
                         else if (n.type === 'announcement')
@@ -343,6 +347,8 @@ export default function NotificationsScreen() {
                            n.type === 'trade_override_denied' ? 'View Room →' :
                            n.type === 'tradeblock' ? 'View Trade Center →' :
                            n.type === 'reset_request' || n.type === 'reset_request_opponent' ? 'View Reset Requests →' :
+                           n.type === 'cpu_trade_request' ? 'Review CPU Trade →' :
+                           n.type === 'cpu_trade_result' ? 'View Rosters →' :
                            n.type === 'announcement' ? 'View League News →' : 'View League →'}
                         </Text>}
                       </TouchableOpacity>

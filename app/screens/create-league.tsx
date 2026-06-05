@@ -77,6 +77,7 @@ export default function CreateLeagueScreen() {
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],
+        maxMembers: 30,
         invites: [],
         createdAt: serverTimestamp(),
         status: 'active',

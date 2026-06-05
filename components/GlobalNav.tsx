@@ -1,15 +1,55 @@
 import { router } from 'expo-router';
+import { useRef } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getLastLeagueId } from '@/utils/lastLeague';
 
 type Props = {
   pendingRequests?: number;
   pendingInvites?: number;
 };
 
+// Time window (ms) within which a second Home tap counts as a double tap.
+const DOUBLE_TAP_DELAY = 280;
+
 export default function GlobalNav({ pendingRequests = 0, pendingInvites = 0 }: Props) {
+  const lastTap = useRef(0);
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Single tap → jump back into the league you were last in (fallback: dashboard).
+  const goToLatestLeague = async () => {
+    const id = await getLastLeagueId();
+    if (id) router.replace({ pathname: '/screens/league', params: { leagueId: id } });
+    else router.replace('/(tabs)/dashboard');
+  };
+
+  // Double tap → main menu (dashboard).
+  const goToMainMenu = () => {
+    router.replace('/(tabs)/dashboard');
+  };
+
+  const handleHomePress = () => {
+    const now = Date.now();
+    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      // Second tap arrived in time → double tap.
+      if (singleTapTimer.current) {
+        clearTimeout(singleTapTimer.current);
+        singleTapTimer.current = null;
+      }
+      lastTap.current = 0;
+      goToMainMenu();
+    } else {
+      // First tap → wait briefly to see if a second one lands.
+      lastTap.current = now;
+      singleTapTimer.current = setTimeout(() => {
+        singleTapTimer.current = null;
+        goToLatestLeague();
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+
   return (
     <View style={styles.bar}>
-      <TouchableOpacity style={styles.btn} onPress={() => router.replace('/(tabs)/dashboard')}>
+      <TouchableOpacity style={styles.btn} onPress={handleHomePress}>
         <Text style={styles.btnIcon}>🏠</Text>
         <Text style={styles.btnLabel}>Home</Text>
       </TouchableOpacity>

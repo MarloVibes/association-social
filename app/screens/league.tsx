@@ -7,6 +7,7 @@ import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurre
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
+import { setLastLeagueId } from '@/utils/lastLeague';
 
 
 
@@ -71,6 +72,7 @@ export default function LeagueScreen() {
 
   useEffect(() => {
     if (!leagueId) return;
+    setLastLeagueId(leagueId);
 
     const loadLeague = async () => {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -442,6 +444,12 @@ export default function LeagueScreen() {
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
               <Text style={[styles.inviteBtnText, { color: teamText }]}>📨 Send League Invite</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
+              onPress={() => router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId } })}
+            >
+              <Text style={[styles.inviteBtnText, { color: teamText }]}>🤖 CPU Trade Requests</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}

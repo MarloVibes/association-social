@@ -20,7 +20,7 @@ const auth = getAuth();
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
 
 export default function TeamRosterScreen() {
-  const { leagueId, teamId } = useLocalSearchParams<{ leagueId: string; teamId: string }>();
+  const { leagueId, teamId, eraTeamId, abbr: cpuAbbr, isCpu } = useLocalSearchParams<{ leagueId: string; teamId: string; eraTeamId?: string; abbr?: string; isCpu?: string }>();
   const [team, setTeam] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
@@ -49,6 +49,19 @@ export default function TeamRosterScreen() {
         }
         if (teamSnap.exists()) {
           setTeam({ id: teamSnap.id, ...teamSnap.data() });
+        } else if (isCpu === '1' || eraTeamId || cpuAbbr) {
+          // Vacant CPU team — build a read-only roster from the era pool
+          const eraKey = leagueSnap.exists() ? ((leagueSnap.data() as any).era || 'current') : 'current';
+          const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+          const poolPlayers = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
+          let cpuName = cpuAbbr || 'CPU Team';
+          try {
+            const eraTeamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
+            const et = eraTeamsSnap.docs.map(d => d.data() as any).find((t: any) => String(t.id) === String(eraTeamId) || t.abbreviation === cpuAbbr);
+            if (et) cpuName = et.full_name;
+          } catch {}
+          const cpuPlayers = poolPlayers.filter((p: any) => p.team === cpuAbbr);
+          setTeam({ id: teamId, abbreviation: cpuAbbr, name: cpuName, players: cpuPlayers, gmId: null, isCpu: true, vacant: true });
         }
         // Compute which of this team's players are locked in active trades.
         // Trade rooms are private to their two participants, so this can only be
@@ -116,6 +129,18 @@ export default function TeamRosterScreen() {
     })();
   }, [leagueId, teamId]);
 
+  // Resolve the owner's display name (team docs only store gmId)
+  useEffect(() => {
+    if (!team?.gmId || team.gmName) return;
+    (async () => {
+      try {
+        const u = await getDoc(doc(db, 'users', team.gmId));
+        const ud = u.data() as any;
+        if (ud) setTeam((prev: any) => prev ? { ...prev, gmName: ud.displayName || (ud.username ? '@' + ud.username : 'GM') } : prev);
+      } catch {}
+    })();
+  }, [team?.gmId, team?.gmName]);
+
   if (loading || !team) {
     return <View style={styles.loadingContainer}><ActivityIndicator color="#00ff87" /></View>;
   }
@@ -179,7 +204,14 @@ export default function TeamRosterScreen() {
       return;
     }
     if (!team.gmId) {
-      Alert.alert('Unowned Team', 'This team has no GM. Trading with unowned teams is not yet supported.');
+      // CPU / vacant team → commissioner-approved CPU trade flow
+      router.push({ pathname: '/screens/cpu-trade', params: {
+        leagueId,
+        cpuTeamId: String(eraTeamId || team.teamId || ''),
+        cpuAbbr: team.abbreviation || '',
+        cpuName: team.name || '',
+        prefillGet: pid,
+      } });
       return;
     }
     if (isMyTeam) {
@@ -234,6 +266,7 @@ export default function TeamRosterScreen() {
               if (m) brefId = m[1];
             }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
+        const canCpuTrade = !team.gmId && !isMyTeam;
         return (
           <TouchableOpacity key={pid + i} style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
             {brefId ? (
@@ -262,6 +295,10 @@ export default function TeamRosterScreen() {
               {isLocked && !isUntouchable && !isOnBlock ? <Text style={styles.lockReason}>⏳ In active trade</Text> : null}
             </View>
             {canTrade ? (
+              <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
+                <Text style={styles.tradeBtnText}>Propose Trade</Text>
+              </TouchableOpacity>
+            ) : canCpuTrade ? (
               <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
                 <Text style={styles.tradeBtnText}>Propose Trade</Text>
               </TouchableOpacity>

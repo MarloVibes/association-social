@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { setDoc, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -15,6 +15,7 @@ const ERA_LABELS: Record<string, string> = {
 };
 
 export default function JoinLeagueScreen() {
+  const MAX_MEMBERS = 30;
   const { leagueId, leagueName } = useLocalSearchParams<{ leagueId?: string; leagueName?: string }>();
   const [leagues, setLeagues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ export default function JoinLeagueScreen() {
   const [leagueRules, setLeagueRules] = useState('');
   const [alreadyRequested, setAlreadyRequested] = useState<Set<string>>(new Set());
   const [alreadyMember, setAlreadyMember] = useState<Set<string>>(new Set());
+  const [alreadyWaitlisted, setAlreadyWaitlisted] = useState<Set<string>>(new Set());
   const [joining, setJoining] = useState(false);
   const user = auth.currentUser;
 
@@ -45,13 +47,20 @@ export default function JoinLeagueScreen() {
       // Get user's memberships and requests
       const memberSet = new Set<string>();
       const requestSet = new Set<string>();
+      const waitlistSet = new Set<string>();
       for (const league of allLeagues) {
         if ((league as any).members?.includes(user?.uid)) memberSet.add(league.id);
         const reqSnap = await getDoc(doc(db, 'leagues', league.id, 'join_requests', user!.uid));
         if (reqSnap.exists()) requestSet.add(league.id);
+        // Waitlist only applies to full leagues
+        if (((league as any).members?.length || 0) >= ((league as any).maxMembers || MAX_MEMBERS)) {
+          const wSnap = await getDoc(doc(db, 'leagues', league.id, 'waitlist', user!.uid));
+          if (wSnap.exists()) waitlistSet.add(league.id);
+        }
       }
       setAlreadyMember(memberSet);
       setAlreadyRequested(requestSet);
+      setAlreadyWaitlisted(waitlistSet);
 
       // Load commissioner names
       const enriched = await Promise.all(allLeagues.map(async (league: any) => {
@@ -117,7 +126,9 @@ export default function JoinLeagueScreen() {
         }}]);
       } else {
         // Send join request
-        await addDoc(collection(db, 'leagues', league.id, 'join_requests'), {
+        // Keyed by uid: one request per user per league (no duplicates, and the
+        // "already requested" check above can actually find it).
+        await setDoc(doc(db, 'leagues', league.id, 'join_requests', user.uid), {
           uid: user.uid,
           displayName: myData.displayName || user.email,
           username: myData.username || '',
@@ -141,6 +152,41 @@ export default function JoinLeagueScreen() {
         Alert.alert('Request Sent!', 'The commissioner will review your request.');
         setSelectedLeague(null);
       }
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    setJoining(false);
+  };
+
+  const joinWaitlist = async (league: any) => {
+    if (!user) return;
+    setJoining(true);
+    try {
+      const myData = (await getDoc(doc(db, 'users', user.uid))).data() || {};
+      // Keyed by uid + timestamped for FIFO ordering
+      await setDoc(doc(db, 'leagues', league.id, 'waitlist', user.uid), {
+        uid: user.uid,
+        displayName: myData.displayName || user.email,
+        username: myData.username || '',
+        leagueId: league.id,
+        leagueName: league.name,
+        joinedAt: serverTimestamp(),
+      });
+      try {
+        await updateDoc(doc(db, 'users', league.commissionerId), {
+          notifications: arrayUnion({
+            type: 'waitlist_joined',
+            leagueId: league.id,
+            leagueName: league.name,
+            fromUid: user.uid,
+            fromName: myData.displayName || user.email,
+            fromUsername: myData.username || '',
+            createdAt: new Date().toISOString(),
+            message: (myData.displayName || 'A GM') + ' joined the waitlist for ' + league.name,
+          }),
+        });
+      } catch {}
+      setAlreadyWaitlisted(prev => new Set([...prev, league.id]));
+      Alert.alert('On the Waitlist!', "You'll be in line if a spot opens and the commissioner invites you.");
+      setSelectedLeague(null);
     } catch (e: any) { Alert.alert('Error', e.message); }
     setJoining(false);
   };
@@ -324,11 +370,26 @@ export default function JoinLeagueScreen() {
                 }}>
                   <Text style={styles.viewLeagueBtnText}>View League →</Text>
                 </TouchableOpacity>
+              ) : alreadyWaitlisted.has(selectedLeague.id) ? (
+                <View style={styles.pendingCard}>
+                  <Text style={styles.pendingIcon}>📋</Text>
+                  <Text style={styles.pendingText}>You're on the waitlist</Text>
+                </View>
               ) : alreadyRequested.has(selectedLeague.id) ? (
                 <View style={styles.pendingCard}>
                   <Text style={styles.pendingIcon}>⏳</Text>
                   <Text style={styles.pendingText}>Join request pending approval</Text>
                 </View>
+              ) : (selectedLeague.members?.length || 0) >= (selectedLeague.maxMembers || MAX_MEMBERS) ? (
+                <TouchableOpacity
+                  style={[styles.joinBtn, joining && { opacity: 0.6 }]}
+                  onPress={() => joinWaitlist(selectedLeague)}
+                  disabled={joining}
+                >
+                  {joining ? <ActivityIndicator color='#000' /> : (
+                    <Text style={styles.joinBtnText}>📋 Join Waitlist (League Full)</Text>
+                  )}
+                </TouchableOpacity>
               ) : (
                 <TouchableOpacity
                   style={[styles.joinBtn, joining && { opacity: 0.6 }]}

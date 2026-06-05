@@ -40,15 +40,69 @@ export default function LeagueRostersScreen() {
     (async () => {
       try {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-        if (leagueSnap.exists()) {
-          const d = leagueSnap.data() as any;
-          if (d.era) setEra(d.era);
-        }
-        const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-        const list = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        // Sort: my team first, then owned (alphabetical), then unowned (alphabetical)
+        const ld = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
+        const eraKey = ld.era || 'current';
+        setEra(eraKey);
+
+        // Full set of teams for this era + the player pool for default rosters,
+        // plus the league's claimed/materialized team docs.
+        const [eraTeamsSnap, poolSnap, leagueTeamsSnap] = await Promise.all([
+          getDocs(collection(db, 'era_rosters', eraKey, 'teams')),
+          getDoc(doc(db, 'era_player_pools', eraKey)),
+          getDocs(collection(db, 'leagues', leagueId, 'teams')),
+        ]);
+        const poolPlayers = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
+        const eraTeams = eraTeamsSnap.docs.map(d => d.data() as any);
+        const leagueTeams = leagueTeamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+        // Resolve owner display names (team docs only store gmId, not a name)
+        const ownerIds = Array.from(new Set(leagueTeams.map((t: any) => t.gmId).filter(Boolean)));
+        const ownerNames: Record<string, string> = {};
+        await Promise.all(ownerIds.map(async (uid: string) => {
+          try {
+            const u = await getDoc(doc(db, 'users', uid));
+            const ud = u.data() as any;
+            if (ud) ownerNames[uid] = ud.displayName || (ud.username ? '@' + ud.username : 'GM');
+          } catch {}
+        }));
+
+        // Index claimed teams by era team id and abbreviation
+        const byEraId: Record<string, any> = {};
+        const byAbbr: Record<string, any> = {};
+        leagueTeams.forEach(t => {
+          if (t.teamId != null) byEraId[String(t.teamId)] = t;
+          if (t.abbreviation) byAbbr[t.abbreviation] = t;
+        });
+
+        // Merge: every era team appears; claimed ones use their live doc, the rest
+        // show as vacant CPU teams with their default roster.
+        const merged = eraTeams.map((et: any) => {
+          const claimed = byEraId[String(et.id)] || byAbbr[et.abbreviation];
+          if (claimed) {
+            return {
+              ...claimed,
+              eraTeamId: et.id,
+              abbreviation: claimed.abbreviation || et.abbreviation,
+              name: claimed.name || et.full_name,
+              gmName: claimed.gmId ? (ownerNames[claimed.gmId] || 'GM') : null,
+              isCpu: !claimed.gmId,
+            };
+          }
+          const defPlayers = poolPlayers.filter((p: any) => p.team === et.abbreviation);
+          return {
+            id: null,
+            eraTeamId: et.id,
+            abbreviation: et.abbreviation,
+            name: et.full_name,
+            players: defPlayers.length ? defPlayers : (et.players || []),
+            gmId: null,
+            isCpu: true,
+            vacant: true,
+          };
+        });
+
         const myUid = auth.currentUser?.uid;
-        list.sort((a, b) => {
+        merged.sort((a, b) => {
           const aIsMine = a.gmId === myUid;
           const bIsMine = b.gmId === myUid;
           if (aIsMine && !bIsMine) return -1;
@@ -59,7 +113,7 @@ export default function LeagueRostersScreen() {
           if (!aOwned && bOwned) return 1;
           return (a.name || '').localeCompare(b.name || '');
         });
-        setTeams(list);
+        setTeams(merged);
       } catch (e) { console.error(e); }
       setLoading(false);
     })();
@@ -97,9 +151,15 @@ export default function LeagueRostersScreen() {
         const subColor = lum < 0.5 ? '#ffffffcc' : '#0a0a0acc';
         return (
           <TouchableOpacity
-            key={team.id}
+            key={team.id || team.eraTeamId || team.abbreviation}
             style={[styles.teamCardWrapper, { shadowColor: colors[0] }]}
-            onPress={() => router.push({ pathname: '/screens/team-roster', params: { leagueId, teamId: team.id } })}
+            onPress={() => router.push({ pathname: '/screens/team-roster', params: {
+              leagueId,
+              teamId: team.id || ('cpu_' + team.eraTeamId),
+              eraTeamId: String(team.eraTeamId || ''),
+              abbr: team.abbreviation || '',
+              isCpu: team.isCpu ? '1' : '',
+            } })}
             activeOpacity={0.85}
           >
             <LinearGradient
@@ -118,7 +178,7 @@ export default function LeagueRostersScreen() {
               <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
-                  <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbr}</Text>
+                  <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbreviation}</Text>
                   {team.gmId === auth.currentUser?.uid ? (
                     <View style={styles.yourTeamBadge}><Text style={styles.yourTeamBadgeText}>YOUR TEAM</Text></View>
                   ) : null}

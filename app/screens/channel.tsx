@@ -597,11 +597,13 @@ export default function ChannelScreen() {
                         Alert.alert(poll.closed ? 'Reopen Poll?' : 'Close Poll?', '', [
                           { text: 'Cancel', style: 'cancel' },
                           { text: poll.closed ? 'Reopen' : 'Close', onPress: async () => {
-                            await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'polls', 'votes', poll.id), { closed: !poll.closed });
+                            await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'polls', 'items', poll.id), { closed: !poll.closed });
+                            await loadPolls();
                           }},
                           { text: 'Delete', style: 'destructive', onPress: async () => {
                             const { deleteDoc } = await import('firebase/firestore');
-                            await deleteDoc(doc(db, 'leagues', leagueId, 'channels', 'polls', 'votes', poll.id));
+                            await deleteDoc(doc(db, 'leagues', leagueId, 'channels', 'polls', 'items', poll.id));
+                            await loadPolls();
                           }},
                         ]);
                       }}>

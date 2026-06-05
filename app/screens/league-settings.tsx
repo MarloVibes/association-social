@@ -33,6 +33,7 @@ export default function LeagueSettingsScreen() {
   const [inviteCode, setInviteCode] = useState('');
   const [tradeApprovalMode, setTradeApprovalMode] = useState('instant');
   const [maxPlayersPerTrade, setMaxPlayersPerTrade] = useState('6');
+  const [maxMembers, setMaxMembers] = useState('30');
   const [paused, setPaused] = useState(false);
   const [archived, setArchived] = useState(false);
   const [salaryCap, setSalaryCap] = useState('154647000');
@@ -68,6 +69,7 @@ export default function LeagueSettingsScreen() {
       setInviteCode(data.inviteCode || '');
       setTradeApprovalMode(data.tradeApprovalMode || 'instant');
       setMaxPlayersPerTrade(String(data.maxPlayersPerTrade || 6));
+      setMaxMembers(String(data.maxMembers || 30));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
       setSalaryCap(String(data.salaryCap || 154647000));
@@ -147,6 +149,10 @@ export default function LeagueSettingsScreen() {
     const capNum = parseInt(salaryCap.replace(/[^0-9]/g, ''), 10) || 154647000;
     const tolNum = parseFloat(tradeApronTolerance) || 1.25;
     if (tolNum < 1.0 || tolNum > 2.0) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
+    const mm = parseInt(maxMembers, 10);
+    const currentMembers = league?.members?.length || 1;
+    if (isNaN(mm) || mm < 1 || mm > 30) { Alert.alert('Invalid', 'Max GMs must be between 1 and 30.'); return; }
+    if (mm < currentMembers) { Alert.alert('Too low', 'This league already has ' + currentMembers + ' GMs, so the max can\'t be set below that. Remove members first if you want a smaller cap.'); return; }
     await saveField({
       name: name.trim(),
       description: description.trim(),
@@ -154,6 +160,7 @@ export default function LeagueSettingsScreen() {
       inviteCode: privacy === 'private' ? inviteCode.trim() : '',
       tradeApprovalMode,
       maxPlayersPerTrade: max,
+      maxMembers: mm,
       salaryCap: capNum,
       tradeApronTolerance: tolNum,
       commissionerCanOverride,
@@ -316,6 +323,17 @@ export default function LeagueSettingsScreen() {
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>How many players each side can put on the table in a Trade Room (1-15).</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Max GMs (League Size)</Text>
+          <TextInput
+            style={styles.input}
+            value={maxMembers}
+            onChangeText={setMaxMembers}
+            keyboardType='number-pad'
+            placeholder='30'
+            placeholderTextColor='#555'
+          />
+          <Text style={styles.helper}>How many GMs can be in this league (1-30). Once full, new applicants join a waitlist.</Text>
         </View>
 
         {/* Salary Cap */}
