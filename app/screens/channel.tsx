@@ -185,6 +185,8 @@ export default function ChannelScreen() {
   };
 
   const saveRules = async () => {
+    const changed = (rulesText || '').trim() !== (rulesContent || '').trim();
+    const isFirst = !((rulesContent || '').trim());
     await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'league-rules'), {
       content: rulesText,
       updatedAt: serverTimestamp(),
@@ -200,6 +202,35 @@ export default function ChannelScreen() {
     });
     setRulesContent(rulesText);
     setEditingRules(false);
+
+    // Notify all members + log to activity when rules are first posted or changed
+    if (changed && user) {
+      try {
+        const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+        const memberIds: string[] = leagueSnap.data()?.members || [];
+        const message = isFirst ? 'Rules have been posted' : 'Rules have been updated';
+        for (const memberId of memberIds) {
+          if (memberId === user.uid) continue;
+          await updateDoc(doc(db, 'users', memberId), {
+            notifications: arrayUnion({
+              type: 'rules_updated',
+              leagueId,
+              leagueName: leagueName || '',
+              message,
+              preview: 'Tap to view rules',
+              createdAt: new Date().toISOString(),
+            }),
+          });
+        }
+        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+          type: 'rules_updated',
+          message: isFirst ? '📋 League rules have been posted' : '📋 League rules have been updated',
+          createdAt: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn('Failed to notify rules update', e);
+      }
+    }
   };
 
   const loadPolls = async () => {
@@ -466,7 +497,7 @@ export default function ChannelScreen() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.chalkContent}>
           {editingRules ? (
             <View style={styles.chalkEditArea}>
-              <Text style={styles.chalkEditLabel}>Write your rules below:</Text>
+              <Text style={styles.chalkEditLabel}>Write one rule per line — they're numbered automatically.</Text>
               <TextInput
                 style={styles.chalkInput}
                 value={rulesText}
@@ -474,7 +505,7 @@ export default function ChannelScreen() {
                 multiline
                 autoFocus
                 placeholderTextColor="rgba(255,255,255,0.3)"
-                placeholder={'1. No tanking\n2. Must make trades active\n3. ...'}
+                placeholder={'No tanking\nMust stay active on trades\nNo colluding'}
               />
             </View>
           ) : rulesContent ? (

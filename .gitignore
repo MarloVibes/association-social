@@ -19,3 +19,4 @@ dist/
 # Firebase service account keys - NEVER commit these
 service-account.json
 *-firebase-adminsdk-*.json
+*.swp
