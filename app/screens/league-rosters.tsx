@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
-import { getTeamColors, getTeamLogoUrl } from '@/constants/teamColors';
+import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -33,7 +33,7 @@ export default function LeagueRostersScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
+  const [era, setEra] = useState<any>(undefined);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -42,7 +42,7 @@ export default function LeagueRostersScreen() {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
         if (leagueSnap.exists()) {
           const d = leagueSnap.data() as any;
-          if (d.currentYear) setCurrentYear(d.currentYear);
+          if (d.era) setEra(d.era);
         }
         const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
         const list = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
@@ -82,8 +82,10 @@ export default function LeagueRostersScreen() {
       <Text style={styles.subtitle}>{teams.length} teams · tap to view roster</Text>
 
       {teams.map(team => {
-        const colors = getTeamColors(team.abbr || 'ATL', currentYear);
-        const logo = getTeamLogoUrl(team.abbr || 'ATL', currentYear);
+        const abbr = team.abbreviation || 'ATL';
+        const colors = getTeamColors(abbr, era);
+        const logoLocal = getTeamLogoLocal(abbr, era);
+        const logoUri = getTeamLogoUrl(abbr, era);
         const isOwned = !!team.gmId;
         // Luminance check for text contrast on bold solid team-color background
         const hex = (colors[0] || '#222').replace('#', '');
@@ -113,7 +115,7 @@ export default function LeagueRostersScreen() {
                 style={styles.glossOverlay}
                 pointerEvents="none"
               />
-              <Image source={{ uri: logo }} style={styles.teamLogo} />
+              <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
                   <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbr}</Text>

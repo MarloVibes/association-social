@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { getTeamColors, getTeamLogoUrl } from '@/constants/teamColors';
+import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -50,21 +50,26 @@ export default function TeamRosterScreen() {
         if (teamSnap.exists()) {
           setTeam({ id: teamSnap.id, ...teamSnap.data() });
         }
-        // Compute which of this team's players are locked in active trades
+        // Compute which of this team's players are locked in active trades.
+        // Trade rooms are private to their two participants, so this can only be
+        // computed for your own team — skip it for others (the query would be
+        // denied by security rules and isn't readable anyway).
         const targetUid = teamSnap.data()?.gmId;
-        if (targetUid) {
-          const ACTIVE = ['open', 'live', 'pushed', 'countered'];
-          const hostQ = query(collection(db, 'leagues', leagueId, 'trade_rooms'), where('hostUid', '==', targetUid));
-          const guestQ = query(collection(db, 'leagues', leagueId, 'trade_rooms'), where('guestUid', '==', targetUid));
-          const [hostSnap, guestSnap] = await Promise.all([getDocs(hostQ), getDocs(guestQ)]);
-          const locked = new Set<string>();
-          [...hostSnap.docs, ...guestSnap.docs].forEach(d => {
-            const data = d.data() as any;
-            if (!ACTIVE.includes(data.status)) return;
-            const theirOffer = data.hostUid === targetUid ? (data.hostOffer || []) : (data.guestOffer || []);
-            theirOffer.forEach((p: any) => locked.add(getPlayerKey(p)));
-          });
-          setLockedKeys(locked);
+        if (targetUid && targetUid === auth.currentUser?.uid) {
+          try {
+            const ACTIVE = ['open', 'live', 'pushed', 'countered'];
+            const hostQ = query(collection(db, 'leagues', leagueId, 'trade_rooms'), where('hostUid', '==', targetUid));
+            const guestQ = query(collection(db, 'leagues', leagueId, 'trade_rooms'), where('guestUid', '==', targetUid));
+            const [hostSnap, guestSnap] = await Promise.all([getDocs(hostQ), getDocs(guestQ)]);
+            const locked = new Set<string>();
+            [...hostSnap.docs, ...guestSnap.docs].forEach(d => {
+              const data = d.data() as any;
+              if (!ACTIVE.includes(data.status)) return;
+              const theirOffer = data.hostUid === targetUid ? (data.hostOffer || []) : (data.guestOffer || []);
+              theirOffer.forEach((p: any) => locked.add(getPlayerKey(p)));
+            });
+            setLockedKeys(locked);
+          } catch (e) { console.warn('trade-lock check skipped', e); }
         }
 
         // Enrich team players with era_stats so playstyles compute correctly
@@ -115,8 +120,10 @@ export default function TeamRosterScreen() {
     return <View style={styles.loadingContainer}><ActivityIndicator color="#00ff87" /></View>;
   }
 
-  const colors = getTeamColors(team.abbr || 'ATL', currentYear);
-  const logo = getTeamLogoUrl(team.abbr || 'ATL', currentYear);
+  const abbr = team.abbreviation || 'ATL';
+  const colors = getTeamColors(abbr, leagueEra);
+  const logoLocal = getTeamLogoLocal(abbr, leagueEra);
+  const logoUri = getTeamLogoUrl(abbr, leagueEra);
   const isOwned = !!team.gmId;
   const isMyTeam = team.gmId === myUid;
   const untouchables: string[] = team.untouchables || [];
@@ -202,9 +209,9 @@ export default function TeamRosterScreen() {
       </View>
 
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
-        <Image source={{ uri: logo }} style={styles.teamLogo} />
+        <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.teamName}>{team.name || team.abbr}</Text>
+          <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>
           <Text style={styles.teamGm}>{isOwned ? '🧑 ' + (team.gmName || 'GM') : '🤖 Unowned'}</Text>
         </View>

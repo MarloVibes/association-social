@@ -13,6 +13,7 @@ import GlobalNav from '@/components/GlobalNav';
 export default function ProfileScreen() {
   const { uid: viewUid } = useLocalSearchParams<{ uid?: string }>();
   const [profile, setProfile] = useState<any>(null);
+  const [leagueCount, setLeagueCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -97,6 +98,19 @@ export default function ProfileScreen() {
       if (snap.exists()) {
         const data = snap.data();
         setProfile(data);
+        // Accurate league count: the raw `leagues` array drifts when leagues are
+        // deleted or membership changes, so verify each one still exists + includes the user.
+        (async () => {
+          const ids: string[] = data.leagues || [];
+          let valid = 0;
+          await Promise.all(ids.map(async (lid) => {
+            try {
+              const ls = await getDoc(doc(db, 'leagues', lid));
+              if (ls.exists() && ((ls.data() as any)?.members || []).includes(profileUid)) valid++;
+            } catch {}
+          }));
+          setLeagueCount(valid);
+        })();
         setBio(data.bio || '');
         setGamerTag(data.gamerTag || '');
         setTwitch(data.socials?.twitch || '');
@@ -340,7 +354,7 @@ export default function ProfileScreen() {
           <Text style={styles.username}>@{profile?.username}</Text>
           <View style={styles.statRow}>
             <View style={styles.stat}>
-              <Text style={styles.statNum}>{profile?.leagues?.length || 0}</Text>
+              <Text style={styles.statNum}>{leagueCount ?? (profile?.leagues?.length || 0)}</Text>
               <Text style={styles.statLabel}>Leagues</Text>
             </View>
             <View style={styles.statDivider} />

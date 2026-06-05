@@ -229,6 +229,10 @@ export default function TradeRoomScreen() {
         // Trade executed remotely — show alert and route back
         Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
       }
+      if (snapData?.status === 'cancelled' && snapData?.cancelReason === 'roster_changed' && prevStatus && prevStatus !== 'cancelled') {
+        // Trade voided because a player in it was traded elsewhere first
+        Alert.alert('Trade voided', 'A player in this deal was traded to another team first, so this trade could not go through.', [{ text: 'OK', onPress: () => router.back() }]);
+      }
       prevStatus = snapData?.status || null;
       if (snap.exists()) setRoom({ id: snap.id, ...snap.data() });
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
@@ -568,7 +572,21 @@ export default function TradeRoomScreen() {
       });
 
       if (result?.cancelled) {
-        Alert.alert('Trade cancelled', 'A player on the table is no longer on their team.');
+        // A player in this deal was traded elsewhere first. The in-room alert is
+        // handled by the room listener; also notify the other GM in case they left.
+        try {
+          await updateDoc(doc(db, 'users', otherUid), {
+            notifications: arrayUnion({
+              type: 'trade_voided',
+              leagueId,
+              roomId,
+              otherUid: myUid,
+              otherTeamName: myTeam?.name || '',
+              createdAt: new Date().toISOString(),
+              message: 'Your trade with ' + (myTeam?.name || 'an opponent') + ' was voided — a player in it was traded to another team first.',
+            }),
+          });
+        } catch {}
         return;
       }
       if (result?.executed) {
@@ -956,7 +974,7 @@ export default function TradeRoomScreen() {
               const onTable = otherOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = theirLockedKeys.has(key);
               const isUntouchable = otherUntouchables.includes(key);
-              const disabled = onTable || lockedElsewhere || isUntouchable;
+              const disabled = onTable || isUntouchable;
               return (
                 <TouchableOpacity
                   key={key + i}
@@ -967,8 +985,8 @@ export default function TradeRoomScreen() {
                   <Text style={styles.pickerPos}>{p.position || '?'}</Text>
                   <Text style={styles.pickerName}>{p.full_name}</Text>
                   {onTable ? <Text style={styles.pickerTag}>ON TABLE</Text> : null}
-                  {lockedElsewhere && !onTable ? <Text style={styles.pickerTagWarn}>IN OTHER ROOM</Text> : null}
-                  {isUntouchable && !onTable && !lockedElsewhere ? <Text style={styles.pickerTagWarn}>🔒 UNTOUCHABLE</Text> : null}
+                  {isUntouchable && !onTable ? <Text style={styles.pickerTagWarn}>🔒 UNTOUCHABLE</Text> : null}
+                  {lockedElsewhere && !onTable && !isUntouchable ? <Text style={styles.pickerTagWarn}>⚠️ IN ANOTHER TRADE</Text> : null}
                 </TouchableOpacity>
               );
             })}
@@ -991,7 +1009,7 @@ export default function TradeRoomScreen() {
               const key = getPlayerKey(p);
               const onTable = myOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = lockedPlayerKeys.has(key);
-              const disabled = onTable || lockedElsewhere;
+              const disabled = onTable;
               return (
                 <TouchableOpacity
                   key={key + i}
@@ -1002,7 +1020,7 @@ export default function TradeRoomScreen() {
                   <Text style={styles.pickerPos}>{p.position || '?'}</Text>
                   <Text style={styles.pickerName}>{p.full_name}</Text>
                   {onTable ? <Text style={styles.pickerTag}>ON TABLE</Text> : null}
-                  {lockedElsewhere && !onTable ? <Text style={styles.pickerTagWarn}>IN OTHER ROOM</Text> : null}
+                  {lockedElsewhere && !onTable ? <Text style={styles.pickerTagWarn}>⚠️ IN ANOTHER TRADE</Text> : null}
                 </TouchableOpacity>
               );
             })}
