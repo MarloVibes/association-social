@@ -2,18 +2,20 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc, collection, doc, getDoc, onSnapshot,
-  orderBy, query, serverTimestamp, updateDoc, arrayUnion, getDocs, where } from 'firebase/firestore';
+  orderBy, query, serverTimestamp, updateDoc, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, getDocs, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
   Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
+const MESSAGE_REACTIONS = ['👍', '❤️', '😂', '😱', '‼️', '💯', '🤯'];
 const EMOJI_LIST = [
   '😂','🔥','💯','👀','😤','🏆','💪','🎯','👑','😎',
   '🤝','💀','😭','🙏','⚡','🎮','🏀','🏈','⚾','👏',
@@ -57,6 +59,8 @@ export default function ChannelScreen() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [msgReaction, setMsgReaction] = useState<any | null>(null); // chat message being reacted to
+  const [editingMsg, setEditingMsg] = useState<any | null>(null); // chat message being edited
   const [showGiphy, setShowGiphy] = useState(false);
   const [giphySearch, setGiphySearch] = useState('');
   const [gifs, setGifs] = useState<any[]>([]);
@@ -97,6 +101,16 @@ export default function ChannelScreen() {
   const [hlOpponent, setHlOpponent] = useState('');
   const [hlResult, setHlResult] = useState<'W'|'L'>('W');
   const [hlUploading, setHlUploading] = useState(false);
+  // Highlights comments modal
+  const [commentPost, setCommentPost] = useState<any | null>(null);
+  const [hlComments, setHlComments] = useState<any[]>([]);
+  const [hlCommentText, setHlCommentText] = useState('');
+  const [hlCommentSending, setHlCommentSending] = useState(false);
+  // Highlights reaction picker
+  const [reactionPost, setReactionPost] = useState<any | null>(null);
+  // @mention autocomplete (league members only)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionTarget, setMentionTarget] = useState<'chat' | 'comment' | null>(null);
   const [resetGameDate, setResetGameDate] = useState('');
   const [resetOpponent, setResetOpponent] = useState('');
   const [resetReason, setResetReason] = useState('');
@@ -145,6 +159,19 @@ export default function ChannelScreen() {
     }
     if (channelId === 'reset-requests') loadResetRequests();
   }, [channelId, leagueId]);
+
+  // Live comments for the highlight post whose comment modal is open
+  useEffect(() => {
+    if (!commentPost) { setHlComments([]); return; }
+    const q = query(
+      collection(db, 'leagues', leagueId, 'channels', 'highlights', 'posts', commentPost.id, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+    const unsub = onSnapshot(q, snap => {
+      setHlComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
+    return () => unsub();
+  }, [commentPost, leagueId]);
 
   const loadMembers = async () => {
     const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -370,22 +397,28 @@ export default function ChannelScreen() {
         createdAt: serverTimestamp(),
       });
 
-      // Notify all league members when an announcement or rule update is posted
-      if (channelId === 'announcements' || channelId === 'league-rules') {
+      // Notify any @mentioned league members
+      await notifyMentions(content, {
+        channelId: channelId || '',
+        channelLabel: channelLabel || 'League Chat',
+        channelIcon: channelIcon || '💬',
+      });
+
+      // Notify all league members when an announcement is posted
+      if (channelId === 'announcements') {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
         const memberIds: string[] = leagueSnap.data()?.members || [];
         const senderName = members[user.uid]?.displayName || 'Commissioner';
         const teamName = members[user.uid]?.teamName || '';
-        const isRules = channelId === 'league-rules';
         for (const memberId of memberIds) {
           if (memberId === user.uid) continue;
           await updateDoc(doc(db, 'users', memberId), {
             notifications: arrayUnion({
-              type: isRules ? 'rules_updated' : 'announcement',
+              type: 'announcement',
               leagueId,
               leagueName: leagueName || '',
-              message: isRules ? 'Rules have been updated' : ((teamName ? teamName : senderName) + ' posted a new announcement'),
-              preview: isRules ? 'Tap to view rules' : (content ? content.slice(0, 60) : 'New bulletin posted'),
+              message: (teamName ? teamName : senderName) + ' posted a new announcement',
+              preview: content ? content.slice(0, 60) : 'New bulletin posted',
               createdAt: new Date().toISOString(),
             }),
           });
@@ -393,10 +426,9 @@ export default function ChannelScreen() {
 
         // Log to league activity feed
         try {
-          const isRules = channelId === 'league-rules';
           await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-            type: isRules ? 'rules_updated' : 'announcement',
-            message: isRules ? '📋 League rules have been updated' : '📰 News posted inside the league',
+            type: 'announcement',
+            message: '📰 News posted inside the league',
             createdAt: serverTimestamp(),
           });
         } catch (e) {
@@ -407,6 +439,206 @@ export default function ChannelScreen() {
       Alert.alert('Error', e.message);
     }
     setSending(false);
+  };
+
+  // ── Message reactions (league chat) ──
+  const setChatReaction = async (msg: any, emoji: string) => {
+    if (!user) return;
+    const mine = (msg.reactions || {})[user.uid];
+    try {
+      await updateDoc(doc(db, 'leagues', leagueId, 'channels', channelId, 'messages', msg.id), {
+        ['reactions.' + user.uid]: mine === emoji ? deleteField() : emoji,
+      });
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    setMsgReaction(null);
+  };
+
+  const EDIT_WINDOW_MS = 30 * 60 * 1000;
+  const msgEditable = (item: any) => {
+    const ms = item.createdAt?.toMillis ? item.createdAt.toMillis()
+      : (item.createdAt?.seconds ? item.createdAt.seconds * 1000 : 0);
+    return !!ms && (Date.now() - ms) < EDIT_WINDOW_MS;
+  };
+
+  const onMessageLongPress = (item: any) => {
+    const isMe = item.uid === user?.uid;
+    const editable = msgEditable(item);
+    const opts: any[] = [];
+    if (isMe && item.text && editable) opts.push({ text: 'Edit', onPress: () => { setEditingMsg(item); setText(item.text || ''); } });
+    opts.push({ text: 'Add Reaction', onPress: () => setMsgReaction(item) });
+    if ((isMe && editable) || isCommOrCoComm) opts.push({ text: 'Delete', style: 'destructive', onPress: () => confirmDeleteMessage(item) });
+    opts.push({ text: 'Cancel', style: 'cancel' });
+    if (opts.length === 2) { setMsgReaction(item); return; } // only React + Cancel → go straight to picker
+    Alert.alert('Message', undefined, opts);
+  };
+
+  const confirmDeleteMessage = (item: any) => {
+    Alert.alert('Delete message?', 'This permanently removes the message for everyone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try { await deleteDoc(doc(db, 'leagues', leagueId, 'channels', channelId, 'messages', item.id)); }
+        catch (e: any) { Alert.alert('Error', e.message); }
+      } },
+    ]);
+  };
+
+  const saveEdit = async () => {
+    if (!editingMsg) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    try {
+      await updateDoc(doc(db, 'leagues', leagueId, 'channels', channelId, 'messages', editingMsg.id), {
+        text: trimmed, edited: true,
+      });
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    setEditingMsg(null);
+    setText('');
+  };
+
+  const cancelEdit = () => { setEditingMsg(null); setText(''); };
+
+  const reactionChip = (msg: any) => {
+    const map: Record<string, number> = {};
+    Object.values(msg.reactions || {}).forEach((e: any) => { map[e] = (map[e] || 0) + 1; });
+    const emojis = Object.keys(map).sort((a, b) => map[b] - map[a]);
+    const total = Object.values(map).reduce((s, n) => s + n, 0);
+    if (total === 0) return null;
+    const mine = !!(user && (msg.reactions || {})[user.uid]);
+    return { emojis: emojis.slice(0, 4).join(''), total, mine };
+  };
+  const detectMention = (value: string) => {
+    const m = value.match(/@([^@\n]*)$/);
+    return m ? m[1] : null;
+  };
+
+  const mentionCandidates = (q: string) => {
+    const query = (q || '').toLowerCase();
+    return Object.values(members)
+      .filter((m: any) => m.username && m.uid !== user?.uid)
+      .filter((m: any) =>
+        (m.username || '').toLowerCase().includes(query) ||
+        (m.displayName || '').toLowerCase().includes(query)
+      )
+      .slice(0, 6);
+  };
+
+  const onMentionInput = (value: string, target: 'chat' | 'comment') => {
+    if (target === 'chat') setText(value); else setHlCommentText(value);
+    const q = detectMention(value);
+    setMentionQuery(q);
+    setMentionTarget(q !== null ? target : null);
+  };
+
+  const applyMention = (member: any) => {
+    const insert = '@' + member.username + ' ';
+    if (mentionTarget === 'chat') setText(prev => prev.replace(/@([^@\n]*)$/, insert));
+    else if (mentionTarget === 'comment') setHlCommentText(prev => prev.replace(/@([^@\n]*)$/, insert));
+    setMentionQuery(null);
+    setMentionTarget(null);
+  };
+
+  // Precisely match @username against known league usernames (longest first).
+  const mentionNames = () => {
+    const names = Object.values(members).map((m: any) => m.username).filter(Boolean);
+    names.push('everyone'); // broadcast keyword
+    return names;
+  };
+
+  const mentionRegex = () => {
+    const names = mentionNames();
+    if (names.length === 0) return null;
+    const escaped = names
+      .map((n: string) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .sort((a, b) => b.length - a.length);
+    return new RegExp('@(' + escaped.join('|') + ')', 'g');
+  };
+
+  const renderWithMentions = (textValue: string) => {
+    const re = mentionRegex();
+    if (!textValue || !re) return textValue;
+    const parts: any[] = [];
+    let last = 0, i = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(textValue)) !== null) {
+      if (m.index > last) parts.push(<Text key={i++}>{textValue.slice(last, m.index)}</Text>);
+      parts.push(<Text key={i++} style={styles.mentionText}>{m[0]}</Text>);
+      last = m.index + m[0].length;
+    }
+    if (last < textValue.length) parts.push(<Text key={i++}>{textValue.slice(last)}</Text>);
+    return parts.length ? parts : textValue;
+  };
+
+  const notifyMentions = async (content: string, meta: { channelId: string; channelLabel: string; channelIcon: string }) => {
+    const re = mentionRegex();
+    if (!content || !re) return;
+    const found = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) found.add(m[1]);
+    if (found.size === 0) return;
+
+    const targetUids = new Set<string>();
+    if (found.has('everyone')) {
+      Object.values(members).forEach((mm: any) => { if (mm.uid !== user?.uid) targetUids.add(mm.uid); });
+    }
+    Object.values(members).forEach((mm: any) => {
+      if (mm.username && found.has(mm.username) && mm.uid !== user?.uid) targetUids.add(mm.uid);
+    });
+
+    const fromName = members[user!.uid]?.displayName || 'Someone';
+    for (const uid of targetUids) {
+      const mm = members[uid];
+      const specifically = mm && mm.username && found.has(mm.username);
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          notifications: arrayUnion({
+            type: 'mention',
+            leagueId,
+            leagueName: leagueName || '',
+            channelId: meta.channelId,
+            channelLabel: meta.channelLabel,
+            channelIcon: meta.channelIcon,
+            message: specifically ? fromName + ' mentioned you' : fromName + ' mentioned everyone',
+            preview: content.slice(0, 60),
+            createdAt: new Date().toISOString(),
+          }),
+        });
+      } catch (e) { /* non-fatal */ }
+    }
+  };
+
+  const renderMentionDropdown = (target: 'chat' | 'comment') => {
+    if (mentionTarget !== target || mentionQuery === null) return null;
+    const list = mentionCandidates(mentionQuery);
+    const showEveryone = 'everyone'.startsWith(mentionQuery.toLowerCase());
+    if (list.length === 0 && !showEveryone) return null;
+    return (
+      <View style={styles.mentionBox}>
+        {showEveryone && (
+          <TouchableOpacity
+            style={styles.mentionItem}
+            onPress={() => applyMention({ uid: '__everyone__', username: 'everyone', displayName: 'Everyone' })}
+          >
+            <View style={[styles.mentionAvatar, { backgroundColor: '#2a1a00' }]}>
+              <Text style={styles.mentionAvatarText}>📣</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mentionName}>Everyone</Text>
+              <Text style={styles.mentionHandle}>Notify all GMs in this league</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        {list.map((m: any) => (
+          <TouchableOpacity key={m.uid} style={styles.mentionItem} onPress={() => applyMention(m)}>
+            <View style={styles.mentionAvatar}>
+              <Text style={styles.mentionAvatarText}>{(m.displayName || m.username || '?')[0]?.toUpperCase()}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mentionName}>{m.displayName || m.username}</Text>
+              <Text style={styles.mentionHandle}>@{m.username}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
   };
 
   const searchGiphy = async (q: string) => {
@@ -441,17 +673,28 @@ export default function ChannelScreen() {
     const senderName = sender?.displayName || 'GM';
     const teamName = sender?.teamName || '';
     const label = teamName ? senderName + ' (' + teamName + ')' : senderName;
+    const chip = reactionChip(item);
     return (
-      <TouchableOpacity onLongPress={() => { if (!isMe) blockAndReport(item.uid, senderName); }} activeOpacity={1}>
+      <TouchableOpacity onLongPress={() => onMessageLongPress(item)} delayLongPress={250} activeOpacity={1}>
         <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
           <View style={[styles.msgContent, isMe && styles.msgContentMe]}>
-            {!isMe && <Text style={styles.msgSender}>{label}</Text>}
+            {!isMe && (
+              <TouchableOpacity onPress={() => blockAndReport(item.uid, senderName)}>
+                <Text style={styles.msgSender}>{label}</Text>
+              </TouchableOpacity>
+            )}
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-              {item.text ? <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.text}</Text> : null}
+              {item.text ? <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{renderWithMentions(item.text)}</Text> : null}
               {item.gifUrl ? <Image source={{ uri: item.gifUrl }} style={styles.gifImage} resizeMode='cover' /> : null}
               {item.photoUrl ? <Image source={{ uri: item.photoUrl }} style={styles.chatPhoto} resizeMode='cover' /> : null}
-              <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>{formatTime(item.createdAt)}</Text>
+              <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>{item.edited ? 'edited · ' : ''}{formatTime(item.createdAt)}</Text>
             </View>
+            {chip && (
+              <TouchableOpacity style={[styles.msgReactChip, isMe && styles.msgReactChipMe, chip.mine && styles.msgReactChipMine]} onPress={() => setMsgReaction(item)}>
+                <Text style={styles.msgReactChipEmoji}>{chip.emojis}</Text>
+                <Text style={styles.msgReactChipCount}>{chip.total}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -1403,6 +1646,67 @@ export default function ChannelScreen() {
       } catch(e: any) { Alert.alert('Error', e.message); }
     };
 
+    // Tap = toggle the default 👍 (or clear whatever reaction you already left).
+    const toggleReaction = async (item: any) => {
+      if (!user) return;
+      const mine = (item.reactions || {})[user.uid];
+      try {
+        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'highlights', 'posts', item.id), {
+          ['reactions.' + user.uid]: mine ? deleteField() : '👍',
+        });
+      } catch (e: any) { Alert.alert('Error', e.message); }
+    };
+
+    // Long-press picker = set a specific reaction (tapping your current one clears it).
+    const setReaction = async (item: any, emoji: string) => {
+      if (!user) return;
+      const mine = (item.reactions || {})[user.uid];
+      try {
+        await updateDoc(doc(db, 'leagues', leagueId, 'channels', 'highlights', 'posts', item.id), {
+          ['reactions.' + user.uid]: mine === emoji ? deleteField() : emoji,
+        });
+      } catch (e: any) { Alert.alert('Error', e.message); }
+      setReactionPost(null);
+    };
+
+    const REACTIONS = ['👍', '❤️', '😂', '😱', '‼️', '💯', '🤯'];
+
+    // Summarize a post's reactions: distinct emojis (most-used first) + total count.
+    const reactionSummary = (item: any) => {
+      const map: Record<string, number> = {};
+      Object.values(item.reactions || {}).forEach((e: any) => { map[e] = (map[e] || 0) + 1; });
+      const emojis = Object.keys(map).sort((a, b) => map[b] - map[a]);
+      const total = Object.values(map).reduce((s, n) => s + n, 0);
+      return { emojis, total };
+    };
+
+    const submitComment = async () => {
+      if (!user || !commentPost) return;
+      const text = hlCommentText.trim();
+      if (!text) return;
+      setHlCommentSending(true);
+      try {
+        const myTeam = leagueTeams.find((t: any) => t.gmId === user?.uid) || {};
+        const authorName = myTeam.name || members[user.uid]?.displayName || 'GM';
+        const postRef = doc(db, 'leagues', leagueId, 'channels', 'highlights', 'posts', commentPost.id);
+        // Full comment record lives in the subcollection (with a server timestamp).
+        await addDoc(collection(postRef, 'comments'), {
+          text,
+          postedBy: user.uid,
+          authorName,
+          createdAt: serverTimestamp(),
+        });
+        // Keep a small denormalized preview (latest 3) on the post for the card.
+        const snap = await getDoc(postRef);
+        const prev = snap.data()?.recentComments || [];
+        const recent = [...prev, { text, authorName, postedBy: user.uid, ts: Date.now() }].slice(-3);
+        await updateDoc(postRef, { commentCount: increment(1), recentComments: recent });
+        await notifyMentions(text, { channelId: 'highlights', channelLabel: 'Highlights', channelIcon: '🎬' });
+        setHlCommentText('');
+      } catch (e: any) { Alert.alert('Error', e.message); }
+      setHlCommentSending(false);
+    };
+
     return (
       <View style={styles.hlContainer}>
         {/* Broadcast header */}
@@ -1490,6 +1794,48 @@ export default function ChannelScreen() {
 
                   {/* Caption */}
                   {item.caption ? <Text style={styles.hlCaption}>{item.caption}</Text> : null}
+
+                  {/* Reaction + Comment action bar */}
+                  <View style={styles.hlActions}>
+                    <TouchableOpacity
+                      style={styles.hlActionBtn}
+                      onPress={() => toggleReaction(item)}
+                      onLongPress={() => setReactionPost(item)}
+                      delayLongPress={250}
+                    >
+                      {(() => {
+                        const mine = (item.reactions || {})[user?.uid || ''];
+                        const { emojis, total } = reactionSummary(item);
+                        return (
+                          <>
+                            <Text style={styles.hlActionIcon}>{emojis.length > 0 ? emojis.slice(0, 3).join('') : '👍'}</Text>
+                            <Text style={[styles.hlActionText, mine && styles.hlActionTextActive]}>{total}</Text>
+                          </>
+                        );
+                      })()}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.hlActionBtn} onPress={() => setCommentPost(item)}>
+                      <Text style={styles.hlActionIcon}>💬</Text>
+                      <Text style={styles.hlActionText}>{item.commentCount || 0}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Comment preview (latest 3) */}
+                  {item.recentComments && item.recentComments.length > 0 && (
+                    <View style={styles.hlCommentPreview}>
+                      {item.recentComments.slice(-3).map((c: any, idx: number) => (
+                        <Text key={idx} style={styles.hlPreviewLine} numberOfLines={2}>
+                          <Text style={styles.hlPreviewAuthor}>{c.authorName || 'GM'} </Text>
+                          {c.text}
+                        </Text>
+                      ))}
+                      {(item.commentCount || 0) > Math.min(item.recentComments.length, 3) && (
+                        <TouchableOpacity onPress={() => setCommentPost(item)}>
+                          <Text style={styles.hlViewAll}>View all {item.commentCount} comments →</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -1572,6 +1918,74 @@ export default function ChannelScreen() {
             </ScrollView>
           </View>
         </Modal>
+
+        {/* Comments Modal */}
+        <Modal visible={!!commentPost} animationType='slide' presentationStyle='pageSheet' onRequestClose={() => setCommentPost(null)}>
+          <View style={styles.hlModal}>
+            <View style={styles.hlModalHeader}>
+              <TouchableOpacity onPress={() => { setCommentPost(null); setHlCommentText(''); setMentionQuery(null); setMentionTarget(null); }}>
+                <Text style={styles.hlBack}>Close</Text>
+              </TouchableOpacity>
+              <Text style={styles.hlModalTitle}>Comments</Text>
+              <View style={{ width: 50 }} />
+            </View>
+            <ScrollView contentContainerStyle={styles.hlCommentList}>
+              {hlComments.length === 0 ? (
+                <Text style={styles.hlCommentEmpty}>No comments yet. Be the first.</Text>
+              ) : (
+                hlComments.map(c => (
+                  <View key={c.id} style={styles.hlCommentRow}>
+                    <View style={styles.hlCommentAvatar}>
+                      <Text style={styles.hlCommentAvatarText}>{(c.authorName || '?')[0]?.toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.hlCommentBody}>
+                      <Text style={styles.hlCommentAuthor}>{c.authorName || 'GM'}</Text>
+                      <Text style={styles.hlCommentText}>{renderWithMentions(c.text)}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            {renderMentionDropdown('comment')}
+            <View style={styles.hlCommentInputBar}>
+              <TextInput
+                style={styles.hlCommentInput}
+                placeholder='Add a comment...'
+                placeholderTextColor='#555'
+                value={hlCommentText}
+                onChangeText={(v) => onMentionInput(v, 'comment')}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.hlCommentSend, (!hlCommentText.trim() || hlCommentSending) && { opacity: 0.4 }]}
+                onPress={submitComment}
+                disabled={!hlCommentText.trim() || hlCommentSending}
+              >
+                <Text style={styles.hlCommentSendText}>{hlCommentSending ? '...' : 'Send'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Reaction Picker (long-press) */}
+        <Modal visible={!!reactionPost} transparent animationType='fade' onRequestClose={() => setReactionPost(null)}>
+          <TouchableOpacity style={styles.hlReactBackdrop} activeOpacity={1} onPress={() => setReactionPost(null)}>
+            <View style={styles.hlReactBar}>
+              {REACTIONS.map(emoji => {
+                const mine = reactionPost && (reactionPost.reactions || {})[user?.uid || ''] === emoji;
+                return (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[styles.hlReactOption, mine && styles.hlReactOptionActive]}
+                    onPress={() => setReaction(reactionPost, emoji)}
+                  >
+                    <Text style={styles.hlReactOptionEmoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     );
   }
@@ -1605,7 +2019,18 @@ export default function ChannelScreen() {
     >
       {/* Basketball Court Background */}
       <View style={styles.courtBg} pointerEvents='none'>
-        <View style={styles.courtFloor} />
+        <LinearGradient
+          colors={['#b9854a', '#9a6a37', '#a9763f', '#855227']}
+          locations={[0, 0.4, 0.7, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.15, y: 1 }}
+          style={styles.courtFloor}
+        />
+        <View style={styles.plankRow}>
+          {Array.from({ length: 16 }).map((_, i) => (
+            <View key={i} style={[styles.plank, i % 2 === 0 ? styles.plankDark : styles.plankLight]} />
+          ))}
+        </View>
         <View style={styles.courtLine} />
         <View style={styles.centerCircle} />
         <View style={styles.centerDot} />
@@ -1648,7 +2073,13 @@ export default function ChannelScreen() {
 
       {canPost && (
         <View>
-          {pendingGif && (
+          {editingMsg && (
+            <View style={styles.editBanner}>
+              <Text style={styles.editBannerText}>✏️ Editing message</Text>
+              <TouchableOpacity onPress={cancelEdit}><Text style={styles.editBannerCancel}>Cancel</Text></TouchableOpacity>
+            </View>
+          )}
+          {pendingGif && !editingMsg && (
             <View style={styles.pendingGifRow}>
               <Image source={{ uri: pendingGif }} style={styles.pendingGifThumb} resizeMode='cover' />
               <TouchableOpacity style={styles.pendingGifRemove} onPress={() => setPendingGif(null)}>
@@ -1657,6 +2088,7 @@ export default function ChannelScreen() {
               <Text style={styles.pendingGifLabel}>GIF ready · Add a caption or send</Text>
             </View>
           )}
+        {renderMentionDropdown('chat')}
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
             <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
@@ -1667,17 +2099,17 @@ export default function ChannelScreen() {
           <TextInput
             style={styles.input}
             value={text}
-            onChangeText={setText}
-            placeholder='Message...'
+            onChangeText={(v) => onMentionInput(v, 'chat')}
+            placeholder={editingMsg ? 'Edit your message...' : 'Message...'}
             placeholderTextColor='#555'
             multiline
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!text.trim() && !pendingGif && !sending) && styles.sendBtnDisabled]}
-            onPress={() => { sendMessage(undefined, pendingGif || undefined); setPendingGif(null); }}
+            onPress={() => { if (editingMsg) { saveEdit(); } else { sendMessage(undefined, pendingGif || undefined); setPendingGif(null); } }}
             disabled={(!text.trim() && !pendingGif) || sending}
           >
-            <Text style={styles.sendBtnText}>↑</Text>
+            <Text style={styles.sendBtnText}>{editingMsg ? '✓' : '↑'}</Text>
           </TouchableOpacity>
         </View>
         </View>
@@ -1720,6 +2152,26 @@ export default function ChannelScreen() {
           )}
         </View>
       </Modal>
+
+      {/* Message reaction picker (long-press) */}
+      <Modal visible={!!msgReaction} transparent animationType='fade' onRequestClose={() => setMsgReaction(null)}>
+        <TouchableOpacity style={styles.hlReactBackdrop} activeOpacity={1} onPress={() => setMsgReaction(null)}>
+          <View style={styles.hlReactBar}>
+            {MESSAGE_REACTIONS.map(emoji => {
+              const mine = msgReaction && (msgReaction.reactions || {})[user?.uid || ''] === emoji;
+              return (
+                <TouchableOpacity
+                  key={emoji}
+                  style={[styles.hlReactOption, mine && styles.hlReactOptionActive]}
+                  onPress={() => setChatReaction(msgReaction, emoji)}
+                >
+                  <Text style={styles.hlReactOptionEmoji}>{emoji}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
       </KeyboardAvoidingView>
   );
 }
@@ -1729,17 +2181,21 @@ const styles = StyleSheet.create({
 
   // Court background
   courtBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  courtFloor: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#8B4513', opacity: 0.45 },
-  courtDark: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', opacity: 0.60 },
-  courtLine: { position: 'absolute', top: '48%', left: 20, right: 20, height: 2, backgroundColor: '#ffffff', opacity: 0.35 },
-  centerCircle: { position: 'absolute', alignSelf: 'center', top: '38%', width: 150, height: 150, borderRadius: 75, borderWidth: 2, borderColor: '#ffffff', opacity: 0.3 },
-  centerDot: { position: 'absolute', alignSelf: 'center', top: '46%', width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', opacity: 0.2 },
-  paintTop: { position: 'absolute', alignSelf: 'center', top: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#ffffff', opacity: 0.22, backgroundColor: 'rgba(255,255,255,0.03)' },
-  paintBottom: { position: 'absolute', alignSelf: 'center', bottom: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#ffffff', opacity: 0.22, backgroundColor: 'rgba(255,255,255,0.03)' },
-  ftCircleTop: { position: 'absolute', alignSelf: 'center', top: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
-  ftCircleBottom: { position: 'absolute', alignSelf: 'center', bottom: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
-  threeTop: { position: 'absolute', alignSelf: 'center', top: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
-  threeBottom: { position: 'absolute', alignSelf: 'center', bottom: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#ffffff', opacity: 0.2 },
+  courtFloor: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.6 },
+  plankRow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
+  plank: { flex: 1, borderRightWidth: 1, borderRightColor: 'rgba(60,35,12,0.45)' },
+  plankDark: { backgroundColor: 'rgba(40,22,6,0.18)' },
+  plankLight: { backgroundColor: 'rgba(255,225,170,0.06)' },
+  courtDark: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', opacity: 0.5 },
+  courtLine: { position: 'absolute', top: '48%', left: 20, right: 20, height: 2, backgroundColor: '#efe2c4', opacity: 0.4 },
+  centerCircle: { position: 'absolute', alignSelf: 'center', top: '38%', width: 150, height: 150, borderRadius: 75, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.32 },
+  centerDot: { position: 'absolute', alignSelf: 'center', top: '46%', width: 20, height: 20, borderRadius: 10, backgroundColor: '#efe2c4', opacity: 0.22 },
+  paintTop: { position: 'absolute', alignSelf: 'center', top: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.24, backgroundColor: 'rgba(255,235,200,0.04)' },
+  paintBottom: { position: 'absolute', alignSelf: 'center', bottom: 0, width: 160, height: 200, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.24, backgroundColor: 'rgba(255,235,200,0.04)' },
+  ftCircleTop: { position: 'absolute', alignSelf: 'center', top: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.22 },
+  ftCircleBottom: { position: 'absolute', alignSelf: 'center', bottom: 140, width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.22 },
+  threeTop: { position: 'absolute', alignSelf: 'center', top: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.22 },
+  threeBottom: { position: 'absolute', alignSelf: 'center', bottom: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.22 },
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
@@ -1759,11 +2215,26 @@ const styles = StyleSheet.create({
   msgContentMe: { alignItems: 'flex-end' },
   msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 4 },
   msgSender: { color: '#F5A623', fontSize: 11, fontWeight: '700', marginBottom: 3, marginLeft: 4 },
+  msgReactChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4, marginLeft: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  msgReactChipMe: { alignSelf: 'flex-end', marginRight: 4 },
+  msgReactChipMine: { borderColor: '#F5A623', backgroundColor: 'rgba(245,166,35,0.15)' },
+  msgReactChipEmoji: { fontSize: 13 },
+  msgReactChipCount: { color: '#ccc', fontSize: 12, fontWeight: '700' },
+  editBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: 'rgba(245,166,35,0.12)', borderTopWidth: 1, borderTopColor: 'rgba(245,166,35,0.4)' },
+  editBannerText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
+  editBannerCancel: { color: '#ff6666', fontSize: 13, fontWeight: '700' },
   msgTeamBadge: { fontSize: 10, fontWeight: '800' },
   bubble: { borderRadius: 18, padding: 10, borderWidth: 1 },
   bubbleMe: { backgroundColor: '#1a1000', borderColor: '#F5A62355', borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: 'rgba(30,30,30,0.92)', borderColor: 'rgba(255,255,255,0.1)', borderBottomLeftRadius: 4 },
   msgText: { color: '#ffffff', fontSize: 15, lineHeight: 20 },
+  mentionText: { color: '#F5A623', fontWeight: '800' },
+  mentionBox: { marginHorizontal: 12, marginBottom: 6, backgroundColor: '#15151a', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a33', overflow: 'hidden' },
+  mentionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1f1f26' },
+  mentionAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2a2a33', borderWidth: 1, borderColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
+  mentionAvatarText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
+  mentionName: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  mentionHandle: { color: '#888', fontSize: 12, marginTop: 1 },
   msgTextMe: { color: '#fff3e0' },
   msgTime: { color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 4, textAlign: 'right' },
   msgTimeMe: { color: 'rgba(245,166,35,0.5)' },
@@ -2055,6 +2526,32 @@ const styles = StyleSheet.create({
   hlClipUrl: { color: '#888', fontSize: 12 },
   hlClipArrow: { color: '#ff4444', fontSize: 18 },
   hlCaption: { color: '#cccccc', fontSize: 14, padding: 12, paddingTop: 8, lineHeight: 20 },
+  hlActions: { flexDirection: 'row', gap: 18, paddingHorizontal: 12, paddingTop: 6, paddingBottom: 4, borderTopWidth: 1, borderTopColor: '#1a0a0a' },
+  hlActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  hlActionIcon: { fontSize: 18 },
+  hlActionText: { color: '#888', fontSize: 14, fontWeight: '700' },
+  hlActionTextActive: { color: '#ff6666' },
+  hlReactBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  hlReactBar: { flexDirection: 'row', backgroundColor: '#1a0a0a', borderRadius: 26, paddingHorizontal: 8, paddingVertical: 8, gap: 2, borderWidth: 1, borderColor: '#2a1010' },
+  hlReactOption: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  hlReactOptionActive: { backgroundColor: '#2a1010', borderWidth: 1, borderColor: '#ff6666' },
+  hlReactOptionEmoji: { fontSize: 24 },
+  hlCommentPreview: { paddingHorizontal: 12, paddingBottom: 12, gap: 4 },
+  hlPreviewLine: { color: '#bbbbbb', fontSize: 13, lineHeight: 18 },
+  hlPreviewAuthor: { color: '#ffffff', fontWeight: '700' },
+  hlViewAll: { color: '#ff6666', fontSize: 13, fontWeight: '700', marginTop: 4 },
+  hlCommentList: { padding: 16, paddingBottom: 40 },
+  hlCommentEmpty: { color: '#555', fontSize: 14, textAlign: 'center', paddingTop: 40 },
+  hlCommentRow: { flexDirection: 'row', gap: 10, marginBottom: 16, alignItems: 'flex-start' },
+  hlCommentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a1010', borderWidth: 1, borderColor: '#ff6666', alignItems: 'center', justifyContent: 'center' },
+  hlCommentAvatarText: { color: '#ff6666', fontSize: 15, fontWeight: '800' },
+  hlCommentBody: { flex: 1 },
+  hlCommentAuthor: { color: '#ffffff', fontSize: 13, fontWeight: '800', marginBottom: 2 },
+  hlCommentText: { color: '#cccccc', fontSize: 14, lineHeight: 20 },
+  hlCommentInputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, paddingBottom: 28, borderTopWidth: 1, borderTopColor: '#1a0a0a', backgroundColor: '#0a0000' },
+  hlCommentInput: { flex: 1, backgroundColor: '#1a0a0a', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 14, maxHeight: 100, borderWidth: 1, borderColor: '#2a1010' },
+  hlCommentSend: { backgroundColor: '#ff4444', borderRadius: 18, paddingHorizontal: 18, paddingVertical: 11 },
+  hlCommentSendText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
   hlModal: { flex: 1, backgroundColor: '#0a0000' },
   hlModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 56, borderBottomWidth: 1, borderBottomColor: '#330000' },
   hlModalCancel: { color: '#888', fontSize: 15, fontWeight: '600' },

@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
@@ -33,6 +33,8 @@ export default function LeagueScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [league, setLeague] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [tradePickerOpen, setTradePickerOpen] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [activityIndex, setActivityIndex] = useState(0);
@@ -93,6 +95,8 @@ export default function LeagueScreen() {
       setMembers(memberProfiles);
 
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      const allTeams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      setTeams(allTeams);
       const myT = teamsSnap.docs.find(d => d.data().gmId === user?.uid);
       if (myT) setMyTeam({ id: myT.id, ...myT.data() });
 
@@ -435,6 +439,16 @@ export default function LeagueScreen() {
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+          onPress={() => {
+            if (!myTeam) { Alert.alert('No team yet', 'Claim a team in this league before proposing a trade.'); return; }
+            setTradePickerOpen(true);
+          }}
+        >
+          <Text style={[styles.rostersBtnText, { color: titleColor }]}>🔁 Propose Trade</Text>
+        </TouchableOpacity>
+
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
@@ -482,6 +496,42 @@ export default function LeagueScreen() {
       </View>
           <GlobalNav />
       </Animated.ScrollView>
+
+      <Modal visible={tradePickerOpen} animationType='slide' presentationStyle='pageSheet' onRequestClose={() => setTradePickerOpen(false)}>
+        <View style={styles.tpModal}>
+          <View style={styles.tpHeader}>
+            <TouchableOpacity onPress={() => setTradePickerOpen(false)}><Text style={styles.tpCancel}>Cancel</Text></TouchableOpacity>
+            <Text style={styles.tpTitle}>Propose Trade</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <Text style={styles.tpSub}>Choose a team to open a trade with</Text>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 8 }}>
+            {teams.filter((t: any) => t.gmId && t.gmId !== user?.uid).length === 0 ? (
+              <Text style={styles.tpEmpty}>No other managers have claimed a team yet.</Text>
+            ) : (
+              teams.filter((t: any) => t.gmId && t.gmId !== user?.uid).map((t: any) => {
+                const gmName = members.find((m: any) => m.uid === t.gmId)?.displayName || 'GM';
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={styles.tpRow}
+                    onPress={() => {
+                      setTradePickerOpen(false);
+                      router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: t.gmId, otherTeamId: t.id, otherTeamName: t.name || '' } });
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.tpRowTeam}>{t.name || t.abbreviation || 'Team'}</Text>
+                      <Text style={styles.tpRowGm}>🧑 {gmName}</Text>
+                    </View>
+                    <Text style={styles.tpChevron}>›</Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -587,6 +637,16 @@ const styles = StyleSheet.create({
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
+  tpModal: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 50 },
+  tpHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  tpCancel: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
+  tpTitle: { color: '#fff', fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },
+  tpSub: { color: '#888', fontSize: 13, paddingHorizontal: 20, paddingTop: 14 },
+  tpEmpty: { color: '#555', fontSize: 14, textAlign: 'center', paddingTop: 40 },
+  tpRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2a2a2a' },
+  tpRowTeam: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  tpRowGm: { color: '#888', fontSize: 13, marginTop: 3 },
+  tpChevron: { color: '#666', fontSize: 22, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
   deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },

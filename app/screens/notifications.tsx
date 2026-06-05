@@ -300,7 +300,7 @@ export default function NotificationsScreen() {
                 >
                 <View style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
-                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : n.type === 'trade_override_review' ? '🔓' : n.type === 'trade_override_approved' ? '✅' : n.type === 'trade_override_denied' ? '❌' : n.type === 'custom_player_submitted' ? '📝' : n.type === 'custom_player_approved' ? '✅' : n.type === 'custom_player_denied' ? '❌' : '🔔'}
+                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : n.type === 'trade_override_review' ? '🔓' : n.type === 'trade_override_approved' ? '✅' : n.type === 'trade_override_denied' ? '❌' : n.type === 'custom_player_submitted' ? '📝' : n.type === 'custom_player_approved' ? '✅' : n.type === 'custom_player_denied' ? '❌' : n.type === 'mention' ? '📣' : '🔔'}
                   </Text>
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
@@ -325,6 +325,8 @@ export default function NotificationsScreen() {
                           router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
                         else if (n.type === 'tradeblock' || n.type === 'trade_listing')
                           router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
+                        else if (n.type === 'mention')
+                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: n.channelId || 'league-chat', channelLabel: n.channelLabel || 'League Chat', channelIcon: n.channelIcon || '💬', commissionerId: '', coCommissioners: '[]' } });
                         else if (n.type === 'cpu_trade_request')
                           router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId: n.leagueId } });
                         else if (n.type === 'cpu_trade_result')
@@ -349,6 +351,7 @@ export default function NotificationsScreen() {
                            n.type === 'reset_request' || n.type === 'reset_request_opponent' ? 'View Reset Requests →' :
                            n.type === 'cpu_trade_request' ? 'Review CPU Trade →' :
                            n.type === 'cpu_trade_result' ? 'View Rosters →' :
+                           n.type === 'mention' ? 'View message →' :
                            n.type === 'announcement' ? 'View League News →' : 'View League →'}
                         </Text>}
                       </TouchableOpacity>

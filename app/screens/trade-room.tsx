@@ -19,6 +19,16 @@ function getPlayerKey(p: any) {
   return p?.player_id || p?.full_name || '';
 }
 
+function pickLabel(pk: any) {
+  const rd = pk?.round === 2 ? '2nd Rd' : '1st Rd';
+  return pk?.year + ' ' + rd + (pk?.protection ? ' · ' + pk.protection : '');
+}
+
+// Strip undefined values (Firestore rejects them) by round-tripping through JSON.
+function cleanForFirestore(obj: any) {
+  return JSON.parse(JSON.stringify(obj ?? {}));
+}
+
 function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
   const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
   const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
@@ -74,6 +84,10 @@ export default function TradeRoomScreen() {
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
+  const [pickModalSide, setPickModalSide] = useState<null | 'mine' | 'theirs'>(null);
+  const [pickRound, setPickRound] = useState<1 | 2>(1);
+  const [pickYear, setPickYear] = useState('');
+  const [pickProtection, setPickProtection] = useState('');
   const presenceTimerRef = useRef<any>(null);
 
   // Initial load + room creation
@@ -343,6 +357,10 @@ export default function TradeRoomScreen() {
   const otherConfirmKey = isHost ? 'guestConfirmed' : 'hostConfirmed';
   const myOffer = room[myOfferKey] || [];
   const otherOffer = room[otherOfferKey] || [];
+  const myPicksKey = isHost ? 'hostPicks' : 'guestPicks';
+  const otherPicksKey = isHost ? 'guestPicks' : 'hostPicks';
+  const myPicks = room[myPicksKey] || [];
+  const otherPicks = room[otherPicksKey] || [];
   const myConfirmed = !!room[myConfirmKey];
   const otherConfirmed = !!room[otherConfirmKey];
   const senderUid = room.senderUid;
@@ -370,7 +388,7 @@ export default function TradeRoomScreen() {
     const exists = current.some((p: any) => getPlayerKey(p) === getPlayerKey(player));
     if (exists) return;
     await updateRoom({
-      [key]: [...current, player],
+      [key]: [...current, cleanForFirestore(player)],
       hostConfirmed: false,
       guestConfirmed: false,
       status: isLive ? 'live' : (room.status === 'open' ? 'open' : room.status),
@@ -383,6 +401,44 @@ export default function TradeRoomScreen() {
     const next = current.filter((p: any) => getPlayerKey(p) !== getPlayerKey(player));
     await updateRoom({
       [key]: next,
+      hostConfirmed: false,
+      guestConfirmed: false,
+    });
+  };
+
+  const addPickToOffer = async (side: 'mine' | 'theirs') => {
+    const yr = parseInt(pickYear, 10);
+    if (!yr || yr < new Date().getFullYear() || yr > 2100) {
+      Alert.alert('Enter a valid year', 'Use a future draft year, e.g. ' + (new Date().getFullYear() + 1) + '.');
+      return;
+    }
+    const key = side === 'mine' ? myPicksKey : otherPicksKey;
+    const current = side === 'mine' ? myPicks : otherPicks;
+    const teamName = side === 'mine' ? (myTeam?.name || 'My Team') : otherTeamName;
+    const pick = {
+      id: 'pk_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      round: pickRound,
+      year: yr,
+      protection: pickProtection.trim(),
+      team: teamName,
+    };
+    await updateRoom({
+      [key]: [...current, pick],
+      hostConfirmed: false,
+      guestConfirmed: false,
+      status: isLive ? 'live' : (room.status === 'open' ? 'open' : room.status),
+    });
+    setPickModalSide(null);
+    setPickYear('');
+    setPickProtection('');
+    setPickRound(1);
+  };
+
+  const removePickFromOffer = async (pick: any, side: 'mine' | 'theirs') => {
+    const key = side === 'mine' ? myPicksKey : otherPicksKey;
+    const current = side === 'mine' ? myPicks : otherPicks;
+    await updateRoom({
+      [key]: current.filter((p: any) => p.id !== pick.id),
       hostConfirmed: false,
       guestConfirmed: false,
     });
@@ -518,8 +574,8 @@ export default function TradeRoomScreen() {
       }
       return;
     }
-    if (myOffer.length === 0 && otherOffer.length === 0) {
-      Alert.alert('Empty trade', 'Add at least one player.');
+    if (myOffer.length === 0 && otherOffer.length === 0 && myPicks.length === 0 && otherPicks.length === 0) {
+      Alert.alert('Empty trade', 'Add at least one player or draft pick.');
       return;
     }
     try {
@@ -564,7 +620,7 @@ export default function TradeRoomScreen() {
             executedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
-          return { executed: true, hostOffered, guestOffered, hostName: data.hostTeamName, guestName: data.guestTeamName };
+          return { executed: true, hostOffered, guestOffered, hostPicks: data.hostPicks || [], guestPicks: data.guestPicks || [], hostName: data.hostTeamName, guestName: data.guestTeamName };
         } else {
           tx.update(ref, { [myConfirmKey]: true, updatedAt: serverTimestamp() });
           return { executed: false };
@@ -607,9 +663,13 @@ export default function TradeRoomScreen() {
 
         // Log to league activity feed (visible on league screen + dashboard trade highlights)
         try {
-          const hostNames = (result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean).join(', ') || 'players';
-          const guestNames = (result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean).join(', ') || 'players';
-          const activityMsg = (result.hostName || 'Team A') + ' traded ' + hostNames + ' to ' + (result.guestName || 'Team B') + ' for ' + guestNames;
+          const hostPlayerNames = (result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean);
+          const guestPlayerNames = (result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean);
+          const hostPickTxt = (result.hostPicks || []).map((pk: any) => pickLabel(pk));
+          const guestPickTxt = (result.guestPicks || []).map((pk: any) => pickLabel(pk));
+          const hostAssets = [...hostPlayerNames, ...hostPickTxt].join(', ') || 'assets';
+          const guestAssets = [...guestPlayerNames, ...guestPickTxt].join(', ') || 'assets';
+          const activityMsg = (result.hostName || 'Team A') + ' traded ' + hostAssets + ' to ' + (result.guestName || 'Team B') + ' for ' + guestAssets;
           await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
             type: 'trade_executed',
             message: activityMsg,
@@ -630,8 +690,8 @@ export default function TradeRoomScreen() {
   };
 
   const handleSendOffer = async () => {
-    if (myOffer.length === 0 && otherOffer.length === 0) {
-      Alert.alert('Empty trade', 'Add at least one player.');
+    if (myOffer.length === 0 && otherOffer.length === 0 && myPicks.length === 0 && otherPicks.length === 0) {
+      Alert.alert('Empty trade', 'Add at least one player or draft pick.');
       return;
     }
     try {
@@ -795,6 +855,19 @@ export default function TradeRoomScreen() {
               <Text style={styles.addBtnText}>+ ADD PLAYER</Text>
             </TouchableOpacity>
           ) : null}
+          {otherPicks.map((pk: any) => (
+            <View key={pk.id} style={styles.pickChip}>
+              <Text style={styles.pickChipText}>🎟️ {pickLabel(pk)}</Text>
+              {canEditOtherSide ? (
+                <TouchableOpacity onPress={() => removePickFromOffer(pk, 'theirs')}><Text style={styles.pickChipX}>✕</Text></TouchableOpacity>
+              ) : null}
+            </View>
+          ))}
+          {canEditOtherSide ? (
+            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('theirs'); setPickRound(1); setPickYear(''); setPickProtection(''); }}>
+              <Text style={styles.addPickBtnText}>+ ADD PICK</Text>
+            </TouchableOpacity>
+          ) : null}
           {otherConfirmed ? <Text style={styles.confirmBadge}>✓ CONFIRMED</Text> : null}
           {otherOffer.length > 0 && leagueEra === 'current' ? (
             <View style={styles.totalRow}>
@@ -902,6 +975,19 @@ export default function TradeRoomScreen() {
           {canEditMySide && myOffer.length < MAX_PER_SIDE ? (
             <TouchableOpacity style={styles.addBtn} onPress={() => setPickerOpen(true)}>
               <Text style={styles.addBtnText}>+ ADD PLAYER</Text>
+            </TouchableOpacity>
+          ) : null}
+          {myPicks.map((pk: any) => (
+            <View key={pk.id} style={styles.pickChip}>
+              <Text style={styles.pickChipText}>🎟️ {pickLabel(pk)}</Text>
+              {canEditMySide ? (
+                <TouchableOpacity onPress={() => removePickFromOffer(pk, 'mine')}><Text style={styles.pickChipX}>✕</Text></TouchableOpacity>
+              ) : null}
+            </View>
+          ))}
+          {canEditMySide ? (
+            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('mine'); setPickRound(1); setPickYear(''); setPickProtection(''); }}>
+              <Text style={styles.addPickBtnText}>+ ADD PICK</Text>
             </TouchableOpacity>
           ) : null}
           {myConfirmed ? <Text style={styles.confirmBadge}>✓ CONFIRMED</Text> : null}
@@ -1028,6 +1114,56 @@ export default function TradeRoomScreen() {
         </View>
       </Modal>
 
+      {/* Draft pick composer */}
+      <Modal visible={!!pickModalSide} animationType='slide' presentationStyle='pageSheet' onRequestClose={() => setPickModalSide(null)}>
+        <View style={styles.pickModal}>
+          <View style={styles.pickModalHeader}>
+            <TouchableOpacity onPress={() => setPickModalSide(null)}><Text style={styles.pickModalCancel}>Cancel</Text></TouchableOpacity>
+            <Text style={styles.pickModalTitle}>Add Draft Pick</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <View style={styles.pickModalBody}>
+            <Text style={styles.pickModalWho}>
+              {pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName} sends this pick
+            </Text>
+
+            <Text style={styles.pickFieldLabel}>Round</Text>
+            <View style={styles.roundRow}>
+              <TouchableOpacity style={[styles.roundBtn, pickRound === 1 && styles.roundBtnActive]} onPress={() => setPickRound(1)}>
+                <Text style={[styles.roundBtnText, pickRound === 1 && styles.roundBtnTextActive]}>1st Round</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.roundBtn, pickRound === 2 && styles.roundBtnActive]} onPress={() => setPickRound(2)}>
+                <Text style={[styles.roundBtnText, pickRound === 2 && styles.roundBtnTextActive]}>2nd Round</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.pickFieldLabel}>Year</Text>
+            <TextInput
+              style={styles.pickInput}
+              value={pickYear}
+              onChangeText={setPickYear}
+              placeholder={'e.g. ' + (new Date().getFullYear() + 1)}
+              placeholderTextColor='#555'
+              keyboardType='number-pad'
+              maxLength={4}
+            />
+
+            <Text style={styles.pickFieldLabel}>Protection (optional)</Text>
+            <TextInput
+              style={styles.pickInput}
+              value={pickProtection}
+              onChangeText={setPickProtection}
+              placeholder='e.g. Top-4 protected, unprotected, lottery protected'
+              placeholderTextColor='#555'
+            />
+
+            <TouchableOpacity style={styles.pickAddConfirm} onPress={() => addPickToOffer(pickModalSide === 'mine' ? 'mine' : 'theirs')}>
+              <Text style={styles.pickAddConfirmText}>Add to Trade</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <GlobalNav />
     </View>
   );
@@ -1078,7 +1214,26 @@ const styles = StyleSheet.create({
 
   addBtn: { borderStyle: 'dashed', borderWidth: 1, borderColor: '#333', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   addBtnText: { color: '#666', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-
+  pickChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1a1530', borderRadius: 8, borderWidth: 1, borderColor: '#4a3fa0', paddingHorizontal: 12, paddingVertical: 10, marginTop: 6 },
+  pickChipText: { color: '#b9b0ff', fontSize: 13, fontWeight: '700' },
+  pickChipX: { color: '#ff6666', fontSize: 14, fontWeight: '800', paddingHorizontal: 6 },
+  addPickBtn: { borderStyle: 'dashed', borderWidth: 1, borderColor: '#4a3fa0', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 6 },
+  addPickBtnText: { color: '#8b80d8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  pickModal: { flex: 1, backgroundColor: '#0a0a12', paddingTop: 50 },
+  pickModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a2a' },
+  pickModalCancel: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
+  pickModalTitle: { color: '#fff', fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },
+  pickModalBody: { padding: 20, gap: 8 },
+  pickModalWho: { color: '#8b80d8', fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  pickFieldLabel: { color: '#888', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginTop: 10, marginBottom: 4 },
+  roundRow: { flexDirection: 'row', gap: 10 },
+  roundBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 10, backgroundColor: '#15151f', borderWidth: 1, borderColor: '#2a2a3a' },
+  roundBtnActive: { backgroundColor: '#1a1530', borderColor: '#4a3fa0' },
+  roundBtnText: { color: '#777', fontSize: 14, fontWeight: '700' },
+  roundBtnTextActive: { color: '#b9b0ff' },
+  pickInput: { backgroundColor: '#15151f', borderRadius: 10, padding: 14, color: '#fff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a3a' },
+  pickAddConfirm: { backgroundColor: '#4a3fa0', borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginTop: 24 },
+  pickAddConfirmText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   confirmBadge: { color: '#00ff87', fontSize: 11, fontWeight: '800', letterSpacing: 1, textAlign: 'center', marginTop: 4 },
 
   footer: { position: 'absolute', bottom: 80, left: 0, right: 0, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0a0a0a', borderTopWidth: 1, borderTopColor: '#1a1a1a' },
