@@ -33,6 +33,23 @@ const MLB_MODES = [
   { label: 'Fantasy Draft', value: 'draft', desc: 'Draft players from scratch before the season', icon: '🎯' },
 ];
 
+const PRIVACY_OPTIONS = [
+  { value: 'public', label: 'Public', desc: 'Anyone can find and join your league' },
+  { value: 'private', label: 'Private', desc: 'Joinable with a passcode' },
+];
+
+const TRADE_MODES = [
+  { value: 'instant', label: 'Instant', desc: 'Trades execute as soon as both GMs confirm', disabled: false },
+  { value: 'veto', label: 'Commissioner Veto', desc: '24h window for a commissioner to veto before a trade goes through', disabled: false },
+  { value: 'vote', label: 'League Vote', desc: 'The league votes to approve or reject each trade', disabled: false },
+];
+
+const VOTE_THRESHOLDS = [
+  { value: 'majority', label: 'Majority', desc: 'More than half of voting GMs must approve' },
+  { value: 'two_thirds', label: 'Two-Thirds', desc: 'At least ⅔ of voting GMs must approve' },
+  { value: 'unanimous', label: 'Unanimous', desc: 'Every voting GM must approve' },
+];
+
 export default function CreateLeagueScreen() {
   const [step, setStep] = useState(1);
   const [leagueName, setLeagueName] = useState('');
@@ -40,6 +57,14 @@ export default function CreateLeagueScreen() {
   const [mode, setMode] = useState('');
   const [era, setEra] = useState('');
   const [teamMode, setTeamMode] = useState('');
+  const [privacy, setPrivacy] = useState('private');
+  const [inviteCode, setInviteCode] = useState('');
+  const [tradeApprovalMode, setTradeApprovalMode] = useState('instant');
+  const [maxPlayersPerTrade, setMaxPlayersPerTrade] = useState('6');
+  const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
+  const [spinChoices, setSpinChoices] = useState('1');
+  const [votePassThreshold, setVotePassThreshold] = useState('majority');
+  const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
   const [loading, setLoading] = useState(false);
 
   const sports = [
@@ -63,13 +88,34 @@ export default function CreateLeagueScreen() {
     if (!user) { router.replace('/(tabs)/auth'); return; }
     setLoading(true);
     try {
+      if (privacy === 'private' && !inviteCode.trim()) {
+        Alert.alert('Passcode required', 'Private leagues need a join passcode.');
+        setLoading(false); return;
+      }
+      const maxTrade = parseInt(maxPlayersPerTrade, 10);
+      if (isNaN(maxTrade) || maxTrade < 1 || maxTrade > 15) {
+        Alert.alert('Invalid', 'Max players per trade must be between 1 and 15.');
+        setLoading(false); return;
+      }
+      const tolNum = parseFloat(tradeApronTolerance) || 1.25;
+      if (tolNum < 1.0 || tolNum > 2.0) {
+        Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.');
+        setLoading(false); return;
+      }
       const leagueId = doc(collection(db, 'leagues')).id;
       const finalMode = sport === 'nba' ? teamMode : mode;
       const finalEra = sport === 'nba' ? era : null;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
-        privacy: 'private',
+        privacy,
+        inviteCode: privacy === 'private' ? inviteCode.trim() : '',
+        tradeApprovalMode,
+        maxPlayersPerTrade: maxTrade,
+        tradeApronTolerance: tolNum,
+        votePassThreshold,
+        voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
+        spinChoices: (sport === 'nba' ? teamMode : mode) === 'random' ? (parseInt(spinChoices, 10) || 1) : 1,
         currentYear: sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : 2024,
         currentSeason: sport === 'nba' ? (era === 'magic_bird' ? '1983-84' : era === 'jordan' ? '1991-92' : era === 'kobe' ? '2002-03' : era === 'lebron' ? '2010-11' : era === 'steph' ? '2016-17' : '2024-25') : '2024-25',
         sport,
@@ -291,6 +337,119 @@ export default function CreateLeagueScreen() {
                 <Text style={styles.summaryValue}>{getSummaryMode()}</Text>
               </View>
             </View>
+
+            <Text style={styles.sectionLabel}>League Privacy</Text>
+            {PRIVACY_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.optionRow, privacy === opt.value && styles.optionRowActive]}
+                onPress={() => setPrivacy(opt.value)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, privacy === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.optionDesc}>{opt.desc}</Text>
+                </View>
+                {privacy === opt.value && <Text style={styles.check}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+            {privacy === 'private' && (
+              <TextInput
+                style={styles.settingInput}
+                value={inviteCode}
+                onChangeText={setInviteCode}
+                placeholder='Join passcode (e.g. HOOPS24)'
+                placeholderTextColor='#555'
+                autoCapitalize='characters'
+              />
+            )}
+
+            <Text style={styles.sectionLabel}>Trade Approval</Text>
+            {TRADE_MODES.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.optionRow, tradeApprovalMode === opt.value && styles.optionRowActive, opt.disabled && { opacity: 0.4 }]}
+                onPress={() => { if (!opt.disabled) setTradeApprovalMode(opt.value); }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, tradeApprovalMode === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.optionDesc}>{opt.desc}</Text>
+                </View>
+                {tradeApprovalMode === opt.value && <Text style={styles.check}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+
+            <Text style={styles.sectionLabel}>Max Players Per Trade Side</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={maxPlayersPerTrade}
+              onChangeText={setMaxPlayersPerTrade}
+              keyboardType='number-pad'
+              placeholder='6'
+              placeholderTextColor='#555'
+            />
+
+            <Text style={styles.sectionLabel}>Trade Tolerance Multiplier</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={tradeApronTolerance}
+              onChangeText={setTradeApronTolerance}
+              keyboardType='decimal-pad'
+              placeholder='1.25'
+              placeholderTextColor='#555'
+            />
+            <Text style={styles.helperSmall}>How close in value trade sides must be (1.0 = exact, 1.25 = within 25%). You can change any of these later in League Settings.</Text>
+
+            {tradeApprovalMode === 'vote' && (
+              <>
+                <Text style={styles.sectionLabel}>Vote Pass Threshold</Text>
+                {VOTE_THRESHOLDS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.optionRow, votePassThreshold === opt.value && styles.optionRowActive]}
+                    onPress={() => setVotePassThreshold(opt.value)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.optionLabel, votePassThreshold === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                      <Text style={styles.optionDesc}>{opt.desc}</Text>
+                    </View>
+                    {votePassThreshold === opt.value && <Text style={styles.check}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+                <Text style={styles.sectionLabel}>Voting Window (days)</Text>
+                <TextInput
+                  style={styles.settingInput}
+                  value={voteDeadlineDays}
+                  onChangeText={setVoteDeadlineDays}
+                  keyboardType='number-pad'
+                  placeholder='2'
+                  placeholderTextColor='#555'
+                />
+                <Text style={styles.helperSmall}>How long GMs have to vote before the trade auto-resolves (1–14 days). Voters exclude the two GMs in the trade.</Text>
+              </>
+            )}
+
+            {(sport === 'nba' ? teamMode : mode) === 'random' && (
+              <>
+                <Text style={styles.sectionLabel}>Random Spins</Text>
+                <View style={styles.spinPickRow}>
+                  {['1', '2', '3'].map(n => (
+                    <TouchableOpacity
+                      key={n}
+                      style={[styles.spinPick, spinChoices === n && styles.spinPickActive]}
+                      onPress={() => setSpinChoices(n)}
+                    >
+                      <Text style={[styles.spinPickText, spinChoices === n && styles.spinPickTextActive]}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.helperSmall}>
+                  {spinChoices === '1'
+                    ? 'Each GM gets one spin and locks in the team they land on — no do-overs.'
+                    : 'Each GM spins up to ' + spinChoices + ' times and picks one of the teams they land on.'}
+                </Text>
+              </>
+            )}
+
             <View style={styles.infoCard}>
               <Text style={styles.infoText}>Once created you will go straight to your league. Invite friends from the league screen.</Text>
             </View>
@@ -318,6 +477,20 @@ const styles = StyleSheet.create({
   topBackText: { color: '#00ff87', fontSize: 15, fontWeight: '600' },
   stepIndicator: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
   stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#444' },
+  sectionLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800', marginTop: 22, marginBottom: 10, textTransform: 'uppercase' },
+  optionRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a' },
+  optionRowActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  optionLabel: { color: '#ddd', fontSize: 15, fontWeight: '700' },
+  optionLabelActive: { color: '#00ff87' },
+  optionDesc: { color: '#777', fontSize: 12, marginTop: 2 },
+  check: { color: '#00ff87', fontSize: 18, fontWeight: '800', marginLeft: 10 },
+  settingInput: { backgroundColor: '#141414', borderRadius: 12, padding: 14, color: '#fff', fontSize: 15, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 4 },
+  helperSmall: { color: '#777', fontSize: 12, marginTop: 6, lineHeight: 17 },
+  spinPickRow: { flexDirection: 'row', gap: 10 },
+  spinPick: { flex: 1, paddingVertical: 16, alignItems: 'center', borderRadius: 12, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a' },
+  spinPickActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  spinPickText: { color: '#888', fontSize: 20, fontWeight: '800' },
+  spinPickTextActive: { color: '#00ff87' },
   stepDotActive: { backgroundColor: '#00ff87', borderColor: '#00ff87' },
   stepDotDone: { backgroundColor: '#005533', borderColor: '#00ff87' },
   stepLine: { flex: 1, height: 1, backgroundColor: '#2a2a2a' },

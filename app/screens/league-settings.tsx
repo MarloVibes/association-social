@@ -16,8 +16,14 @@ const PRIVACY_OPTIONS = [
 
 const TRADE_APPROVAL_OPTIONS = [
   { value: 'instant', label: 'Instant', desc: 'Trades execute as soon as both GMs confirm' },
-  { value: 'veto', label: 'Commissioner Veto', desc: 'Coming soon — 24h window for commissioner to veto', disabled: true },
-  { value: 'vote', label: 'League Vote', desc: 'Coming soon — league members vote to approve', disabled: true },
+  { value: 'veto', label: 'Commissioner Veto', desc: '24h window for a commissioner to veto before a trade goes through', disabled: false },
+  { value: 'vote', label: 'League Vote', desc: 'The league votes to approve or reject each trade', disabled: false },
+];
+
+const VOTE_THRESHOLDS = [
+  { value: 'majority', label: 'Majority', desc: 'More than half of voting GMs must approve' },
+  { value: 'two_thirds', label: 'Two-Thirds', desc: 'At least ⅔ of voting GMs must approve' },
+  { value: 'unanimous', label: 'Unanimous', desc: 'Every voting GM must approve' },
 ];
 
 export default function LeagueSettingsScreen() {
@@ -39,6 +45,8 @@ export default function LeagueSettingsScreen() {
   const [archived, setArchived] = useState(false);
   const [salaryCap, setSalaryCap] = useState('154647000');
   const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
+  const [votePassThreshold, setVotePassThreshold] = useState('majority');
+  const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
   const [commissionerCanOverride, setCommissionerCanOverride] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
@@ -75,6 +83,8 @@ export default function LeagueSettingsScreen() {
       setArchived(!!data.archived);
       setSalaryCap(String(data.salaryCap || getEraCap(data.era)));
       setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
+      setVotePassThreshold(data.votePassThreshold || 'majority');
+      setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
@@ -164,6 +174,8 @@ export default function LeagueSettingsScreen() {
       maxMembers: mm,
       salaryCap: capNum,
       tradeApronTolerance: tolNum,
+      votePassThreshold,
+      voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
       commissionerCanOverride,
     }, 'League settings updated.');
   };
@@ -324,6 +336,35 @@ export default function LeagueSettingsScreen() {
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>How many players each side can put on the table in a Trade Room (1-15).</Text>
+
+          {tradeApprovalMode === 'vote' && (
+            <>
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Vote Pass Threshold</Text>
+              {VOTE_THRESHOLDS.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.optionRow, votePassThreshold === opt.value && styles.optionRowActive]}
+                  onPress={() => setVotePassThreshold(opt.value)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionLabel, votePassThreshold === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                    <Text style={styles.optionDesc}>{opt.desc}</Text>
+                  </View>
+                  {votePassThreshold === opt.value && <Text style={styles.check}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Voting Window (days)</Text>
+              <TextInput
+                style={styles.input}
+                value={voteDeadlineDays}
+                onChangeText={setVoteDeadlineDays}
+                keyboardType='number-pad'
+                placeholder='2'
+                placeholderTextColor='#555'
+              />
+              <Text style={styles.helper}>Days GMs have to vote before a trade auto-resolves (1-14). The two GMs in the trade don't vote.</Text>
+            </>
+          )}
 
           <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Max GMs (League Size)</Text>
           <TextInput

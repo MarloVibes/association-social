@@ -1,8 +1,9 @@
 import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayUnion, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Animated, ActivityIndicator, Alert, Dimensions, Easing, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -64,6 +65,68 @@ const getLogoUrl = (abbr: string, era?: string) => {
   return 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/' + abbr.toLowerCase() + '.png';
 };
 
+// Lighten/darken a hex color by amt (-255..255) — mirrors league-rosters gradients.
+function adjustColor(hex: string, amt: number): string {
+  const c = (hex || '#1a1a2a').replace('#', '');
+  const full = c.length === 3 ? c.split('').map(x => x + x).join('') : c;
+  const n = parseInt(full, 16);
+  let r = (n >> 16) + amt, g = ((n >> 8) & 0xff) + amt, b = (n & 0xff) + amt;
+  r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+// Reusable team card matching the League Rosters layout. Optionally face-down (flip).
+function RosterTeamCard({ team, eraKey, faceDown, flipAnim }: {
+  team: any; eraKey: string; faceDown?: boolean; flipAnim?: Animated.Value;
+}) {
+  const base = (TEAM_COLORS[team.abbreviation] || ['#1a1a2a', '#4444ff'])[0];
+  const front = (
+    <LinearGradient
+      colors={[adjustColor(base, 12), base, adjustColor(base, -18)]}
+      start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+      style={[styles.rosterCard, { borderColor: adjustColor(base, -25) }]}
+    >
+      <LinearGradient
+        colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.6 }}
+        style={styles.rosterGloss} pointerEvents="none"
+      />
+      <Image
+        source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
+        style={styles.rosterLogo} resizeMode="contain"
+      />
+      <View style={styles.rosterInfo}>
+        <Text style={styles.rosterName} numberOfLines={1}>{team.full_name || team.name}</Text>
+        <Text style={styles.rosterMeta}>{team.abbreviation} · {(team.players || []).length} players</Text>
+      </View>
+    </LinearGradient>
+  );
+
+  if (!faceDown) return front;
+
+  const anim = flipAnim || new Animated.Value(0);
+  const backRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const frontRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
+  return (
+    <View style={styles.flipWrap}>
+      <Animated.View style={[styles.flipFace, { transform: [{ rotateY: backRot }] }]}>
+        <View style={styles.cardBackFull}>
+          <Text style={styles.cardBackIcon}>🏀</Text>
+          <Text style={styles.cardBackText}>NBA</Text>
+        </View>
+      </Animated.View>
+      <Animated.View style={[styles.flipFace, styles.flipFaceFront, { transform: [{ rotateY: frontRot }] }]}>
+        {front}
+      </Animated.View>
+    </View>
+  );
+}
+
+const CARD_H = 88;            // card height incl. spacing for the reel
+const REEL_VISIBLE = 5;       // cards visible in the spin window
+const REEL_WINDOW = CARD_H * REEL_VISIBLE;
+const REEL_REPEAT = 8;        // how many times the team list repeats in the reel
+
 export default function TeamSelectScreen() {
   const { leagueId, sport, era, mode } = useLocalSearchParams<{
     leagueId: string; sport: string; era: string; mode: string;
@@ -71,21 +134,16 @@ export default function TeamSelectScreen() {
 
   const [teams, setTeams] = useState<any[]>([]);
   const [takenTeams, setTakenTeams] = useState<string[]>([]);
+  const [members, setMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
-  const [shuffledTeams, setShuffledTeams] = useState<any[]>([]);
-  const [revealedIndex, setRevealedIndex] = useState<number | null>(null);
-  const [hasShuffled, setHasShuffled] = useState(false);
-  const [showReveal, setShowReveal] = useState(false);
-  const [countdown, setCountdown] = useState(5);
-  const flipAnims = useRef<Animated.Value[]>([]);
-  const othersOpacity = useRef(new Animated.Value(1)).current;
-  const cardScale = useRef(new Animated.Value(1)).current;
-  const cardY = useRef(new Animated.Value(0)).current;
-  const topTextOpacity = useRef(new Animated.Value(0)).current;
-  const bottomTextOpacity = useRef(new Animated.Value(0)).current;
-  const countdownRef = useRef<any>(null);
+  const [spinning, setSpinning] = useState(false);
+  const [flippedId, setFlippedId] = useState<string | null>(null);
+  const [spinChoices, setSpinChoices] = useState(1);
+  const [spunResults, setSpunResults] = useState<any[]>([]);
+  const spinY = useRef(new Animated.Value(0)).current;
+  const flipAnims = useRef<Record<string, Animated.Value>>({});
 
   const user = auth.currentUser;
   const isRandom = mode === 'random';
@@ -94,14 +152,17 @@ export default function TeamSelectScreen() {
 
   useEffect(() => { loadTeams(); }, []);
 
+  // Live league state so the spin/face-down switch and collision-avoidance stay current.
   useEffect(() => {
-    if (showReveal && countdown > 0) {
-      countdownRef.current = setTimeout(() => setCountdown(c => c - 1), 1000);
-    } else if (showReveal && countdown === 0) {
-      handleConfirmTeam(selectedTeam);
-    }
-    return () => clearTimeout(countdownRef.current);
-  }, [showReveal, countdown]);
+    if (!leagueId) return;
+    const unsub = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
+      const data = snap.data() || {};
+      setTakenTeams(data.takenTeams || []);
+      setMembers(data.members || []);
+      setSpinChoices(data.spinChoices || 1);
+    });
+    return () => unsub();
+  }, [leagueId]);
 
   const loadTeams = async () => {
     setLoading(true);
@@ -122,60 +183,63 @@ export default function TeamSelectScreen() {
       }
 
       setTeams(teamList);
-      flipAnims.current = teamList.map(() => new Animated.Value(0));
-      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-      const taken = leagueSnap.data()?.takenTeams || [];
-      setTakenTeams(taken);
     } catch (e) { console.error(e); }
     setLoading(false);
   };
 
-  const handleShuffle = () => {
-    if (hasShuffled) return;
-    const available = teams.filter(t => !takenTeams.includes(t.id));
-    const shuffled = [...available].sort(() => Math.random() - 0.5);
-    setShuffledTeams(shuffled);
-    setHasShuffled(true);
-  };
-
-  const handleFlipCard = (index: number, team: any) => {
-    if (revealedIndex !== null) return;
-    setRevealedIndex(index);
-
-    Animated.spring(flipAnims.current[index], {
-      toValue: 1,
-      friction: 8,
-      tension: 10,
+  // Spin the ferris-wheel reel and land on a random team not already landed on.
+  const handleSpin = (available: any[]) => {
+    if (spinning || saving) return;
+    const remaining = available.filter(t => !spunResults.some(r => r.id === t.id));
+    if (remaining.length === 0) return;
+    setSpinning(true);
+    const winner = remaining[Math.floor(Math.random() * remaining.length)];
+    const idxInAvail = available.findIndex(t => t.id === winner.id);
+    // Land the winner near the end of the repeated reel for a long spin.
+    const landIndex = (REEL_REPEAT - 2) * available.length + idxInAvail;
+    const finalY = -(landIndex * CARD_H) + (REEL_WINDOW / 2 - CARD_H / 2);
+    spinY.setValue(0);
+    Animated.timing(spinY, {
+      toValue: finalY,
+      duration: 4800,
+      easing: Easing.out(Easing.poly(5)), // quintic — long, dramatic slow-down at the end
       useNativeDriver: true,
     }).start(() => {
-      setSelectedTeam(team);
-      // Fade out other cards
-      Animated.timing(othersOpacity, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }).start(() => {
-        // Zoom chosen card to center
-        Animated.parallel([
-          Animated.spring(cardScale, { toValue: 2.5, friction: 6, tension: 40, useNativeDriver: true }),
-          Animated.timing(cardY, { toValue: -60, duration: 500, useNativeDriver: true }),
-        ]).start(() => {
-          // Show reveal text
-          setShowReveal(true);
-          Animated.stagger(300, [
-            Animated.timing(topTextOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-            Animated.timing(bottomTextOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-          ]).start();
-        });
-      });
+      setSpinning(false);
+      setSpunResults(prev => [...prev, winner]);
+      // Single-spin leagues: lock straight onto the team you landed on (no do-overs).
+      if (spinChoices <= 1) setSelectedTeam(winner);
     });
+  };
+
+  const getFlipAnim = (id: string) => {
+    if (!flipAnims.current[id]) flipAnims.current[id] = new Animated.Value(0);
+    return flipAnims.current[id];
+  };
+
+  // Flip a face-down card to reveal the team, then await confirm.
+  const handleFlip = (team: any) => {
+    if (flippedId || spinning || saving) return;
+    setFlippedId(team.id);
+    Animated.spring(getFlipAnim(team.id), {
+      toValue: 1, friction: 8, tension: 10, useNativeDriver: true,
+    }).start(() => setSelectedTeam(team));
   };
 
   const handleConfirmTeam = async (team: any) => {
     if (!team || !user) return;
-    clearTimeout(countdownRef.current);
     setSaving(true);
     try {
+      // Collision guard: another GM may have grabbed this team while we deliberated.
+      const freshLeague = await getDoc(doc(db, 'leagues', leagueId));
+      const freshTaken: string[] = freshLeague.data()?.takenTeams || [];
+      if (freshTaken.includes(team.id)) {
+        Alert.alert('Just missed it', (team.full_name || 'That team') + ' was just claimed by another GM. ' + (isRandom ? 'Spin again!' : 'Pick another.'));
+        setSelectedTeam(null);
+        setFlippedId(null);
+        setSaving(false);
+        return;
+      }
       let players: any[] = [];
       if (!isDraft) {
         const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
@@ -237,119 +301,120 @@ export default function TeamSelectScreen() {
   const availableTeams = teams.filter(t => !takenTeams.includes(t.id));
 
   if (isRandom) {
+    // Face-down finale fires only when 4 or fewer teams remain unclaimed.
+    const faceDownPhase = availableTeams.length <= 4;
+
+    // Teams not yet landed on this session, and whether another spin is allowed.
+    const remainingToSpin = availableTeams.filter(t => !spunResults.some(r => r.id === t.id));
+    const canSpin = !spinning && !saving && spunResults.length < spinChoices && remainingToSpin.length > 0;
+
+    // Long repeated strip for the spin reel.
+    const reel: any[] = [];
+    for (let r = 0; r < REEL_REPEAT; r++) reel.push(...availableTeams);
+
     return (
-      <TouchableWithoutFeedback onPress={() => showReveal && selectedTeam && !saving ? handleConfirmTeam(selectedTeam) : undefined}>
-        <View style={styles.container}>
-          <ScrollView style={{ flex: 1 }} scrollEnabled={!showReveal} contentContainerStyle={{ paddingBottom: 90 }}>
-            <View style={styles.inner}>
-              {!showReveal && (
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                  <Text style={styles.backText}>← Back</Text>
-                </TouchableOpacity>
-              )}
+      <View style={styles.container}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 90 }}>
+          <View style={styles.inner}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <Text style={styles.backText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>{faceDownPhase ? 'Final Picks' : 'Spin for Your Team'}</Text>
+            <Text style={styles.subtitle}>
+              {ERA_LABELS[eraKey]} · {availableTeams.length} left{faceDownPhase ? ' · blind pick' : ''}
+            </Text>
 
-              {!showReveal && (
-                <>
-                  <Text style={styles.title}>Pick a Card</Text>
-                  <Text style={styles.subtitle}>{ERA_LABELS[eraKey]} · {availableTeams.length} teams available</Text>
-                </>
-              )}
-
-              {!hasShuffled && !showReveal ? (
-                <TouchableOpacity style={styles.shuffleButton} onPress={handleShuffle}>
-                  <Text style={styles.shuffleButtonText}>🎲 Shuffle Teams</Text>
-                </TouchableOpacity>
-              ) : showReveal && selectedTeam ? (
-                // REVEAL SCREEN
-                <View style={styles.revealContainer}>
-                  <Animated.Text style={[styles.revealTopText, { opacity: topTextOpacity }]}>
-                    It's time to hoop
-                  </Animated.Text>
-                  <Animated.View style={[
-                    styles.revealCardWrapper,
-                    { transform: [{ scale: cardScale }, { translateY: cardY }] }
-                  ]}>
-                    {(() => {
-                      const colors = TEAM_COLORS[selectedTeam.abbreviation] || ['#1a1a2a', '#4444ff'];
+            {availableTeams.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyText}>All teams have been claimed.</Text>
+              </View>
+            ) : faceDownPhase ? (
+              // FACE-DOWN BLIND PICK
+              <>
+                <Text style={styles.phaseHint}>Down to the wire — tap a mystery card to claim it.</Text>
+                <View style={styles.faceDownGrid}>
+                  {availableTeams.map(team => (
+                    <TouchableOpacity
+                      key={team.id}
+                      activeOpacity={0.85}
+                      onPress={() => handleFlip(team)}
+                      disabled={!!flippedId && flippedId !== team.id}
+                      style={[styles.faceDownItem, !!flippedId && flippedId !== team.id && { opacity: 0.4 }]}
+                    >
+                      <RosterTeamCard team={team} eraKey={eraKey} faceDown flipAnim={getFlipAnim(team.id)} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (
+              // PRICE-IS-RIGHT SPIN REEL
+              <>
+                <View style={styles.reelWindow}>
+                  <Animated.View style={{ transform: [{ translateY: spinY }] }}>
+                    {reel.map((team, i) => (
+                      <View key={team.id + '_' + i} style={styles.reelCard}>
+                        <RosterTeamCard team={team} eraKey={eraKey} />
+                      </View>
+                    ))}
+                  </Animated.View>
+                  <View style={styles.reelSelector} pointerEvents="none" />
+                  <LinearGradient colors={['#000', 'rgba(0,0,0,0)']} style={styles.reelFadeTop} pointerEvents="none" />
+                  <LinearGradient colors={['rgba(0,0,0,0)', '#000']} style={styles.reelFadeBottom} pointerEvents="none" />
+                </View>
+                {canSpin && (
+                  <TouchableOpacity
+                    style={[styles.spinButton, (spinning || saving) && styles.spinButtonDisabled]}
+                    onPress={() => handleSpin(availableTeams)}
+                    disabled={spinning || saving}
+                  >
+                    <Text style={styles.spinButtonText}>
+                      {spinning
+                        ? 'Spinning…'
+                        : spunResults.length === 0
+                          ? '🎡 Spin'
+                          : '🎡 Spin Again (' + (spinChoices - spunResults.length) + ' left)'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {spinChoices > 1 && spunResults.length > 0 && (
+                  <View style={styles.resultsBox}>
+                    <Text style={styles.resultsLabel}>
+                      Your spins{spunResults.length >= spinChoices || remainingToSpin.length === 0 ? ' — pick one to lock in' : ''}
+                    </Text>
+                    {spunResults.map(t => {
+                      const sel = selectedTeam?.id === t.id;
                       return (
-                        <View style={[styles.revealCard, { backgroundColor: colors[0], borderColor: colors[1] }]}>
-                          <Image
-                            source={{ uri: getLogoUrl(selectedTeam.abbreviation, eraKey) || '' }}
-                            style={styles.revealLogo}
-                            resizeMode='contain'
-                            onError={() => {}}
-                          />
-                          {!getLogoUrl(selectedTeam.abbreviation, eraKey) && (
-                            <Text style={styles.revealCardAbbr}>{selectedTeam.abbreviation}</Text>
-                          )}
-                          <Text style={styles.revealCardName}>{selectedTeam.name}</Text>
-                        </View>
-                      );
-                    })()}
-                  </Animated.View>
-                  <Animated.View style={[styles.revealBottomText, { opacity: bottomTextOpacity }]}>
-                    <Text style={styles.revealTeamName}>You have chosen the</Text>
-                    <Text style={styles.revealTeamFull}>{selectedTeam.full_name}</Text>
-                    {saving ? (
-                      <ActivityIndicator color='#00ff87' style={{ marginTop: 20 }} />
-                    ) : (
-                      <Text style={styles.revealCountdown}>
-                        Locking in {countdown > 0 ? 'in ' + countdown + 's' : '...'} · tap anywhere to skip
-                      </Text>
-                    )}
-                  </Animated.View>
-                </View>
-              ) : (
-                // CARD GRID
-                <View style={styles.cardGrid}>
-                  {shuffledTeams.map((team, index) => {
-                    const flipAnim = flipAnims.current[index] || new Animated.Value(0);
-                    const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-                    const backRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
-                    const colors = TEAM_COLORS[team.abbreviation] || ['#1a1a2a', '#4444ff'];
-                    const isChosen = revealedIndex === index;
-                    return (
-                      <Animated.View
-                        key={team.id}
-                        style={[
-                          styles.cardWrapper,
-                          !isChosen && revealedIndex !== null && { opacity: othersOpacity },
-                          isChosen && { transform: [{ scale: cardScale }, { translateY: cardY }], zIndex: 10 },
-                        ]}
-                      >
                         <TouchableOpacity
-                          style={{ width: 88, height: 116 }}
-                          onPress={() => handleFlipCard(index, team)}
-                          disabled={revealedIndex !== null}
-                          activeOpacity={0.8}
+                          key={t.id}
+                          activeOpacity={0.85}
+                          onPress={() => setSelectedTeam(t)}
+                          style={[styles.resultItem, sel && styles.resultItemSel]}
                         >
-                          <Animated.View style={[styles.cardFace, styles.cardBack, { transform: [{ rotateY: frontRotate }] }]}>
-                            <Text style={styles.cardBackIcon}>🏀</Text>
-                            <Text style={styles.cardBackText}>NBA</Text>
-                          </Animated.View>
-                          <Animated.View style={[styles.cardFace, styles.cardFront, { backgroundColor: colors[0], borderColor: colors[1], transform: [{ rotateY: backRotate }] }]}>
-                            {getLogoUrl(team.abbreviation) ? (
-                              <Image
-                                source={{ uri: getLogoUrl(team.abbreviation, eraKey) || '' }}
-                                style={styles.cardLogo}
-                                resizeMode='contain'
-                              />
-                            ) : (
-                              <Text style={styles.cardFrontAbbr}>{team.abbreviation}</Text>
-                            )}
-                            <Text style={styles.cardFrontName}>{team.name}</Text>
-                          </Animated.View>
+                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} /></View>
+                          {sel && <Text style={styles.resultCheck}>✓</Text>}
                         </TouchableOpacity>
-                      </Animated.View>
-                    );
-                  })}
-                </View>
-              )}
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </ScrollView>
+
+        {selectedTeam && !spinning && (
+          <View style={styles.confirmBar}>
+            <View style={styles.confirmBarInfo}>
+              <Text style={styles.confirmBarName}>{selectedTeam.full_name}</Text>
+              <Text style={styles.confirmBarSub}>{(selectedTeam.players?.length || 0) + ' players pre-loaded'}</Text>
             </View>
-          </ScrollView>
-          <GlobalNav />
-        </View>
-      </TouchableWithoutFeedback>
+            <TouchableOpacity style={styles.confirmBtn} onPress={() => handleConfirmTeam(selectedTeam)} disabled={saving}>
+              {saving ? <ActivityIndicator color='#000' size='small' /> : <Text style={styles.confirmBtnText}>Lock In</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+        <GlobalNav />
+      </View>
     );
   }
 
@@ -458,4 +523,40 @@ const styles = StyleSheet.create({
   confirmBarSub: { color: '#4a8a4a', fontSize: 12 },
   confirmBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 },
   confirmBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
+
+  // Reusable league-rosters style card
+  rosterCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1, overflow: 'hidden', height: 72 },
+  rosterGloss: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', borderTopLeftRadius: 14, borderTopRightRadius: 14 },
+  rosterLogo: { width: 40, height: 40, marginRight: 12 },
+  rosterInfo: { flex: 1 },
+  rosterName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  rosterMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
+
+  // Face-down flip card
+  flipWrap: { height: 72 },
+  flipFace: { position: 'absolute', left: 0, right: 0, top: 0, height: 72, backfaceVisibility: 'hidden' },
+  flipFaceFront: {},
+  cardBackFull: { flex: 1, height: 72, borderRadius: 14, borderWidth: 1, borderColor: '#4444ff', backgroundColor: '#10101e', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+
+  // Spin reel
+  reelWindow: { height: REEL_WINDOW, overflow: 'hidden', borderRadius: 16, borderWidth: 1, borderColor: '#222', marginBottom: 20 },
+  reelCard: { height: CARD_H, justifyContent: 'center', paddingHorizontal: 4 },
+  reelSelector: { position: 'absolute', left: 4, right: 4, top: REEL_WINDOW / 2 - CARD_H / 2, height: CARD_H, borderRadius: 16, borderWidth: 2, borderColor: '#00ff87' },
+  reelFadeTop: { position: 'absolute', top: 0, left: 0, right: 0, height: CARD_H },
+  reelFadeBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: CARD_H },
+  spinButton: { backgroundColor: '#00ff87', borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
+  spinButtonDisabled: { opacity: 0.5 },
+  spinButtonText: { color: '#000', fontSize: 20, fontWeight: '900', letterSpacing: 0.5 },
+  resultsBox: { marginBottom: 24 },
+  resultsLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800', marginBottom: 10, textTransform: 'uppercase' },
+  resultItem: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 2, borderColor: 'transparent', marginBottom: 10, paddingRight: 8 },
+  resultItemSel: { borderColor: '#00ff87' },
+  resultCheck: { color: '#00ff87', fontSize: 22, fontWeight: '800', marginLeft: 8 },
+
+  // Face-down grid
+  phaseHint: { color: '#F5A623', fontSize: 13, fontWeight: '600', marginBottom: 14, textAlign: 'center' },
+  faceDownGrid: { gap: 12, marginBottom: 24 },
+  faceDownItem: { marginBottom: 0 },
+  emptyBox: { padding: 40, alignItems: 'center' },
+  emptyText: { color: '#666', fontSize: 15 },
 });

@@ -29,7 +29,128 @@ function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
 }
 
-function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
+// Execute a trade that's sitting in 'pending_veto' — runs the swap, sets it
+// 'executed', and notifies both GMs. Self-contained (reads everything fresh),
+// so it's safe to call from the commissioner's Approve button OR opportunistically
+// when the veto window has elapsed. Concurrency-safe: the transaction re-checks
+// status === 'pending_veto', so a second caller no-ops.
+async function finalizeVetoTradeTx(leagueId: string, roomId: string) {
+  try {
+    const result: any = await runTransaction(db, async (tx) => {
+      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return { done: false };
+      const data = snap.data() as any;
+      if (data.status !== 'pending_veto' && data.status !== 'vote_passed') return { done: false };
+      const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
+      const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
+      const [hostSnap, guestSnap] = await Promise.all([tx.get(hostTeamRef), tx.get(guestTeamRef)]);
+      if (!hostSnap.exists() || !guestSnap.exists()) return { done: false };
+      const host = hostSnap.data() as any;
+      const guest = guestSnap.data() as any;
+      const hostOffered = data.hostOffer || [];
+      const guestOffered = data.guestOffer || [];
+      const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
+      const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
+      const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
+      const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
+      if (!allHostStillOwns || !allGuestStillOwns) {
+        tx.update(ref, { status: 'cancelled', cancelReason: 'roster_changed', updatedAt: serverTimestamp() });
+        return { done: false, cancelled: true };
+      }
+      const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
+      const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
+      tx.update(hostTeamRef, { players: newHostPlayers });
+      tx.update(guestTeamRef, { players: newGuestPlayers });
+      tx.update(ref, { status: 'executed', executedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      return { done: true, data, hostOffered, guestOffered };
+    });
+
+    if (result?.done && result.data) {
+      const d = result.data;
+      const note = {
+        type: 'trade_executed', leagueId, roomId,
+        createdAt: new Date().toISOString(),
+        message: 'Your trade was approved and has been completed.',
+      };
+      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
+        try { await updateDoc(doc(db, 'users', uid), { notifications: arrayUnion(note) }); } catch {}
+      }
+      try {
+        const hostAssets = [...((result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.hostPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
+        const guestAssets = [...((result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.guestPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
+        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+          type: 'trade_executed',
+          message: (d.hostTeamName || 'Team A') + ' traded ' + hostAssets + ' to ' + (d.guestTeamName || 'Team B') + ' for ' + guestAssets,
+          hostTeamId: d.hostTeamId, guestTeamId: d.guestTeamId, hostName: d.hostTeamName, guestName: d.guestTeamName,
+          createdAt: serverTimestamp(),
+        });
+      } catch {}
+    }
+    return result;
+  } catch (e) {
+    return { done: false, error: e };
+  }
+}
+
+// Tally a 'pending_vote' trade against the league's threshold. Sets status to
+// 'vote_passed' (the swap then runs via finalizeVetoTradeTx) or 'rejected'.
+// Eligible voters = all GMs except the two in the trade. Returns early/pending
+// if not yet decided, unless `force` (deadline) is set. Concurrency-safe.
+async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: boolean) {
+  try {
+    const result: any = await runTransaction(db, async (tx) => {
+      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return { done: false };
+      const data = snap.data() as any;
+      if (data.status !== 'pending_vote') return { done: false };
+      const leagueSnap = await tx.get(doc(db, 'leagues', leagueId));
+      const league = (leagueSnap.data() || {}) as any;
+      const members: string[] = league.members || [];
+      const threshold: string = league.votePassThreshold || 'majority';
+      const participants = [data.hostUid, data.guestUid];
+      const eligible = members.filter(m => !participants.includes(m));
+      const E = eligible.length;
+      const votes = data.tradeVotes || {};
+      let approve = 0, reject = 0;
+      for (const uid of eligible) {
+        if (votes[uid] === 'approve') approve++;
+        else if (votes[uid] === 'reject') reject++;
+      }
+      let needToPass: number;
+      if (threshold === 'unanimous') needToPass = E;
+      else if (threshold === 'two_thirds') needToPass = Math.ceil((E * 2) / 3);
+      else needToPass = Math.floor(E / 2) + 1; // majority
+      const passed = E === 0 ? true : approve >= needToPass;
+      const cannotPass = E > 0 && reject > (E - needToPass);
+      if (passed) {
+        tx.update(ref, { status: 'vote_passed', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        return { done: true, decided: 'passed' };
+      }
+      if (force || cannotPass) {
+        tx.update(ref, { status: 'rejected', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        return { done: true, decided: 'rejected', data };
+      }
+      return { done: false, pending: true };
+    });
+
+    if (result?.decided === 'rejected' && result.data) {
+      const d = result.data;
+      const note = {
+        type: 'trade_rejected', leagueId, roomId,
+        createdAt: new Date().toISOString(),
+        message: 'The league voted down the trade between ' + (d.hostTeamName || 'Team A') + ' and ' + (d.guestTeamName || 'Team B') + '.',
+      };
+      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
+        try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
+      }
+    }
+    return result;
+  } catch (e) {
+    return { done: false, error: e };
+  }
+}
   const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
   const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
   return (
@@ -78,6 +199,10 @@ export default function TradeRoomScreen() {
   const [tradeApronTolerance, setTradeApronTolerance] = useState<number>(1.25);
   const [commissionerCanOverride, setCommissionerCanOverride] = useState<boolean>(false);
   const [leagueCommUids, setLeagueCommUids] = useState<string[]>([]);
+  const [tradeApprovalMode, setTradeApprovalMode] = useState<string>('instant');
+  const [leagueMembers, setLeagueMembers] = useState<string[]>([]);
+  const [votePassThreshold, setVotePassThreshold] = useState<string>('majority');
+  const [voteDeadlineDays, setVoteDeadlineDays] = useState<number>(2);
   const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
@@ -221,6 +346,10 @@ export default function TradeRoomScreen() {
         setCommissionerCanOverride(!!data.commissionerCanOverride);
         const comms: string[] = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
         setLeagueCommUids(comms);
+        setTradeApprovalMode(data.tradeApprovalMode || 'instant');
+        setLeagueMembers(data.members || []);
+        setVotePassThreshold(data.votePassThreshold || 'majority');
+        setVoteDeadlineDays(typeof data.voteDeadlineDays === 'number' ? data.voteDeadlineDays : 2);
       }
     }).catch(() => {});
   }, [leagueId]);
@@ -247,8 +376,22 @@ export default function TradeRoomScreen() {
         // Trade voided because a player in it was traded elsewhere first
         Alert.alert('Trade voided', 'A player in this deal was traded to another team first, so this trade could not go through.', [{ text: 'OK', onPress: () => router.back() }]);
       }
+      if (snapData?.status === 'rejected' && prevStatus && prevStatus !== 'rejected') {
+        Alert.alert('Trade rejected', 'The league voted this trade down. No players moved.', [{ text: 'OK', onPress: () => router.back() }]);
+      }
       prevStatus = snapData?.status || null;
       if (snap.exists()) setRoom({ id: snap.id, ...snap.data() });
+      // Opportunistic finalize: if the veto window has elapsed with no veto, execute now.
+      if (snapData?.status === 'pending_veto' && snapData?.vetoDeadline && Date.now() > snapData.vetoDeadline) {
+        finalizeVetoTradeTx(leagueId, roomId);
+      }
+      // League vote: resolve at deadline; once passed, a participant runs the swap.
+      if (snapData?.status === 'pending_vote' && snapData?.voteDeadline && Date.now() > snapData.voteDeadline) {
+        resolveVoteTradeTx(leagueId, roomId, true);
+      }
+      if (snapData?.status === 'vote_passed' && (myUid === snapData?.hostUid || myUid === snapData?.guestUid)) {
+        finalizeVetoTradeTx(leagueId, roomId);
+      }
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
   }, [leagueId, roomId]);
@@ -545,6 +688,53 @@ export default function TradeRoomScreen() {
     ]);
   };
 
+  // ── Commissioner veto controls (when tradeApprovalMode === 'veto') ──
+  const approveVetoNow = () => {
+    Alert.alert('Approve Trade?', 'This executes the trade now and swaps the players.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Approve', onPress: async () => {
+        const res: any = await finalizeVetoTradeTx(leagueId, roomId);
+        if (res?.error) Alert.alert('Error', 'Could not finalize the trade.');
+      } },
+    ]);
+  };
+
+  const vetoTrade = () => {
+    Alert.alert('Veto Trade?', 'This cancels the trade. No players move and both GMs are notified.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Veto', style: 'destructive', onPress: async () => {
+        try {
+          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+            status: 'vetoed',
+            vetoedBy: myUid,
+            vetoedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          const note = {
+            type: 'trade_vetoed', leagueId, roomId,
+            createdAt: new Date().toISOString(),
+            message: 'A commissioner vetoed the trade between ' + (room?.hostTeamName || 'Team A') + ' and ' + (room?.guestTeamName || 'Team B') + '.',
+          };
+          for (const uid of [room?.hostUid, room?.guestUid].filter(Boolean)) {
+            try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
+          }
+        } catch (e: any) { Alert.alert('Error', e.message); }
+      } },
+    ]);
+  };
+
+  // ── League-vote: an eligible GM casts their approve/reject vote ──
+  const castTradeVote = async (choice: 'approve' | 'reject') => {
+    try {
+      await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
+        ['tradeVotes.' + myUid]: choice,
+        updatedAt: serverTimestamp(),
+      });
+      // Check whether this vote decides the outcome.
+      await resolveVoteTradeTx(leagueId, roomId, false);
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
   const handleConfirm = async () => {
     console.log('[handleConfirm] called', { passes: salaryCheck.passes, overrideAppliedLocal, salaryOverrideApplied: room?.salaryOverrideApplied, myOfferLen: myOffer.length, otherOfferLen: otherOffer.length, anyConfirmed, myConfirmed });
     if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
@@ -586,6 +776,31 @@ export default function TradeRoomScreen() {
         const newMyConfirm = true;
         const otherIsConfirmed = !!data[otherConfirmKey];
         if (newMyConfirm && otherIsConfirmed) {
+          // Both confirmed. If this league requires commissioner approval, hold the
+          // trade for review instead of swapping immediately.
+          if (tradeApprovalMode === 'veto' && data.status !== 'pending_veto') {
+            tx.update(ref, {
+              status: 'pending_veto',
+              hostConfirmed: true,
+              guestConfirmed: true,
+              vetoDeadline: Date.now() + 24 * 60 * 60 * 1000,
+              pendingVetoSince: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            return { pendingVeto: true };
+          }
+          if (tradeApprovalMode === 'vote' && data.status !== 'pending_vote') {
+            tx.update(ref, {
+              status: 'pending_vote',
+              hostConfirmed: true,
+              guestConfirmed: true,
+              tradeVotes: {},
+              voteDeadline: Date.now() + Math.max(1, voteDeadlineDays) * 24 * 60 * 60 * 1000,
+              pendingVoteSince: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            return { pendingVote: true };
+          }
           // Both confirmed — execute the trade
           const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
           const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
@@ -626,6 +841,42 @@ export default function TradeRoomScreen() {
         }
       });
 
+      if (result?.pendingVeto) {
+        // Notify commissioners that a trade is awaiting review.
+        try {
+          const note = {
+            type: 'trade_pending_veto',
+            leagueId,
+            roomId,
+            createdAt: new Date().toISOString(),
+            message: (room?.hostTeamName || 'A team') + ' and ' + (room?.guestTeamName || 'another team') + ' agreed to a trade — review within 24h or it auto-approves.',
+          };
+          for (const cid of leagueCommUids) {
+            if (cid === myUid) continue;
+            try { await updateDoc(doc(db, 'users', cid), { notifications: arrayUnion(note) }); } catch {}
+          }
+        } catch {}
+        Alert.alert('Sent for review', 'Both sides agreed. A commissioner has 24 hours to veto — otherwise the trade goes through automatically.', [{ text: 'OK', onPress: () => router.back() }]);
+        return;
+      }
+      if (result?.pendingVote) {
+        // Notify every GM except the two in the trade that a vote is open.
+        try {
+          const note = {
+            type: 'trade_vote_open',
+            leagueId,
+            roomId,
+            createdAt: new Date().toISOString(),
+            message: 'A trade between ' + (room?.hostTeamName || 'a team') + ' and ' + (room?.guestTeamName || 'another team') + ' needs your vote.',
+          };
+          for (const uid of leagueMembers) {
+            if (uid === room?.hostUid || uid === room?.guestUid) continue;
+            try { await updateDoc(doc(db, 'users', uid), { notifications: arrayUnion(note) }); } catch {}
+          }
+        } catch {}
+        Alert.alert('Out for league vote', 'Both sides agreed. The league now votes — the trade goes through if it passes the threshold, or is rejected.', [{ text: 'OK', onPress: () => router.back() }]);
+        return;
+      }
       if (result?.cancelled) {
         // A player in this deal was traded elsewhere first. The in-room alert is
         // handled by the room listener; also notify the other GM in case they left.
@@ -790,12 +1041,38 @@ export default function TradeRoomScreen() {
   let statusColor = '#888';
   if (room.status === 'executed') { statusText = 'TRADE EXECUTED'; statusColor = '#00ff87'; }
   else if (room.status === 'cancelled') { statusText = 'CANCELLED'; statusColor = '#ff4444'; }
+  else if (room.status === 'vetoed') { statusText = 'VETOED'; statusColor = '#ff4444'; }
+  else if (room.status === 'rejected') { statusText = 'VOTED DOWN'; statusColor = '#ff4444'; }
+  else if (room.status === 'pending_veto') { statusText = 'PENDING REVIEW'; statusColor = '#F5A623'; }
+  else if (room.status === 'pending_vote' || room.status === 'vote_passed') { statusText = 'LEAGUE VOTE'; statusColor = '#F5A623'; }
   else if (isPushedToMe) { statusText = 'OFFER RECEIVED'; statusColor = '#F5A623'; }
   else if (isPushedByMe) { statusText = 'OFFER SENT — WAITING'; statusColor = '#F5A623'; }
   else if (isLive) { statusText = 'LIVE'; statusColor = '#00ff87'; }
   else { statusText = 'WAITING FOR OPPONENT'; statusColor = '#888'; }
 
-  const isTerminal = room.status === 'executed' || room.status === 'cancelled';
+  const isTerminal = room.status === 'executed' || room.status === 'cancelled' || room.status === 'vetoed' || room.status === 'rejected';
+  const isPendingVeto = room.status === 'pending_veto';
+  const isCommish = leagueCommUids.includes(myUid || '');
+  const vetoHoursLeft = isPendingVeto && room.vetoDeadline
+    ? Math.max(0, Math.ceil((room.vetoDeadline - Date.now()) / (60 * 60 * 1000)))
+    : 0;
+
+  // ── League-vote derived values ──
+  const isPendingVote = room.status === 'pending_vote';
+  const voteParticipants = [room.hostUid, room.guestUid];
+  const voteEligible = leagueMembers.filter(m => !voteParticipants.includes(m));
+  const voteE = voteEligible.length;
+  const tradeVotes = room.tradeVotes || {};
+  const voteApprove = voteEligible.filter(m => tradeVotes[m] === 'approve').length;
+  const voteReject = voteEligible.filter(m => tradeVotes[m] === 'reject').length;
+  const voteNeedToPass = votePassThreshold === 'unanimous' ? voteE
+    : votePassThreshold === 'two_thirds' ? Math.ceil((voteE * 2) / 3)
+    : Math.floor(voteE / 2) + 1;
+  const myTradeVote = tradeVotes[myUid || ''];
+  const isEligibleVoter = leagueMembers.includes(myUid || '') && myUid !== room.hostUid && myUid !== room.guestUid;
+  const voteDaysLeft = isPendingVote && room.voteDeadline
+    ? Math.max(0, Math.ceil((room.voteDeadline - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
 
   return (
     <View style={styles.container}>
@@ -814,6 +1091,56 @@ export default function TradeRoomScreen() {
         <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
         <Text style={styles.statusOpponent}>· {otherTeamName}</Text>
       </View>
+
+      {isPendingVeto && (
+        <View style={styles.vetoBanner}>
+          <Text style={styles.vetoBannerTitle}>⏳ Awaiting Commissioner Review</Text>
+          <Text style={styles.vetoBannerText}>
+            Both GMs agreed. {isCommish
+              ? 'Approve it now, or veto to cancel.'
+              : 'A commissioner can veto within ' + vetoHoursLeft + 'h — otherwise it goes through automatically.'}
+          </Text>
+          {isCommish && (
+            <View style={styles.vetoBtnRow}>
+              <TouchableOpacity style={styles.vetoApproveBtn} onPress={approveVetoNow}>
+                <Text style={styles.vetoApproveText}>✓ Approve Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.vetoKillBtn} onPress={vetoTrade}>
+                <Text style={styles.vetoKillText}>⛔ Veto</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {(isPendingVote || room.status === 'vote_passed') && (
+        <View style={styles.vetoBanner}>
+          <Text style={styles.vetoBannerTitle}>🗳️ League Vote {room.status === 'vote_passed' ? '— Passed' : 'In Progress'}</Text>
+          <Text style={styles.vetoBannerText}>
+            {voteApprove} approve · {voteReject} reject — needs {voteNeedToPass} of {voteE} to pass
+            {isPendingVote ? ' · ' + voteDaysLeft + 'd left' : ''}
+          </Text>
+          {isPendingVote && isEligibleVoter && (
+            <View style={styles.vetoBtnRow}>
+              <TouchableOpacity
+                style={[styles.vetoApproveBtn, myTradeVote === 'approve' && { opacity: 0.6 }]}
+                onPress={() => castTradeVote('approve')}
+              >
+                <Text style={styles.vetoApproveText}>{myTradeVote === 'approve' ? '✓ Approved' : '✓ Approve'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.vetoKillBtn, myTradeVote === 'reject' && { opacity: 0.6 }]}
+                onPress={() => castTradeVote('reject')}
+              >
+                <Text style={styles.vetoKillText}>{myTradeVote === 'reject' ? '⛔ Rejected' : '⛔ Reject'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {isPendingVote && !isEligibleVoter && (
+            <Text style={styles.vetoBannerSub}>You're in this trade — the rest of the league decides.</Text>
+          )}
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 90 }]}>
         {/* Their side */}
@@ -996,7 +1323,20 @@ export default function TradeRoomScreen() {
       {/* Footer CTAs */}
       <View style={styles.footer}>
         {isTerminal ? (
-          <Text style={styles.footerNote}>{room.status === 'executed' ? 'Trade complete.' : 'Room closed.'}</Text>
+          <Text style={styles.footerNote}>
+            {room.status === 'executed' ? 'Trade complete.'
+              : room.status === 'vetoed' ? 'Vetoed by commissioner.'
+              : room.status === 'rejected' ? 'Voted down by the league.'
+              : 'Room closed.'}
+          </Text>
+        ) : isPendingVeto ? (
+          <Text style={styles.footerNote}>
+            {isCommish ? 'Use the review controls above.' : 'Pending commissioner review — auto-approves in ~' + vetoHoursLeft + 'h.'}
+          </Text>
+        ) : isPendingVote || room.status === 'vote_passed' ? (
+          <Text style={styles.footerNote}>
+            {room.status === 'vote_passed' ? 'Vote passed — finalizing…' : isEligibleVoter ? 'Cast your vote above.' : 'Out for league vote (' + voteDaysLeft + 'd left).'}
+          </Text>
         ) : isPushedToMe ? (
           <View style={styles.footerRow}>
             <TouchableOpacity style={[styles.ctaBtn, styles.ctaAccept]} onPress={handleAcceptPushed}>
@@ -1247,6 +1587,15 @@ const styles = StyleSheet.create({
   chatSendBtn: { backgroundColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
   chatSendText: { color: '#000', fontWeight: '700', fontSize: 13 },
   footerNote: { color: '#666', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
+  vetoBanner: { backgroundColor: '#2a1f00', borderWidth: 1, borderColor: '#F5A623', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, padding: 14 },
+  vetoBannerTitle: { color: '#F5A623', fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  vetoBannerText: { color: '#d8c08a', fontSize: 12, lineHeight: 17 },
+  vetoBannerSub: { color: '#9a8a5a', fontSize: 11, marginTop: 8, fontStyle: 'italic' },
+  vetoBtnRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  vetoApproveBtn: { flex: 1, backgroundColor: '#00ff87', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  vetoApproveText: { color: '#000', fontSize: 14, fontWeight: '800' },
+  vetoKillBtn: { flex: 1, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#ff4444', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  vetoKillText: { color: '#ff4444', fontSize: 14, fontWeight: '800' },
 
   ctaBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
   ctaAccept: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
