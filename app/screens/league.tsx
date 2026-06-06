@@ -17,6 +17,11 @@ const SPORT_KEY: Record<string, string> = {
   mlb: 'mlb',
 };
 
+const NBA_ERA_LABELS: Record<string, string> = {
+  magic_bird: 'Magic vs Bird', jordan: 'Jordan', kobe: 'Kobe',
+  lebron: 'LeBron', steph: 'Steph', current: 'Modern',
+};
+
 const CHANNEL_LABEL: Record<string, string> = {
   nba: 'Inside the NBA',
   madden: 'Inside the NFL',
@@ -267,7 +272,9 @@ export default function LeagueScreen() {
           <View style={styles.sportChip}>
             <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
           </View>
-          <Text style={styles.metaText}>{league.mode} mode</Text>
+          <Text style={styles.metaText}>{league.sport === 'nba' && league.era
+            ? (NBA_ERA_LABELS[league.era] || league.era) + ' Era · ' + (league.mode === 'draft' ? 'Draft' : 'Current Rosters')
+            : league.mode + ' mode'}</Text>
           <View style={styles.metaBtns}>
             <TouchableOpacity
               style={[styles.membersTabBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
