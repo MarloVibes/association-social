@@ -3,6 +3,7 @@ import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getEraCap } from '@/constants/eraCaps';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -135,7 +136,7 @@ export default function CreateLeagueScreen() {
         leagues: arrayUnion(leagueId),
       });
 
-      router.push({ pathname: '/screens/team-select', params: { leagueId, sport, era: finalEra || '', mode: finalMode } });
+      goToTeamSelect({ leagueId, sport, era: finalEra || '', mode: finalMode });
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }

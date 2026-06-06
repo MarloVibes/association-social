@@ -3,6 +3,7 @@ import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSna
 import { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
@@ -339,10 +340,7 @@ export default function LeagueScreen() {
         ) : (
           <TouchableOpacity
             style={styles.pickTeamBtn}
-            onPress={() => router.push({
-              pathname: '/screens/team-select',
-              params: { leagueId, sport: league.sport, era: league.era || '', mode: league.mode },
-            })}
+            onPress={() => goToTeamSelect({ leagueId, sport: league.sport, era: league.era, mode: league.mode })}
           >
             <Text style={styles.pickTeamBtnIcon}>🏆</Text>
             <View>

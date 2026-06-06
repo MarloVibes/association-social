@@ -3,6 +3,7 @@ import { setDoc, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, s
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { goToTeamSelect } from '@/utils/teamSelectNav';
 import GlobalNav from '@/components/GlobalNav';
 
 const ERA_LABELS: Record<string, string> = {
@@ -115,15 +116,7 @@ export default function JoinLeagueScreen() {
         setAlreadyMember(prev => new Set([...prev, league.id]));
         Alert.alert('Joined!', 'Pick your team to start playing.', [{ text: 'Pick Team', onPress: () => {
           setSelectedLeague(null);
-          router.push({
-            pathname: '/screens/team-select',
-            params: {
-              leagueId: league.id,
-              sport: league.sport,
-              era: league.era || '',
-              mode: league.mode,
-            },
-          });
+          goToTeamSelect({ leagueId: league.id, sport: league.sport, era: league.era, mode: league.mode });
         }}]);
       } else {
         // Send join request
