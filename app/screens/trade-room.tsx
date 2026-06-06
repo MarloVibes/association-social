@@ -151,6 +151,8 @@ async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: bool
     return { done: false, error: e };
   }
 }
+
+function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
   const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
   const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
   return (
