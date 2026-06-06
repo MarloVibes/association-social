@@ -8,8 +8,8 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
 
-function PlaystyleBadge({ player }: { player: any }) {
-  const style = getPlaystyle(player);
+function PlaystyleBadge({ player, eraKey }: { player: any; eraKey?: string }) {
+  const style = getPlaystyle(player, eraKey);
   return (
     <View style={[badgeStyles.badge, { borderColor: style.color + '88' }]}>
       <Text style={[badgeStyles.badgeText, { color: style.color }]}>{style.label}</Text>
@@ -22,7 +22,7 @@ const badgeStyles = StyleSheet.create({
   badgeText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-function PlayerSlot({ player, onPress, empty, style }: { player?: any; onPress?: () => void; empty?: boolean; style?: any }) {
+function PlayerSlot({ player, onPress, empty, style, eraKey }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string }) {
   if (empty) {
     return (
       <TouchableOpacity style={[styles.playerSlot, styles.playerSlotEmpty, style]} onPress={onPress}>
@@ -47,7 +47,7 @@ function PlayerSlot({ player, onPress, empty, style }: { player?: any; onPress?:
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
-          <PlaystyleBadge player={player} />
+          <PlaystyleBadge player={player} eraKey={eraKey} />
         </View>
       </View>
     </TouchableOpacity>
@@ -289,7 +289,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = tradeBlockPlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
+                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('block')} />;
               })}
             </View>
@@ -313,7 +313,7 @@ export default function TradeChannelScreen() {
                   }
                 }
                 return targetPlayer ? (
-                  <PlayerSlot key={i} player={targetPlayer} onPress={() => setRosterModal('target')} />
+                  <PlayerSlot key={i} player={targetPlayer} eraKey={myTeam?.era} onPress={() => setRosterModal('target')} />
                 ) : (
                   <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
                 );
@@ -325,7 +325,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = untouchablePlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
+                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('untouchable')} />;
               })}
             </View>
@@ -387,6 +387,7 @@ export default function TradeChannelScreen() {
                 <View style={styles.listingRow}>
                   <PlayerSlot
                     player={item.player}
+                    eraKey={myTeam?.era}
                     style={{ flex: 1 }}
                     onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: (item.player?.teamId || ''), teamName: item.teamName || '' })}
                   />
@@ -550,7 +551,7 @@ export default function TradeChannelScreen() {
                 >
                   <Text style={styles.rosterRowPos}>{p.position}</Text>
                   <Text style={styles.rosterRowName}>{p.full_name}{p.teamName ? ' · ' + p.teamName : ''}</Text>
-                  <PlaystyleBadge player={p} />
+                  <PlaystyleBadge player={p} eraKey={myTeam?.era} />
                   {isSelected && <Text style={styles.rosterCheck}>✓</Text>}
                 </TouchableOpacity>
               );

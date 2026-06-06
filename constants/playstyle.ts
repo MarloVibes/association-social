@@ -14,14 +14,56 @@ export interface Playstyle {
   color: string;
 }
 
-export function getPlaystyle(player: any): Playstyle {
-  const ppg = parseFloat(player?.ppg) || 0;
-  const apg = parseFloat(player?.apg) || 0;
-  const rpg = parseFloat(player?.rpg) || 0;
-  const spg = parseFloat(player?.spg) || 0;
-  const bpg = parseFloat(player?.bpg) || 0;
+// ── Era normalization ───────────────────────────────────────────────
+// Counting stats (points, assists, rebounds, steals, blocks) scale with
+// pace/possessions, which varied hugely by era. We normalize each era's
+// stats to a neutral baseline so a fixed threshold means the same thing
+// across eras and during era transitions. Rates (FG%, 3P%) are NOT scaled.
+
+// Approx league points-per-game per team, by era (pace/scoring proxy).
+const ERA_PACE: Record<string, number> = {
+  magic_bird: 110, jordan: 105, kobe: 95, lebron: 100, steph: 106, current: 114,
+};
+// Approx league average 3P%, by era — the 3-point bar is relative to this.
+const ERA_3P_AVG: Record<string, number> = {
+  magic_bird: 0.27, jordan: 0.32, kobe: 0.35, lebron: 0.36, steph: 0.36, current: 0.37,
+};
+const BASELINE_PACE = 105; // neutral reference (~early-90s scoring)
+const THREE_MARGIN = 0.045; // how far above era average counts as a shooter
+const THREE_NOISE_CAP = 0.52; // above this over a season is small-sample noise
+
+// Map a league start-year to its era key (same boundaries as advance-season).
+export function eraForYear(year: number | undefined): string | undefined {
+  if (!year) return undefined;
+  if (year >= 2024) return 'current';
+  if (year >= 2016) return 'steph';
+  if (year >= 2010) return 'lebron';
+  if (year >= 2002) return 'kobe';
+  if (year >= 1991) return 'jordan';
+  return 'magic_bird';
+}
+
+function paceFactor(eraKey?: string): number {
+  if (!eraKey || !ERA_PACE[eraKey]) return 1;
+  return BASELINE_PACE / ERA_PACE[eraKey];
+}
+function threeFloor(eraKey?: string): number {
+  if (!eraKey || ERA_3P_AVG[eraKey] == null) return 0.38; // legacy default
+  return ERA_3P_AVG[eraKey] + THREE_MARGIN;
+}
+
+export function getPlaystyle(player: any, eraKey?: string): Playstyle {
+  const f = paceFactor(eraKey);
+  // pace-adjust counting stats; leave shooting rates alone
+  const ppg = (parseFloat(player?.ppg) || 0) * f;
+  const apg = (parseFloat(player?.apg) || 0) * f;
+  const rpg = (parseFloat(player?.rpg) || 0) * f;
+  const spg = (parseFloat(player?.spg) || 0) * f;
+  const bpg = (parseFloat(player?.bpg) || 0) * f;
   const fg3 = parseFloat(player?.fg3_pct) || 0;
   const pos = player?.position || '';
+  const t3 = threeFloor(eraKey);
+  const isShooter = fg3 >= t3 && fg3 <= THREE_NOISE_CAP;
 
   // Hall of Fame / Jersey retirement / Anniversary teams = LEGEND
   const accolades = player?.accolades || [];
@@ -32,11 +74,11 @@ export function getPlaystyle(player: any): Playstyle {
   });
   if (isLegend) return { label: 'LEGEND', color: '#ff00ff' };
 
-  // Long career + strong scoring proxy
+  // Long career + strong scoring proxy (career ppg, era-neutral)
   const retiredYear = player?.retirement_year;
   const birthYear = player?.birth_year;
   const seasons = retiredYear && birthYear ? retiredYear - birthYear - 18 : 0;
-  if (seasons >= 15 && ppg >= 18) return { label: 'LEGEND', color: '#ff00ff' };
+  if (seasons >= 15 && (parseFloat(player?.ppg) || 0) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
 
   if (ppg >= 25) return { label: 'SUPERSTAR', color: '#FFD700' };
   if (ppg >= 20) return { label: 'STAR', color: '#FFA500' };
@@ -44,8 +86,8 @@ export function getPlaystyle(player: any): Playstyle {
   if (rpg >= 10) return { label: 'REBOUNDER', color: '#aa44ff' };
   if (bpg >= 2) return { label: 'SHOT BLOCKER', color: '#ff6644' };
   if (spg >= 2) return { label: 'LOCKDOWN', color: '#ff4444' };
-  if (fg3 >= 0.38 && (pos.includes('SF') || pos.includes('SG') || pos.includes('PF'))) return { label: '3&D', color: '#00ff87' };
-  if (fg3 >= 0.38) return { label: 'SHARPSHOOTER', color: '#44ffaa' };
+  if (isShooter && (pos.includes('SF') || pos.includes('SG') || pos.includes('PF'))) return { label: '3&D', color: '#00ff87' };
+  if (isShooter) return { label: 'SHARPSHOOTER', color: '#44ffaa' };
   if (ppg >= 15 && (spg >= 1.2 || bpg >= 1.2)) return { label: 'TWO-WAY', color: '#88ff44' };
   if (pos.includes('C') || pos.includes('PF')) return { label: 'INTERIOR', color: '#aa88ff' };
   if (pos.includes('PG')) return { label: 'FLOOR GENERAL', color: '#44aaff' };
@@ -134,18 +176,24 @@ const YEAR_COLOR = '#00ccff';
 // Falls back to the static getPlaystyle(player) if no season match.
 export function getPlaystyleForYear(player: any, profile: any, currentYear: number | undefined): Playstyle {
   const season = getSeasonForYear(profile, currentYear);
-  if (!season) return getPlaystyle(player);
+  if (!season) return getPlaystyle(player, eraForYear(currentYear));
+  // Use the season's stat when it's actually present; otherwise keep the
+  // player's existing (era_stats-merged) value. Older seasons often scrape
+  // with blank fields, and a blank value must NOT clobber a real stat —
+  // that's what was dropping stars (e.g. Kobe 2002-03) to ROLE PLAYER.
+  const pick = (v: any, fallback: any) =>
+    (v !== undefined && v !== null && v !== '' && !Number.isNaN(parseFloat(v))) ? v : fallback;
   const synthetic = {
     ...player,
-    ppg: season.ppg,
-    apg: season.apg,
-    rpg: season.rpg,
-    spg: season.spg,
-    bpg: season.bpg,
-    fg3_pct: season.fg3_pct,
-    fg_pct: season.fg_pct,
+    ppg: pick(season.ppg, player?.ppg),
+    apg: pick(season.apg, player?.apg),
+    rpg: pick(season.rpg, player?.rpg),
+    spg: pick(season.spg, player?.spg),
+    bpg: pick(season.bpg, player?.bpg),
+    fg3_pct: pick(season.fg3_pct, player?.fg3_pct),
+    fg_pct: pick(season.fg_pct, player?.fg_pct),
   };
-  const tier = getPlaystyle(synthetic);
+  const tier = getPlaystyle(synthetic, eraForYear(currentYear));
   // Graduation logic: only override ROLE PLAYER for early-career players
   if (tier.label === 'ROLE PLAYER') {
     const careerYear = getCareerYear(profile, currentYear);
