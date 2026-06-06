@@ -187,6 +187,12 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
   const accolades = profile?.accolades || [];
   // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
   const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
+  // Origin line: college if known, else high school (prep-to-pro), else country (overseas)
+  const origCollege = profile?.college || player.college || '';
+  const origHS = profile?.high_school || player.high_school || '';
+  const origCountry = player.country || profile?.country || '';
+  const originValue = origCollege || origHS || origCountry;
+  const originLabel = origCollege ? 'College' : (origHS ? 'High School' : 'From');
 
   return (
     <Modal visible={visible} animationType='slide' presentationStyle='pageSheet' onRequestClose={onClose}>
@@ -234,6 +240,9 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                   ) : null}
                   {profile?.birth_date ? (
                     <Text style={styles.birthDate}>Born: {profile.birth_date}</Text>
+                  ) : null}
+                  {originValue ? (
+                    <Text style={styles.birthDate}>{originLabel}: {originValue}</Text>
                   ) : null}
                 </View>
               </View>
