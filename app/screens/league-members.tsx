@@ -46,6 +46,10 @@ export default function LeagueMembersScreen() {
   const bootMember = (member: any) => {
     if (member.uid === user?.uid) { Alert.alert('Cannot boot yourself'); return; }
     if (member.uid === league?.commissionerId) { Alert.alert('Cannot boot the league founder.'); return; }
+    if (coComms.includes(member.uid) && !isFounder) {
+      Alert.alert('Only the founder can remove a co-commissioner', 'Ask the league founder to demote or remove them.');
+      return;
+    }
     Alert.alert(
       'Boot ' + member.displayName + '?',
       'This will remove them from the league and release their team.',
@@ -196,7 +200,7 @@ export default function LeagueMembersScreen() {
                         <Text style={styles.demoteBtnText}>⬇️</Text>
                       </TouchableOpacity>
                     )}
-                    {isCommissioner && !isComm && (
+                    {isCommissioner && !isComm && (isFounder || !coComms.includes(item.uid)) && (
                       <TouchableOpacity
                         style={styles.bootBtn}
                         onPress={(e) => { e.stopPropagation?.(); bootMember(item); }}

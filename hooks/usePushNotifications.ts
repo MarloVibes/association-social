@@ -1,10 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
+
+// Route to the right screen when a push notification is tapped. Mirrors the
+// in-app notification routing so taps land in the same place as taps inside the app.
+function routeFromData(data: any) {
+  if (!data || !data.type) return;
+  const type: string = data.type;
+  const leagueId: string = data.leagueId || '';
+  try {
+    if (['trade_offer', 'trade_executed', 'trade_declined', 'trade_cancelled',
+         'trade_room_opened', 'trade_override_review', 'trade_override_approved',
+         'trade_override_denied', 'trade_pending_veto', 'trade_pending_vote'].includes(type)) {
+      router.push({
+        pathname: '/screens/trade-room',
+        params: {
+          leagueId,
+          otherUid: data.otherUid || '',
+          otherTeamId: data.otherTeamId || '',
+          otherTeamName: data.otherTeamName || '',
+        },
+      });
+    } else if (type === 'tradeblock' || type === 'trade_listing') {
+      router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
+    } else if (leagueId) {
+      router.push({ pathname: '/screens/league', params: { leagueId } });
+    }
+  } catch (e) {
+    console.log('Push deep-link route failed:', e);
+  }
+}
 
 // Show notifications even when app is foregrounded
 Notifications.setNotificationHandler({
@@ -96,8 +126,15 @@ export function usePushNotifications() {
     });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification tapped:', response);
-      // TODO: deep-link based on notification.data.deepLink
+      routeFromData(response.notification.request.content.data);
+    });
+
+    // Cold start: app was launched by tapping a notification. Give the router a
+    // moment to mount, then route.
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) {
+        setTimeout(() => routeFromData(response.notification.request.content.data), 1000);
+      }
     });
 
     return () => {
