@@ -1,5 +1,7 @@
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 initializeApp();
 
@@ -69,4 +71,54 @@ exports.pushOnNotification = onDocumentUpdated('users/{uid}', async (event) => {
   } catch (e) {
     console.error('Expo push failed:', e);
   }
+});
+
+/**
+ * Atomically redeem a promo code. This is the ONLY path that can mark a code
+ * used, which is what makes single-use enforceable — the client cannot bypass
+ * it (the promo_codes collection is locked to admin-only access).
+ *
+ * Code doc shape (promo_codes/{CODE}, CODE uppercased):
+ *   active: boolean, plan: 'lifetime'|'promo', months: number, label: string,
+ *   maxUses: number (1 = single use), uses: number, redeemedBy: string[]
+ *
+ * Returns the resolved grant { plan, months, label } on success, or throws an
+ * HttpsError the client can show ('not-found', 'failed-precondition',
+ * 'already-exists', 'resource-exhausted').
+ */
+exports.redeemPromoCode = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const code = (request.data && request.data.code ? String(request.data.code) : '').trim().toUpperCase();
+  if (!code) throw new HttpsError('invalid-argument', 'No promo code provided.');
+
+  const db = getFirestore();
+  const ref = db.collection('promo_codes').doc(code);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', "That promo code isn't valid.");
+    const c = snap.data() || {};
+    if (c.active === false) throw new HttpsError('failed-precondition', 'That code is no longer active.');
+
+    const maxUses = typeof c.maxUses === 'number' ? c.maxUses : 1;
+    const uses = typeof c.uses === 'number' ? c.uses : 0;
+    const redeemedBy = Array.isArray(c.redeemedBy) ? c.redeemedBy : [];
+
+    if (redeemedBy.includes(uid)) throw new HttpsError('already-exists', "You've already used this code.");
+    if (uses >= maxUses) throw new HttpsError('resource-exhausted', 'That code has already been used.');
+
+    tx.update(ref, {
+      uses: uses + 1,
+      redeemedBy: FieldValue.arrayUnion(uid),
+      lastRedeemedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      plan: c.plan || 'promo',
+      months: typeof c.months === 'number' ? c.months : 0,
+      label: c.label || 'Promo',
+    };
+  });
 });

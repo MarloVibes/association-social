@@ -1,10 +1,14 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { doc, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 
 export default function ProfileSetupScreen() {
+  const { promoCode, promoPlan, promoMonths, promoLabel } = useLocalSearchParams<{
+    promoCode?: string; promoPlan?: string; promoMonths?: string; promoLabel?: string;
+  }>();
+  const hasPromo = !!promoCode;
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [age, setAge] = useState('');
@@ -13,7 +17,7 @@ export default function ProfileSetupScreen() {
   const [bio, setBio] = useState('');
   const [console_, setConsole] = useState('');
   const [favSports, setFavSports] = useState<string[]>([]);
-  const [plan, setPlan] = useState('trial');
+  const [plan, setPlan] = useState(hasPromo ? (promoPlan || 'promo') : 'trial');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,6 +39,23 @@ export default function ProfileSetupScreen() {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('Not logged in');
+
+      // Resolve promo access window: lifetime never expires; month grants set an
+      // expiry from now. No promo falls back to the chosen plan with no window.
+      let accessUntil: string | null = null;
+      if (hasPromo) {
+        if (promoPlan === 'lifetime') {
+          accessUntil = null;
+        } else {
+          const months = parseInt(promoMonths || '0', 10);
+          if (months > 0) {
+            const d = new Date();
+            d.setMonth(d.getMonth() + months);
+            accessUntil = d.toISOString();
+          }
+        }
+      }
+
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email || '',
@@ -48,6 +69,9 @@ export default function ProfileSetupScreen() {
         console: console_,
         favSports,
         plan,
+        promoCode: hasPromo ? promoCode : null,
+        promoLabel: hasPromo ? promoLabel : null,
+        accessUntil,
         createdAt: new Date().toISOString(),
         leagues: [],
         friends: [],
@@ -140,15 +164,29 @@ export default function ProfileSetupScreen() {
         <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="words" />
         <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="words" />
 
-        <Text style={styles.label}>Choose Your Plan</Text>
-        <TouchableOpacity style={[styles.planCard, plan === 'trial' && styles.planCardActive]} onPress={() => setPlan('trial')}>
-          <Text style={[styles.planTitle, plan === 'trial' && styles.planTitleActive]}>Free Trial</Text>
-          <Text style={styles.planDesc}>2 weeks free, no credit card needed</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.planCard, plan === 'paid' && styles.planCardActive]} onPress={() => setPlan('paid')}>
-          <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly — $5/month</Text>
-          <Text style={styles.planDesc}>Full access, cancel anytime</Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>{hasPromo ? 'Your Plan' : 'Choose Your Plan'}</Text>
+        {hasPromo ? (
+          <View style={[styles.planCard, styles.promoCard]}>
+            <Text style={styles.promoBadge}>🎟️ PROMO APPLIED</Text>
+            <Text style={[styles.planTitle, styles.planTitleActive]}>{promoLabel}</Text>
+            <Text style={styles.planDesc}>
+              {promoPlan === 'lifetime'
+                ? 'Lifetime access — no payment ever'
+                : 'Full access included — no card needed'}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity style={[styles.planCard, plan === 'trial' && styles.planCardActive]} onPress={() => setPlan('trial')}>
+              <Text style={[styles.planTitle, plan === 'trial' && styles.planTitleActive]}>Free Trial</Text>
+              <Text style={styles.planDesc}>2 weeks free, no credit card needed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.planCard, plan === 'paid' && styles.planCardActive]} onPress={() => setPlan('paid')}>
+              <Text style={[styles.planTitle, plan === 'paid' && styles.planTitleActive]}>Monthly — $5/month</Text>
+              <Text style={styles.planDesc}>Full access, cancel anytime</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -188,6 +226,8 @@ const styles = StyleSheet.create({
   sportTextActive: { color: '#00ff87' },
   planCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#2a2a2a' },
   planCardActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
+  promoCard: { borderColor: '#FFD700', backgroundColor: '#2a2410' },
+  promoBadge: { color: '#FFD700', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
   planTitle: { fontSize: 16, fontWeight: '700', color: '#888888', marginBottom: 4 },
   planTitleActive: { color: '#00ff87' },
   planDesc: { fontSize: 13, color: '#555555' },

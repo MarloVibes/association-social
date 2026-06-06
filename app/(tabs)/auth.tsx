@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 
 export default function AuthScreen() {
   const { mode } = useLocalSearchParams();
@@ -16,6 +17,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,9 +26,22 @@ export default function AuthScreen() {
     setError('');
     try {
       let uid = '';
+      let promo: any = null;
       if (isSignUp) {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         uid = result.user.uid;
+        // Redeem promo code (optional) via the server — single-use is enforced
+        // there, atomically. A bad/used code doesn't block signup; the user just
+        // continues without the perk and is told why.
+        if (promoCode.trim()) {
+          try {
+            const redeem = httpsCallable(functions, 'redeemPromoCode');
+            const res: any = await redeem({ code: promoCode.trim() });
+            promo = { code: promoCode.trim().toUpperCase(), ...res.data };
+          } catch (e: any) {
+            setError(e?.message || "That promo code couldn't be applied.");
+          }
+        }
       } else {
         // Support login by username OR email
         let loginEmail = email.trim().toLowerCase();
@@ -49,7 +64,17 @@ export default function AuthScreen() {
       if (profileDoc.exists()) {
         router.replace('/(tabs)/dashboard');
       } else {
-        router.replace('/(tabs)/profile-setup');
+        router.replace({
+          pathname: '/(tabs)/profile-setup',
+          params: promo
+            ? {
+                promoCode: promo.code,
+                promoPlan: promo.plan || 'promo',
+                promoMonths: String(promo.months || 0),
+                promoLabel: promo.label || 'Promo',
+              }
+            : {},
+        });
       }
     } catch (e: any) {
       setError(e.message);
@@ -81,6 +106,9 @@ export default function AuthScreen() {
         )}
         <TextInput style={styles.input} placeholder="Email or Username" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#555" value={password} onChangeText={setPassword} secureTextEntry />
+        {isSignUp && (
+          <TextInput style={styles.input} placeholder="Promo code (optional)" placeholderTextColor="#555" value={promoCode} onChangeText={setPromoCode} autoCapitalize="characters" autoCorrect={false} />
+        )}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.primaryButton} onPress={handleAuth} disabled={loading}>
           {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.primaryButtonText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>}
