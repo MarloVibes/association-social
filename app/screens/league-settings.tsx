@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, 
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db } from '@/constants/firebase';
+import { getEraCap } from '@/constants/eraCaps';
 import GlobalNav from '@/components/GlobalNav';
 
 const PRIVACY_OPTIONS = [
@@ -72,7 +73,7 @@ export default function LeagueSettingsScreen() {
       setMaxMembers(String(data.maxMembers || 30));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
-      setSalaryCap(String(data.salaryCap || 154647000));
+      setSalaryCap(String(data.salaryCap || getEraCap(data.era)));
       setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
     } catch (e: any) { Alert.alert('Error', e.message); }

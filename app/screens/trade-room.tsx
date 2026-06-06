@@ -336,7 +336,6 @@ export default function TradeRoomScreen() {
   const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
 
   const checkSalaryBalance = () => {
-    if (leagueEra !== 'current') return { passes: true, hostShortfall: 0, guestShortfall: 0, skipped: true };
     const hostOut = sumSalary(room?.hostOffer || []);
     const guestOut = sumSalary(room?.guestOffer || []);
     if (hostOut === 0 && guestOut === 0) return { passes: true, hostShortfall: 0, guestShortfall: 0, skipped: true };
@@ -869,7 +868,7 @@ export default function TradeRoomScreen() {
             </TouchableOpacity>
           ) : null}
           {otherConfirmed ? <Text style={styles.confirmBadge}>✓ CONFIRMED</Text> : null}
-          {otherOffer.length > 0 && leagueEra === 'current' ? (
+          {otherOffer.length > 0 && sumSalary(otherOffer) > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>OUT</Text>
               <Text style={styles.totalValue}>{fmtMoney(sumSalary(otherOffer))}</Text>
@@ -941,13 +940,13 @@ export default function TradeRoomScreen() {
               />
             ))
           )}
-          {myOffer.length > 0 && leagueEra === 'current' ? (
+          {myOffer.length > 0 && sumSalary(myOffer) > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>OUT</Text>
               <Text style={styles.totalValue}>{fmtMoney(sumSalary(myOffer))}</Text>
             </View>
           ) : null}
-          {leagueEra === 'current' && !salaryCheck.skipped ? (
+          {!salaryCheck.skipped ? (
             <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
               <Text style={[styles.balanceText, { color: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
                 {room?.salaryOverrideApplied

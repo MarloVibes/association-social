@@ -3,6 +3,7 @@ import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { getEraCap } from '@/constants/eraCaps';
 import GlobalNav from '@/components/GlobalNav';
 
 const NBA_ERAS = [
@@ -74,6 +75,7 @@ export default function CreateLeagueScreen() {
         sport,
         mode: finalMode,
         era: finalEra,
+        salaryCap: getEraCap(finalEra),
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],

@@ -63,10 +63,13 @@ function parseDraft(html, year) {
     const teamMatch = row.match(/data-stat="team_id"[^>]*>[\s\S]*?title="[^"]*">([A-Z]{2,3})<\/a>/);
     const team = teamMatch ? teamMatch[1] : '';
 
-    // Player name
-    const playerMatch = row.match(/data-stat="player"[^>]*>[\s\S]*?href='[^']*'>([^<]+)<\/a>/);
+    // bref_id: prefer the canonical data-append-csv attribute (reliable on every
+    // row), fall back to parsing the profile link. Handles single/double quotes.
+    const csvMatch = row.match(/data-append-csv="([^"]+)"/);
+    const playerMatch = row.match(/data-stat="player"[^>]*>[\s\S]*?href=['"]([^'"]*)['"]>([^<]+)<\/a>/);
     if (!playerMatch) continue;
-    const name = playerMatch[1].trim();
+    const brefId = csvMatch ? csvMatch[1] : ((playerMatch[1].match(/\/([^/]+)\.html/) || [])[1] || '');
+    const name = playerMatch[2].trim();
     if (!name) continue;
 
     // College
@@ -80,6 +83,7 @@ function parseDraft(html, year) {
 
     players.push({
       player_id: `draft_${year}_${pick}`,
+      bref_id: brefId,
       first_name: firstName,
       last_name: lastName,
       full_name: name,
@@ -122,7 +126,7 @@ async function main() {
   console.log(`Result: ${testPlayers.length} players`);
   if (testPlayers.length > 0) {
     console.log('Top 5:');
-    testPlayers.slice(0, 5).forEach(p => console.log(`  ${p.draft_pick}. ${p.full_name} (${p.drafted_by})`));
+    testPlayers.slice(0, 5).forEach(p => console.log(`  ${p.draft_pick}. ${p.full_name} [${p.bref_id || 'NO BREF_ID'}] (${p.drafted_by})`));
     console.log('\nTest passed! Starting full scrape in 4 seconds...\n');
   } else {
     console.log('Still failing - exiting');
