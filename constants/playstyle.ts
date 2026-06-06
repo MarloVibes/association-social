@@ -74,6 +74,13 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   });
   if (isLegend) return { label: 'LEGEND', color: '#ff00ff' };
 
+  // All-Star selection (career accolade) guarantees STAR or higher.
+  // bref writes both "All-Star" and "All Star"; exclude All-NBA/All-Defensive/All-Rookie.
+  const isAllStar = accolades.some((a: string) => {
+    const t = a.toLowerCase();
+    return t.includes('all-star') || t.includes('all star');
+  });
+
   // Long career + strong scoring proxy (career ppg, era-neutral)
   const retiredYear = player?.retirement_year;
   const birthYear = player?.birth_year;
@@ -81,6 +88,7 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   if (seasons >= 15 && (parseFloat(player?.ppg) || 0) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
 
   if (ppg >= 25) return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (isAllStar) return { label: 'STAR', color: '#FFA500' }; // All-Star floor
   if (ppg >= 20) return { label: 'STAR', color: '#FFA500' };
   if (apg >= 7) return { label: 'PLAYMAKER', color: '#00ccff' };
   if (rpg >= 10) return { label: 'REBOUNDER', color: '#aa44ff' };
@@ -175,8 +183,11 @@ const YEAR_COLOR = '#00ccff';
 // If the result would be ROLE PLAYER AND the player is in years 1-4, replace with year tag.
 // Falls back to the static getPlaystyle(player) if no season match.
 export function getPlaystyleForYear(player: any, profile: any, currentYear: number | undefined): Playstyle {
+  // Accolades (incl. All-Star) live on the profile, not the pool player — carry
+  // them through so accolade-based tiers (LEGEND, All-Star floor) can fire.
+  const withAccolades = { ...player, accolades: profile?.accolades || player?.accolades || [] };
   const season = getSeasonForYear(profile, currentYear);
-  if (!season) return getPlaystyle(player, eraForYear(currentYear));
+  if (!season) return getPlaystyle(withAccolades, eraForYear(currentYear));
   // Use the season's stat when it's actually present; otherwise keep the
   // player's existing (era_stats-merged) value. Older seasons often scrape
   // with blank fields, and a blank value must NOT clobber a real stat —
@@ -184,7 +195,7 @@ export function getPlaystyleForYear(player: any, profile: any, currentYear: numb
   const pick = (v: any, fallback: any) =>
     (v !== undefined && v !== null && v !== '' && !Number.isNaN(parseFloat(v))) ? v : fallback;
   const synthetic = {
-    ...player,
+    ...withAccolades,
     ppg: pick(season.ppg, player?.ppg),
     apg: pick(season.apg, player?.apg),
     rpg: pick(season.rpg, player?.rpg),
