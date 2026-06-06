@@ -119,8 +119,9 @@ export default function JoinLeagueScreen() {
             pathname: '/screens/team-select',
             params: {
               leagueId: league.id,
-              eraKey: league.era || 'current',
-              isDraft: 'false',
+              sport: league.sport,
+              era: league.era || '',
+              mode: league.mode,
             },
           });
         }}]);
