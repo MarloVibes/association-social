@@ -227,7 +227,7 @@ export default function JoinLeagueScreen() {
           <Text style={styles.leagueMetaDot}>·</Text>
           <Text style={styles.leagueMetaText}>{era}</Text>
           <Text style={styles.leagueMetaDot}>·</Text>
-          <Text style={styles.leagueMetaText}>{item.mode} mode</Text>
+          <Text style={styles.leagueMetaText}>{item.mode === 'draft' ? 'Draft' : item.mode === 'current' ? 'Current Rosters' : item.mode + ' mode'}</Text>
         </View>
         <View style={styles.commRow}>
           <Text style={styles.commLabel}>Commissioner: </Text>
@@ -327,7 +327,7 @@ export default function JoinLeagueScreen() {
                 </View>
                 <View style={styles.modalInfoRow}>
                   <Text style={styles.modalInfoLabel}>Mode</Text>
-                  <Text style={styles.modalInfoValue}>{selectedLeague.mode}</Text>
+                  <Text style={styles.modalInfoValue}>{selectedLeague.mode === 'draft' ? 'Draft' : selectedLeague.mode === 'current' ? 'Current Rosters' : selectedLeague.mode}</Text>
                 </View>
                 <View style={styles.modalInfoRow}>
                   <Text style={styles.modalInfoLabel}>Commissioner</Text>
