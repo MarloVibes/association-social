@@ -43,21 +43,7 @@ export default function AuthScreen() {
           }
         }
       } else {
-        // Support login by username OR email
-        let loginEmail = email.trim().toLowerCase();
-        if (!loginEmail.includes('@')) {
-          // It's a username - look up the email
-          const { getDocs, collection, query, where } = await import('firebase/firestore');
-          const q = query(collection(db, 'users'), where('username', '==', loginEmail));
-          const snap = await getDocs(q);
-          if (snap.empty) {
-            setError('No account found with that username.');
-            setLoading(false);
-            return;
-          }
-          loginEmail = snap.docs[0].data().email || loginEmail;
-        }
-        const result = await signInWithEmailAndPassword(auth, loginEmail, password);
+        const result = await signInWithEmailAndPassword(auth, email.trim(), password);
         uid = result.user.uid;
       }
       const profileDoc = await getDoc(doc(db, 'users', uid));
@@ -104,7 +90,7 @@ export default function AuthScreen() {
         {isSignUp && (
           <TextInput style={styles.input} placeholder="GM Username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
         )}
-        <TextInput style={styles.input} placeholder={isSignUp ? "Email" : "Email or Username"} placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#555" value={password} onChangeText={setPassword} secureTextEntry />
         {isSignUp && (
           <TextInput style={styles.input} placeholder="Promo code (optional)" placeholderTextColor="#555" value={promoCode} onChangeText={setPromoCode} autoCapitalize="characters" autoCorrect={false} />
