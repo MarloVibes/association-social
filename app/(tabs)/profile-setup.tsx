@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -30,8 +30,8 @@ export default function ProfileSetupScreen() {
   ];
 
   const handleSave = async () => {
-    if (!displayName.trim() || !username.trim()) {
-      setError('Display name and username are required.');
+    if (!username.trim()) {
+      setError('Username is required.');
       return;
     }
     setLoading(true);
@@ -39,6 +39,39 @@ export default function ProfileSetupScreen() {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('Not logged in');
+
+      const uname = username.trim();
+      const unameLower = uname.toLowerCase();
+
+      // Enforce unique usernames. Two layers:
+      // 1) Query existing users (catches accounts created before reservations).
+      // 2) A reservation doc at usernames/{lower} — rules only let the owner hold
+      //    it, so a second claimant's write is denied atomically (handles races).
+      const dupSnap = await getDocs(query(collection(db, 'users'), where('usernameLower', '==', unameLower)));
+      const takenByOther = dupSnap.docs.some(d => d.id !== user.uid);
+      if (takenByOther) {
+        setError('That username is already taken — try another.');
+        setLoading(false);
+        return;
+      }
+      const resRef = doc(db, 'usernames', unameLower);
+      const resSnap = await getDoc(resRef);
+      if (resSnap.exists() && resSnap.data()?.uid !== user.uid) {
+        setError('That username is already taken — try another.');
+        setLoading(false);
+        return;
+      }
+      try {
+        await setDoc(resRef, { uid: user.uid, username: uname });
+      } catch {
+        setError('That username was just taken — try another.');
+        setLoading(false);
+        return;
+      }
+
+      // Display name is optional and defaults to the (unique) username, so the
+      // rest of the app — which shows displayName — always has something to show.
+      const finalDisplayName = displayName.trim() || uname;
 
       // Resolve promo access window: lifetime never expires; month grants set an
       // expiry from now. No promo falls back to the chosen plan with no window.
@@ -59,9 +92,9 @@ export default function ProfileSetupScreen() {
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email || '',
-        displayName: displayName.trim(),
-        username: username.trim(),
-        usernameLower: username.trim().toLowerCase(),
+        displayName: finalDisplayName,
+        username: uname,
+        usernameLower: unameLower,
         age,
         gender,
         gamerTag,
@@ -107,11 +140,11 @@ export default function ProfileSetupScreen() {
           <Text style={styles.avatarLabel}>Add Photo</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Display Name *</Text>
-        <TextInput style={styles.input} placeholder="Your name" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
+        <Text style={styles.label}>Display Name</Text>
+        <TextInput style={styles.input} placeholder="Optional — defaults to your username" placeholderTextColor="#555" value={displayName} onChangeText={setDisplayName} />
 
         <Text style={styles.label}>Username *</Text>
-        <TextInput style={styles.input} placeholder="@username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="@username (unique)" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} />
 
         <Text style={styles.label}>Age</Text>
         <TextInput style={styles.input} placeholder="Your age" placeholderTextColor="#555" value={age} onChangeText={setAge} keyboardType="number-pad" />
@@ -126,7 +159,7 @@ export default function ProfileSetupScreen() {
         </View>
 
         <Text style={styles.label}>Gamer Tag</Text>
-        <TextInput style={styles.input} placeholder="PSN / Xbox / EA ID" placeholderTextColor="#555" value={gamerTag} onChangeText={setGamerTag} autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="PSN / Xbox / EA ID" placeholderTextColor="#555" value={gamerTag} onChangeText={setGamerTag} autoCapitalize="none" />
 
         <Text style={styles.label}>Console</Text>
         <View style={styles.optionRow}>
@@ -158,11 +191,11 @@ export default function ProfileSetupScreen() {
         <TextInput style={[styles.input, styles.textArea]} placeholder="Tell the league about yourself..." placeholderTextColor="#555" value={bio} onChangeText={setBio} multiline />
 
         <Text style={styles.label}>Social Media (Optional)</Text>
-        <TextInput style={styles.input} placeholder="Twitch username" placeholderTextColor="#555" autoCapitalize="words" />
-        <TextInput style={styles.input} placeholder="YouTube channel" placeholderTextColor="#555" autoCapitalize="words" />
-        <TextInput style={styles.input} placeholder="Twitter / X handle" placeholderTextColor="#555" autoCapitalize="words" />
-        <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="words" />
-        <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="words" />
+        <TextInput style={styles.input} placeholder="Twitch username" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="YouTube channel" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Twitter / X handle" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Instagram handle" placeholderTextColor="#555" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="TikTok handle" placeholderTextColor="#555" autoCapitalize="none" />
 
         <Text style={styles.label}>{hasPromo ? 'Your Plan' : 'Choose Your Plan'}</Text>
         {hasPromo ? (

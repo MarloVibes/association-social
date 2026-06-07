@@ -104,7 +104,7 @@ export default function AuthScreen() {
         {isSignUp && (
           <TextInput style={styles.input} placeholder="GM Username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
         )}
-        <TextInput style={styles.input} placeholder="Email or Username" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder={isSignUp ? "Email" : "Email or Username"} placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#555" value={password} onChangeText={setPassword} secureTextEntry />
         {isSignUp && (
           <TextInput style={styles.input} placeholder="Promo code (optional)" placeholderTextColor="#555" value={promoCode} onChangeText={setPromoCode} autoCapitalize="characters" autoCorrect={false} />
