@@ -615,6 +615,16 @@ export default function ProfileScreen() {
     )}
     {isOwnProfile && (
       <TouchableOpacity
+        style={styles.redeemRow}
+        onPress={() => router.push('/screens/redeem-code')}
+      >
+        <Text style={styles.redeemRowIcon}>🎟️</Text>
+        <Text style={styles.redeemRowText}>Redeem a Promo Code</Text>
+        <Text style={styles.redeemRowChevron}>›</Text>
+      </TouchableOpacity>
+    )}
+    {isOwnProfile && (
+      <TouchableOpacity
         style={styles.manageBlockedLink}
         onPress={() => router.push('/screens/blocked-users')}
       >
@@ -666,6 +676,10 @@ const styles = StyleSheet.create({
   blockUserBtnText: { color: '#ff4444', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
   manageBlockedLink: { marginTop: 24, marginBottom: 40, padding: 14, alignItems: 'center' },
   manageBlockedText: { color: '#888', fontSize: 14, fontWeight: '600' },
+  redeemRow: { flexDirection: 'row', alignItems: 'center', marginTop: 30, marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
+  redeemRowIcon: { fontSize: 18 },
+  redeemRowText: { flex: 1, color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  redeemRowChevron: { color: '#666', fontSize: 22, fontWeight: '300' },
   mvpPreviewCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#1a1a1a', marginBottom: 8 },
   mvpOvrCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   mvpOvrText: { color: '#fff', fontSize: 17, fontWeight: '900' },
