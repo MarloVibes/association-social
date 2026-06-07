@@ -25,6 +25,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "package": "com.marlovibes.franchisesocial",
       "googleServicesFile": "./google-services.json"
     },
     "web": {

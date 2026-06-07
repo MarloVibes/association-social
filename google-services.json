@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "444786220612",
+    "project_id": "association-social",
+    "storage_bucket": "association-social.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:444786220612:android:a1ff9ac252f2519595e611",
+        "android_client_info": {
+          "package_name": "com.marlovibes.franchisesocial"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "444786220612-7mg2i04nl7ksjlb0qd1g5l0456j6najn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7xEaPcKOwbOJvVC5qv0GkYjg3yq3pEL8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "444786220612-7mg2i04nl7ksjlb0qd1g5l0456j6najn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "444786220612-g34uf26r3eq9cvoc88q50l9mdki5nmov.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marlovibes.associationsocial"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
