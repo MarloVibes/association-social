@@ -1,4 +1,5 @@
 import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
+import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -76,10 +77,13 @@ function adjustColor(hex: string, amt: number): string {
 }
 
 // Reusable team card matching the League Rosters layout. Optionally face-down (flip).
-function RosterTeamCard({ team, eraKey, faceDown, flipAnim }: {
-  team: any; eraKey: string; faceDown?: boolean; flipAnim?: Animated.Value;
+function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
+  team: any; eraKey: string; sport?: string; faceDown?: boolean; flipAnim?: Animated.Value;
 }) {
-  const base = (TEAM_COLORS[team.abbreviation] || ['#1a1a2a', '#4444ff'])[0];
+  const isNBA = !sport || sport === 'nba';
+  const base = isNBA
+    ? (TEAM_COLORS[team.abbreviation] || ['#1a1a2a', '#4444ff'])[0]
+    : getSportTeamTheme(sport, team.abbreviation).tintColor;
   const front = (
     <LinearGradient
       colors={[adjustColor(base, 12), base, adjustColor(base, -18)]}
@@ -91,10 +95,16 @@ function RosterTeamCard({ team, eraKey, faceDown, flipAnim }: {
         start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.6 }}
         style={styles.rosterGloss} pointerEvents="none"
       />
-      <Image
-        source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
-        style={styles.rosterLogo} resizeMode="contain"
-      />
+      {isNBA ? (
+        <Image
+          source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
+          style={styles.rosterLogo} resizeMode="contain"
+        />
+      ) : (
+        <View style={[styles.rosterLogo, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{team.abbreviation}</Text>
+        </View>
+      )}
       <View style={styles.rosterInfo}>
         <Text style={styles.rosterName} numberOfLines={1}>{team.full_name || team.name}</Text>
         <Text style={styles.rosterMeta}>{team.abbreviation} · {(team.players || []).length} players</Text>
@@ -104,6 +114,9 @@ function RosterTeamCard({ team, eraKey, faceDown, flipAnim }: {
 
   if (!faceDown) return front;
 
+  const back = isNBA
+    ? { icon: '🏀', label: 'NBA' }
+    : sport === 'madden' ? { icon: '🏈', label: 'NFL' } : { icon: '⚾', label: 'MLB' };
   const anim = flipAnim || new Animated.Value(0);
   const backRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const frontRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
@@ -111,8 +124,8 @@ function RosterTeamCard({ team, eraKey, faceDown, flipAnim }: {
     <View style={styles.flipWrap}>
       <Animated.View style={[styles.flipFace, { transform: [{ rotateY: backRot }] }]}>
         <View style={styles.cardBackFull}>
-          <Text style={styles.cardBackIcon}>🏀</Text>
-          <Text style={styles.cardBackText}>NBA</Text>
+          <Text style={styles.cardBackIcon}>{back.icon}</Text>
+          <Text style={styles.cardBackText}>{back.label}</Text>
         </View>
       </Animated.View>
       <Animated.View style={[styles.flipFace, styles.flipFaceFront, { transform: [{ rotateY: frontRot }] }]}>
@@ -149,6 +162,10 @@ export default function TeamSelectScreen() {
   const isRandom = mode === 'random';
   const isDraft = mode === 'draft';
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
+  // For non-NBA leagues the pool lives at era_player_pools/{sport} (e.g. mlb, madden),
+  // and there are no era_rosters docs — the team list is built from the sport tables.
+  const isNBA = !sport || sport === 'nba';
+  const poolKey = isNBA ? eraKey : sport;
 
   useEffect(() => { loadTeams(); }, []);
 
@@ -167,12 +184,25 @@ export default function TeamSelectScreen() {
   const loadTeams = async () => {
     setLoading(true);
     try {
-      const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
-      let teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+      let teamList: any[] = [];
+      if (isNBA) {
+        const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
+        teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+      } else {
+        // No era_rosters for football/baseball — build the team list from the sport tables.
+        const table = getSportTeams(sport) || {};
+        teamList = Object.values(table).map((t: any) => ({
+          id: t.abbr,
+          abbreviation: t.abbr,
+          full_name: `${t.city} ${t.name}`,
+          name: t.name,
+          players: [],
+        })).sort((a, b) => a.full_name.localeCompare(b.full_name));
+      }
 
-      // Compute real player counts from the era_player_pools (the stale .players field has wrong counts)
+      // Attach real players from the pool (era_player_pools/{poolKey}).
       try {
-        const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+        const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
         const allPoolPlayers = poolSnap.data()?.players || [];
         teamList = teamList.map((t: any) => {
           const realPlayers = allPoolPlayers.filter((p: any) => p.team === t.abbreviation);
@@ -183,8 +213,34 @@ export default function TeamSelectScreen() {
       }
 
       setTeams(teamList);
+
+      // Restore spins already used (persisted server-side) so closing the app
+      // or pressing Home cannot reset the spin count and grant infinite re-rolls.
+      try {
+        if (user) {
+          const spinSnap = await getDoc(doc(db, 'leagues', leagueId, 'spins', user.uid));
+          const savedIds: string[] = spinSnap.data()?.teamIds || [];
+          if (savedIds.length > 0) {
+            const restored = savedIds
+              .map((id) => teamList.find((t: any) => t.id === id))
+              .filter(Boolean);
+            setSpunResults(restored);
+          }
+        }
+      } catch (e) { console.warn('Failed to restore spins', e); }
     } catch (e) { console.error(e); }
     setLoading(false);
+  };
+
+  // Persist this GM's spin results to the league so they survive an app restart.
+  const persistSpins = async (results: any[]) => {
+    if (!user || !leagueId) return;
+    try {
+      await setDoc(doc(db, 'leagues', leagueId, 'spins', user.uid), {
+        teamIds: results.map((r) => r.id),
+        spunAt: new Date().toISOString(),
+      });
+    } catch (e) { console.warn('Failed to persist spins', e); }
   };
 
   // Spin the ferris-wheel reel and land on a random team not already landed on.
@@ -206,7 +262,11 @@ export default function TeamSelectScreen() {
       useNativeDriver: true,
     }).start(() => {
       setSpinning(false);
-      setSpunResults(prev => [...prev, winner]);
+      setSpunResults(prev => {
+        const next = [...prev, winner];
+        persistSpins(next); // save immediately so a kill/Home can't reset the count
+        return next;
+      });
       // Single-spin leagues: lock straight onto the team you landed on (no do-overs).
       if (spinChoices <= 1) setSelectedTeam(winner);
     });
@@ -242,7 +302,7 @@ export default function TeamSelectScreen() {
       }
       let players: any[] = [];
       if (!isDraft) {
-        const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+        const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
         if (poolSnap.exists()) {
           const allPoolPlayers = poolSnap.data().players || [];
           players = allPoolPlayers.filter((p: any) => p.team === team.abbreviation);
@@ -265,7 +325,7 @@ export default function TeamSelectScreen() {
         teamId: team.id,
         name: team.full_name,
         abbreviation: team.abbreviation,
-        era: eraKey,
+        era: poolKey,
         players,
         tradeBlock: [],
       });
@@ -341,7 +401,7 @@ export default function TeamSelectScreen() {
                       disabled={!!flippedId && flippedId !== team.id}
                       style={[styles.faceDownItem, !!flippedId && flippedId !== team.id && { opacity: 0.4 }]}
                     >
-                      <RosterTeamCard team={team} eraKey={eraKey} faceDown flipAnim={getFlipAnim(team.id)} />
+                      <RosterTeamCard team={team} eraKey={eraKey} sport={sport} faceDown flipAnim={getFlipAnim(team.id)} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -353,7 +413,7 @@ export default function TeamSelectScreen() {
                   <Animated.View style={{ transform: [{ translateY: spinY }] }}>
                     {reel.map((team, i) => (
                       <View key={team.id + '_' + i} style={styles.reelCard}>
-                        <RosterTeamCard team={team} eraKey={eraKey} />
+                        <RosterTeamCard team={team} eraKey={eraKey} sport={sport} />
                       </View>
                     ))}
                   </Animated.View>
@@ -390,7 +450,7 @@ export default function TeamSelectScreen() {
                           onPress={() => setSelectedTeam(t)}
                           style={[styles.resultItem, sel && styles.resultItemSel]}
                         >
-                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} /></View>
+                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} sport={sport} /></View>
                           {sel && <Text style={styles.resultCheck}>✓</Text>}
                         </TouchableOpacity>
                       );

@@ -37,7 +37,6 @@ export default function DashboardScreen() {
   const [pendingInvites, setPendingInvites] = useState(0);
   const [leagueInvites, setLeagueInvites] = useState<any[]>([]);
   const [onlineFriends, setOnlineFriends] = useState<any[]>([]);
-  const [tradeHighlights, setTradeHighlights] = useState<any[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
     try {
@@ -86,7 +85,6 @@ export default function DashboardScreen() {
       const leagueIds: string[] = profileData.leagues || [];
       if (leagueIds.length === 0) {
         setLeagues([]);
-        setTradeHighlights([]);
         setRecentActivity([]);
         setLoadingLeagues(false);
         return;
@@ -101,35 +99,6 @@ export default function DashboardScreen() {
         .map((d) => { return { id: d.id, ...d.data() }; });
 
       setLeagues(leagueData);
-
-      // Fetch recent trade block highlights across all leagues (last 7 days)
-      try {
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const allTrades: any[] = [];
-        for (const leagueId of leagueIds) {
-          try {
-            const actQ = query(
-              collection(db, 'leagues', leagueId, 'activity'),
-              orderBy('createdAt', 'desc')
-            );
-            const actSnap = await getDocs(actQ);
-            for (const d of actSnap.docs) {
-              const data: any = d.data();
-              if (data.type !== 'tradeblock' && data.type !== 'trade_listing') continue;
-              const createdMs = data.createdAt?.toMillis?.() || 0;
-              if (createdMs < sevenDaysAgo) continue;
-              allTrades.push({
-                id: d.id,
-                leagueId,
-                leagueName: leagueData.find((l: any) => l.id === leagueId)?.name || 'League',
-                ...data,
-              });
-            }
-          } catch {}
-        }
-        allTrades.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-        setTradeHighlights(allTrades.slice(0, 5));
-      } catch {}
 
       const allActivity: any[] = [];
       await Promise.all(
@@ -381,29 +350,6 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {tradeHighlights.length > 0 && (
-            <View style={styles.tradesSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>💰 Trade Block</Text>
-                <Text style={styles.tradesSubtitle}>Last 7 days</Text>
-              </View>
-              {tradeHighlights.map((t: any) => (
-                <TouchableOpacity
-                  key={t.leagueId + '-' + t.id}
-                  style={styles.tradeCard}
-                  onPress={() => router.push({ pathname: '/screens/trade-channel', params: { leagueId: t.leagueId, channelId: 'trade-center' } })}
-                >
-                  <Text style={styles.tradeIcon}>{t.type === 'trade_listing' ? '💰' : '🔄'}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.tradeMessage} numberOfLines={2}>{t.message}</Text>
-                    <Text style={styles.tradeLeague}>{t.leagueName} · {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : ''}</Text>
-                  </View>
-                  <Text style={styles.tradeChevron}>›</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Leagues</Text>
             <TouchableOpacity onPress={() => router.push('/screens/create-league')}>
@@ -554,13 +500,6 @@ const styles = StyleSheet.create({
   onlineAvatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
   onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00ff87', borderWidth: 2, borderColor: '#000' },
   onlineName: { color: '#ccc', fontSize: 11, marginTop: 6, fontWeight: '600', textAlign: 'center' },
-  tradesSection: { marginBottom: 24 },
-  tradesSubtitle: { color: '#666', fontSize: 12, fontWeight: '500' },
-  tradeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#1a1a1a', marginBottom: 8, gap: 12 },
-  tradeIcon: { fontSize: 22 },
-  tradeMessage: { color: '#ddd', fontSize: 14, lineHeight: 18 },
-  tradeLeague: { color: '#666', fontSize: 11, marginTop: 3, fontWeight: '500' },
-  tradeChevron: { color: '#555', fontSize: 22, fontWeight: '300' },
   sectionAction: { color: '#00ff87', fontSize: 14, fontWeight: '600' },
   loadingCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 32, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
