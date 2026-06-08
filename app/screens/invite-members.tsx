@@ -289,7 +289,7 @@ export default function InviteMembersScreen() {
             onChangeText={handleSearch}
           />
           {loading ? <ActivityIndicator color='#00ff87' style={{ marginTop: 20 }} /> : (
-            <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
+            <FlatList
               data={displayList}
               keyExtractor={item => item.uid}
               contentContainerStyle={styles.listContent}

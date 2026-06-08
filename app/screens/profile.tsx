@@ -723,10 +723,4 @@ const styles = StyleSheet.create({
   platformBadgeLink: { color: '#4488ff', fontSize: 12 },
   xboxBadge: { backgroundColor: '#10772022', borderColor: '#107720' },
   xboxBadgeText: { color: '#44cc44' },
-  platformBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#00439c22', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderColor: '#00439c' },
-  platformBadgeIcon: { fontSize: 14 },
-  platformBadgeText: { color: '#4488ff', fontSize: 13, fontWeight: '700' },
-  platformBadgeLink: { color: '#4488ff', fontSize: 12 },
-  xboxBadge: { backgroundColor: '#10772022', borderColor: '#107720' },
-  xboxBadgeText: { color: '#44cc44' },
 });

@@ -171,7 +171,7 @@ export default function FriendsScreen() {
       {loading ? (
         <View style={styles.loadingContainer}><ActivityIndicator color="#00ff87" /></View>
       ) : tab === 'friends' ? (
-        <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
+        <FlatList
           data={friends}
           keyExtractor={item => item.uid}
           renderItem={renderFriend}

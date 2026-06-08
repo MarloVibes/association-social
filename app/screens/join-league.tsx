@@ -283,7 +283,7 @@ export default function JoinLeagueScreen() {
       {loading ? (
         <ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 60 }} />
       ) : (
-        <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
+        <FlatList
           data={filteredLeagues}
           keyExtractor={item => item.id}
           renderItem={renderLeagueCard}
