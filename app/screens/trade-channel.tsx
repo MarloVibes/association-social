@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard from '@/components/PlayerCard';
+import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getPlaystyle } from '@/constants/playstyle';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';

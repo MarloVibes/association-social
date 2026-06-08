@@ -76,6 +76,7 @@ export default function AuthScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
         <Text style={styles.subtitle}>{isSignUp ? 'Join the association' : 'Sign in to your league'}</Text>
+        {/* Social auth not wired yet — hidden for launch to avoid dead buttons.
         <TouchableOpacity style={styles.socialButton}>
           <Text style={styles.socialButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
@@ -87,6 +88,7 @@ export default function AuthScreen() {
           <Text style={styles.dividerText}>OR</Text>
           <View style={styles.divider} />
         </View>
+        */}
         {isSignUp && (
           <TextInput style={styles.input} placeholder="GM Username" placeholderTextColor="#555" value={username} onChangeText={setUsername} autoCapitalize="none" />
         )}

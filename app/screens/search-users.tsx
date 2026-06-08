@@ -11,6 +11,7 @@ export default function SearchUsersScreen() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [blockSet, setBlockSet] = useState<Set<string>>(new Set());
+  const user = auth.currentUser;
 
   // Load block sets on mount: who I blocked + who blocked me
   useEffect(() => {
@@ -40,8 +41,6 @@ export default function SearchUsersScreen() {
   const [friends, setFriends] = useState<string[]>([]);
   const [blocked, setBlocked] = useState<string[]>([]);
   const [gmLeagues, setGmLeagues] = useState<Record<string, any[]>>({});
-
-  const user = auth.currentUser;
 
   const handleSearch = async (text: string) => {
     setSearch(text);

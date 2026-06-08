@@ -86,6 +86,21 @@ export default function DashboardScreen() {
       const leagueIds: string[] = profileData.leagues || [];
       if (leagueIds.length === 0) {
         setLeagues([]);
+        setTradeHighlights([]);
+        setRecentActivity([]);
+        setLoadingLeagues(false);
+        return;
+      }
+
+      const leagueDocs = await Promise.all(
+        leagueIds.map((id: string) => getDoc(doc(db, 'leagues', id)))
+      );
+
+      const leagueData = leagueDocs
+        .filter((d) => d.exists())
+        .map((d) => { return { id: d.id, ...d.data() }; });
+
+      setLeagues(leagueData);
 
       // Fetch recent trade block highlights across all leagues (last 7 days)
       try {
@@ -112,24 +127,9 @@ export default function DashboardScreen() {
             }
           } catch {}
         }
-        // Sort by recency, take top 5
         allTrades.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
         setTradeHighlights(allTrades.slice(0, 5));
       } catch {}
-        setRecentActivity([]);
-        setLoadingLeagues(false);
-        return;
-      }
-
-      const leagueDocs = await Promise.all(
-        leagueIds.map((id: string) => getDoc(doc(db, 'leagues', id)))
-      );
-
-      const leagueData = leagueDocs
-        .filter((d) => d.exists())
-        .map((d) => { return { id: d.id, ...d.data() }; });
-
-      setLeagues(leagueData);
 
       const allActivity: any[] = [];
       await Promise.all(
