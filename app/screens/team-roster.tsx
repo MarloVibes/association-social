@@ -3,6 +3,7 @@ import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
+import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
@@ -26,6 +27,7 @@ export default function TeamRosterScreen() {
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
   const [leagueEra, setLeagueEra] = useState<string>('');
+  const [sport, setSport] = useState<string>('nba');
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
@@ -44,6 +46,7 @@ export default function TeamRosterScreen() {
           const d = leagueSnap.data() as any;
           if (d.currentYear) setCurrentYear(d.currentYear);
           setLeagueEra(d.era || 'current');
+          setSport(d.sport || 'nba');
           const myUid_ = auth.currentUser?.uid;
           const commUids_ = [d.commissionerId, ...(d.coCommissioners || [])].filter(Boolean);
           setIsLeagueCommissioner(!!myUid_ && commUids_.includes(myUid_));
@@ -279,7 +282,7 @@ export default function TeamRosterScreen() {
               <View style={styles.playerHeaderRow}>
                 <Text style={styles.playerPos}>{p.position || '?'}</Text>
                 {(() => {
-                  const ps = getPlaystyleForYear(p, profilesByName[p.full_name], currentYear);
+                  const ps = getSportArchetypeForYear(p, profilesByName[p.full_name], currentYear, sport);
                   return (
                     <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                       <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>

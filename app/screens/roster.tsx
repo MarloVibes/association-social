@@ -1,5 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
+import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc, query, where } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
@@ -799,7 +800,7 @@ export default function RosterScreen() {
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
                   {(() => {
-                    const ps = getPlaystyleForYear(item, profilesByName[item.full_name], currentYear);
+                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, sport);
                     return (
                       <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                         <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>
