@@ -28,6 +28,12 @@ const ROSTER_URL = `https://github.com/nflverse/nflverse-data/releases/download/
 // Our NFL_TEAMS keys (the 32 valid teams).
 const VALID = new Set(['BUF','MIA','NE','NYJ','BAL','CIN','CLE','PIT','HOU','IND','JAX','TEN','DEN','KC','LV','LAC','DAL','NYG','PHI','WAS','CHI','DET','GB','MIN','ATL','CAR','NO','TB','ARI','LAR','SF','SEA']);
 
+// Roster statuses to KEEP. Default = realistic rosters (active + reserve/IR/PUP),
+// which drops practice squad, retired, and cut players.
+//   Realistic:  ['ACT','RES','PUP','EXE','NON','SUS']
+//   Deeper:     add 'DEV' (practice squad) for more draftable depth.
+const KEEP_STATUS = new Set(['ACT', 'RES', 'PUP', 'EXE', 'NON', 'SUS']);
+
 // nflverse abbreviation -> our abbreviation (only differences need mapping).
 function normTeam(t) {
   const map = { LA: 'LAR', SD: 'LAC', OAK: 'LV', STL: 'LAR', WSH: 'WAS' };
@@ -83,6 +89,8 @@ async function main() {
     const row = rows[r];
     const team = normTeam((row[iTeam] || '').toUpperCase());
     if (!VALID.has(team)) continue;
+    const status = (iStatus !== -1 ? (row[iStatus] || '') : '').toUpperCase();
+    if (status && !KEEP_STATUS.has(status)) continue;
     const full = iFull !== -1 ? row[iFull] : `${row[iFirst]} ${row[iLast]}`;
     if (!full || !full.trim()) continue;
     const { first_name, last_name } = splitName(full);
