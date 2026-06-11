@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import PlayerCard from '@/components/PlayerCard';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
+import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { initializeApp, getApps } from 'firebase/app';
@@ -257,7 +258,16 @@ export default function TeamRosterScreen() {
 
       {players.length === 0 ? (
         <Text style={styles.empty}>No players on this roster.</Text>
-      ) : players.map((p: any, i: number) => {
+      ) : (() => {
+        // For MLB/NFL, order by position group so the roster reads like a depth chart.
+        const groups = getPositionGroups(sport);
+        const displayPlayers = groups
+          ? [...players].sort((a: any, b: any) =>
+              groupForPosition(sport, a.position).index - groupForPosition(sport, b.position).index)
+          : players;
+        return displayPlayers.map((p: any, i: number) => {
+        const grpLabel = groups ? groupForPosition(sport, p.position).label : '';
+        const showHeader = !!groups && (i === 0 || grpLabel !== groupForPosition(sport, displayPlayers[i - 1].position).label);
         const pid = getPlayerKey(p);
         const isUntouchable = untouchables.includes(pid);
         const isLocked = lockedKeys.has(pid);
@@ -272,7 +282,9 @@ export default function TeamRosterScreen() {
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         const canCpuTrade = !team.gmId && !isMyTeam;
         return (
-          <TouchableOpacity key={pid + i} style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
+          <Fragment key={pid + i}>
+            {showHeader ? <Text style={styles.posGroupHeader}>{grpLabel}</Text> : null}
+          <TouchableOpacity style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
             {brefId ? (
               <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.photo} />
             ) : (
@@ -308,8 +320,10 @@ export default function TeamRosterScreen() {
               </TouchableOpacity>
             ) : null}
           </TouchableOpacity>
+          </Fragment>
         );
-      })}
+      });
+      })()}
 
       <View style={{ height: 60 }} />
       <PlayerCard
@@ -342,6 +356,7 @@ const styles = StyleSheet.create({
   teamMeta: { color: '#ccc', fontSize: 13, marginTop: 2 },
   teamGm: { color: '#888', fontSize: 12, marginTop: 2 },
   sectionLabel: { color: '#666', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
+  posGroupHeader: { color: '#00ff87', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
   empty: { color: '#666', textAlign: 'center', padding: 20 },
   playerRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 6, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a' },
   playerRowUntouchable: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
