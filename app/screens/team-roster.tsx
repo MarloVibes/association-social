@@ -11,6 +11,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
+import { getSportTeamTheme } from '@/constants/sportTeams';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -151,9 +152,11 @@ export default function TeamRosterScreen() {
   }
 
   const abbr = team.abbreviation || 'ATL';
-  const colors = getTeamColors(abbr, leagueEra);
-  const logoLocal = getTeamLogoLocal(abbr, leagueEra);
-  const logoUri = getTeamLogoUrl(abbr, leagueEra);
+  const isNBARoster = !sport || sport === 'nba';
+  const sportTheme = getSportTeamTheme(sport || 'nba', abbr);
+  const colors = isNBARoster ? getTeamColors(abbr, leagueEra) : [sportTheme.tintColor, sportTheme.titleColor];
+  const logoLocal = isNBARoster ? getTeamLogoLocal(abbr, leagueEra) : null;
+  const logoUri = isNBARoster ? getTeamLogoUrl(abbr, leagueEra) : '';
   const isOwned = !!team.gmId;
   const isMyTeam = team.gmId === myUid;
   const untouchables: string[] = team.untouchables || [];
@@ -246,7 +249,13 @@ export default function TeamRosterScreen() {
       </View>
 
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
-        <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
+        {isNBARoster ? (
+          <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
+        ) : (
+          <View style={[styles.teamLogo, { backgroundColor: sportTheme.tintColor, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }]}>
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{abbr}</Text>
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>

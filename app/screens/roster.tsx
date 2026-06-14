@@ -35,6 +35,10 @@ export default function RosterScreen() {
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
+  // Some navigations pass 'nfl' (via SPORT_KEY) while pools are keyed 'madden'. Normalize.
+  const sportNorm = sport === 'nfl' ? 'madden' : (sport || 'nba');
+  const isNBA = sportNorm === 'nba';
+  const poolKey = isNBA ? eraKey : sportNorm;
 
   useEffect(() => { loadData(); }, [teamId, eraKey]);
 
@@ -84,11 +88,11 @@ export default function RosterScreen() {
 
       // Load era player pool
       let poolPlayers: any[] = [];
-      const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+      const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
       if (poolSnap.exists()) {
         poolPlayers = poolSnap.data().players || [];
       } else {
-        const sportKey = sport === 'madden' ? 'nfl' : sport === 'mlb' ? 'mlb' : 'nba';
+        const sportKey = sportNorm === 'madden' ? 'nfl' : sportNorm === 'mlb' ? 'mlb' : 'nba';
         const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
         if (rosterSnap.exists()) {
           poolPlayers = rosterSnap.data().players || [];
@@ -800,7 +804,7 @@ export default function RosterScreen() {
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
                   {(() => {
-                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, sport);
+                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, sportNorm);
                     return (
                       <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                         <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>

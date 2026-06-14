@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, StyleShee
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
+import { getSportTeamTheme } from '@/constants/sportTeams';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
@@ -51,7 +52,11 @@ export default function LeagueScreen() {
   const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
   const currentYear = league?.currentYear || 2024;
   const teamAbbr = myTeam?.abbreviation || '';
-  const teamColors = getTeamColors(teamAbbr || 'ATL', currentYear);
+  const leagueSport = league?.sport || 'nba';
+  const isNBASport = leagueSport === 'nba';
+  const teamColors = isNBASport
+    ? getTeamColors(teamAbbr || 'ATL', currentYear)
+    : [getSportTeamTheme(leagueSport, teamAbbr).tintColor, getSportTeamTheme(leagueSport, teamAbbr).titleColor];
   const teamPrimary = teamColors[0] || '#1a1a1a';
   const teamSecondary = teamColors[1] || '#ffffff';
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -71,7 +76,9 @@ export default function LeagueScreen() {
   // If team color is very dark (close to black), use white as visual fallback for borders/tints
   const displayPrimary = hexToLum(teamPrimary) < 0.1 ? '#ffffff' : teamPrimary;
   // Per-team theme overrides (button labels, borders, tints)
-  const teamTheme = getTeamTheme(myTeam?.abbreviation || teamAbbr, league?.era);
+  const teamTheme = isNBASport
+    ? getTeamTheme(myTeam?.abbreviation || teamAbbr, league?.era)
+    : getSportTeamTheme(leagueSport, myTeam?.abbreviation || teamAbbr);
   const titleColor = teamTheme.titleColor;
   const borderColor = teamTheme.borderColor;
   const tintColor = teamTheme.tintColor;
@@ -259,11 +266,17 @@ export default function LeagueScreen() {
 
         <View style={styles.leagueNameRow}>
           {myTeam?.abbreviation ? (
-            <Image
-              source={getTeamLogoLocal(myTeam.abbreviation, league.era) || { uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
-              style={styles.leagueNameLogo}
-              resizeMode='contain'
-            />
+            isNBASport ? (
+              <Image
+                source={getTeamLogoLocal(myTeam.abbreviation, league.era) || { uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
+                style={styles.leagueNameLogo}
+                resizeMode='contain'
+              />
+            ) : (
+              <View style={[styles.leagueNameLogo, { backgroundColor: teamTheme.tintColor, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }]}>
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{myTeam.abbreviation}</Text>
+              </View>
+            )
           ) : (
             <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={44} />
           )}
