@@ -62,7 +62,7 @@ export default function LeagueRostersScreen() {
           const eraTeamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
           eraTeams = eraTeamsSnap.docs.map(d => d.data() as any);
         } else {
-          eraTeams = getSportTeams(sportVal).map((t: any) => ({
+          eraTeams = Object.values(getSportTeams(sportVal) || {}).map((t: any) => ({
             id: t.abbr, abbreviation: t.abbr, full_name: `${t.city} ${t.name}`,
           }));
         }
