@@ -27,6 +27,7 @@ export default function CpuTradeScreen() {
         const ld = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
         setLeague({ id: leagueId, ...ld });
         const eraKey = ld.era || 'current';
+        const poolKey = (ld.sport && ld.sport !== 'nba') ? ld.sport : eraKey;
 
         const mySnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', leagueId + '_' + user.uid));
         if (mySnap.exists()) {
@@ -40,7 +41,7 @@ export default function CpuTradeScreen() {
         if (cpuSnap.exists()) {
           setCpuRoster((cpuSnap.data() as any).players || []);
         } else {
-          const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+          const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
           const pool = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
           setCpuRoster(pool.filter((p: any) => p.team === cpuAbbr));
         }

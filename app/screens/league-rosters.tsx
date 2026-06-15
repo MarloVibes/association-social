@@ -6,6 +6,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
+import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -34,6 +35,7 @@ export default function LeagueRostersScreen() {
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [era, setEra] = useState<any>(undefined);
+  const [sport, setSport] = useState<string>('nba');
 
   useEffect(() => {
     if (!leagueId) return;
@@ -42,17 +44,28 @@ export default function LeagueRostersScreen() {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
         const ld = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
         const eraKey = ld.era || 'current';
+        const sportVal = ld.sport || 'nba';
+        const isNBA = sportVal === 'nba';
+        const poolKey = isNBA ? eraKey : sportVal;
         setEra(eraKey);
+        setSport(sportVal);
 
-        // Full set of teams for this era + the player pool for default rosters,
-        // plus the league's claimed/materialized team docs.
-        const [eraTeamsSnap, poolSnap, leagueTeamsSnap] = await Promise.all([
-          getDocs(collection(db, 'era_rosters', eraKey, 'teams')),
-          getDoc(doc(db, 'era_player_pools', eraKey)),
+        // Player pool for default rosters + the league's claimed team docs.
+        // NBA teams come from era_rosters; MLB/NFL from the static sport team list.
+        const [poolSnap, leagueTeamsSnap] = await Promise.all([
+          getDoc(doc(db, 'era_player_pools', poolKey)),
           getDocs(collection(db, 'leagues', leagueId, 'teams')),
         ]);
         const poolPlayers = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
-        const eraTeams = eraTeamsSnap.docs.map(d => d.data() as any);
+        let eraTeams: any[];
+        if (isNBA) {
+          const eraTeamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
+          eraTeams = eraTeamsSnap.docs.map(d => d.data() as any);
+        } else {
+          eraTeams = getSportTeams(sportVal).map((t: any) => ({
+            id: t.abbr, abbreviation: t.abbr, full_name: `${t.city} ${t.name}`,
+          }));
+        }
         const leagueTeams = leagueTeamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
         // Resolve owner display names (team docs only store gmId, not a name)
@@ -137,9 +150,11 @@ export default function LeagueRostersScreen() {
 
       {teams.map(team => {
         const abbr = team.abbreviation || 'ATL';
-        const colors = getTeamColors(abbr, era);
-        const logoLocal = getTeamLogoLocal(abbr, era);
-        const logoUri = getTeamLogoUrl(abbr, era);
+        const isNBASport = sport === 'nba';
+        const sportTheme = isNBASport ? null : getSportTeamTheme(sport, abbr);
+        const colors = isNBASport ? getTeamColors(abbr, era) : [sportTheme?.tintColor || '#1a1a1a'];
+        const logoLocal = isNBASport ? getTeamLogoLocal(abbr, era) : null;
+        const logoUri = isNBASport ? getTeamLogoUrl(abbr, era) : '';
         const isOwned = !!team.gmId;
         // Luminance check for text contrast on bold solid team-color background
         const hex = (colors[0] || '#222').replace('#', '');
@@ -175,7 +190,13 @@ export default function LeagueRostersScreen() {
                 style={styles.glossOverlay}
                 pointerEvents="none"
               />
-              <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
+              {isNBASport ? (
+                <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
+              ) : (
+                <View style={[styles.teamLogo, styles.abbrBadge]}>
+                  <Text style={[styles.abbrBadgeText, { color: textColor }]}>{abbr}</Text>
+                </View>
+              )}
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
                   <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbreviation}</Text>
@@ -218,6 +239,8 @@ const styles = StyleSheet.create({
   teamCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   glossOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', borderTopLeftRadius: 14, borderTopRightRadius: 14 },
   teamLogo: { width: 40, height: 40, marginRight: 12 },
+  abbrBadge: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.22)', borderRadius: 8 },
+  abbrBadgeText: { fontWeight: '900', fontSize: 15 },
   teamInfo: { flex: 1 },
   teamName: { color: '#fff', fontSize: 16, fontWeight: '700' },
   teamNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

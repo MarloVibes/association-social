@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard from '@/components/PlayerCard';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getPlaystyle } from '@/constants/playstyle';
+import { getSportArchetype } from '@/constants/sportArchetype';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -9,8 +10,8 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
 
-function PlaystyleBadge({ player, eraKey }: { player: any; eraKey?: string }) {
-  const style = getPlaystyle(player, eraKey);
+function PlaystyleBadge({ player, eraKey, sport }: { player: any; eraKey?: string; sport?: string }) {
+  const style = getSportArchetype(player, sport, eraKey);
   return (
     <View style={[badgeStyles.badge, { borderColor: style.color + '88' }]}>
       <Text style={[badgeStyles.badgeText, { color: style.color }]}>{style.label}</Text>
@@ -23,7 +24,7 @@ const badgeStyles = StyleSheet.create({
   badgeText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-function PlayerSlot({ player, onPress, empty, style, eraKey }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string }) {
+function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string; sport?: string }) {
   if (empty) {
     return (
       <TouchableOpacity style={[styles.playerSlot, styles.playerSlotEmpty, style]} onPress={onPress}>
@@ -48,7 +49,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey }: { player?: any; o
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
-          <PlaystyleBadge player={player} eraKey={eraKey} />
+          <PlaystyleBadge player={player} eraKey={eraKey} sport={sport} />
         </View>
       </View>
     </TouchableOpacity>
@@ -59,6 +60,7 @@ export default function TradeChannelScreen() {
   const { leagueId, channelId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
   const [activeTab, setActiveTab] = useState<'block' | 'available'>('block');
   const [myTeam, setMyTeam] = useState<any>(null);
+  const [sport, setSport] = useState<string>('nba');
   const [myTeamId, setMyTeamId] = useState('');
   const [myRoster, setMyRoster] = useState<any[]>([]);
   const [tradeBlock, setTradeBlock] = useState<string[]>([]);
@@ -139,6 +141,14 @@ export default function TradeChannelScreen() {
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllTeams(teams);
+      // League sport drives archetype labels (NBA playstyle vs MLB/NFL archetypes).
+      let leagueSport = 'nba';
+      try {
+        const lSnap = await getDoc(doc(db, 'leagues', leagueId));
+        leagueSport = (lSnap.exists() && (lSnap.data() as any).sport) || 'nba';
+      } catch {}
+      setSport(leagueSport);
+      const isNBA = leagueSport === 'nba';
       // Note: allTeams are used for tradeBlock display - they get enriched inline
       const mine = teams.find((t: any) => t.gmId === user?.uid);
       if (mine) {
@@ -147,14 +157,16 @@ export default function TradeChannelScreen() {
         setTradeBlock(mine.tradeBlock || []);
         setUntouchables(mine.untouchables || []);
 
-        // Load era stats to enrich players with ppg/rpg/apg etc
+        // Load era stats to enrich players (NBA only — MLB/NFL pools carry their own).
         const eraKey = mine.era || 'current';
-        const statsSnap = await getDoc(doc(db, 'era_stats', eraKey));
         const statsMap: Record<string, any> = {};
-        if (statsSnap.exists()) {
-          (statsSnap.data().players || []).forEach((p: any) => {
-            statsMap[p.name] = p;
-          });
+        if (isNBA) {
+          const statsSnap = await getDoc(doc(db, 'era_stats', eraKey));
+          if (statsSnap.exists()) {
+            (statsSnap.data().players || []).forEach((p: any) => {
+              statsMap[p.name] = p;
+            });
+          }
         }
 
         const enrichedRoster = (mine.players || []).map((p: any) => ({
@@ -290,7 +302,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = tradeBlockPlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
+                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} sport={sport} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('block')} />;
               })}
             </View>
@@ -314,7 +326,7 @@ export default function TradeChannelScreen() {
                   }
                 }
                 return targetPlayer ? (
-                  <PlayerSlot key={i} player={targetPlayer} eraKey={myTeam?.era} onPress={() => setRosterModal('target')} />
+                  <PlayerSlot key={i} player={targetPlayer} eraKey={myTeam?.era} sport={sport} onPress={() => setRosterModal('target')} />
                 ) : (
                   <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
                 );
@@ -326,7 +338,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = untouchablePlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
+                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} sport={sport} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('untouchable')} />;
               })}
             </View>
@@ -388,7 +400,7 @@ export default function TradeChannelScreen() {
                 <View style={styles.listingRow}>
                   <PlayerSlot
                     player={item.player}
-                    eraKey={myTeam?.era}
+                    eraKey={myTeam?.era} sport={sport}
                     style={{ flex: 1 }}
                     onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: (item.player?.teamId || ''), teamName: item.teamName || '' })}
                   />
@@ -552,7 +564,7 @@ export default function TradeChannelScreen() {
                 >
                   <Text style={styles.rosterRowPos}>{p.position}</Text>
                   <Text style={styles.rosterRowName}>{p.full_name}{p.teamName ? ' · ' + p.teamName : ''}</Text>
-                  <PlaystyleBadge player={p} eraKey={myTeam?.era} />
+                  <PlaystyleBadge player={p} eraKey={myTeam?.era} sport={sport} />
                   {isSelected && <Text style={styles.rosterCheck}>✓</Text>}
                 </TouchableOpacity>
               );

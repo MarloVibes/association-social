@@ -57,8 +57,10 @@ export default function TeamRosterScreen() {
           setTeam({ id: teamSnap.id, ...teamSnap.data() });
         } else if (isCpu === '1' || eraTeamId || cpuAbbr) {
           // Vacant CPU team — build a read-only roster from the era pool
-          const eraKey = leagueSnap.exists() ? ((leagueSnap.data() as any).era || 'current') : 'current';
-          const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+          const ld2 = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
+          const eraKey = ld2.era || 'current';
+          const poolKey = (ld2.sport && ld2.sport !== 'nba') ? ld2.sport : eraKey;
+          const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
           const poolPlayers = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
           let cpuName = cpuAbbr || 'CPU Team';
           try {

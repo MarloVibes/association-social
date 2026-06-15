@@ -55,7 +55,8 @@ export default function SalaryOverridesScreen() {
 
       // Load era player pool for search
       const era = ld.era || 'current';
-      const poolSnap = await getDoc(doc(db, 'era_player_pools', era));
+      const poolKey = (ld.sport && ld.sport !== 'nba') ? ld.sport : era;
+      const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
       if (poolSnap.exists()) {
         setAllPlayers((poolSnap.data() as any).players || []);
       }
