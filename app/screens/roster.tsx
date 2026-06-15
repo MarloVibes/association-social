@@ -69,6 +69,12 @@ export default function RosterScreen() {
         setIsLeagueCommissioner(!!myUid_ && commUids_.includes(myUid_));
       }
 
+      // Authoritative sport from the league doc — the nav param can be mismapped
+      // via SPORT_KEY (madden->nfl), so read the source of truth here.
+      const docSport = (leagueSnap.exists() && (leagueSnap.data() as any).sport) || 'nba';
+      const isNBADoc = docSport === 'nba';
+      const docPoolKey = isNBADoc ? eraKey : docSport;
+
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const claimedAbbrs = new Set<string>();
       const claimedPlayerIds = new Set<string>();
@@ -88,11 +94,11 @@ export default function RosterScreen() {
 
       // Load era player pool
       let poolPlayers: any[] = [];
-      const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
+      const poolSnap = await getDoc(doc(db, 'era_player_pools', docPoolKey));
       if (poolSnap.exists()) {
         poolPlayers = poolSnap.data().players || [];
       } else {
-        const sportKey = sportNorm === 'madden' ? 'nfl' : sportNorm === 'mlb' ? 'mlb' : 'nba';
+        const sportKey = docSport === 'madden' ? 'nfl' : docSport === 'mlb' ? 'mlb' : 'nba';
         const rosterSnap = await getDoc(doc(db, 'rosters', sportKey));
         if (rosterSnap.exists()) {
           poolPlayers = rosterSnap.data().players || [];
@@ -113,8 +119,9 @@ export default function RosterScreen() {
         });
       });
 
-      // ALSO: load vault-tagged free agents for this league's era
-      // (players the vault marks with free_in_eras containing the era key)
+      // ALSO: load vault-tagged free agents (NBA only — the 'players' vault is
+      // basketball; MLB/NFL free agents come from their own sport pool above).
+      if (isNBADoc) {
       const vaultEra = (leagueSnap.exists() && (leagueSnap.data() as any).era) || 'current';
       try {
         const vaultFAQ = query(collection(db, 'players'), where('free_in_eras', 'array-contains', vaultEra));
@@ -146,6 +153,7 @@ export default function RosterScreen() {
       } catch (e) {
         console.warn('vault free agents fetch failed', e);
       }
+      } // end isNBA vault free agents
 
       // Build 'taken' set from pool: every pool player is taken EXCEPT free agents.
       // Then force-add anyone on a claimed team (in case trades moved them).
@@ -180,13 +188,16 @@ export default function RosterScreen() {
         customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
       }
 
-      // Enrich players with era_stats so playstyles compute correctly
+      // Enrich players with era_stats so playstyles compute correctly (NBA only;
+      // MLB/NFL pools already carry their own stats from the enrichment scripts).
       try {
-        const eraKey = (leagueSnap.exists() && (leagueSnap.data() as any).era) || 'current';
-        const statsSnap = await getDoc(doc(db, 'era_stats', eraKey));
         const statsMap: Record<string, any> = {};
-        if (statsSnap.exists()) {
-          (statsSnap.data().players || []).forEach((p: any) => { statsMap[p.name] = p; });
+        if (isNBADoc) {
+          const statsEraKey = (leagueSnap.exists() && (leagueSnap.data() as any).era) || 'current';
+          const statsSnap = await getDoc(doc(db, 'era_stats', statsEraKey));
+          if (statsSnap.exists()) {
+            (statsSnap.data().players || []).forEach((p: any) => { statsMap[p.name] = p; });
+          }
         }
         const enrichedPool = [...poolPlayers, ...leagueFreeAgents, ...customPlayers].map(p => ({
           ...p, ...(statsMap[p.full_name] || {}),
