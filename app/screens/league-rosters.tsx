@@ -6,7 +6,8 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
-import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
+import { getSportTeams, getSportTeamTheme, getSportLogoUrl } from '@/constants/sportTeams';
+import SportTeamLogo from '@/components/SportTeamLogo';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -190,13 +191,7 @@ export default function LeagueRostersScreen() {
                 style={styles.glossOverlay}
                 pointerEvents="none"
               />
-              {isNBASport ? (
-                <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
-              ) : (
-                <View style={[styles.teamLogo, styles.abbrBadge]}>
-                  <Text style={[styles.abbrBadgeText, { color: textColor }]}>{abbr}</Text>
-                </View>
-              )}
+              <SportTeamLogo sport={sport} abbr={abbr} era={era} style={styles.teamLogo} textColor={textColor} fontSize={15} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
                   <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbreviation}</Text>

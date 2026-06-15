@@ -6,6 +6,7 @@ import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
+import SportTeamLogo from '@/components/SportTeamLogo';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
@@ -266,17 +267,14 @@ export default function LeagueScreen() {
 
         <View style={styles.leagueNameRow}>
           {myTeam?.abbreviation ? (
-            isNBASport ? (
-              <Image
-                source={getTeamLogoLocal(myTeam.abbreviation, league.era) || { uri: getTeamLogoUrl(myTeam.abbreviation, league.era) }}
-                style={styles.leagueNameLogo}
-                resizeMode='contain'
-              />
-            ) : (
-              <View style={[styles.leagueNameLogo, { backgroundColor: teamTheme.tintColor, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }]}>
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{myTeam.abbreviation}</Text>
-              </View>
-            )
+            <SportTeamLogo
+              sport={leagueSport}
+              abbr={myTeam.abbreviation}
+              era={league.era}
+              style={styles.leagueNameLogo}
+              textColor="#ffffff"
+              fontSize={14}
+            />
           ) : (
             <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={44} />
           )}

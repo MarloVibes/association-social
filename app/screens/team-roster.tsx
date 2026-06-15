@@ -12,6 +12,7 @@ import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'fi
 import { getAuth } from 'firebase/auth';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
+import SportTeamLogo from '@/components/SportTeamLogo';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -251,13 +252,7 @@ export default function TeamRosterScreen() {
       </View>
 
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
-        {isNBARoster ? (
-          <Image source={logoLocal || { uri: logoUri }} style={styles.teamLogo} />
-        ) : (
-          <View style={[styles.teamLogo, { backgroundColor: sportTheme.tintColor, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }]}>
-            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{abbr}</Text>
-          </View>
-        )}
+        <SportTeamLogo sport={sport || 'nba'} abbr={abbr} era={leagueEra} style={styles.teamLogo} textColor="#ffffff" fontSize={16} />
         <View style={{ flex: 1 }}>
           <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>
