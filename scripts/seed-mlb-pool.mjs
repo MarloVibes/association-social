@@ -25,7 +25,8 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const SEASON = 2024;
+const seasonArg = process.argv.find(a => a.startsWith('--season='));
+const SEASON = seasonArg ? parseInt(seasonArg.split('=')[1], 10) : 2026;
 
 // Stable MLB Stats API team IDs -> your MLB_TEAMS abbreviations.
 const TEAM_ID_TO_ABBR = {

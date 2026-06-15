@@ -22,7 +22,8 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const SEASON = 2024;
+const seasonArg = process.argv.find(a => a.startsWith('--season='));
+const SEASON = seasonArg ? parseInt(seasonArg.split('=')[1], 10) : 2025;
 const ROSTER_URL = `https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_${SEASON}.csv`;
 
 // Our NFL_TEAMS keys (the 32 valid teams).

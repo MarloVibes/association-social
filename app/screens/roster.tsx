@@ -155,6 +155,22 @@ export default function RosterScreen() {
       }
       } // end isNBA vault free agents
 
+      // MLB/NFL: load the sport free-agent pool (fringe/depth players not on a
+      // real roster) so GMs have signable players from day one.
+      if (!isNBADoc) {
+        try {
+          const faSnap = await getDoc(doc(db, 'era_player_pools', docPoolKey + '_fa'));
+          const faPlayers = faSnap.data()?.players || [];
+          faPlayers.forEach((p: any) => {
+            if (!freeAgentNames.has(p.full_name || '')) {
+              leagueFreeAgents.push({ ...p, team: '', from_fa_pool: true });
+              if (p.player_id) freeAgentIds.add(p.player_id);
+              if (p.full_name) freeAgentNames.add(p.full_name);
+            }
+          });
+        } catch (e) { console.warn('FA pool load failed', e); }
+      }
+
       // Build 'taken' set from pool: every pool player is taken EXCEPT free agents.
       // Then force-add anyone on a claimed team (in case trades moved them).
       const taken = new Set<string>();

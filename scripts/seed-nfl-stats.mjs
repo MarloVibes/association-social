@@ -24,7 +24,8 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const SEASON = 2024;
+const seasonArg = process.argv.find(a => a.startsWith('--season='));
+const SEASON = seasonArg ? parseInt(seasonArg.split('=')[1], 10) : 2025;
 const OFF_URL = `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${SEASON}.csv`;
 const DEF_URL = `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_def_${SEASON}.csv`;
 

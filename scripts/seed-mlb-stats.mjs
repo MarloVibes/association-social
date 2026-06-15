@@ -23,7 +23,8 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const SEASON = 2024;
+const seasonArg = process.argv.find(a => a.startsWith('--season='));
+const SEASON = seasonArg ? parseInt(seasonArg.split('=')[1], 10) : 2025;
 const BATCH = 25;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
