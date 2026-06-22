@@ -871,6 +871,7 @@ export default function RosterScreen() {
       <PlayerCard
         player={selectedPlayer}
         era={eraKey}
+        sport={sportNorm}
         leagueId={leagueId}
         teamId={teamId}
         visible={!!selectedPlayer}

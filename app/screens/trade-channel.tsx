@@ -575,6 +575,7 @@ export default function TradeChannelScreen() {
       <PlayerCard
         player={selectedAvailPlayer?.player || null}
         era={myTeam?.era || 'current'}
+        sport={sport}
         leagueId={leagueId}
         teamId={selectedAvailPlayer?.teamId || ''}
         visible={!!selectedAvailPlayer}

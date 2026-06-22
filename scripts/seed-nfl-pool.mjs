@@ -83,6 +83,7 @@ async function main() {
   const iLast = col('last_name');
   const iStatus = col('status');
   const iId = col('gsis_id') !== -1 ? col('gsis_id') : col('espn_id');
+  const iHeadshot = col('headshot_url');
 
   const players = [];
   const counts = {};
@@ -103,6 +104,7 @@ async function main() {
       position: (iPos !== -1 ? row[iPos] : '') || '',
       player_id: iId !== -1 ? (row[iId] || '') : '',
       status: iStatus !== -1 ? (row[iStatus] || '') : '',
+      photo: iHeadshot !== -1 ? (row[iHeadshot] || '') : '',
     });
     counts[team] = (counts[team] || 0) + 1;
   }

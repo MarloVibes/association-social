@@ -335,6 +335,7 @@ export default function TeamRosterScreen() {
       <PlayerCard
         player={selectedPlayer}
         era={leagueEra}
+        sport={sport || 'nba'}
         leagueId={leagueId}
         teamId={team?.id || ''}
         visible={!!selectedPlayer}

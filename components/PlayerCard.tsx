@@ -6,6 +6,7 @@ import { db } from '@/constants/firebase';
 type Props = {
   player: any;
   era: string;
+  sport?: string;
   leagueId: string;
   teamId: string;
   visible: boolean;
@@ -108,11 +109,12 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
   }));
 }
 
-export default function PlayerCard({ player, era, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
+export default function PlayerCard({ player, era, sport, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [onTradeBlock, setOnTradeBlock] = useState(false);
   const [expandedSeason, setExpandedSeason] = useState<string | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   useEffect(() => {
     if (visible && player) loadPlayerData();
@@ -121,6 +123,7 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
   const loadPlayerData = async () => {
     setLoading(true);
     setProfile(null);
+    setPhotoFailed(false);
     try {
       // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
   const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
@@ -194,6 +197,38 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
   const originValue = origCollege || origHS || origCountry;
   const originLabel = origCollege ? 'College' : (origHS ? 'High School' : 'From');
 
+  // Infer sport from embedded stat fields when the prop is missing/nba, so the
+  // right photo source and stat line are used even if the caller didn't pass sport.
+  const effectiveSport = (sport && sport !== 'nba') ? sport
+    : (player.hr != null || player.avg != null || player.era != null || player.saves != null) ? 'mlb'
+    : (player.passing_yards != null || player.rushing_yards != null || player.receiving_yards != null || player.sacks != null) ? 'madden'
+    : (sport || 'nba');
+  const isNBAPlayer = effectiveSport === 'nba';
+
+  // Headshot source per sport. MLB derives from the MLB person id; NFL uses a
+  // stored photo url (from the roster seed); NBA uses basketball-reference.
+  let headshotUri = '';
+  if (isNBAPlayer) headshotUri = brefId ? 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' : '';
+  else if (effectiveSport === 'mlb') headshotUri = player.player_id ? `https://midfield.mlbstatic.com/v1/people/${player.player_id}/spots/120` : '';
+  else headshotUri = player.photo || player.headshot_url || '';
+
+  // Season stat line for MLB/NFL (the pool carries one season of stats).
+  const sportStats: { label: string; value: any }[] = [];
+  if (effectiveSport === 'mlb') {
+    if (player.avg != null && player.avg !== '') sportStats.push({ label: 'AVG', value: player.avg });
+    if (player.hr != null) sportStats.push({ label: 'HR', value: player.hr });
+    if (player.sb != null) sportStats.push({ label: 'SB', value: player.sb });
+    if (player.era != null && player.era !== '') sportStats.push({ label: 'ERA', value: player.era });
+    if (player.so != null) sportStats.push({ label: 'SO', value: player.so });
+    if (player.saves != null) sportStats.push({ label: 'SV', value: player.saves });
+  } else if (effectiveSport === 'madden') {
+    if (player.passing_yards) sportStats.push({ label: 'PASS YDS', value: player.passing_yards });
+    if (player.passing_tds) sportStats.push({ label: 'PASS TD', value: player.passing_tds });
+    if (player.rushing_yards) sportStats.push({ label: 'RUSH YDS', value: player.rushing_yards });
+    if (player.receiving_yards) sportStats.push({ label: 'REC YDS', value: player.receiving_yards });
+    if (player.sacks) sportStats.push({ label: 'SACKS', value: player.sacks });
+  }
+
   return (
     <Modal visible={visible} animationType='slide' presentationStyle='pageSheet' onRequestClose={onClose}>
       <View style={styles.container}>
@@ -213,11 +248,12 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
               {/* Hero Section */}
               <View style={styles.heroSection}>
                 <View style={styles.photoWrapper}>
-                  {brefId ? (
+                  {headshotUri && !photoFailed ? (
                     <Image
-                      source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }}
+                      source={{ uri: headshotUri }}
                       style={styles.photo}
                       resizeMode='cover'
+                      onError={() => setPhotoFailed(true)}
                     />
                   ) : (
                     <View style={[styles.photoPlaceholder, { backgroundColor: posColor + '33' }]}>
@@ -262,8 +298,29 @@ export default function PlayerCard({ player, era, leagueId, teamId, visible, onC
                 </View>
               )}
 
+              {/* Season stats for MLB/NFL */}
+              {!isNBAPlayer && sportStats.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📊 Season Stats</Text>
+                  <View style={styles.expandedGrid}>
+                    {sportStats.map(stat => (
+                      <View key={stat.label} style={styles.expandedStatItem}>
+                        <Text style={styles.expandedStatValue}>{stat.value ?? '—'}</Text>
+                        <Text style={styles.expandedStatLabel}>{stat.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              {!isNBAPlayer && sportStats.length === 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📊 Season Stats</Text>
+                  <Text style={styles.physical}>No recorded stats — depth/free-agent player.</Text>
+                </View>
+              )}
+
               {/* Career Stats by Season */}
-              {seasons.length > 0 && (
+              {isNBAPlayer && seasons.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>📊 Career Stats</Text>
                   {/* Header */}
