@@ -127,7 +127,15 @@ export default function LeagueScreen() {
       setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
-    return () => unsubscribe();
+    // If the league is deleted while we're viewing it, return to the main menu.
+    const unsubLeague = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
+      if (!snap.exists()) {
+        Alert.alert('League deleted', 'This league has been deleted by the commissioner.');
+        router.replace('/(tabs)/dashboard');
+      }
+    }, err => { if (err.code !== 'permission-denied') console.error(err); });
+
+    return () => { unsubscribe(); unsubLeague(); };
   }, [leagueId]);
 
 
