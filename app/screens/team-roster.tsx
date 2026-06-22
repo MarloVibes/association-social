@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import PlayerCard from '@/components/PlayerCard';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
@@ -291,11 +292,12 @@ export default function TeamRosterScreen() {
           <Fragment key={pid + i}>
             {showHeader ? <Text style={styles.posGroupHeader}>{grpLabel}</Text> : null}
           <TouchableOpacity style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
-            {brefId ? (
-              <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.photo} />
-            ) : (
-              <View style={styles.photoFallback}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>
-            )}
+            <PlayerHeadshot
+              player={p}
+              sport={sport || 'nba'}
+              imageStyle={styles.photo}
+              fallback={<View style={styles.photoFallback}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>}
+            />
             <View style={styles.playerInfo}>
               <View style={styles.playerHeaderRow}>
                 <Text style={styles.playerPos}>{p.position || '?'}</Text>

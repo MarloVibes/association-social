@@ -376,7 +376,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                 </View>
               )}
 
-              {!profile && (
+              {isNBAPlayer && !profile && (
                 <View style={styles.noData}>
                   <Text style={styles.noDataText}>Career data loading... Check back soon.</Text>
                 </View>

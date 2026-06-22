@@ -26,8 +26,9 @@ const db = getFirestore(app);
 const DRY_RUN = process.argv.includes('--dry-run');
 const seasonArg = process.argv.find(a => a.startsWith('--season='));
 const SEASON = seasonArg ? parseInt(seasonArg.split('=')[1], 10) : 2025;
-const OFF_URL = `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${SEASON}.csv`;
-const DEF_URL = `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_def_${SEASON}.csv`;
+// nflverse v2 (2025+) combines offense + defense into one player-stats table
+// under the `stats_player` release. Weekly file, summed to season below.
+const STATS_URL = `https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_${SEASON}.csv`;
 
 function parseCSV(text) {
   const rows = [];
@@ -53,10 +54,10 @@ async function fetchCSV(url) {
   return parseCSV(await res.text());
 }
 
-// Sum a numeric column across all weekly rows, keyed by player_id.
-function sumByPlayer(rows, idCol, statCols) {
+// Sum a numeric column across all weekly rows, keyed by player id.
+function sumByPlayer(rows, idCols, statCols) {
   const header = rows[0];
-  const iId = header.indexOf(idCol);
+  const iId = idCols.map(c => header.indexOf(c)).find(i => i !== -1) ?? -1;
   const idxs = {};
   for (const [field, names] of Object.entries(statCols)) {
     idxs[field] = names.map(n => header.indexOf(n)).find(i => i !== -1) ?? -1;
@@ -83,31 +84,28 @@ async function main() {
   const players = data.players || [];
   console.log(`Loaded ${players.length} players from era_player_pools/madden`);
 
-  console.log('Fetching offense stats...');
-  const offRows = await fetchCSV(OFF_URL);
-  const off = sumByPlayer(offRows, 'player_id', {
+  console.log(`Fetching player stats: ${STATS_URL}`);
+  const rows = await fetchCSV(STATS_URL);
+  const totals = sumByPlayer(rows, ['player_id', 'gsis_id'], {
     passing_yards: ['passing_yards'],
     passing_tds: ['passing_tds'],
     rushing_yards: ['rushing_yards'],
     receiving_yards: ['receiving_yards'],
+    sacks: ['def_sacks', 'sacks'],
   });
-
-  console.log('Fetching defense stats...');
-  let def = {};
-  try {
-    const defRows = await fetchCSV(DEF_URL);
-    def = sumByPlayer(defRows, 'player_id', { sacks: ['def_sacks', 'sacks'] });
-  } catch (e) { console.log(`defense stats skipped: ${e.message}`); }
 
   let enriched = 0;
   players.forEach((p, i) => {
     const id = String(p.player_id || '');
-    const o = off[id], d = def[id];
-    if (!o && !d) return;
+    const t = totals[id];
+    if (!t) return;
     players[i] = {
       ...p,
-      ...(o ? { passing_yards: Math.round(o.passing_yards || 0), passing_tds: Math.round(o.passing_tds || 0), rushing_yards: Math.round(o.rushing_yards || 0), receiving_yards: Math.round(o.receiving_yards || 0) } : {}),
-      ...(d ? { sacks: d.sacks || 0 } : {}),
+      passing_yards: Math.round(t.passing_yards || 0),
+      passing_tds: Math.round(t.passing_tds || 0),
+      rushing_yards: Math.round(t.rushing_yards || 0),
+      receiving_yards: Math.round(t.receiving_yards || 0),
+      sacks: t.sacks || 0,
     };
     enriched++;
   });

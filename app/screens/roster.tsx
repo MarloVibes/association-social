@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, Toucha
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 
 const POSITIONS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'];
@@ -813,20 +814,16 @@ export default function RosterScreen() {
               }}
               activeOpacity={0.7}
             >
-              {(() => {
-                let brefId = item.bref_id || '';
-                if (!brefId && item.player_id) {
-                  const m = String(item.player_id).match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i);
-                  if (m) brefId = m[1];
-                }
-                return brefId ? (
-                  <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.playerHeadshot} />
-                ) : (
+              <PlayerHeadshot
+                player={item}
+                sport={sportNorm}
+                imageStyle={styles.playerHeadshot}
+                fallback={
                   <View style={styles.playerAvatar}>
                     <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
                   </View>
-                );
-              })()}
+                }
+              />
               <View style={styles.playerInfo}>
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
