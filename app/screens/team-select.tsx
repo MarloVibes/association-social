@@ -1,6 +1,7 @@
 import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import { generateTeamPicks } from '@/constants/draftPicks';
+import SportTeamLogo from '@/components/SportTeamLogo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -96,16 +97,14 @@ function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
         start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.6 }}
         style={styles.rosterGloss} pointerEvents="none"
       />
-      {isNBA ? (
-        <Image
-          source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
-          style={styles.rosterLogo} resizeMode="contain"
-        />
-      ) : (
-        <View style={[styles.rosterLogo, { alignItems: 'center', justifyContent: 'center' }]}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{team.abbreviation}</Text>
-        </View>
-      )}
+      <SportTeamLogo
+        sport={sport}
+        abbr={team.abbreviation}
+        era={eraKey}
+        style={styles.rosterLogo}
+        textColor="#ffffff"
+        fontSize={15}
+      />
       <View style={styles.rosterInfo}>
         <Text style={styles.rosterName} numberOfLines={1}>{team.full_name || team.name}</Text>
         <Text style={styles.rosterMeta}>{team.abbreviation} · {(team.players || []).length} players</Text>
