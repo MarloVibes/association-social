@@ -165,8 +165,9 @@ export default function TeamSelectScreen() {
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
   // For non-NBA leagues the pool lives at era_player_pools/{sport} (e.g. mlb, madden),
   // and there are no era_rosters docs — the team list is built from the sport tables.
-  const isNBA = !sport || sport === 'nba';
-  const poolKey = isNBA ? eraKey : sport;
+  const [sportResolved, setSportResolved] = useState(sport || 'nba');
+  const isNBA = sportResolved === 'nba';
+  const poolKey = isNBA ? eraKey : sportResolved;
 
   useEffect(() => { loadTeams(); }, []);
 
@@ -185,13 +186,22 @@ export default function TeamSelectScreen() {
   const loadTeams = async () => {
     setLoading(true);
     try {
+      // Resolve sport from the league doc (the nav param can arrive empty from some
+      // entry points, which would otherwise default the wheel to NBA teams).
+      const lSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const ld = lSnap.data() || {};
+      const sportVal = ld.sport || sport || 'nba';
+      setSportResolved(sportVal);
+      const isNBALocal = sportVal === 'nba';
+      const poolKeyLocal = isNBALocal ? eraKey : sportVal;
+
       let teamList: any[] = [];
-      if (isNBA) {
+      if (isNBALocal) {
         const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
         teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
       } else {
         // No era_rosters for football/baseball — build the team list from the sport tables.
-        const table = getSportTeams(sport) || {};
+        const table = getSportTeams(sportVal) || {};
         teamList = Object.values(table).map((t: any) => ({
           id: t.abbr,
           abbreviation: t.abbr,
@@ -203,7 +213,7 @@ export default function TeamSelectScreen() {
 
       // Attach real players from the pool (era_player_pools/{poolKey}).
       try {
-        const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
+        const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKeyLocal));
         const allPoolPlayers = poolSnap.data()?.players || [];
         teamList = teamList.map((t: any) => {
           const realPlayers = allPoolPlayers.filter((p: any) => p.team === t.abbreviation);
@@ -412,7 +422,7 @@ export default function TeamSelectScreen() {
                       disabled={!!flippedId && flippedId !== team.id}
                       style={[styles.faceDownItem, !!flippedId && flippedId !== team.id && { opacity: 0.4 }]}
                     >
-                      <RosterTeamCard team={team} eraKey={eraKey} sport={sport} faceDown flipAnim={getFlipAnim(team.id)} />
+                      <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} faceDown flipAnim={getFlipAnim(team.id)} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -424,7 +434,7 @@ export default function TeamSelectScreen() {
                   <Animated.View style={{ transform: [{ translateY: spinY }] }}>
                     {reel.map((team, i) => (
                       <View key={team.id + '_' + i} style={styles.reelCard}>
-                        <RosterTeamCard team={team} eraKey={eraKey} sport={sport} />
+                        <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} />
                       </View>
                     ))}
                   </Animated.View>
@@ -461,7 +471,7 @@ export default function TeamSelectScreen() {
                           onPress={() => setSelectedTeam(t)}
                           style={[styles.resultItem, sel && styles.resultItemSel]}
                         >
-                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} sport={sport} /></View>
+                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} sport={sportResolved} /></View>
                           {sel && <Text style={styles.resultCheck}>✓</Text>}
                         </TouchableOpacity>
                       );
