@@ -54,19 +54,22 @@ async function finalizeVetoTradeTx(leagueId: string, roomId: string) {
       const guestOffered = data.guestOffer || [];
       const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
       const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
+      const hostPicks = data.hostPicks || [];
+      const guestPicks = data.guestPicks || [];
+      const hostPickIds = new Set(hostPicks.map((pk: any) => pk.id));
+      const guestPickIds = new Set(guestPicks.map((pk: any) => pk.id));
+      // Verify both sides still own everything they're sending (players AND picks);
+      // another trade could have moved an asset since this one was agreed.
       const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
       const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-      if (!allHostStillOwns || !allGuestStillOwns) {
+      const hostOwnsPicks = hostPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
+      const guestOwnsPicks = guestPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
+      if (!allHostStillOwns || !allGuestStillOwns || !hostOwnsPicks || !guestOwnsPicks) {
         tx.update(ref, { status: 'cancelled', cancelReason: 'roster_changed', updatedAt: serverTimestamp() });
         return { done: false, cancelled: true };
       }
       const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
       const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-      // Draft picks: each side gives up its offered picks and receives the other's.
-      const hostPicks = data.hostPicks || [];
-      const guestPicks = data.guestPicks || [];
-      const hostPickIds = new Set(hostPicks.map((pk: any) => pk.id));
-      const guestPickIds = new Set(guestPicks.map((pk: any) => pk.id));
       const newHostPicks = (host.picks || []).filter((pk: any) => !hostPickIds.has(pk.id)).concat(guestPicks);
       const newGuestPicks = (guest.picks || []).filter((pk: any) => !guestPickIds.has(pk.id)).concat(hostPicks);
       tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
@@ -313,11 +316,17 @@ export default function TradeRoomScreen() {
               status: 'open',
               hostOffer: [],
               guestOffer: [],
+              hostPicks: [],
+              guestPicks: [],
               hostConfirmed: false,
               guestConfirmed: false,
               senderUid: null,
               cancelReason: null,
               executedAt: null,
+              salaryOverrideApplied: false,
+              pendingOverrideReview: false,
+              overrideRequestedBy: null,
+              overrideApprovedBy: null,
               updatedAt: serverTimestamp(),
             });
           }
@@ -829,10 +838,19 @@ export default function TradeRoomScreen() {
           const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
           const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
 
-          const hostStillHas = (host.players || []).every((p: any) => true);
           const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
           const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-          if (!allHostStillOwns || !allGuestStillOwns) {
+
+          // Draft picks: verify ownership before swapping — another trade may have
+          // moved a pick since this offer was agreed.
+          const hPicks = data.hostPicks || [];
+          const gPicks = data.guestPicks || [];
+          const hPickIds = new Set(hPicks.map((pk: any) => pk.id));
+          const gPickIds = new Set(gPicks.map((pk: any) => pk.id));
+          const hOwnsPicks = hPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
+          const gOwnsPicks = gPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
+
+          if (!allHostStillOwns || !allGuestStillOwns || !hOwnsPicks || !gOwnsPicks) {
             tx.update(ref, { status: 'cancelled', updatedAt: serverTimestamp(), cancelReason: 'roster_changed' });
             return { executed: false, cancelled: true };
           }
@@ -840,11 +858,6 @@ export default function TradeRoomScreen() {
           const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
           const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
 
-          // Draft picks: each side gives up its offered picks and receives the other's.
-          const hPicks = data.hostPicks || [];
-          const gPicks = data.guestPicks || [];
-          const hPickIds = new Set(hPicks.map((pk: any) => pk.id));
-          const gPickIds = new Set(gPicks.map((pk: any) => pk.id));
           const newHostPicks = (host.picks || []).filter((pk: any) => !hPickIds.has(pk.id)).concat(gPicks);
           const newGuestPicks = (guest.picks || []).filter((pk: any) => !gPickIds.has(pk.id)).concat(hPicks);
 

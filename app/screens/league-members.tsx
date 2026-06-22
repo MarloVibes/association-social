@@ -148,10 +148,10 @@ export default function LeagueMembersScreen() {
         <ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 60 }} />
       ) : (
         <>
-          <FlatList contentContainerStyle={{ paddingTop: 60, paddingBottom: 90 }}
+          <FlatList
             data={members}
             keyExtractor={item => item.uid}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingTop: 60 }]}
             renderItem={({ item }) => {
               const team = getMemberTeam(item.uid);
               const isComm = item.uid === league?.commissionerId;
