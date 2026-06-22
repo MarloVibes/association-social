@@ -127,7 +127,7 @@ export default function CreateLeagueScreen() {
         mode: finalMode,
         era: finalEra,
         draftPickMode,
-        stepienRule,
+        stepienRule: sport === 'nba' ? stepienRule : false,
         draftBaseYear: draftBaseYearFor(leagueSeasonYear),
         draftRounds: DRAFT_ROUNDS[sport] || 2,
         salaryCap: getEraCap(finalEra),
@@ -455,23 +455,27 @@ export default function CreateLeagueScreen() {
               </TouchableOpacity>
             ))}
 
-            <Text style={styles.sectionLabel}>Stepien Rule (house rule)</Text>
-            {[
-              { value: true, label: 'On', desc: "Can't trade away first-rounders in back-to-back drafts. Real in the NBA; optional for all sports." },
-              { value: false, label: 'Off', desc: 'No restriction on trading first-round picks.' },
-            ].map(opt => (
-              <TouchableOpacity
-                key={String(opt.value)}
-                style={[styles.optionRow, stepienRule === opt.value && styles.optionRowActive]}
-                onPress={() => setStepienRule(opt.value)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionLabel, stepienRule === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
-                  <Text style={styles.optionDesc}>{opt.desc}</Text>
-                </View>
-                {stepienRule === opt.value && <Text style={styles.check}>✓</Text>}
-              </TouchableOpacity>
-            ))}
+            {sport === 'nba' && (
+              <>
+                <Text style={styles.sectionLabel}>Stepien Rule</Text>
+                {[
+                  { value: true, label: 'On', desc: "Can't trade away first-rounders in back-to-back drafts (real NBA rule)." },
+                  { value: false, label: 'Off', desc: 'No restriction on trading first-round picks.' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={String(opt.value)}
+                    style={[styles.optionRow, stepienRule === opt.value && styles.optionRowActive]}
+                    onPress={() => setStepienRule(opt.value)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.optionLabel, stepienRule === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                      <Text style={styles.optionDesc}>{opt.desc}</Text>
+                    </View>
+                    {stepienRule === opt.value && <Text style={styles.check}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
 
             {(sport === 'nba' ? teamMode : mode) === 'random' && (
               <>
