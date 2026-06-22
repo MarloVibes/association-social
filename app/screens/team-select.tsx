@@ -1,5 +1,6 @@
 import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
+import { generateTeamPicks } from '@/constants/draftPicks';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -312,11 +313,20 @@ export default function TeamSelectScreen() {
       // Ensure user is a league member BEFORE creating their team (required by rules)
       // Skip if already a member (arrayUnion is no-op but rule denies non-changing updates)
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-      const existingMembers: string[] = leagueSnap.data()?.members || [];
+      const ld = leagueSnap.data() || {};
+      const existingMembers: string[] = ld.members || [];
       if (!existingMembers.includes(user.uid)) {
         await updateDoc(doc(db, 'leagues', leagueId), {
           members: arrayUnion(user.uid),
         });
+      }
+
+      // Standard draft-pick inventory: this team owns its own picks for the next
+      // 7 drafts (rounds per sport). Skipped if the league uses realistic ownership.
+      let picks: any[] = [];
+      if ((ld.draftPickMode || 'standard') === 'standard') {
+        const baseYear = ld.draftBaseYear || (new Date().getFullYear() + 1);
+        picks = generateTeamPicks(ld.sport || 'nba', team.abbreviation, baseYear);
       }
 
       const teamDocId = leagueId + '_' + user.uid;
@@ -327,6 +337,7 @@ export default function TeamSelectScreen() {
         abbreviation: team.abbreviation,
         era: poolKey,
         players,
+        picks,
         tradeBlock: [],
       });
 

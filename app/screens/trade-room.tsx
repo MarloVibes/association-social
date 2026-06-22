@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
 
 const MAX_PER_SIDE = 6;
@@ -20,8 +21,9 @@ function getPlayerKey(p: any) {
 }
 
 function pickLabel(pk: any) {
-  const rd = pk?.round === 2 ? '2nd Rd' : '1st Rd';
-  return pk?.year + ' ' + rd + (pk?.protection ? ' · ' + pk.protection : '');
+  const r = pk?.round;
+  const ord = r === 1 ? '1st' : r === 2 ? '2nd' : r === 3 ? '3rd' : `${r}th`;
+  return `${pk?.year} ${ord} Rd${pk?.protection ? ' · ' + pk.protection : ''}`;
 }
 
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
@@ -60,8 +62,15 @@ async function finalizeVetoTradeTx(leagueId: string, roomId: string) {
       }
       const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
       const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-      tx.update(hostTeamRef, { players: newHostPlayers });
-      tx.update(guestTeamRef, { players: newGuestPlayers });
+      // Draft picks: each side gives up its offered picks and receives the other's.
+      const hostPicks = data.hostPicks || [];
+      const guestPicks = data.guestPicks || [];
+      const hostPickIds = new Set(hostPicks.map((pk: any) => pk.id));
+      const guestPickIds = new Set(guestPicks.map((pk: any) => pk.id));
+      const newHostPicks = (host.picks || []).filter((pk: any) => !hostPickIds.has(pk.id)).concat(guestPicks);
+      const newGuestPicks = (guest.picks || []).filter((pk: any) => !guestPickIds.has(pk.id)).concat(hostPicks);
+      tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
+      tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
       tx.update(ref, { status: 'executed', executedAt: serverTimestamp(), updatedAt: serverTimestamp() });
       return { done: true, data, hostOffered, guestOffered };
     });
@@ -215,6 +224,9 @@ export default function TradeRoomScreen() {
   const [pickRound, setPickRound] = useState<1 | 2>(1);
   const [pickYear, setPickYear] = useState('');
   const [pickProtection, setPickProtection] = useState('');
+  const [otherTeamPicks, setOtherTeamPicks] = useState<any[]>([]);
+  const [stepienRule, setStepienRule] = useState(false);
+  const [draftBaseYear, setDraftBaseYear] = useState<number>(new Date().getFullYear() + 1);
   const presenceTimerRef = useRef<any>(null);
 
   // Initial load + room creation
@@ -236,6 +248,7 @@ export default function TradeRoomScreen() {
         if (theirs) {
           setOtherRoster(theirs.players || []);
           setOtherUntouchables(theirs.untouchables || []);
+          setOtherTeamPicks(theirs.picks || []);
         }
 
         const roomRef = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
@@ -351,6 +364,8 @@ export default function TradeRoomScreen() {
         setTradeApprovalMode(data.tradeApprovalMode || 'instant');
         setLeagueMembers(data.members || []);
         setVotePassThreshold(data.votePassThreshold || 'majority');
+        setStepienRule(!!data.stepienRule);
+        setDraftBaseYear(data.draftBaseYear || (new Date().getFullYear() + 1));
         setVoteDeadlineDays(typeof data.voteDeadlineDays === 'number' ? data.voteDeadlineDays : 2);
       }
     }).catch(() => {});
@@ -550,22 +565,23 @@ export default function TradeRoomScreen() {
     });
   };
 
-  const addPickToOffer = async (side: 'mine' | 'theirs') => {
-    const yr = parseInt(pickYear, 10);
-    if (!yr || yr < new Date().getFullYear() || yr > 2100) {
-      Alert.alert('Enter a valid year', 'Use a future draft year, e.g. ' + (new Date().getFullYear() + 1) + '.');
-      return;
-    }
+  const addPickToOffer = async (side: 'mine' | 'theirs', pick: any) => {
     const key = side === 'mine' ? myPicksKey : otherPicksKey;
     const current = side === 'mine' ? myPicks : otherPicks;
-    const teamName = side === 'mine' ? (myTeam?.name || 'My Team') : otherTeamName;
-    const pick = {
-      id: 'pk_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      round: pickRound,
-      year: yr,
-      protection: pickProtection.trim(),
-      team: teamName,
-    };
+    if (current.some((p: any) => p.id === pick.id)) { setPickModalSide(null); return; }
+
+    // Stepien Rule: block offering a first-round pick if it would leave this team
+    // without a first-rounder in back-to-back drafts.
+    if (stepienRule && pick.round === 1) {
+      const owned = side === 'mine' ? (myTeam?.picks || []) : otherTeamPicks;
+      const offeredFirstIds = new Set<string>([...current.filter((p: any) => p.round === 1).map((p: any) => p.id), pick.id]);
+      const remainingFirstYears = owned.filter((p: any) => p.round === 1 && !offeredFirstIds.has(p.id)).map((p: any) => p.year);
+      if (stepienViolation(remainingFirstYears, draftBaseYear, DRAFT_YEARS)) {
+        Alert.alert('Stepien Rule', "This league enforces the Stepien Rule — a team can't be left without a first-round pick in back-to-back drafts. Keep a first-rounder in those years, or the commissioner can turn the rule off in league settings.");
+        return;
+      }
+    }
+
     await updateRoom({
       [key]: [...current, pick],
       hostConfirmed: false,
@@ -573,9 +589,6 @@ export default function TradeRoomScreen() {
       status: isLive ? 'live' : (room.status === 'open' ? 'open' : room.status),
     });
     setPickModalSide(null);
-    setPickYear('');
-    setPickProtection('');
-    setPickRound(1);
   };
 
   const removePickFromOffer = async (pick: any, side: 'mine' | 'theirs') => {
@@ -827,8 +840,16 @@ export default function TradeRoomScreen() {
           const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
           const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
 
-          tx.update(hostTeamRef, { players: newHostPlayers });
-          tx.update(guestTeamRef, { players: newGuestPlayers });
+          // Draft picks: each side gives up its offered picks and receives the other's.
+          const hPicks = data.hostPicks || [];
+          const gPicks = data.guestPicks || [];
+          const hPickIds = new Set(hPicks.map((pk: any) => pk.id));
+          const gPickIds = new Set(gPicks.map((pk: any) => pk.id));
+          const newHostPicks = (host.picks || []).filter((pk: any) => !hPickIds.has(pk.id)).concat(gPicks);
+          const newGuestPicks = (guest.picks || []).filter((pk: any) => !gPickIds.has(pk.id)).concat(hPicks);
+
+          tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
+          tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
           tx.update(ref, {
             status: 'executed',
             hostConfirmed: true,
@@ -1465,42 +1486,33 @@ export default function TradeRoomScreen() {
           </View>
           <View style={styles.pickModalBody}>
             <Text style={styles.pickModalWho}>
-              {pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName} sends this pick
+              {pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName}'s available picks
             </Text>
-
-            <Text style={styles.pickFieldLabel}>Round</Text>
-            <View style={styles.roundRow}>
-              <TouchableOpacity style={[styles.roundBtn, pickRound === 1 && styles.roundBtnActive]} onPress={() => setPickRound(1)}>
-                <Text style={[styles.roundBtnText, pickRound === 1 && styles.roundBtnTextActive]}>1st Round</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.roundBtn, pickRound === 2 && styles.roundBtnActive]} onPress={() => setPickRound(2)}>
-                <Text style={[styles.roundBtnText, pickRound === 2 && styles.roundBtnTextActive]}>2nd Round</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.pickFieldLabel}>Year</Text>
-            <TextInput
-              style={styles.pickInput}
-              value={pickYear}
-              onChangeText={setPickYear}
-              placeholder={'e.g. ' + (new Date().getFullYear() + 1)}
-              placeholderTextColor='#555'
-              keyboardType='number-pad'
-              maxLength={4}
-            />
-
-            <Text style={styles.pickFieldLabel}>Protection (optional)</Text>
-            <TextInput
-              style={styles.pickInput}
-              value={pickProtection}
-              onChangeText={setPickProtection}
-              placeholder='e.g. Top-4 protected, unprotected, lottery protected'
-              placeholderTextColor='#555'
-            />
-
-            <TouchableOpacity style={styles.pickAddConfirm} onPress={() => addPickToOffer(pickModalSide === 'mine' ? 'mine' : 'theirs')}>
-              <Text style={styles.pickAddConfirmText}>Add to Trade</Text>
-            </TouchableOpacity>
+            {(() => {
+              const owned = (pickModalSide === 'mine' ? (myTeam?.picks || []) : otherTeamPicks);
+              const inOffer = new Set((pickModalSide === 'mine' ? myPicks : otherPicks).map((p: any) => p.id));
+              const available = owned
+                .filter((pk: any) => !inOffer.has(pk.id))
+                .sort((a: any, b: any) => (a.year - b.year) || (a.round - b.round));
+              if (available.length === 0) {
+                return <Text style={styles.pickEmpty}>No tradeable picks available.</Text>;
+              }
+              return (
+                <ScrollView style={{ marginTop: 8 }}>
+                  {available.map((pk: any) => (
+                    <TouchableOpacity
+                      key={pk.id}
+                      style={styles.pickOwnedRow}
+                      onPress={() => addPickToOffer(pickModalSide === 'mine' ? 'mine' : 'theirs', pk)}
+                    >
+                      <Text style={styles.pickOwnedLabel}>🎟️ {pickLabel(pk)}</Text>
+                      {pk.originalTeam && pk.originalTeam !== (pickModalSide === 'mine' ? myTeam?.abbreviation : undefined)
+                        ? <Text style={styles.pickOwnedOrigin}>via {pk.originalTeam}</Text> : null}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -1516,6 +1528,10 @@ const styles = StyleSheet.create({
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
   title: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
   cancelTopText: { color: '#ff4444', fontSize: 22, fontWeight: '800', width: 60, textAlign: 'right' },
+  pickEmpty: { color: '#666', fontSize: 14, textAlign: 'center', marginTop: 30 },
+  pickOwnedRow: { backgroundColor: '#101c14', borderWidth: 1, borderColor: '#1f5f3a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 8 },
+  pickOwnedLabel: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
+  pickOwnedOrigin: { color: '#6a6a6a', fontSize: 11, marginTop: 3 },
 
   statusBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#1a1a1a', backgroundColor: '#0d0d0d' },
   statusDot: { width: 8, height: 8, borderRadius: 4 },

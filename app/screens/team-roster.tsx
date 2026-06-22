@@ -14,6 +14,7 @@ import { getAuth } from 'firebase/auth';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
+import { pickLabel } from '@/constants/draftPicks';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -261,6 +262,20 @@ export default function TeamRosterScreen() {
         </View>
       </View>
 
+      {team.picks && team.picks.length > 0 ? (
+        <>
+          <Text style={styles.sectionLabel}>DRAFT PICKS ({team.picks.length})</Text>
+          <View style={styles.picksRow}>
+            {[...team.picks].sort((a: any, b: any) => (a.year - b.year) || (a.round - b.round)).map((pk: any, i: number) => (
+              <View key={pk.id || i} style={styles.pickChip}>
+                <Text style={styles.pickChipText}>🎟️ {pickLabel(pk)}</Text>
+                {pk.originalTeam && pk.originalTeam !== abbr ? <Text style={styles.pickChipOrigin}>via {pk.originalTeam}</Text> : null}
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
+
       <Text style={styles.sectionLabel}>ROSTER ({players.length})</Text>
 
       {players.length === 0 ? (
@@ -365,6 +380,10 @@ const styles = StyleSheet.create({
   teamMeta: { color: '#ccc', fontSize: 13, marginTop: 2 },
   teamGm: { color: '#888', fontSize: 12, marginTop: 2 },
   sectionLabel: { color: '#666', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
+  picksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  pickChip: { backgroundColor: '#101c14', borderWidth: 1, borderColor: '#1f5f3a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  pickChipText: { color: '#00ff87', fontSize: 12, fontWeight: '700' },
+  pickChipOrigin: { color: '#6a6a6a', fontSize: 10, marginTop: 2 },
   posGroupHeader: { color: '#00ff87', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
   empty: { color: '#666', textAlign: 'center', padding: 20 },
   playerRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 6, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a' },

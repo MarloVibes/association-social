@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { DRAFT_ROUNDS, draftBaseYearFor } from '@/constants/draftPicks';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -66,6 +67,8 @@ export default function CreateLeagueScreen() {
   const [spinChoices, setSpinChoices] = useState('1');
   const [votePassThreshold, setVotePassThreshold] = useState('majority');
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
+  const [draftPickMode, setDraftPickMode] = useState('standard');
+  const [stepienRule, setStepienRule] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const sports = [
@@ -106,6 +109,7 @@ export default function CreateLeagueScreen() {
       const leagueId = doc(collection(db, 'leagues')).id;
       const finalMode = sport === 'nba' ? teamMode : mode;
       const finalEra = sport === 'nba' ? era : null;
+      const leagueSeasonYear = sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : (sport === 'mlb' ? 2026 : 2025);
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
@@ -122,6 +126,10 @@ export default function CreateLeagueScreen() {
         sport,
         mode: finalMode,
         era: finalEra,
+        draftPickMode,
+        stepienRule,
+        draftBaseYear: draftBaseYearFor(leagueSeasonYear),
+        draftRounds: DRAFT_ROUNDS[sport] || 2,
         salaryCap: getEraCap(finalEra),
         commissionerId: user.uid,
         coCommissioners: [],
@@ -428,6 +436,42 @@ export default function CreateLeagueScreen() {
                 <Text style={styles.helperSmall}>How long GMs have to vote before the trade auto-resolves (1–14 days). Voters exclude the two GMs in the trade.</Text>
               </>
             )}
+
+            <Text style={styles.sectionLabel}>Draft Pick Ownership</Text>
+            {[
+              { value: 'standard', label: 'Standard', desc: 'Every team owns its own picks for the next 7 drafts. Fair and balanced.', disabled: false },
+              { value: 'realistic', label: 'Realistic (coming soon)', desc: 'Real current pick ownership from actual trades. Available soon.', disabled: true },
+            ].map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.optionRow, draftPickMode === opt.value && styles.optionRowActive, opt.disabled && { opacity: 0.4 }]}
+                onPress={() => { if (!opt.disabled) setDraftPickMode(opt.value); }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, draftPickMode === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.optionDesc}>{opt.desc}</Text>
+                </View>
+                {draftPickMode === opt.value && <Text style={styles.check}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+
+            <Text style={styles.sectionLabel}>Stepien Rule (house rule)</Text>
+            {[
+              { value: true, label: 'On', desc: "Can't trade away first-rounders in back-to-back drafts. Real in the NBA; optional for all sports." },
+              { value: false, label: 'Off', desc: 'No restriction on trading first-round picks.' },
+            ].map(opt => (
+              <TouchableOpacity
+                key={String(opt.value)}
+                style={[styles.optionRow, stepienRule === opt.value && styles.optionRowActive]}
+                onPress={() => setStepienRule(opt.value)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, stepienRule === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.optionDesc}>{opt.desc}</Text>
+                </View>
+                {stepienRule === opt.value && <Text style={styles.check}>✓</Text>}
+              </TouchableOpacity>
+            ))}
 
             {(sport === 'nba' ? teamMode : mode) === 'random' && (
               <>
