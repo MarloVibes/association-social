@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 const ERA_LABELS: Record<string, string> = {
@@ -17,7 +18,6 @@ const ERA_LABELS: Record<string, string> = {
 };
 
 export default function JoinLeagueScreen() {
-  const MAX_MEMBERS = 30;
   const { leagueId, leagueName } = useLocalSearchParams<{ leagueId?: string; leagueName?: string }>();
   const [leagues, setLeagues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,10 @@ export default function JoinLeagueScreen() {
         const reqSnap = await getDoc(doc(db, 'leagues', league.id, 'join_requests', user!.uid));
         if (reqSnap.exists()) requestSet.add(league.id);
         // Waitlist only applies to full leagues
-        if (((league as any).members?.length || 0) >= ((league as any).maxMembers || MAX_MEMBERS)) {
+        const maxMembers = typeof (league as any).maxMembers === 'number'
+          ? (league as any).maxMembers
+          : getSportRules((league as any).sport).teamCount;
+        if (((league as any).members?.length || 0) >= maxMembers) {
           const wSnap = await getDoc(doc(db, 'leagues', league.id, 'waitlist', user!.uid));
           if (wSnap.exists()) waitlistSet.add(league.id);
         }
@@ -374,7 +377,11 @@ export default function JoinLeagueScreen() {
                   <Text style={styles.pendingIcon}>⏳</Text>
                   <Text style={styles.pendingText}>Join request pending approval</Text>
                 </View>
-              ) : (selectedLeague.members?.length || 0) >= (selectedLeague.maxMembers || MAX_MEMBERS) ? (
+              ) : (selectedLeague.members?.length || 0) >= (
+                typeof selectedLeague.maxMembers === 'number'
+                  ? selectedLeague.maxMembers
+                  : getSportRules(selectedLeague.sport).teamCount
+              ) ? (
                 <TouchableOpacity
                   style={[styles.joinBtn, joining && { opacity: 0.6 }]}
                   onPress={() => joinWaitlist(selectedLeague)}

@@ -3,6 +3,7 @@ import { arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimes
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function LeagueWaitlistScreen() {
@@ -59,7 +60,9 @@ export default function LeagueWaitlistScreen() {
     league.commissionerId === user.uid || (league.coCommissioners || []).includes(user.uid)
   );
 
-  const MAX = league?.maxMembers || 30;
+  const MAX = typeof league?.maxMembers === 'number'
+    ? league.maxMembers
+    : getSportRules(league?.sport).teamCount;
   const openSlots = Math.max(0, MAX - members.length);
 
   // Hide anyone who has since become a member

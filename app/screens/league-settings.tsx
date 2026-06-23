@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 const PRIVACY_OPTIONS = [
@@ -79,7 +80,11 @@ export default function LeagueSettingsScreen() {
       setInviteCode(data.inviteCode || '');
       setTradeApprovalMode(data.tradeApprovalMode || 'instant');
       setMaxPlayersPerTrade(String(data.maxPlayersPerTrade || 6));
-      setMaxMembers(String(data.maxMembers || 30));
+      setMaxMembers(String(
+        typeof data.maxMembers === 'number'
+          ? data.maxMembers
+          : getSportRules(data.sport).teamCount
+      ));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
       setSalaryCap(String(data.salaryCap || getEraCap(data.era)));
@@ -94,6 +99,7 @@ export default function LeagueSettingsScreen() {
   const isFounder = league?.commissionerId === user?.uid;
   const [pendingCount, setPendingCount] = useState(0);
   const isCommissioner = isFounder || (league?.coCommissioners || []).includes(user?.uid || '');
+  const teamLimit = getSportRules(league?.sport).teamCount;
 
   if (loading) {
     return (
@@ -163,7 +169,7 @@ export default function LeagueSettingsScreen() {
     if (tolNum < 1.0 || tolNum > 2.0) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
     const mm = parseInt(maxMembers, 10);
     const currentMembers = league?.members?.length || 1;
-    if (isNaN(mm) || mm < 1 || mm > 30) { Alert.alert('Invalid', 'Max GMs must be between 1 and 30.'); return; }
+    if (isNaN(mm) || mm < 1 || mm > teamLimit) { Alert.alert('Invalid', 'Max GMs must be between 1 and ' + teamLimit + '.'); return; }
     if (mm < currentMembers) { Alert.alert('Too low', 'This league already has ' + currentMembers + ' GMs, so the max can\'t be set below that. Remove members first if you want a smaller cap.'); return; }
     await saveField({
       name: name.trim(),
@@ -365,10 +371,10 @@ export default function LeagueSettingsScreen() {
             value={maxMembers}
             onChangeText={setMaxMembers}
             keyboardType='number-pad'
-            placeholder='30'
+            placeholder={String(teamLimit)}
             placeholderTextColor='#555'
           />
-          <Text style={styles.helper}>How many GMs can be in this league (1-30). Once full, new applicants join a waitlist.</Text>
+          <Text style={styles.helper}>How many GMs can be in this league (1-{teamLimit}). Once full, new applicants join a waitlist.</Text>
         </View>
 
         {/* Salary Cap */}

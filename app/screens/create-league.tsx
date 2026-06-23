@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { DRAFT_ROUNDS, draftBaseYearFor } from '@/constants/draftPicks';
+import { draftBaseYearFor } from '@/constants/draftPicks';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getEraCap } from '@/constants/eraCaps';
+import { buildLeagueDefaults, seasonLabel } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 const NBA_ERAS = [
@@ -109,7 +110,19 @@ export default function CreateLeagueScreen() {
       const leagueId = doc(collection(db, 'leagues')).id;
       const finalMode = sport === 'nba' ? teamMode : mode;
       const finalEra = sport === 'nba' ? era : null;
-      const leagueSeasonYear = sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : (sport === 'mlb' ? 2026 : 2025);
+      const defaults = buildLeagueDefaults(sport);
+      const historicalNbaYear = era === 'magic_bird' ? 1983
+        : era === 'jordan' ? 1991
+          : era === 'kobe' ? 2002
+            : era === 'lebron' ? 2010
+              : era === 'steph' ? 2016
+                : null;
+      const leagueSeasonYear = sport === 'nba' && historicalNbaYear !== null
+        ? historicalNbaYear
+        : defaults.currentYear;
+      const currentSeason = sport === 'nba' && historicalNbaYear !== null
+        ? seasonLabel(sport, historicalNbaYear)
+        : defaults.currentSeason;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
@@ -121,20 +134,24 @@ export default function CreateLeagueScreen() {
         votePassThreshold,
         voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
         spinChoices: (sport === 'nba' ? teamMode : mode) === 'random' ? (parseInt(spinChoices, 10) || 1) : 1,
-        currentYear: sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : 2024,
-        currentSeason: sport === 'nba' ? (era === 'magic_bird' ? '1983-84' : era === 'jordan' ? '1991-92' : era === 'kobe' ? '2002-03' : era === 'lebron' ? '2010-11' : era === 'steph' ? '2016-17' : '2024-25') : '2024-25',
+        currentYear: leagueSeasonYear,
+        currentSeason,
         sport,
         mode: finalMode,
         era: finalEra,
         draftPickMode,
         stepienRule: sport === 'nba' ? stepienRule : false,
         draftBaseYear: draftBaseYearFor(leagueSeasonYear),
-        draftRounds: DRAFT_ROUNDS[sport] || 2,
+        rosterLimit: defaults.rosterLimit,
+        twoWayLimit: defaults.twoWayLimit,
+        draftRounds: defaults.draftRounds,
+        draftTimerSeconds: defaults.draftTimerSeconds,
+        financeMode: defaults.financeMode,
         salaryCap: getEraCap(finalEra),
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],
-        maxMembers: 30,
+        maxMembers: defaults.maxMembers,
         invites: [],
         createdAt: serverTimestamp(),
         status: 'active',

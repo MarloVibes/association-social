@@ -56,3 +56,19 @@ export function seasonLabel(sport: SportKey | string | null, year: number): stri
 
   return String(year);
 }
+
+export function buildLeagueDefaults(sportInput?: string | null) {
+  const rules = getSportRules(sportInput);
+  const currentYear = rules.initialSeasonYear;
+
+  return {
+    maxMembers: rules.teamCount,
+    currentYear,
+    currentSeason: seasonLabel(rules.key, currentYear),
+    rosterLimit: rules.standardRosterLimit,
+    twoWayLimit: rules.twoWayLimit,
+    draftRounds: rules.draftRounds,
+    draftTimerSeconds: rules.defaultDraftTimerSeconds,
+    financeMode: rules.financeMode,
+  };
+}
