@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { auth, db } from '@/constants/firebase';
+import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function NotificationsScreen() {
@@ -56,12 +57,9 @@ export default function NotificationsScreen() {
   const acceptInvite = async (invite: any) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'leagues', invite.leagueId), {
-        members: arrayUnion(user.uid),
-      });
-      await updateDoc(doc(db, 'users', user.uid), {
-        leagues: arrayUnion(invite.leagueId),
-        leagueInvites: (await getDoc(doc(db, 'users', user.uid))).data()?.leagueInvites?.filter((i: any) => i.leagueId !== invite.leagueId) || [],
+      await addLeagueMemberIfSpace(db, invite.leagueId, user.uid, {
+        leagueName: invite.leagueName,
+        inviteToRemove: invite,
       });
       // Clean up the invite/request docs so they don't resurface later
       try { await deleteDoc(doc(db, 'leagues', invite.leagueId, 'sent_invites', user.uid)); } catch {}
@@ -92,22 +90,16 @@ export default function NotificationsScreen() {
   const acceptJoinRequest = async (req: any) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'leagues', req.leagueDocId), {
-        members: arrayUnion(req.uid),
-      });
-      await updateDoc(doc(db, 'users', req.uid), {
-        leagues: arrayUnion(req.leagueDocId),
-        notifications: arrayUnion({
+      await addLeagueMemberIfSpace(db, req.leagueDocId, req.uid, {
+        leagueName: req.leagueName,
+        requestId: req.id,
+        resolvedBy: user.uid,
+        userNotification: {
           type: 'join_accepted',
           leagueId: req.leagueDocId,
           leagueName: req.leagueName,
           createdAt: new Date().toISOString(),
-        }),
-      });
-      await updateDoc(doc(db, 'leagues', req.leagueDocId, 'join_requests', req.id), {
-        status: 'accepted',
-        resolvedAt: serverTimestamp(),
-        resolvedBy: user?.uid || '',
+        },
       });
       setJoinRequests(prev => prev.filter(r => r.id !== req.id));
       Alert.alert('Accepted!', req.displayName + ' has been added to ' + req.leagueName);

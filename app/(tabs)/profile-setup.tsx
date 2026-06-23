@@ -1,23 +1,24 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 
 export default function ProfileSetupScreen() {
-  const { promoCode, promoPlan, promoMonths, promoLabel } = useLocalSearchParams<{
-    promoCode?: string; promoPlan?: string; promoMonths?: string; promoLabel?: string;
+  const { initialUsername, promoCode } = useLocalSearchParams<{
+    initialUsername?: string; promoCode?: string;
   }>();
-  const hasPromo = !!promoCode;
+  const hasPromo = !!promoCode?.trim();
   const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(String(initialUsername || ''));
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [gamerTag, setGamerTag] = useState('');
   const [bio, setBio] = useState('');
   const [console_, setConsole] = useState('');
   const [favSports, setFavSports] = useState<string[]>([]);
-  const [plan, setPlan] = useState(hasPromo ? (promoPlan || 'promo') : 'trial');
+  const [plan, setPlan] = useState('trial');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,7 +41,12 @@ export default function ProfileSetupScreen() {
       const user = auth.currentUser;
       if (!user) throw new Error('Not logged in');
 
-      const uname = username.trim();
+      const uname = username.trim().replace(/^@+/, '').toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(uname)) {
+        setError('Use 3-20 letters, numbers, or underscores for your username.');
+        setLoading(false);
+        return;
+      }
       const unameLower = uname.toLowerCase();
 
       // Enforce unique usernames. Two layers:
@@ -73,23 +79,7 @@ export default function ProfileSetupScreen() {
       // rest of the app — which shows displayName — always has something to show.
       const finalDisplayName = displayName.trim() || uname;
 
-      // Resolve promo access window: lifetime never expires; month grants set an
-      // expiry from now. No promo falls back to the chosen plan with no window.
-      let accessUntil: string | null = null;
-      if (hasPromo) {
-        if (promoPlan === 'lifetime') {
-          accessUntil = null;
-        } else {
-          const months = parseInt(promoMonths || '0', 10);
-          if (months > 0) {
-            const d = new Date();
-            d.setMonth(d.getMonth() + months);
-            accessUntil = d.toISOString();
-          }
-        }
-      }
-
-      await setDoc(doc(db, 'users', user.uid), {
+      const profileData = {
         uid: user.uid,
         email: user.email || '',
         displayName: finalDisplayName,
@@ -102,9 +92,9 @@ export default function ProfileSetupScreen() {
         console: console_,
         favSports,
         plan,
-        promoCode: hasPromo ? promoCode : null,
-        promoLabel: hasPromo ? promoLabel : null,
-        accessUntil,
+        promoCode: null,
+        promoLabel: null,
+        accessUntil: null,
         createdAt: new Date().toISOString(),
         leagues: [],
         friends: [],
@@ -119,7 +109,15 @@ export default function ProfileSetupScreen() {
           instagram: '',
           tiktok: '',
         },
-      });
+      };
+
+      if (hasPromo) {
+        const redeem = httpsCallable(functions, 'redeemPromoCode');
+        await redeem({ code: String(promoCode).trim(), profile: profileData });
+      } else {
+        await setDoc(doc(db, 'users', user.uid), profileData);
+      }
+
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
       setError(e.message);
@@ -200,13 +198,9 @@ export default function ProfileSetupScreen() {
         <Text style={styles.label}>{hasPromo ? 'Your Plan' : 'Choose Your Plan'}</Text>
         {hasPromo ? (
           <View style={[styles.planCard, styles.promoCard]}>
-            <Text style={styles.promoBadge}>🎟️ PROMO APPLIED</Text>
-            <Text style={[styles.planTitle, styles.planTitleActive]}>{promoLabel}</Text>
-            <Text style={styles.planDesc}>
-              {promoPlan === 'lifetime'
-                ? 'Lifetime access — no payment ever'
-                : 'Full access included — no card needed'}
-            </Text>
+            <Text style={styles.promoBadge}>PROMO READY</Text>
+            <Text style={[styles.planTitle, styles.planTitleActive]}>{promoCode}</Text>
+            <Text style={styles.planDesc}>Your promo will be validated when you finish your profile.</Text>
           </View>
         ) : (
           <>

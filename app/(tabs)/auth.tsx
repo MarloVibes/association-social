@@ -1,10 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db, functions } from '@/constants/firebase';
+import { auth, db } from '@/constants/firebase';
 
 export default function AuthScreen() {
   const { mode } = useLocalSearchParams();
@@ -26,22 +25,9 @@ export default function AuthScreen() {
     setError('');
     try {
       let uid = '';
-      let promo: any = null;
       if (isSignUp) {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         uid = result.user.uid;
-        // Redeem promo code (optional) via the server — single-use is enforced
-        // there, atomically. A bad/used code doesn't block signup; the user just
-        // continues without the perk and is told why.
-        if (promoCode.trim()) {
-          try {
-            const redeem = httpsCallable(functions, 'redeemPromoCode');
-            const res: any = await redeem({ code: promoCode.trim() });
-            promo = { code: promoCode.trim().toUpperCase(), ...res.data };
-          } catch (e: any) {
-            setError(e?.message || "That promo code couldn't be applied.");
-          }
-        }
       } else {
         const result = await signInWithEmailAndPassword(auth, email.trim(), password);
         uid = result.user.uid;
@@ -52,12 +38,10 @@ export default function AuthScreen() {
       } else {
         router.replace({
           pathname: '/(tabs)/profile-setup',
-          params: promo
+          params: isSignUp
             ? {
-                promoCode: promo.code,
-                promoPlan: promo.plan || 'promo',
-                promoMonths: String(promo.months || 0),
-                promoLabel: promo.label || 'Promo',
+                initialUsername: username.trim(),
+                promoCode: promoCode.trim().toUpperCase(),
               }
             : {},
         });

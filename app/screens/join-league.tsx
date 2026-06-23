@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { setDoc, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { setDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
+import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 import GlobalNav from '@/components/GlobalNav';
 
 const ERA_LABELS: Record<string, string> = {
@@ -101,8 +102,7 @@ export default function JoinLeagueScreen() {
 
       if (league.privacy === 'public') {
         // Auto join
-        await updateDoc(doc(db, 'leagues', league.id), { members: arrayUnion(user.uid) });
-        await updateDoc(doc(db, 'users', user.uid), { leagues: arrayUnion(league.id) });
+        await addLeagueMemberIfSpace(db, league.id, user.uid, { leagueName: league.name });
         // Notify commissioner
         await updateDoc(doc(db, 'users', league.commissionerId), {
           notifications: arrayUnion({

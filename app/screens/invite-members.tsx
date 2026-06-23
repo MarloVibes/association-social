@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 import GlobalNav from '@/components/GlobalNav';
 
 export default function InviteMembersScreen() {
@@ -184,20 +185,16 @@ export default function InviteMembersScreen() {
 
   const acceptRequest = async (req: any) => {
     try {
-      await updateDoc(doc(db, 'leagues', leagueId), { members: arrayUnion(req.uid) });
-      await updateDoc(doc(db, 'users', req.uid), {
-        leagues: arrayUnion(leagueId),
-        notifications: arrayUnion({
+      await addLeagueMemberIfSpace(db, leagueId, req.uid, {
+        leagueName: league?.name || leagueName || '',
+        requestId: req.id,
+        resolvedBy: user?.uid || '',
+        userNotification: {
           type: 'join_accepted',
           leagueId,
           leagueName: league?.name || leagueName || '',
           createdAt: new Date().toISOString(),
-        }),
-      });
-      await updateDoc(doc(db, 'leagues', leagueId, 'join_requests', req.id), {
-        status: 'accepted',
-        resolvedAt: serverTimestamp(),
-        resolvedBy: user?.uid || '',
+        },
       });
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
