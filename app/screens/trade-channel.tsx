@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import { getPositionFilters } from '@/domain/sports/playerFields';
 
 
 function PlaystyleBadge({ player, eraKey, sport }: { player: any; eraKey?: string; sport?: string }) {
@@ -75,6 +76,8 @@ export default function TradeChannelScreen() {
   const [targetPosFilter, setTargetPosFilter] = useState('ALL');
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const user = auth.currentUser;
+  const positionFilters = getPositionFilters(sport);
+  const tradePositionFilters = positionFilters.filter(position => position !== 'ALL');
 
   useEffect(() => { loadData(); }, []);
 
@@ -358,7 +361,7 @@ export default function TradeChannelScreen() {
               ))}
               <View style={{ width: 1, backgroundColor: '#333', marginHorizontal: 4 }} />
               <Text style={styles.sortLabel}>Pos:</Text>
-              {['PG','SG','SF','PF','C'].map(pos => (
+              {tradePositionFilters.map(pos => (
                 <TouchableOpacity key={pos} style={[styles.sortBtn, blockSort === pos && styles.sortBtnActive]} onPress={() => setBlockSort(blockSort === pos ? 'team' : pos)}>
                   <Text style={[styles.sortBtnText, blockSort === pos && styles.sortBtnTextActive]}>{pos}</Text>
                 </TouchableOpacity>
@@ -381,8 +384,7 @@ export default function TradeChannelScreen() {
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
             ];
-            const POSITIONS = ['PG','SG','SF','PF','C'];
-            const isPositionFilter = POSITIONS.includes(blockSort);
+            const isPositionFilter = tradePositionFilters.includes(blockSort);
             const isTeamFilter = !isPositionFilter && blockSort !== 'team';
             const filtered = allAvail.filter(item => {
               if (isPositionFilter) return (item.player?.position || '').includes(blockSort);
@@ -449,7 +451,7 @@ export default function TradeChannelScreen() {
                 />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
                   <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 8 }}>
-                    {['ALL','PG','SG','SF','PF','C'].map(p => (
+                    {positionFilters.map(p => (
                       <TouchableOpacity key={p} style={[styles.sortBtn, targetPosFilter === p && styles.sortBtnActive]} onPress={() => setTargetPosFilter(p)}>
                         <Text style={[styles.sortBtnText, targetPosFilter === p && styles.sortBtnTextActive]}>{p}</Text>
                       </TouchableOpacity>

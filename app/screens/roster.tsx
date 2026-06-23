@@ -8,9 +8,8 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { getPositionFilters } from '@/domain/sports/playerFields';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
-
-const POSITIONS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'];
 
 export default function RosterScreen() {
   const { leagueId, sport, teamId, era } = useLocalSearchParams<{
@@ -36,10 +35,8 @@ export default function RosterScreen() {
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
 
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
-  // Some navigations pass 'nfl' (via SPORT_KEY) while pools are keyed 'madden'. Normalize.
-  const sportNorm = sport === 'nfl' ? 'madden' : (sport || 'nba');
-  const isNBA = sportNorm === 'nba';
-  const poolKey = isNBA ? eraKey : sportNorm;
+  const authoritativeSport = league?.sport || sport || 'nba';
+  const positionFilters = getPositionFilters(authoritativeSport);
 
   useEffect(() => { loadData(); }, [teamId, eraKey]);
 
@@ -192,17 +189,28 @@ export default function RosterScreen() {
       // Dual-read: vault first, fall back to old subcollection during migration
       let customPlayers: any[] = [];
       try {
-        const vaultCustomQ = query(
-          collection(db, 'players'),
-          where('is_custom', '==', true),
-          where('created_by_league', '==', leagueId)
-        );
+        const vaultCustomQ = isNBADoc
+          ? query(
+              collection(db, 'players'),
+              where('is_custom', '==', true),
+              where('created_by_league', '==', leagueId)
+            )
+          : query(
+              collection(db, 'players'),
+              where('is_custom', '==', true),
+              where('created_by_league', '==', leagueId),
+              where('sport', '==', docSport)
+            );
         const vaultCustomSnap = await getDocs(vaultCustomQ);
-        customPlayers = vaultCustomSnap.docs.map(d => ({ ...d.data() } as any));
+        customPlayers = vaultCustomSnap.docs
+          .map(d => ({ ...d.data() } as any))
+          .filter(p => isNBADoc ? !p.sport || p.sport === 'nba' : p.sport === docSport);
       } catch (e) {
         console.warn('vault custom players fetch failed, falling back', e);
         const customSnap = await getDocs(collection(db, 'leagues', leagueId, 'custom_players'));
-        customPlayers = customSnap.docs.map(d => ({ ...d.data() } as any));
+        customPlayers = customSnap.docs
+          .map(d => ({ ...d.data() } as any))
+          .filter(p => isNBADoc ? !p.sport || p.sport === 'nba' : p.sport === docSport);
       }
 
       // Enrich players with era_stats so playstyles compute correctly (NBA only;
@@ -718,7 +726,10 @@ export default function RosterScreen() {
         <>
           <TouchableOpacity
             style={styles.createPlayerBanner}
-            onPress={() => router.push({ pathname: '/screens/create-player', params: { leagueId, era: league?.currentSeason || '' } })}
+            onPress={() => router.push({
+              pathname: '/screens/create-player',
+              params: { leagueId, era: league?.currentSeason || '', sport: authoritativeSport },
+            })}
             activeOpacity={0.85}
           >
             <Text style={styles.createPlayerBannerIcon}>+</Text>
@@ -736,7 +747,7 @@ export default function RosterScreen() {
             onChangeText={setSearch}
           />
           <View style={styles.posFilters}>
-            {POSITIONS.map(pos => (
+            {positionFilters.map(pos => (
               <TouchableOpacity
                 key={pos}
                 style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
@@ -816,7 +827,7 @@ export default function RosterScreen() {
             >
               <PlayerHeadshot
                 player={item}
-                sport={sportNorm}
+                sport={authoritativeSport}
                 imageStyle={styles.playerHeadshot}
                 fallback={
                   <View style={styles.playerAvatar}>
@@ -828,7 +839,7 @@ export default function RosterScreen() {
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
                   {(() => {
-                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, sportNorm);
+                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, authoritativeSport);
                     return (
                       <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
                         <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>
@@ -868,7 +879,7 @@ export default function RosterScreen() {
       <PlayerCard
         player={selectedPlayer}
         era={eraKey}
-        sport={sportNorm}
+        sport={authoritativeSport}
         leagueId={leagueId}
         teamId={teamId}
         visible={!!selectedPlayer}
@@ -901,7 +912,10 @@ export default function RosterScreen() {
         onEditCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === auth.currentUser?.uid || isLeagueCommissioner) ? () => {
           const pid = selectedPlayer.player_id;
           setSelectedPlayer(null);
-          router.push({ pathname: '/screens/create-player', params: { leagueId, era: (league as any)?.era || '2024-25', customId: pid } });
+          router.push({
+            pathname: '/screens/create-player',
+            params: { leagueId, era: (league as any)?.era || '2024-25', sport: authoritativeSport, customId: pid },
+          });
         } : undefined}
         onDeleteCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === auth.currentUser?.uid || isLeagueCommissioner) ? () => {
           const p = selectedPlayer;
