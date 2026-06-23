@@ -49,7 +49,7 @@ export function getSportRules(sport?: string | null): SportRules {
   return SPORT_RULES[normalizeSport(sport)];
 }
 
-export function seasonLabel(sport: SportKey | string, year: number): string {
+export function seasonLabel(sport: SportKey | string | null, year: number): string {
   if (normalizeSport(sport) === 'nba') {
     return `${year}-${String(year + 1).slice(-2)}`;
   }

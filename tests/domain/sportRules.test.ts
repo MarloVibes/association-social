@@ -71,7 +71,18 @@ describe('seasonLabel', () => {
     expect(seasonLabel('madden', 2026)).toBe('2026');
   });
 
+  it('normalizes the NFL alias to Madden formatting', () => {
+    expect(seasonLabel('nfl', 2026)).toBe('2026');
+  });
+
   it('formats MLB seasons as a single year', () => {
     expect(seasonLabel('mlb', 2027)).toBe('2027');
   });
+
+  it.each([null, 'unknown'])(
+    'falls back safely to NBA formatting for %s',
+    (sport) => {
+      expect(seasonLabel(sport, 2026)).toBe('2026-27');
+    },
+  );
 });

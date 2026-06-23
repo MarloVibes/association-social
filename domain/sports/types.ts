@@ -3,12 +3,12 @@ export type SportKey = 'nba' | 'madden' | 'mlb';
 export type FinanceMode = 'nba_cap' | 'hard_cap' | 'team_budget';
 
 export interface SportRules {
-  key: SportKey;
-  teamCount: number;
-  standardRosterLimit: number;
-  twoWayLimit: number;
-  draftRounds: number;
-  initialSeasonYear: number;
-  financeMode: FinanceMode;
-  defaultDraftTimerSeconds: number;
+  readonly key: SportKey;
+  readonly teamCount: number;
+  readonly standardRosterLimit: number;
+  readonly twoWayLimit: number;
+  readonly draftRounds: number;
+  readonly initialSeasonYear: number;
+  readonly financeMode: FinanceMode;
+  readonly defaultDraftTimerSeconds: number;
 }
