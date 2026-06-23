@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Alert, Dimensions, Easing, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@/constants/firebase';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 const { width, height } = Dimensions.get('window');
@@ -338,7 +339,9 @@ export default function TeamSelectScreen() {
         const currentLeague = leagueTxnSnap.data() || {};
         const currentTaken: string[] = currentLeague.takenTeams || [];
         const currentMembers: string[] = currentLeague.members || [];
-        const maxMembers = typeof currentLeague.maxMembers === 'number' ? currentLeague.maxMembers : 30;
+        const maxMembers = typeof currentLeague.maxMembers === 'number'
+          ? currentLeague.maxMembers
+          : getSportRules(currentLeague.sport).teamCount;
 
         if (currentTaken.includes(team.id)) {
           throw new Error((team.full_name || 'That team') + ' was just claimed by another GM.');
