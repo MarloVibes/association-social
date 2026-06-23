@@ -5,6 +5,7 @@ import {
   NFL_POSITIONS,
   getPlayerEditorSchema,
   getPositionFilters,
+  matchesPositionFilter,
 } from '@/domain/sports/playerFields';
 
 describe('getPositionFilters', () => {
@@ -79,5 +80,22 @@ describe('getPlayerEditorSchema', () => {
   it('uses the Madden schema for nfl and NBA for unknown sports', () => {
     expect(getPlayerEditorSchema('nfl')).toEqual(getPlayerEditorSchema('madden'));
     expect(getPlayerEditorSchema('unknown')).toEqual(getPlayerEditorSchema('nba'));
+  });
+});
+
+describe('matchesPositionFilter', () => {
+  it('allows every position when the filter is ALL', () => {
+    expect(matchesPositionFilter('CB', 'ALL')).toBe(true);
+  });
+
+  it('does not match NFL center to cornerback', () => {
+    expect(matchesPositionFilter('CB', 'C')).toBe(false);
+    expect(matchesPositionFilter('C', 'C')).toBe(true);
+  });
+
+  it('does not match guard to left or right guard', () => {
+    expect(matchesPositionFilter('LG', 'G')).toBe(false);
+    expect(matchesPositionFilter('RG', 'G')).toBe(false);
+    expect(matchesPositionFilter('G', 'G')).toBe(true);
   });
 });

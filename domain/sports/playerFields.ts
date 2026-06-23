@@ -129,6 +129,10 @@ export function getPositionFilters(sport?: string | null): readonly string[] {
   return Object.freeze(['ALL', ...getPlayerEditorSchema(sport).positions]);
 }
 
+export function matchesPositionFilter(playerPosition: string, positionFilter: string): boolean {
+  return positionFilter === 'ALL' || playerPosition === positionFilter;
+}
+
 export function getPlayerEditorSchema(sport?: string | null): PlayerEditorSchema {
   const normalizedSport = normalizeSport(sport);
   if (normalizedSport === 'madden') return NFL_SCHEMA;

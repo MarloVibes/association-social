@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
-import { getPositionFilters } from '@/domain/sports/playerFields';
+import { getPositionFilters, matchesPositionFilter } from '@/domain/sports/playerFields';
 
 
 function PlaystyleBadge({ player, eraKey, sport }: { player: any; eraKey?: string; sport?: string }) {
@@ -387,7 +387,7 @@ export default function TradeChannelScreen() {
             const isPositionFilter = tradePositionFilters.includes(blockSort);
             const isTeamFilter = !isPositionFilter && blockSort !== 'team';
             const filtered = allAvail.filter(item => {
-              if (isPositionFilter) return (item.player?.position || '').includes(blockSort);
+              if (isPositionFilter) return matchesPositionFilter(item.player?.position || '', blockSort);
               if (isTeamFilter) {
                 const abbr = item.teamName?.slice(0,3).toUpperCase();
                 const fullMatch = item.teamName?.toUpperCase().includes(blockSort.toUpperCase());
@@ -466,7 +466,7 @@ export default function TradeChannelScreen() {
                 ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
                     .filter((p: any) => {
                       const matchSearch = !targetSearch || (p.full_name || '').toLowerCase().includes(targetSearch.toLowerCase());
-                      const matchPos = targetPosFilter === 'ALL' || (p.position || '').includes(targetPosFilter);
+                      const matchPos = matchesPositionFilter(p.position || '', targetPosFilter);
                       return matchSearch && matchPos;
                     })
                 : myRoster;
