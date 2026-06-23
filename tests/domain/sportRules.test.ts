@@ -2,28 +2,43 @@ import { describe, expect, it } from 'vitest';
 import { getSportRules, seasonLabel } from '@/domain/sports/rules';
 
 describe('getSportRules', () => {
-  it('returns NBA roster rules', () => {
-    const rules = getSportRules('nba');
-
-    expect(rules.teamCount).toBe(30);
-    expect(rules.standardRosterLimit).toBe(15);
-    expect(rules.twoWayLimit).toBe(3);
+  it('returns the complete NBA rules', () => {
+    expect(getSportRules('nba')).toEqual({
+      key: 'nba',
+      teamCount: 30,
+      standardRosterLimit: 15,
+      twoWayLimit: 3,
+      draftRounds: 2,
+      initialSeasonYear: 2025,
+      financeMode: 'nba_cap',
+      defaultDraftTimerSeconds: 120,
+    });
   });
 
-  it('returns Madden roster and finance rules', () => {
-    const rules = getSportRules('madden');
-
-    expect(rules.teamCount).toBe(32);
-    expect(rules.standardRosterLimit).toBe(53);
-    expect(rules.financeMode).toBe('hard_cap');
+  it('returns the complete Madden rules', () => {
+    expect(getSportRules('madden')).toEqual({
+      key: 'madden',
+      teamCount: 32,
+      standardRosterLimit: 53,
+      twoWayLimit: 0,
+      draftRounds: 7,
+      initialSeasonYear: 2025,
+      financeMode: 'hard_cap',
+      defaultDraftTimerSeconds: 120,
+    });
   });
 
-  it('returns MLB roster and finance rules', () => {
-    const rules = getSportRules('mlb');
-
-    expect(rules.teamCount).toBe(30);
-    expect(rules.standardRosterLimit).toBe(40);
-    expect(rules.financeMode).toBe('team_budget');
+  it('returns the complete MLB rules', () => {
+    expect(getSportRules('mlb')).toEqual({
+      key: 'mlb',
+      teamCount: 30,
+      standardRosterLimit: 40,
+      twoWayLimit: 0,
+      draftRounds: 5,
+      initialSeasonYear: 2026,
+      financeMode: 'team_budget',
+      defaultDraftTimerSeconds: 120,
+    });
   });
 
   it('normalizes the NFL alias to Madden', () => {
