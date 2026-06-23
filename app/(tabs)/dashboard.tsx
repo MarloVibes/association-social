@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
+import { arrayRemove, collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -10,6 +10,7 @@ import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/t
 import GlobalNav from '@/components/GlobalNav';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePresence } from '@/hooks/usePresence';
+import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 
 const SPORT_LABELS: Record<string, string> = {
   nba: 'NBA 2K',
@@ -181,14 +182,9 @@ export default function DashboardScreen() {
     const u = auth.currentUser;
     if (!u) return;
     try {
-      // Add user to league members
-      await updateDoc(doc(db, 'leagues', invite.leagueId), {
-        members: arrayUnion(u.uid),
-      });
-      // Add league to user's leagues list
-      await updateDoc(doc(db, 'users', u.uid), {
-        leagues: arrayUnion(invite.leagueId),
-        leagueInvites: arrayRemove(invite),
+      await addLeagueMemberIfSpace(db, invite.leagueId, u.uid, {
+        leagueName: invite.leagueName,
+        inviteToRemove: invite,
       });
       // Remove from league's sent_invites
       try {

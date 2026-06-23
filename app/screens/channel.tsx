@@ -643,6 +643,7 @@ export default function ChannelScreen() {
 
   const searchGiphy = async (q: string) => {
     setGiphySearch(q);
+    if (!GIPHY_KEY) { setGifs([]); return; }
     if (q.length < 2) { setGifs([]); return; }
     setGiphyLoading(true);
     try {
@@ -2090,9 +2091,11 @@ export default function ChannelScreen() {
           )}
         {renderMentionDropdown('chat')}
         <View style={styles.inputBar}>
-          <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
-            <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
-          </TouchableOpacity>
+          {GIPHY_KEY ? (
+            <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
+              <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.inputAction} onPress={pickPhoto}>
             <Text style={styles.inputActionIcon}>📷</Text>
           </TouchableOpacity>

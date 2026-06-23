@@ -29,10 +29,33 @@ function titleFor(type) {
   }
 }
 
-// Notifications present in `after` but not in `before` (compared by value).
+function notificationKey(n) {
+  if (!n || typeof n !== 'object') return JSON.stringify(n);
+  if (n.id) return `id:${n.id}`;
+  return [
+    n.type || '',
+    n.leagueId || '',
+    n.otherUid || n.fromUid || '',
+    n.message || '',
+    n.createdAt || '',
+  ].join('|');
+}
+
+// Notifications present in `after` but not in `before`. Read/unread changes
+// must not count as a fresh notification, or opening the inbox can resend pushes.
 function newNotifications(before, after) {
-  const seen = new Set((before || []).map((n) => JSON.stringify(n)));
-  return (after || []).filter((n) => !seen.has(JSON.stringify(n)));
+  const seen = new Map();
+  (before || []).forEach((n) => {
+    const key = notificationKey(n);
+    seen.set(key, (seen.get(key) || 0) + 1);
+  });
+  return (after || []).filter((n) => {
+    const key = notificationKey(n);
+    const count = seen.get(key) || 0;
+    if (count === 0) return true;
+    seen.set(key, count - 1);
+    return false;
+  });
 }
 
 exports.pushOnNotification = onDocumentUpdated('users/{uid}', async (event) => {
@@ -92,6 +115,7 @@ exports.redeemPromoCode = onCall(async (request) => {
 
   const code = (request.data && request.data.code ? String(request.data.code) : '').trim().toUpperCase();
   if (!code) throw new HttpsError('invalid-argument', 'No promo code provided.');
+  const profile = request.data && request.data.profile;
 
   const db = getFirestore();
   const ref = db.collection('promo_codes').doc(code);
@@ -109,16 +133,90 @@ exports.redeemPromoCode = onCall(async (request) => {
     if (redeemedBy.includes(uid)) throw new HttpsError('already-exists', "You've already used this code.");
     if (uses >= maxUses) throw new HttpsError('resource-exhausted', 'That code has already been used.');
 
+    let accessUntil = null;
+    if ((c.plan || 'promo') !== 'lifetime') {
+      const months = typeof c.months === 'number' ? c.months : 0;
+      if (months > 0) {
+        const d = new Date();
+        d.setMonth(d.getMonth() + months);
+        accessUntil = d.toISOString();
+      }
+    }
+
     tx.update(ref, {
       uses: uses + 1,
       redeemedBy: FieldValue.arrayUnion(uid),
       lastRedeemedAt: FieldValue.serverTimestamp(),
     });
 
+    const profileData = profile && typeof profile === 'object' ? {
+      uid,
+      email: typeof profile.email === 'string' ? profile.email : '',
+      displayName: typeof profile.displayName === 'string' ? profile.displayName : '',
+      username: typeof profile.username === 'string' ? profile.username : '',
+      usernameLower: typeof profile.usernameLower === 'string' ? profile.usernameLower : '',
+      age: typeof profile.age === 'string' ? profile.age : '',
+      gender: typeof profile.gender === 'string' ? profile.gender : '',
+      gamerTag: typeof profile.gamerTag === 'string' ? profile.gamerTag : '',
+      bio: typeof profile.bio === 'string' ? profile.bio : '',
+      console: typeof profile.console === 'string' ? profile.console : '',
+      favSports: Array.isArray(profile.favSports) ? profile.favSports : [],
+      createdAt: typeof profile.createdAt === 'string' ? profile.createdAt : new Date().toISOString(),
+      leagues: Array.isArray(profile.leagues) ? profile.leagues : [],
+      friends: Array.isArray(profile.friends) ? profile.friends : [],
+      friendRequestsSent: Array.isArray(profile.friendRequestsSent) ? profile.friendRequestsSent : [],
+      friendRequestsReceived: Array.isArray(profile.friendRequestsReceived) ? profile.friendRequestsReceived : [],
+      blockedUsers: Array.isArray(profile.blockedUsers) ? profile.blockedUsers : [],
+      dmEnabled: profile.dmEnabled !== false,
+      socials: profile.socials && typeof profile.socials === 'object' ? profile.socials : {},
+    } : {};
+
+    tx.set(db.collection('users').doc(uid), {
+      ...profileData,
+      plan: c.plan || 'promo',
+      promoCode: code,
+      promoLabel: c.label || 'Promo',
+      accessUntil,
+    }, { merge: true });
+
     return {
       plan: c.plan || 'promo',
       months: typeof c.months === 'number' ? c.months : 0,
       label: c.label || 'Promo',
+      accessUntil,
     };
   });
+});
+
+exports.deleteLeague = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const leagueId = request.data && request.data.leagueId ? String(request.data.leagueId) : '';
+  if (!leagueId) throw new HttpsError('invalid-argument', 'No league provided.');
+
+  const db = getFirestore();
+  const leagueRef = db.collection('leagues').doc(leagueId);
+  const leagueSnap = await leagueRef.get();
+  if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+
+  const league = leagueSnap.data() || {};
+  if (league.commissionerId !== uid) {
+    throw new HttpsError('permission-denied', 'Only the original commissioner can delete this league.');
+  }
+
+  const memberIds = Array.isArray(league.members) ? league.members : [];
+  await db.recursiveDelete(leagueRef);
+
+  if (memberIds.length > 0) {
+    const batch = db.batch();
+    memberIds.forEach((memberId) => {
+      batch.set(db.collection('users').doc(memberId), {
+        leagues: FieldValue.arrayRemove(leagueId),
+      }, { merge: true });
+    });
+    await batch.commit();
+  }
+
+  return { deleted: true };
 });

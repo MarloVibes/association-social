@@ -140,6 +140,7 @@ export default function LockerConsoleChatScreen() {
 
   const searchGiphy = async (q: string) => {
     setGiphySearch(q);
+    if (!GIPHY_KEY) { setGifs([]); return; }
     if (q.trim().length < 2) { setGifs([]); return; }
     setGiphyLoading(true);
     try {
@@ -341,9 +342,11 @@ export default function LockerConsoleChatScreen() {
       )}
 
       <View style={styles.inputBar}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
-          <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
-        </TouchableOpacity>
+        {GIPHY_KEY ? (
+          <TouchableOpacity style={styles.iconBtn} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
+            <View style={styles.gifBtnBox}><Text style={styles.gifBtnText}>GIF</Text></View>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity style={styles.iconBtn} onPress={pickPhoto}>
           <Text style={styles.iconBtnText}>📷</Text>
         </TouchableOpacity>

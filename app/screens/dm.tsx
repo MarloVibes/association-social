@@ -1,5 +1,4 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -73,18 +72,9 @@ export default function DMScreen() {
     setSending(false);
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) {
-      Alert.alert('Photo selected', 'Photo sharing requires Firebase Storage setup. Coming soon!');
-    }
-  };
-
   const searchGiphy = async (q: string) => {
     setGiphySearch(q);
+    if (!GIPHY_KEY) { setGifs([]); return; }
     if (q.length < 2) { setGifs([]); return; }
     setGiphyLoading(true);
     try {
@@ -181,15 +171,14 @@ export default function DMScreen() {
       )}
 
       <View style={styles.inputBar}>
-        <TouchableOpacity style={styles.inputAction} onPress={pickImage}>
-          <Text style={styles.inputActionText}>📷</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.inputAction} onPress={() => { setShowEmoji(!showEmoji); setShowGiphy(false); }}>
           <Text style={styles.inputActionText}>😊</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
-          <Text style={styles.inputActionText}>GIF</Text>
-        </TouchableOpacity>
+        {GIPHY_KEY ? (
+          <TouchableOpacity style={styles.inputAction} onPress={() => { setShowGiphy(true); setShowEmoji(false); }}>
+            <Text style={styles.inputActionText}>GIF</Text>
+          </TouchableOpacity>
+        ) : null}
         <TextInput
           style={styles.input}
           placeholder="Message..."

@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -224,16 +225,8 @@ export default function LeagueSettingsScreen() {
         { text: 'Delete', style: 'destructive', onPress: async () => {
           setSaving(true);
           try {
-            const batch = writeBatch(db);
-            const SUBS = ['teams', 'join_requests', 'sent_invites', 'trade_rooms', 'channels', 'activity', 'trade_proposals'];
-            for (const sub of SUBS) {
-              try {
-                const snap = await getDocs(collection(db, 'leagues', leagueId, sub));
-                snap.docs.forEach(d => batch.delete(d.ref));
-              } catch (e) { /* ignore */ }
-            }
-            await batch.commit();
-            await deleteDoc(doc(db, 'leagues', leagueId));
+            const deleteLeague = httpsCallable(functions, 'deleteLeague');
+            await deleteLeague({ leagueId });
             Alert.alert('Deleted', 'The league has been deleted.');
             router.replace('/(tabs)/dashboard');
           } catch (e: any) { Alert.alert('Error', e.message); setSaving(false); }

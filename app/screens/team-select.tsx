@@ -3,7 +3,7 @@ import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import { generateTeamPicks } from '@/constants/draftPicks';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Alert, Dimensions, Easing, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -302,7 +302,8 @@ export default function TeamSelectScreen() {
     try {
       // Collision guard: another GM may have grabbed this team while we deliberated.
       const freshLeague = await getDoc(doc(db, 'leagues', leagueId));
-      const freshTaken: string[] = freshLeague.data()?.takenTeams || [];
+      const ld = freshLeague.data() || {};
+      const freshTaken: string[] = ld.takenTeams || [];
       if (freshTaken.includes(team.id)) {
         Alert.alert('Just missed it', (team.full_name || 'That team') + ' was just claimed by another GM. ' + (isRandom ? 'Spin again!' : 'Pick another.'));
         setSelectedTeam(null);
@@ -319,17 +320,6 @@ export default function TeamSelectScreen() {
         }
         if (players.length === 0) players = team.players || [];
       }
-      // Ensure user is a league member BEFORE creating their team (required by rules)
-      // Skip if already a member (arrayUnion is no-op but rule denies non-changing updates)
-      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-      const ld = leagueSnap.data() || {};
-      const existingMembers: string[] = ld.members || [];
-      if (!existingMembers.includes(user.uid)) {
-        await updateDoc(doc(db, 'leagues', leagueId), {
-          members: arrayUnion(user.uid),
-        });
-      }
-
       // Standard draft-pick inventory: this team owns its own picks for the next
       // 7 drafts (rounds per sport). Skipped if the league uses realistic ownership.
       let picks: any[] = [];
@@ -339,19 +329,41 @@ export default function TeamSelectScreen() {
       }
 
       const teamDocId = leagueId + '_' + user.uid;
-      await setDoc(doc(db, 'leagues', leagueId, 'teams', teamDocId), {
-        gmId: user.uid,
-        teamId: team.id,
-        name: team.full_name,
-        abbreviation: team.abbreviation,
-        era: poolKey,
-        players,
-        picks,
-        tradeBlock: [],
-      });
+      const leagueRef = doc(db, 'leagues', leagueId);
+      const teamRef = doc(db, 'leagues', leagueId, 'teams', teamDocId);
+      await runTransaction(db, async (tx) => {
+        const leagueTxnSnap = await tx.get(leagueRef);
+        const existingTeamSnap = await tx.get(teamRef);
+        if (!leagueTxnSnap.exists()) throw new Error('League not found.');
+        const currentLeague = leagueTxnSnap.data() || {};
+        const currentTaken: string[] = currentLeague.takenTeams || [];
+        const currentMembers: string[] = currentLeague.members || [];
+        const maxMembers = typeof currentLeague.maxMembers === 'number' ? currentLeague.maxMembers : 30;
 
-      await updateDoc(doc(db, 'leagues', leagueId), {
-        takenTeams: arrayUnion(team.id),
+        if (currentTaken.includes(team.id)) {
+          throw new Error((team.full_name || 'That team') + ' was just claimed by another GM.');
+        }
+        if (!currentMembers.includes(user.uid) && currentMembers.length >= maxMembers) {
+          throw new Error('This league is full.');
+        }
+        if (existingTeamSnap.exists() && existingTeamSnap.data()?.teamId !== team.id) {
+          throw new Error('You already have a team in this league.');
+        }
+
+        tx.set(teamRef, {
+          gmId: user.uid,
+          teamId: team.id,
+          name: team.full_name,
+          abbreviation: team.abbreviation,
+          era: poolKey,
+          players,
+          picks,
+          tradeBlock: [],
+        });
+        tx.update(leagueRef, {
+          takenTeams: arrayUnion(team.id),
+          members: arrayUnion(user.uid),
+        });
       });
 
       try {
