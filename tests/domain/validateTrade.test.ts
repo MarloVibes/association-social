@@ -190,8 +190,8 @@ describe('validateTrade', () => {
     }
   });
 
-  it('rejects invalid authoritative salaries when an offered player requires salary', () => {
-    for (const invalidSalary of [-1, Number.NaN, '10', undefined]) {
+  it('never lets commissioner override remove invalid authoritative salary errors', () => {
+    for (const invalidSalary of [-1, Number.NaN, Number.POSITIVE_INFINITY, '10', undefined]) {
       const teamA = {
         players: [{ player_id: 'a-0', salary: invalidSalary }],
         picks: [],
@@ -206,10 +206,12 @@ describe('validateTrade', () => {
           offerA: [{ player_id: 'a-0', salary: 999 }],
           teamABudget: 100,
           teamBBudget: 100,
-          commissionerOverride: false,
+          commissionerOverride: true,
         } as Parameters<typeof validateTrade>[0]);
 
-        expect(result.errors).toContain('financial_limit');
+        expect(result.valid).toBe(false);
+        expect(result.errors).toContain('invalid_salary');
+        expect(result.errors).not.toContain('financial_limit');
       }
     }
   });

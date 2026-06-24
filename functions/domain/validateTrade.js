@@ -81,7 +81,7 @@ function validateTrade(input) {
   }
 
   if (!offeredSalariesValid(playersA, offerA) || !offeredSalariesValid(playersB, offerB)) {
-    errors.add('financial_limit');
+    errors.add('invalid_salary');
   }
 
   const outgoingA = offeredSalary(playersA, offerA);

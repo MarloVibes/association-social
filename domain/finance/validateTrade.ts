@@ -1,6 +1,7 @@
 export type TradeValidationError =
   | 'ownership'
   | 'roster_limit'
+  | 'invalid_salary'
   | 'financial_limit'
   | 'nba_matching';
 
@@ -126,7 +127,7 @@ export function validateTrade(input: ValidateTradeInput): TradeValidation {
   }
 
   if (!offeredSalariesValid(playersA, offerA) || !offeredSalariesValid(playersB, offerB)) {
-    errors.add('financial_limit');
+    errors.add('invalid_salary');
   }
 
   const outgoingA = offeredSalary(playersA, offerA);
