@@ -57,4 +57,16 @@ describe('source safety regressions', () => {
       expect(file).toContain("from '@/constants/firebase'");
     }
   });
+
+  it('does not call native push notification response APIs on web', () => {
+    const hook = source('hooks/usePushNotifications.ts');
+
+    expect(hook).toContain("if (Platform.OS === 'web') return;");
+    expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
+      hook.indexOf('Notifications.addNotificationReceivedListener'),
+    );
+    expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
+      hook.indexOf('Notifications.getLastNotificationResponseAsync'),
+    );
+  });
 });
