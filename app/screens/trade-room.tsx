@@ -3,10 +3,11 @@ import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTr
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
@@ -91,16 +92,18 @@ async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: bool
   }
 }
 
-function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
+function PlayerChip({ player, sport, onRemove, locked, overrides }: { player: any; sport: string; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
   const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
-  const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
   return (
     <View style={[styles.chip, locked && styles.chipLocked]}>
-      {brefId ? (
-        <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.chipPhoto} />
-      ) : (
+      <PlayerHeadshot
+        player={player}
+        sport={sport}
+        imageStyle={styles.chipPhoto}
+        fallback={
         <View style={styles.chipPhotoFallback}><Text style={styles.chipInitial}>{(player?.full_name || '?')[0]}</Text></View>
-      )}
+        }
+      />
       <View style={styles.chipInfo}>
         <Text style={styles.chipPos}>{player?.position || '?'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{player?.full_name}</Text>
@@ -137,6 +140,7 @@ export default function TradeRoomScreen() {
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [leagueEra, setLeagueEra] = useState<string>('');
+  const [leagueSport, setLeagueSport] = useState<string>('nba');
   const [tradeApronTolerance, setTradeApronTolerance] = useState<number>(1.25);
   const [commissionerCanOverride, setCommissionerCanOverride] = useState<boolean>(false);
   const [leagueCommUids, setLeagueCommUids] = useState<string[]>([]);
@@ -348,6 +352,7 @@ export default function TradeRoomScreen() {
       if (snap.exists()) {
         const data = snap.data() as any;
         setLeagueEra(data.era || 'current');
+        setLeagueSport(data.sport || 'nba');
         setTradeApronTolerance(typeof data.tradeApronTolerance === 'number' ? data.tradeApronTolerance : 1.25);
         setCommissionerCanOverride(!!data.commissionerCanOverride);
         const comms: string[] = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
@@ -754,7 +759,7 @@ export default function TradeRoomScreen() {
 
   const handleConfirm = async () => {
     console.log('[handleConfirm] called', { passes: salaryCheck.passes, overrideAppliedLocal, salaryOverrideApplied: room?.salaryOverrideApplied, myOfferLen: myOffer.length, otherOfferLen: otherOffer.length, anyConfirmed, myConfirmed });
-    if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
+    if (leagueSport === 'nba' && !salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
       const myNeed = myShortfall;
       const theirNeed = otherShortfall;
       const messages = [];
@@ -1090,6 +1095,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
+                sport={leagueSport}
                 onRemove={canEditOtherSide ? () => removePlayerFromOffer(p, 'theirs') : undefined}
                 overrides={overridesMap}
               />
@@ -1199,6 +1205,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
+                sport={leagueSport}
                 onRemove={canEditMySide ? () => removePlayerFromOffer(p, 'mine') : undefined}
                 overrides={overridesMap}
               />
@@ -1210,7 +1217,7 @@ export default function TradeRoomScreen() {
               <Text style={styles.totalValue}>{fmtMoney(sumSalary(myOffer))}</Text>
             </View>
           ) : null}
-          {!salaryCheck.skipped ? (
+          {leagueSport === 'nba' && !salaryCheck.skipped ? (
             <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
               <Text style={[styles.balanceText, { color: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
                 {room?.salaryOverrideApplied
