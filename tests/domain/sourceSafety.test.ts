@@ -68,6 +68,7 @@ describe('source safety regressions', () => {
     expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
       hook.indexOf('Notifications.getLastNotificationResponseAsync'),
     );
+    expect(hook).toContain('Push cold-start response unavailable');
   });
 
   it('keeps the NBA season calendar visible without requiring a claimed team', () => {

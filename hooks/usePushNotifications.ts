@@ -132,12 +132,19 @@ export function usePushNotifications() {
     });
 
     // Cold start: app was launched by tapping a notification. Give the router a
-    // moment to mount, then route.
-    Notifications.getLastNotificationResponseAsync().then(response => {
-      if (response) {
-        setTimeout(() => routeFromData(response.notification.request.content.data), 1000);
-      }
-    });
+    // moment to mount, then route. Some Expo web shims expose this method but
+    // throw when called, so keep it defensive even after the platform guard.
+    try {
+      Notifications.getLastNotificationResponseAsync().then(response => {
+        if (response) {
+          setTimeout(() => routeFromData(response.notification.request.content.data), 1000);
+        }
+      }).catch(error => {
+        console.log('Push cold-start response unavailable:', error);
+      });
+    } catch (error) {
+      console.log('Push cold-start response unavailable:', error);
+    }
 
     return () => {
       if (notificationListener.current) notificationListener.current.remove();
