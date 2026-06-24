@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -31,82 +32,8 @@ function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
 }
 
-// Execute a trade that's sitting in 'pending_veto' — runs the swap, sets it
-// 'executed', and notifies both GMs. Self-contained (reads everything fresh),
-// so it's safe to call from the commissioner's Approve button OR opportunistically
-// when the veto window has elapsed. Concurrency-safe: the transaction re-checks
-// status === 'pending_veto', so a second caller no-ops.
-async function finalizeVetoTradeTx(leagueId: string, roomId: string) {
-  try {
-    const result: any = await runTransaction(db, async (tx) => {
-      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return { done: false };
-      const data = snap.data() as any;
-      if (data.status !== 'pending_veto' && data.status !== 'vote_passed') return { done: false };
-      const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
-      const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
-      const [hostSnap, guestSnap] = await Promise.all([tx.get(hostTeamRef), tx.get(guestTeamRef)]);
-      if (!hostSnap.exists() || !guestSnap.exists()) return { done: false };
-      const host = hostSnap.data() as any;
-      const guest = guestSnap.data() as any;
-      const hostOffered = data.hostOffer || [];
-      const guestOffered = data.guestOffer || [];
-      const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
-      const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
-      const hostPicks = data.hostPicks || [];
-      const guestPicks = data.guestPicks || [];
-      const hostPickIds = new Set(hostPicks.map((pk: any) => pk.id));
-      const guestPickIds = new Set(guestPicks.map((pk: any) => pk.id));
-      // Verify both sides still own everything they're sending (players AND picks);
-      // another trade could have moved an asset since this one was agreed.
-      const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
-      const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-      const hostOwnsPicks = hostPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
-      const guestOwnsPicks = guestPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
-      if (!allHostStillOwns || !allGuestStillOwns || !hostOwnsPicks || !guestOwnsPicks) {
-        tx.update(ref, { status: 'cancelled', cancelReason: 'roster_changed', updatedAt: serverTimestamp() });
-        return { done: false, cancelled: true };
-      }
-      const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
-      const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-      const newHostPicks = (host.picks || []).filter((pk: any) => !hostPickIds.has(pk.id)).concat(guestPicks);
-      const newGuestPicks = (guest.picks || []).filter((pk: any) => !guestPickIds.has(pk.id)).concat(hostPicks);
-      tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
-      tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
-      tx.update(ref, { status: 'executed', executedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      return { done: true, data, hostOffered, guestOffered };
-    });
-
-    if (result?.done && result.data) {
-      const d = result.data;
-      const note = {
-        type: 'trade_executed', leagueId, roomId,
-        createdAt: new Date().toISOString(),
-        message: 'Your trade was approved and has been completed.',
-      };
-      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
-        try { await updateDoc(doc(db, 'users', uid), { notifications: arrayUnion(note) }); } catch {}
-      }
-      try {
-        const hostAssets = [...((result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.hostPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
-        const guestAssets = [...((result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.guestPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
-        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-          type: 'trade_executed',
-          message: (d.hostTeamName || 'Team A') + ' traded ' + hostAssets + ' to ' + (d.guestTeamName || 'Team B') + ' for ' + guestAssets,
-          hostTeamId: d.hostTeamId, guestTeamId: d.guestTeamId, hostName: d.hostTeamName, guestName: d.guestTeamName,
-          createdAt: serverTimestamp(),
-        });
-      } catch {}
-    }
-    return result;
-  } catch (e) {
-    return { done: false, error: e };
-  }
-}
-
 // Tally a 'pending_vote' trade against the league's threshold. Sets status to
-// 'vote_passed' (the swap then runs via finalizeVetoTradeTx) or 'rejected'.
+// 'vote_passed' (the swap then runs via finalizeTrade) or 'rejected'.
 // Eligible voters = all GMs except the two in the trade. Returns early/pending
 // if not yet decided, unless `force` (deadline) is set. Concurrency-safe.
 async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: boolean) {
@@ -231,6 +158,61 @@ export default function TradeRoomScreen() {
   const [stepienRule, setStepienRule] = useState(false);
   const [draftBaseYear, setDraftBaseYear] = useState<number>(new Date().getFullYear() + 1);
   const presenceTimerRef = useRef<any>(null);
+  const finalizeInFlightRef = useRef(false);
+  const snapshotFinalizeKeyRef = useRef('');
+
+  const finalizeTradeRoom = async (trade: any) => {
+    if (finalizeInFlightRef.current) return { executed: false, inFlight: true };
+    finalizeInFlightRef.current = true;
+    try {
+      const callable = httpsCallable(functions, 'finalizeTrade');
+      const response: any = await callable({ leagueId, roomId });
+      const result = response?.data || {};
+      if (!result.executed) return result;
+
+      const note = {
+        type: 'trade_executed',
+        leagueId,
+        roomId,
+        createdAt: new Date().toISOString(),
+        message: 'Your trade was approved and has been completed.',
+      };
+      for (const uid of [trade?.hostUid, trade?.guestUid].filter(Boolean)) {
+        try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
+      }
+
+      try {
+        const hostAssets = [
+          ...((trade?.hostOffer || []).map((p: any) => p.full_name).filter(Boolean)),
+          ...((trade?.hostPicks || []).map((pk: any) => pickLabel(pk))),
+        ].join(', ') || 'assets';
+        const guestAssets = [
+          ...((trade?.guestOffer || []).map((p: any) => p.full_name).filter(Boolean)),
+          ...((trade?.guestPicks || []).map((pk: any) => pickLabel(pk))),
+        ].join(', ') || 'assets';
+        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+          type: 'trade_executed',
+          message: (trade?.hostTeamName || 'Team A') + ' traded ' + hostAssets + ' to ' + (trade?.guestTeamName || 'Team B') + ' for ' + guestAssets,
+          hostTeamId: trade?.hostTeamId,
+          guestTeamId: trade?.guestTeamId,
+          hostName: trade?.hostTeamName,
+          guestName: trade?.guestTeamName,
+          createdAt: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn('Failed to log trade to activity', e);
+      }
+      return result;
+    } catch (e: any) {
+      const validationErrors = e?.details?.errors;
+      if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+        throw new Error(validationErrors.join('\n'));
+      }
+      throw e;
+    } finally {
+      finalizeInFlightRef.current = false;
+    }
+  };
 
   // Initial load + room creation
   useEffect(() => {
@@ -409,14 +391,22 @@ export default function TradeRoomScreen() {
       if (snap.exists()) setRoom({ id: snap.id, ...snap.data() });
       // Opportunistic finalize: if the veto window has elapsed with no veto, execute now.
       if (snapData?.status === 'pending_veto' && snapData?.vetoDeadline && Date.now() > snapData.vetoDeadline) {
-        finalizeVetoTradeTx(leagueId, roomId);
+        const finalizeKey = 'pending_veto:' + snapData.vetoDeadline;
+        if (snapshotFinalizeKeyRef.current !== finalizeKey) {
+          snapshotFinalizeKeyRef.current = finalizeKey;
+          finalizeTradeRoom(snapData).catch(() => {});
+        }
       }
       // League vote: resolve at deadline; once passed, a participant runs the swap.
       if (snapData?.status === 'pending_vote' && snapData?.voteDeadline && Date.now() > snapData.voteDeadline) {
         resolveVoteTradeTx(leagueId, roomId, true);
       }
       if (snapData?.status === 'vote_passed' && (myUid === snapData?.hostUid || myUid === snapData?.guestUid)) {
-        finalizeVetoTradeTx(leagueId, roomId);
+        const finalizeKey = 'vote_passed:' + (snapData.voteResolvedAt?.toMillis?.() || '');
+        if (snapshotFinalizeKeyRef.current !== finalizeKey) {
+          snapshotFinalizeKeyRef.current = finalizeKey;
+          finalizeTradeRoom(snapData).catch(() => {});
+        }
       }
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
@@ -717,8 +707,11 @@ export default function TradeRoomScreen() {
     Alert.alert('Approve Trade?', 'This executes the trade now and swaps the players.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Approve', onPress: async () => {
-        const res: any = await finalizeVetoTradeTx(leagueId, roomId);
-        if (res?.error) Alert.alert('Error', 'Could not finalize the trade.');
+        try {
+          await finalizeTradeRoom(room);
+        } catch (e: any) {
+          Alert.alert('Error', e?.message || 'Could not finalize the trade.');
+        }
       } },
     ]);
   };
@@ -825,52 +818,12 @@ export default function TradeRoomScreen() {
             });
             return { pendingVote: true };
           }
-          // Both confirmed — execute the trade
-          const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
-          const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
-          const [hostSnap, guestSnap] = await Promise.all([tx.get(hostTeamRef), tx.get(guestTeamRef)]);
-          if (!hostSnap.exists() || !guestSnap.exists()) throw new Error('Team missing');
-          const host = hostSnap.data() as any;
-          const guest = guestSnap.data() as any;
-
-          const hostOffered = data.hostOffer || [];
-          const guestOffered = data.guestOffer || [];
-          const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
-          const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
-
-          const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
-          const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-
-          // Draft picks: verify ownership before swapping — another trade may have
-          // moved a pick since this offer was agreed.
-          const hPicks = data.hostPicks || [];
-          const gPicks = data.guestPicks || [];
-          const hPickIds = new Set(hPicks.map((pk: any) => pk.id));
-          const gPickIds = new Set(gPicks.map((pk: any) => pk.id));
-          const hOwnsPicks = hPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
-          const gOwnsPicks = gPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
-
-          if (!allHostStillOwns || !allGuestStillOwns || !hOwnsPicks || !gOwnsPicks) {
-            tx.update(ref, { status: 'cancelled', updatedAt: serverTimestamp(), cancelReason: 'roster_changed' });
-            return { executed: false, cancelled: true };
-          }
-
-          const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
-          const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-
-          const newHostPicks = (host.picks || []).filter((pk: any) => !hPickIds.has(pk.id)).concat(gPicks);
-          const newGuestPicks = (guest.picks || []).filter((pk: any) => !gPickIds.has(pk.id)).concat(hPicks);
-
-          tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
-          tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
           tx.update(ref, {
-            status: 'executed',
             hostConfirmed: true,
             guestConfirmed: true,
-            executedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
-          return { executed: true, hostOffered, guestOffered, hostPicks: data.hostPicks || [], guestPicks: data.guestPicks || [], hostName: data.hostTeamName, guestName: data.guestTeamName };
+          return { finalize: true, trade: data };
         } else {
           tx.update(ref, { [myConfirmKey]: true, updatedAt: serverTimestamp() });
           return { executed: false };
@@ -913,62 +866,10 @@ export default function TradeRoomScreen() {
         Alert.alert('Out for league vote', 'Both sides agreed. The league now votes — the trade goes through if it passes the threshold, or is rejected.', [{ text: 'OK', onPress: () => router.back() }]);
         return;
       }
-      if (result?.cancelled) {
-        // A player in this deal was traded elsewhere first. The in-room alert is
-        // handled by the room listener; also notify the other GM in case they left.
-        try {
-          await updateDoc(doc(db, 'users', otherUid), {
-            notifications: arrayUnion({
-              type: 'trade_voided',
-              leagueId,
-              roomId,
-              otherUid: myUid,
-              otherTeamName: myTeam?.name || '',
-              createdAt: new Date().toISOString(),
-              message: 'Your trade with ' + (myTeam?.name || 'an opponent') + ' was voided — a player in it was traded to another team first.',
-            }),
-          });
-        } catch {}
-        return;
-      }
-      if (result?.executed) {
+      if (result?.finalize) {
+        const finalized: any = await finalizeTradeRoom(result.trade);
+        if (!finalized?.executed) return;
         Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => { console.log('Trade OK pressed - calling router.back()'); router.back(); } }]);
-        // Notify other side
-        await updateDoc(doc(db, 'users', otherUid), {
-          notifications: arrayUnion({
-            type: 'trade_executed',
-            leagueId,
-            roomId,
-            otherUid: myUid,
-            otherTeamId: myTeam?.id || '',
-            otherTeamName: myTeam?.name || '',
-            createdAt: new Date().toISOString(),
-            message: 'Your trade with ' + (myTeam?.name || 'opponent') + ' has been completed.',
-          }),
-        });
-
-        // Log to league activity feed (visible on league screen + dashboard trade highlights)
-        try {
-          const hostPlayerNames = (result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean);
-          const guestPlayerNames = (result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean);
-          const hostPickTxt = (result.hostPicks || []).map((pk: any) => pickLabel(pk));
-          const guestPickTxt = (result.guestPicks || []).map((pk: any) => pickLabel(pk));
-          const hostAssets = [...hostPlayerNames, ...hostPickTxt].join(', ') || 'assets';
-          const guestAssets = [...guestPlayerNames, ...guestPickTxt].join(', ') || 'assets';
-          const activityMsg = (result.hostName || 'Team A') + ' traded ' + hostAssets + ' to ' + (result.guestName || 'Team B') + ' for ' + guestAssets;
-          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-            type: 'trade_executed',
-            message: activityMsg,
-            hostTeamId: room.hostTeamId,
-            guestTeamId: room.guestTeamId,
-            hostName: result.hostName,
-            guestName: result.guestName,
-            createdAt: serverTimestamp(),
-          });
-        } catch (e) {
-          console.warn('Failed to log trade to activity', e);
-        }
-
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
