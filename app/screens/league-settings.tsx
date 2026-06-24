@@ -45,7 +45,7 @@ export default function LeagueSettingsScreen() {
   const [maxMembers, setMaxMembers] = useState('30');
   const [paused, setPaused] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [salaryCap, setSalaryCap] = useState('154647000');
+  const [salaryCap, setSalaryCap] = useState('');
   const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
   const [votePassThreshold, setVotePassThreshold] = useState('majority');
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
@@ -91,7 +91,8 @@ export default function LeagueSettingsScreen() {
       const financeValue = loadedFinanceMode === 'team_budget'
         ? (data.teamBudget ?? data.salaryCap)
         : data.salaryCap;
-      setSalaryCap(String(financeValue || getEraCap(data.era)));
+      const financeDefault = loadedFinanceMode === 'nba_cap' ? getEraCap(data.era) : null;
+      setSalaryCap(financeValue == null ? (financeDefault == null ? '' : String(financeDefault)) : String(financeValue));
       setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
       setVotePassThreshold(data.votePassThreshold || 'majority');
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
@@ -170,7 +171,17 @@ export default function LeagueSettingsScreen() {
     if (!name.trim()) { Alert.alert('Name required', 'League name cannot be empty.'); return; }
     const max = parseInt(maxPlayersPerTrade, 10);
     if (isNaN(max) || max < 1 || max > 15) { Alert.alert('Invalid', 'Max players per trade must be between 1 and 15.'); return; }
-    const capNum = parseInt(salaryCap.replace(/[^0-9]/g, ''), 10) || 154647000;
+    const normalizedFinance = salaryCap.trim().replace(/[$,\s]/g, '');
+    const capNum = Number(normalizedFinance);
+    if (!normalizedFinance || !Number.isFinite(capNum) || capNum <= 0) {
+      Alert.alert(
+        'Invalid',
+        financeMode === 'team_budget'
+          ? 'Team budget must be greater than zero.'
+          : 'Salary cap must be greater than zero.'
+      );
+      return;
+    }
     const tolNum = parseFloat(tradeApronTolerance) || 1.25;
     if (financeMode === 'nba_cap' && (tolNum < 1.0 || tolNum > 2.0)) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
     const mm = parseInt(maxMembers, 10);
@@ -399,7 +410,7 @@ export default function LeagueSettingsScreen() {
             value={salaryCap}
             onChangeText={setSalaryCap}
             keyboardType='number-pad'
-            placeholder='154647000'
+            placeholder={financeMode === 'nba_cap' ? '154647000' : 'Required'}
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>

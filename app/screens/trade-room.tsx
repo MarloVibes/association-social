@@ -163,6 +163,7 @@ export default function TradeRoomScreen() {
   const [draftBaseYear, setDraftBaseYear] = useState<number>(new Date().getFullYear() + 1);
   const presenceTimerRef = useRef<any>(null);
   const finalizeInFlightRef = useRef(false);
+  const localFinalizeSuccessPendingRef = useRef(false);
   const snapshotFinalizeKeyRef = useRef('');
 
   const finalizeTradeRoom = async (trade: any) => {
@@ -382,8 +383,11 @@ export default function TradeRoomScreen() {
     const unsub = onSnapshot(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), snap => {
       const snapData = snap.data() as any;
       if (snapData?.status === 'executed' && prevStatus && prevStatus !== 'executed') {
-        // Trade executed remotely — show alert and route back
-        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
+        const localFinalizeWillAlert = finalizeInFlightRef.current || localFinalizeSuccessPendingRef.current;
+        if (!localFinalizeWillAlert) {
+          // Trade executed remotely — show alert and route back
+          Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
+        }
       }
       if (snapData?.status === 'cancelled' && snapData?.cancelReason === 'roster_changed' && prevStatus && prevStatus !== 'cancelled') {
         // Trade voided because a player in it was traded elsewhere first
@@ -872,9 +876,22 @@ export default function TradeRoomScreen() {
         return;
       }
       if (result?.finalize) {
-        const finalized: any = await finalizeTradeRoom(result.trade);
-        if (!finalized?.executed) return;
-        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => { console.log('Trade OK pressed - calling router.back()'); router.back(); } }]);
+        localFinalizeSuccessPendingRef.current = true;
+        try {
+          const finalized: any = await finalizeTradeRoom(result.trade);
+          if (!finalized?.executed) {
+            localFinalizeSuccessPendingRef.current = false;
+            return;
+          }
+          Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => {
+            localFinalizeSuccessPendingRef.current = false;
+            console.log('Trade OK pressed - calling router.back()');
+            router.back();
+          } }]);
+        } catch (e) {
+          localFinalizeSuccessPendingRef.current = false;
+          throw e;
+        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
