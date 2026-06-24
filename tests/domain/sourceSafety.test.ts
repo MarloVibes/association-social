@@ -69,4 +69,11 @@ describe('source safety regressions', () => {
       hook.indexOf('Notifications.getLastNotificationResponseAsync'),
     );
   });
+
+  it('keeps the NBA season calendar visible without requiring a claimed team', () => {
+    const league = source('app/screens/league.tsx');
+
+    expect(league).toContain('Season Hub');
+    expect(league).not.toContain('isNBASport && myTeam && (');
+  });
 });

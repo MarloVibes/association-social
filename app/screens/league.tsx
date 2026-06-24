@@ -473,27 +473,40 @@ export default function LeagueScreen() {
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>🔁 Propose Trade</Text>
         </TouchableOpacity>
 
-        {isNBASport && myTeam && (
-          <>
+        {isNBASport && (
+          <View style={[styles.seasonHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
+            <View style={styles.seasonHubHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.seasonHubTitle, { color: titleColor }]}>Season Hub</Text>
+                <Text style={styles.seasonHubSub}>Calendar, rotations, coaching, and matchup prep</Text>
+              </View>
+              <Text style={[styles.seasonHubChevron, { color: titleColor }]}>NBA</Text>
+            </View>
             <TouchableOpacity
-              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
-              onPress={() => router.push({ pathname: '/screens/season/rotation', params: { leagueId } })}
-            >
-              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Manage Rotation</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
-              onPress={() => router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } })}
-            >
-              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Coaching Presets</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
               onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
             >
-              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Season Calendar</Text>
+              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Season Calendar</Text>
             </TouchableOpacity>
-          </>
+            <TouchableOpacity
+              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+              onPress={() => {
+                if (!myTeam) { Alert.alert('No team yet', 'Claim a team before setting rotations.'); return; }
+                router.push({ pathname: '/screens/season/rotation', params: { leagueId } });
+              }}
+            >
+              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Manage Rotation</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88', marginBottom: 0 }]}
+              onPress={() => {
+                if (!myTeam) { Alert.alert('No team yet', 'Claim a team before saving coaching presets.'); return; }
+                router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } });
+              }}
+            >
+              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Coaching Presets</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Commissioner Controls */}
@@ -685,6 +698,13 @@ const styles = StyleSheet.create({
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
+  seasonHub: { borderRadius: 16, padding: 16, borderWidth: 2, marginBottom: 16 },
+  seasonHubHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  seasonHubTitle: { fontSize: 18, fontWeight: '900' },
+  seasonHubSub: { color: '#777', fontSize: 12, marginTop: 2 },
+  seasonHubChevron: { fontSize: 11, fontWeight: '900' },
+  seasonHubButton: { borderRadius: 10, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 8, backgroundColor: '#11111188' },
+  seasonHubButtonText: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
   tpModal: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 50 },
   tpHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   tpCancel: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
