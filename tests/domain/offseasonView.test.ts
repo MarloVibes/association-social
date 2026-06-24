@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildInitialOffseasonState,
+  getFreeAgentAction,
   getOffseasonStageLabel,
   getUnresolvedOffseasonTeams,
   isOffseasonTeamActionStage,
@@ -40,5 +41,12 @@ describe('offseason view model', () => {
     expect(getUnresolvedOffseasonTeams(teams, ['a'])).toEqual([
       { id: 'b', label: 'BOS' },
     ]);
+  });
+
+  it('routes free-agent acquisition through offers only during free agency', () => {
+    expect(getFreeAgentAction('free_agency')).toBe('offer');
+    expect(getFreeAgentAction('re_signing')).toBe('closed');
+    expect(getFreeAgentAction('regular_season')).toBe('sign');
+    expect(getFreeAgentAction(undefined)).toBe('sign');
   });
 });

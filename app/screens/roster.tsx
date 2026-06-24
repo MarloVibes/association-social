@@ -9,6 +9,7 @@ import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPositionFilters } from '@/domain/sports/playerFields';
+import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 
 export default function RosterScreen() {
@@ -618,6 +619,15 @@ export default function RosterScreen() {
   };
 
   const handleAddPlayer = (player: any) => {
+    const freeAgentAction = getFreeAgentAction(league?.offseason?.stage);
+    if (freeAgentAction === 'offer') {
+      router.push({ pathname: '/screens/offseason/free-agency', params: { leagueId } });
+      return;
+    }
+    if (freeAgentAction === 'closed') {
+      Alert.alert('Signings closed', 'Free-agent signings are not available during this offseason stage.');
+      return;
+    }
     Alert.alert(
       '✍️ Sign ' + (player.full_name || player.name) + '?',
       'Add this player to your roster?',

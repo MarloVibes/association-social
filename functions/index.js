@@ -25,6 +25,11 @@ const {
 const {
   createAdvanceOffseasonHandler,
 } = require('./franchise/offseasonCallable');
+const {
+  createCompleteOffseasonActionHandler,
+  createResolveContractRoundHandler,
+  createSubmitContractOfferHandler,
+} = require('./franchise/contracts');
 
 initializeApp();
 
@@ -247,6 +252,24 @@ exports.deleteLeague = onCall(async (request) => {
 });
 
 exports.advanceOffseasonStage = onCall(createAdvanceOffseasonHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.submitContractOffer = onCall(createSubmitContractOfferHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.resolveFreeAgencyRound = onCall(createResolveContractRoundHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.completeOffseasonTeamAction = onCall(createCompleteOffseasonActionHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,

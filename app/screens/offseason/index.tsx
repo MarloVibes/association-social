@@ -133,6 +133,11 @@ export default function OffseasonScreen() {
     && !advancing
     && !isRegularSeason
     && unresolvedTeams.length === 0;
+  const stageRoute = offseason?.stage === 're_signing'
+    ? '/screens/offseason/re-signing'
+    : offseason?.stage === 'free_agency'
+      ? '/screens/offseason/free-agency'
+      : null;
 
   const advanceStage = () => {
     if (!leagueId || !offseason || !nextStage || !canAdvance) return;
@@ -231,6 +236,15 @@ export default function OffseasonScreen() {
         {isOffseasonTeamActionStage(offseason.stage) && (
           <View style={styles.actionSection}>
             <Text style={styles.sectionHeading}>Team actions</Text>
+            {stageRoute && (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: stageRoute, params: { leagueId } } as any)}
+                style={styles.openStageButton}
+              >
+                <Text style={styles.openStageText}>Open {getOffseasonStageLabel(offseason.stage)}</Text>
+                <Ionicons color="#00e58b" name="arrow-forward" size={18} />
+              </TouchableOpacity>
+            )}
             {unresolvedTeams.length === 0 ? (
               <View style={styles.statusRow}>
                 <Ionicons color="#00e58b" name="checkmark-circle" size={20} />
@@ -348,6 +362,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1c201d',
   },
+  openStageButton: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#28603f',
+    backgroundColor: '#12231a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  openStageText: { color: '#00e58b', fontSize: 14, fontWeight: '800' },
   sectionHeading: { color: '#ffffff', fontSize: 16, fontWeight: '800', marginBottom: 12 },
   bodyText: { color: '#9aa19c', fontSize: 14, lineHeight: 20, marginBottom: 10 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },

@@ -62,6 +62,14 @@ export function isOffseasonTeamActionStage(stage: OffseasonStage): boolean {
   return TEAM_ACTION_STAGES.has(stage);
 }
 
+export function getFreeAgentAction(
+  stage?: OffseasonStage,
+): 'sign' | 'offer' | 'closed' {
+  if (stage === 'free_agency') return 'offer';
+  if (stage && stage !== 'regular_season') return 'closed';
+  return 'sign';
+}
+
 export function getUnresolvedOffseasonTeams(
   teams: TeamSummary[],
   completedTeamIds: string[],
