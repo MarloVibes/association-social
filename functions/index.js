@@ -22,6 +22,9 @@ const {
   signAuthorizationReceipt,
   verifyAuthorizationReceipt,
 } = require('./domain/tradeAuthorization');
+const {
+  createAdvanceOffseasonHandler,
+} = require('./franchise/offseasonCallable');
 
 initializeApp();
 
@@ -242,6 +245,12 @@ exports.deleteLeague = onCall(async (request) => {
 
   return { deleted: true };
 });
+
+exports.advanceOffseasonStage = onCall(createAdvanceOffseasonHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
 
 exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (request) => {
   const uid = request.auth && request.auth.uid;
