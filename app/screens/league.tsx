@@ -503,9 +503,9 @@ export default function LeagueScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.advanceSeasonBtn, { backgroundColor: '#2a1a00', borderColor: '#ffaa00', marginTop: 12 }]}
-              onPress={() => router.push({ pathname: '/screens/advance-season', params: { leagueId } })}
+              onPress={() => router.push({ pathname: '/screens/offseason', params: { leagueId } })}
             >
-              <Text style={[styles.advanceSeasonBtnText, { color: '#ffaa00' }]}>⏩ Advance Season</Text>
+              <Text style={[styles.advanceSeasonBtnText, { color: '#ffaa00' }]}>Offseason Management</Text>
             </TouchableOpacity>
           </View>
         )}
