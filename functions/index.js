@@ -46,6 +46,12 @@ const {
 const {
   createGenerateScheduleHandler,
 } = require('./franchise/schedule');
+const {
+  createAcceptMatchupHandler,
+  createExpireMatchupRequestHandler,
+  createRequestMatchupHandler,
+  createSimulateScheduledGameHandler,
+} = require('./franchise/matchups');
 
 initializeApp();
 
@@ -336,6 +342,30 @@ exports.startNextSeason = onCall(createStartNextSeasonHandler({
 exports.generateNbaSchedule = onCall(createGenerateScheduleHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.requestMatchup = onCall(createRequestMatchupHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.acceptMatchup = onCall(createAcceptMatchupHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.simulateScheduledGame = onCall(createSimulateScheduledGameHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.expireMatchupRequest = onCall(createExpireMatchupRequestHandler({
+  getFirestore,
+  now: () => Date.now(),
   HttpsError,
 }));
 

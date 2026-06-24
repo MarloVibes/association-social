@@ -102,7 +102,11 @@ export default function CalendarScreen() {
           const away = teamNames.get(item.awayTeamId) || item.awayTeamId;
           const mine = myTeam && (item.homeTeamId === myTeam.id || item.awayTeamId === myTeam.id);
           return (
-            <View style={[styles.gameRow, mine && styles.myGame]}>
+            <TouchableOpacity
+              style={[styles.gameRow, mine && styles.myGame]}
+              disabled={!mine}
+              onPress={() => router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId: item.id } })}
+            >
               <View style={styles.weekBadge}>
                 <Text style={styles.weekLabel}>W{item.week}</Text>
               </View>
@@ -113,7 +117,7 @@ export default function CalendarScreen() {
               {item.status === 'scheduled' && mine ? (
                 <Text style={styles.selectable}>Ready</Text>
               ) : null}
-            </View>
+            </TouchableOpacity>
           );
         }}
       />
