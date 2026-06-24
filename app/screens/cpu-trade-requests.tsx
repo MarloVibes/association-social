@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayUnion, collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -54,17 +54,6 @@ export default function CpuTradeRequestsScreen() {
       const result = response?.data || {};
       if (result.executed) {
         Alert.alert('Approved', 'Rosters have been updated.');
-        try {
-          await updateDoc(doc(db, 'users', req.proposerUid), {
-            notifications: arrayUnion({
-              type: 'cpu_trade_result',
-              leagueId,
-              leagueName: league?.name || '',
-              createdAt: new Date().toISOString(),
-              message: 'Your CPU trade with ' + (req.cpuName || req.cpuAbbr) + ' was approved. Rosters updated.',
-            }),
-          });
-        } catch {}
       } else if (result.alreadyFinalized) {
         Alert.alert('Already handled', 'This request was already resolved.');
       } else {
@@ -94,20 +83,8 @@ export default function CpuTradeRequestsScreen() {
       { text: 'Decline', style: 'destructive', onPress: async () => {
         setBusy(req.id);
         try {
-          await updateDoc(doc(db, 'leagues', leagueId, 'cpu_trade_requests', req.id), {
-            status: 'declined', resolvedAt: serverTimestamp(), resolvedBy: user?.uid || '',
-          });
-          try {
-            await updateDoc(doc(db, 'users', req.proposerUid), {
-              notifications: arrayUnion({
-                type: 'cpu_trade_result',
-                leagueId,
-                leagueName: league?.name || '',
-                createdAt: new Date().toISOString(),
-                message: 'Your CPU trade with ' + (req.cpuName || req.cpuAbbr) + ' was declined by the commissioner.',
-              }),
-            });
-          } catch {}
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, cpuRequestId: req.id, action: 'decline_cpu' });
         } catch (e: any) { Alert.alert('Error', e.message); }
         setBusy(null);
       }},

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
@@ -31,65 +31,6 @@ function pickLabel(pk: any) {
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
 function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
-}
-
-// Tally a 'pending_vote' trade against the league's threshold. Sets status to
-// 'vote_passed' (the swap then runs via finalizeTrade) or 'rejected'.
-// Eligible voters = all GMs except the two in the trade. Returns early/pending
-// if not yet decided, unless `force` (deadline) is set. Concurrency-safe.
-async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: boolean) {
-  try {
-    const result: any = await runTransaction(db, async (tx) => {
-      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return { done: false };
-      const data = snap.data() as any;
-      if (data.status !== 'pending_vote') return { done: false };
-      const leagueSnap = await tx.get(doc(db, 'leagues', leagueId));
-      const league = (leagueSnap.data() || {}) as any;
-      const members: string[] = league.members || [];
-      const threshold: string = league.votePassThreshold || 'majority';
-      const participants = [data.hostUid, data.guestUid];
-      const eligible = members.filter(m => !participants.includes(m));
-      const E = eligible.length;
-      const votes = data.tradeVotes || {};
-      let approve = 0, reject = 0;
-      for (const uid of eligible) {
-        if (votes[uid] === 'approve') approve++;
-        else if (votes[uid] === 'reject') reject++;
-      }
-      let needToPass: number;
-      if (threshold === 'unanimous') needToPass = E;
-      else if (threshold === 'two_thirds') needToPass = Math.ceil((E * 2) / 3);
-      else needToPass = Math.floor(E / 2) + 1; // majority
-      const passed = E === 0 ? true : approve >= needToPass;
-      const cannotPass = E > 0 && reject > (E - needToPass);
-      if (passed) {
-        tx.update(ref, { status: 'vote_passed', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return { done: true, decided: 'passed' };
-      }
-      if (force || cannotPass) {
-        tx.update(ref, { status: 'rejected', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return { done: true, decided: 'rejected', data };
-      }
-      return { done: false, pending: true };
-    });
-
-    if (result?.decided === 'rejected' && result.data) {
-      const d = result.data;
-      const note = {
-        type: 'trade_rejected', leagueId, roomId,
-        createdAt: new Date().toISOString(),
-        message: 'The league voted down the trade between ' + (d.hostTeamName || 'Team A') + ' and ' + (d.guestTeamName || 'Team B') + '.',
-      };
-      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
-        try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
-      }
-    }
-    return result;
-  } catch (e) {
-    return { done: false, error: e };
-  }
 }
 
 function PlayerChip({ player, sport, onRemove, locked, overrides }: { player: any; sport: string; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
@@ -166,47 +107,13 @@ export default function TradeRoomScreen() {
   const localFinalizeSuccessPendingRef = useRef(false);
   const snapshotFinalizeKeyRef = useRef('');
 
-  const finalizeTradeRoom = async (trade: any) => {
+  const finalizeTradeRoom = async (_trade: any) => {
     if (finalizeInFlightRef.current) return { executed: false, inFlight: true };
     finalizeInFlightRef.current = true;
     try {
       const callable = httpsCallable(functions, 'finalizeTrade');
       const response: any = await callable({ leagueId, roomId });
       const result = response?.data || {};
-      if (!result.executed) return result;
-
-      const note = {
-        type: 'trade_executed',
-        leagueId,
-        roomId,
-        createdAt: new Date().toISOString(),
-        message: 'Your trade was approved and has been completed.',
-      };
-      for (const uid of [trade?.hostUid, trade?.guestUid].filter(Boolean)) {
-        try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
-      }
-
-      try {
-        const hostAssets = [
-          ...((trade?.hostOffer || []).map((p: any) => p.full_name).filter(Boolean)),
-          ...((trade?.hostPicks || []).map((pk: any) => pickLabel(pk))),
-        ].join(', ') || 'assets';
-        const guestAssets = [
-          ...((trade?.guestOffer || []).map((p: any) => p.full_name).filter(Boolean)),
-          ...((trade?.guestPicks || []).map((pk: any) => pickLabel(pk))),
-        ].join(', ') || 'assets';
-        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-          type: 'trade_executed',
-          message: (trade?.hostTeamName || 'Team A') + ' traded ' + hostAssets + ' to ' + (trade?.guestTeamName || 'Team B') + ' for ' + guestAssets,
-          hostTeamId: trade?.hostTeamId,
-          guestTeamId: trade?.guestTeamId,
-          hostName: trade?.hostTeamName,
-          guestName: trade?.guestTeamName,
-          createdAt: serverTimestamp(),
-        });
-      } catch (e) {
-        console.warn('Failed to log trade to activity', e);
-      }
       return result;
     } catch (e: any) {
       const validationErrors = e?.details?.errors;
@@ -408,7 +315,8 @@ export default function TradeRoomScreen() {
       }
       // League vote: resolve at deadline; once passed, a participant runs the swap.
       if (snapData?.status === 'pending_vote' && snapData?.voteDeadline && Date.now() > snapData.voteDeadline) {
-        resolveVoteTradeTx(leagueId, roomId, true);
+        const callable = httpsCallable(functions, 'updateTradeDecision');
+        callable({ leagueId, roomId, action: 'cast_vote', forceResolve: true }).catch(() => {});
       }
       if (snapData?.status === 'vote_passed' && (myUid === snapData?.hostUid || myUid === snapData?.guestUid)) {
         const finalizeKey = 'vote_passed:' + (snapData.voteResolvedAt?.toMillis?.() || '');
@@ -649,30 +557,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Approve', onPress: async () => {
         try {
-          const requesterUid = room?.overrideRequestedBy || '';
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            salaryOverrideApplied: true,
-            pendingOverrideReview: false,
-            overrideApprovedBy: myUid,
-            overrideApprovedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          if (requesterUid) {
-            try {
-              await updateDoc(doc(db, 'users', requesterUid), {
-                notifications: arrayUnion({
-                  type: 'trade_override_approved',
-                  leagueId,
-                  roomId,
-                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
-                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
-                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
-                  createdAt: new Date().toISOString(),
-                  message: 'Commissioner approved your override. Both sides can confirm now.',
-                }),
-              });
-            } catch (e) {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'approve_override' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -683,29 +569,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Deny', style: 'destructive', onPress: async () => {
         try {
-          const requesterUid = room?.overrideRequestedBy || '';
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            pendingOverrideReview: false,
-            overrideDeniedBy: myUid,
-            overrideDeniedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          if (requesterUid) {
-            try {
-              await updateDoc(doc(db, 'users', requesterUid), {
-                notifications: arrayUnion({
-                  type: 'trade_override_denied',
-                  leagueId,
-                  roomId,
-                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
-                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
-                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
-                  createdAt: new Date().toISOString(),
-                  message: 'Commissioner denied your salary override request.',
-                }),
-              });
-            } catch (e) {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'deny_override' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -730,20 +595,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Veto', style: 'destructive', onPress: async () => {
         try {
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            status: 'vetoed',
-            vetoedBy: myUid,
-            vetoedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          const note = {
-            type: 'trade_vetoed', leagueId, roomId,
-            createdAt: new Date().toISOString(),
-            message: 'A commissioner vetoed the trade between ' + (room?.hostTeamName || 'Team A') + ' and ' + (room?.guestTeamName || 'Team B') + '.',
-          };
-          for (const uid of [room?.hostUid, room?.guestUid].filter(Boolean)) {
-            try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'veto_trade' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -752,12 +605,8 @@ export default function TradeRoomScreen() {
   // ── League-vote: an eligible GM casts their approve/reject vote ──
   const castTradeVote = async (choice: 'approve' | 'reject') => {
     try {
-      await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-        ['tradeVotes.' + myUid]: choice,
-        updatedAt: serverTimestamp(),
-      });
-      // Check whether this vote decides the outcome.
-      await resolveVoteTradeTx(leagueId, roomId, false);
+      const callable = httpsCallable(functions, 'updateTradeDecision');
+      await callable({ leagueId, roomId, action: 'cast_vote', choice });
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 

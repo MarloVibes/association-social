@@ -31,7 +31,7 @@ function authorizeFinalization({ uid, league, source, type, now = Date.now() }) 
   if (source.status === 'pending_veto') {
     if (commissioner) return true;
     const deadline = deadlineMillis(source.vetoDeadline);
-    return Number.isFinite(deadline) && now >= deadline && (member || participant);
+    return Number.isFinite(deadline) && now >= deadline && participant;
   }
 
   const active = ['open', 'live', 'pushed', 'countered'].includes(source.status);
@@ -105,6 +105,18 @@ function authoritativeAssets(owned, offered, keyOf) {
   return (offered || []).map((asset) => byKey.get(keyOf(asset))).filter(Boolean);
 }
 
+function tradeFingerprint(source) {
+  const keys = (assets, keyOf) => (assets || []).map(keyOf).filter(Boolean).sort();
+  return JSON.stringify({
+    hostTeamId: String(source.hostTeamId || ''),
+    guestTeamId: String(source.guestTeamId || ''),
+    hostOffer: keys(source.hostOffer, playerKey),
+    guestOffer: keys(source.guestOffer, playerKey),
+    hostPicks: keys(source.hostPicks, pickKey),
+    guestPicks: keys(source.guestPicks, pickKey),
+  });
+}
+
 function swapAssets({ teamA, teamB, offerA, offerB, pickOfferA, pickOfferB }) {
   const playersA = authoritativeAssets(teamA.players, offerA, playerKey);
   const playersB = authoritativeAssets(teamB.players, offerB, playerKey);
@@ -136,13 +148,13 @@ function financeLimit(team, league, sport) {
   return Number.isFinite(team.salaryCap) ? team.salaryCap : league.salaryCap;
 }
 
-function validationInput({ league, source, teamA, teamB, type }) {
+function validationInput({
+  league, source, teamA, teamB, type, approvedOverride = false,
+}) {
   const sport = league.sport === 'nfl' ? 'madden' : (league.sport || 'nba');
-  const commissioners = [league.commissionerId, ...(league.coCommissioners || [])].filter(Boolean);
-  const approvedOverride = type === 'room'
+  const overrideAuthorized = type === 'room'
     && league.commissionerCanOverride === true
-    && source.salaryOverrideApplied === true
-    && commissioners.includes(source.overrideApprovedBy);
+    && approvedOverride === true;
   const offerA = type === 'cpu' ? (source.give || []) : (source.hostOffer || []);
   const offerB = type === 'cpu' ? (source.get || []) : (source.guestOffer || []);
   const pickOfferA = type === 'cpu' ? (source.givePicks || []) : (source.hostPicks || []);
@@ -164,7 +176,7 @@ function validationInput({ league, source, teamA, teamB, type }) {
     teamBBudget: limitB,
     nbaMatchingTolerance: league.tradeApronTolerance,
     nbaMatchingBuffer: league.tradeMatchingBuffer,
-    commissionerOverride: approvedOverride,
+    commissionerOverride: overrideAuthorized,
   };
 }
 
@@ -175,6 +187,7 @@ module.exports = {
   matchesCpuIdentity,
   resolveCpuIdentity,
   swapAssets,
+  tradeFingerprint,
   validateTeamBindings,
   validationInput,
 };

@@ -1,5 +1,6 @@
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { validateTrade } = require('./domain/validateTrade');
@@ -9,13 +10,23 @@ const {
   matchesCpuIdentity,
   resolveCpuIdentity,
   swapAssets,
+  tradeFingerprint,
   validateTeamBindings,
   validationInput,
 } = require('./domain/finalizeTrade');
+const {
+  authorizeTradeAction,
+  resolveVote,
+} = require('./domain/tradeActions');
+const {
+  signAuthorizationReceipt,
+  verifyAuthorizationReceipt,
+} = require('./domain/tradeAuthorization');
 
 initializeApp();
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const tradeAuthSecret = defineSecret('TRADE_AUTH_SECRET');
 
 // Title shown on the device. Body falls back to the notification's own message.
 function titleFor(type) {
@@ -27,6 +38,7 @@ function titleFor(type) {
     case 'trade_room_opened': return '🤝 Trade Negotiation';
     case 'trade_pending_veto': return '🏛️ Trade Awaiting Review';
     case 'trade_pending_vote': return '🗳️ Trade Up for Vote';
+    case 'trade_vetoed': return '❌ Trade Vetoed';
     case 'trade_override_review': return '🔓 Salary Override Review';
     case 'trade_override_approved': return '✅ Override Approved';
     case 'trade_override_denied': return '❌ Override Denied';
@@ -231,9 +243,187 @@ exports.deleteLeague = onCall(async (request) => {
   return { deleted: true };
 });
 
-exports.finalizeTrade = onCall(async (request) => {
+exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+  const receiptSecret = tradeAuthSecret.value();
+  if (!receiptSecret) {
+    throw new HttpsError('failed-precondition', 'Trade authorization is unavailable.');
+  }
+
+  const data = request.data || {};
+  const leagueId = data.leagueId ? String(data.leagueId) : '';
+  const action = data.action ? String(data.action) : '';
+  const roomId = data.roomId ? String(data.roomId) : '';
+  const cpuRequestId = data.cpuRequestId ? String(data.cpuRequestId) : '';
+  const forceResolve = data.forceResolve === true;
+  if (!leagueId || !action) {
+    throw new HttpsError('invalid-argument', 'Provide leagueId and action.');
+  }
+  const isCpu = action === 'decline_cpu';
+  if ((isCpu && !cpuRequestId) || (!isCpu && !roomId)) {
+    throw new HttpsError('invalid-argument', 'Provide the trade source for this action.');
+  }
+  if (action === 'cast_vote' && !forceResolve && !['approve', 'reject'].includes(data.choice)) {
+    throw new HttpsError('invalid-argument', 'Vote choice must be approve or reject.');
+  }
+
+  const db = getFirestore();
+  const leagueRef = db.collection('leagues').doc(leagueId);
+  const sourceRef = isCpu
+    ? leagueRef.collection('cpu_trade_requests').doc(cpuRequestId)
+    : leagueRef.collection('trade_rooms').doc(roomId);
+  const overrideAuthorizationRef = roomId
+    ? leagueRef.collection('_trade_authorizations').doc(`${roomId}:salary_override`)
+    : null;
+  const voteAuthorizationRef = roomId
+    ? leagueRef.collection('_trade_authorizations').doc(`${roomId}:vote_passed`)
+    : null;
+  const createdAt = new Date().toISOString();
+
+  return db.runTransaction(async (tx) => {
+    const [leagueSnap, sourceSnap] = await Promise.all([tx.get(leagueRef), tx.get(sourceRef)]);
+    if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+    if (!sourceSnap.exists) throw new HttpsError('not-found', 'Trade not found.');
+    const league = leagueSnap.data() || {};
+    const source = sourceSnap.data() || {};
+    const authorization = authorizeTradeAction({
+      action, uid, league, source, forceResolve,
+    });
+    if (!authorization.authorized) {
+      throw new HttpsError('permission-denied', 'This trade decision is not authorized.', {
+        reason: authorization.reason,
+      });
+    }
+
+    const timestamp = FieldValue.serverTimestamp();
+    if (action === 'cast_vote') {
+      const nextSource = forceResolve
+        ? source
+        : { ...source, tradeVotes: { ...(source.tradeVotes || {}), [uid]: data.choice } };
+      const resolution = resolveVote({ league, source: nextSource, forceResolve });
+      const update = {
+        updatedAt: timestamp,
+        voteApproveCount: resolution.approve,
+        voteRejectCount: resolution.reject,
+        voteEligibleCount: resolution.eligibleCount,
+        voteNeededToPass: resolution.needed,
+      };
+      if (!forceResolve) update[`tradeVotes.${uid}`] = data.choice;
+      if (resolution.status !== 'pending_vote') {
+        update.status = resolution.status;
+        update.voteResolvedAt = timestamp;
+        update.voteResolvedBy = uid;
+      }
+      if (resolution.status === 'vote_passed') {
+        const payload = {
+          leagueId,
+          roomId,
+          kind: 'vote_passed',
+          tradeFingerprint: tradeFingerprint(nextSource),
+          status: resolution.status,
+          eligibleCount: resolution.eligibleCount,
+          approve: resolution.approve,
+          reject: resolution.reject,
+          needed: resolution.needed,
+          resolvedBy: uid,
+        };
+        tx.set(voteAuthorizationRef, signAuthorizationReceipt(payload, receiptSecret));
+      } else if (resolution.status === 'rejected') {
+        tx.delete(voteAuthorizationRef);
+      }
+      tx.update(sourceRef, update);
+      return { action, roomId, choice: forceResolve ? null : data.choice, ...resolution };
+    }
+
+    if (action === 'approve_override') {
+      tx.set(overrideAuthorizationRef, signAuthorizationReceipt({
+        kind: 'salary_override',
+        leagueId,
+        roomId,
+        approved: true,
+        approvedBy: uid,
+        tradeFingerprint: tradeFingerprint(source),
+      }, receiptSecret));
+      tx.update(sourceRef, {
+        salaryOverrideApplied: true,
+        pendingOverrideReview: false,
+        overrideApprovedBy: uid,
+        overrideApprovedAt: timestamp,
+        updatedAt: timestamp,
+      });
+    } else if (action === 'deny_override') {
+      tx.delete(overrideAuthorizationRef);
+      tx.update(sourceRef, {
+        salaryOverrideApplied: false,
+        pendingOverrideReview: false,
+        overrideDeniedBy: uid,
+        overrideDeniedAt: timestamp,
+        updatedAt: timestamp,
+      });
+    } else if (action === 'veto_trade') {
+      tx.delete(overrideAuthorizationRef);
+      tx.delete(voteAuthorizationRef);
+      tx.update(sourceRef, {
+        status: 'vetoed',
+        vetoedBy: uid,
+        vetoedAt: timestamp,
+        updatedAt: timestamp,
+      });
+      const participantIds = [...new Set([source.hostUid, source.guestUid].filter(Boolean))];
+      participantIds.forEach((participantUid) => {
+        tx.set(db.collection('users').doc(participantUid), {
+          notifications: FieldValue.arrayUnion({
+            id: `trade-decision:${leagueId}:${roomId}:veto_trade:${participantUid}`,
+            type: 'trade_vetoed',
+            leagueId,
+            roomId,
+            createdAt,
+            message: `A commissioner vetoed the trade between ${source.hostTeamName || 'Team A'} and ${source.guestTeamName || 'Team B'}.`,
+          }),
+        }, { merge: true });
+      });
+    } else if (action === 'decline_cpu') {
+      tx.update(sourceRef, {
+        status: 'declined',
+        resolvedAt: timestamp,
+        resolvedBy: uid,
+      });
+    }
+
+    const recipient = action === 'decline_cpu'
+      ? source.proposerUid
+      : action === 'veto_trade' ? null : source.overrideRequestedBy;
+    if (recipient) {
+      const approved = action === 'approve_override';
+      tx.set(db.collection('users').doc(recipient), {
+        notifications: FieldValue.arrayUnion({
+          id: `trade-decision:${leagueId}:${roomId || cpuRequestId}:${action}`,
+          type: action === 'decline_cpu'
+            ? 'cpu_trade_result'
+            : approved ? 'trade_override_approved' : 'trade_override_denied',
+          leagueId,
+          roomId,
+          createdAt,
+          message: action === 'decline_cpu'
+            ? `Your CPU trade with ${source.cpuName || source.cpuAbbr || 'the CPU team'} was declined by the commissioner.`
+            : approved
+              ? 'Commissioner approved your override. Both sides can confirm now.'
+              : 'Commissioner denied your salary override request.',
+        }),
+      }, { merge: true });
+    }
+    return { action, roomId: roomId || null, cpuRequestId: cpuRequestId || null, resolved: true };
+  });
+});
+
+exports.finalizeTrade = onCall({ secrets: [tradeAuthSecret] }, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+  const receiptSecret = tradeAuthSecret.value();
+  if (!receiptSecret) {
+    throw new HttpsError('failed-precondition', 'Trade authorization is unavailable.');
+  }
 
   const data = request.data || {};
   const leagueId = data.leagueId ? String(data.leagueId) : '';
@@ -249,11 +439,20 @@ exports.finalizeTrade = onCall(async (request) => {
   const sourceRef = type === 'cpu'
     ? leagueRef.collection('cpu_trade_requests').doc(String(cpuRequestId))
     : leagueRef.collection('trade_rooms').doc(String(roomId));
+  const overrideAuthorizationRef = type === 'room'
+    ? leagueRef.collection('_trade_authorizations').doc(`${String(roomId)}:salary_override`)
+    : null;
+  const voteAuthorizationRef = type === 'room'
+    ? leagueRef.collection('_trade_authorizations').doc(`${String(roomId)}:vote_passed`)
+    : null;
+  const notificationCreatedAt = new Date().toISOString();
 
   return db.runTransaction(async (tx) => {
-    const [leagueSnap, sourceSnap] = await Promise.all([
+    const [leagueSnap, sourceSnap, overrideAuthorizationSnap, voteAuthorizationSnap] = await Promise.all([
       tx.get(leagueRef),
       tx.get(sourceRef),
+      overrideAuthorizationRef ? tx.get(overrideAuthorizationRef) : Promise.resolve(null),
+      voteAuthorizationRef ? tx.get(voteAuthorizationRef) : Promise.resolve(null),
     ]);
     if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
     if (!sourceSnap.exists) throw new HttpsError('not-found', 'Trade not found.');
@@ -264,10 +463,41 @@ exports.finalizeTrade = onCall(async (request) => {
       (type === 'room' && source.status === 'executed')
       || (type === 'cpu' && source.status === 'approved')
     ) {
-      return { executed: false, alreadyFinalized: true };
+      const sourceId = String(cpuRequestId || roomId);
+      const participantUids = type === 'cpu'
+        ? [source.proposerUid]
+        : [source.hostUid, source.guestUid];
+      return {
+        executed: false,
+        alreadyFinalized: true,
+        sourceType: type,
+        activityId: `trade_${type}_${sourceId}`,
+        notifiedUserIds: participantUids.filter(Boolean),
+      };
     }
     if (!authorizeFinalization({ uid, league, source, type })) {
       throw new HttpsError('permission-denied', 'This trade cannot be finalized by this user in its current state.');
+    }
+    const fingerprint = type === 'room' ? tradeFingerprint(source) : '';
+    if (type === 'room' && source.status === 'vote_passed') {
+      const voteReceipt = voteAuthorizationSnap && voteAuthorizationSnap.exists
+        ? voteAuthorizationSnap.data()
+        : null;
+      const expectedVoteReceipt = {
+        leagueId,
+        roomId: String(roomId),
+        kind: 'vote_passed',
+        tradeFingerprint: fingerprint,
+        status: 'vote_passed',
+        eligibleCount: source.voteEligibleCount,
+        approve: source.voteApproveCount,
+        reject: source.voteRejectCount,
+        needed: source.voteNeededToPass,
+        resolvedBy: source.voteResolvedBy,
+      };
+      if (!verifyAuthorizationReceipt(voteReceipt, expectedVoteReceipt, receiptSecret)) {
+        throw new HttpsError('permission-denied', 'Vote approval receipt is invalid.');
+      }
     }
 
     const teamAId = type === 'cpu' ? source.proposerTeamId : source.hostTeamId;
@@ -367,7 +597,22 @@ exports.finalizeTrade = onCall(async (request) => {
       });
     }
 
-    const input = validationInput({ league, source, teamA, teamB, type });
+    const authorization = overrideAuthorizationSnap && overrideAuthorizationSnap.exists
+      ? overrideAuthorizationSnap.data()
+      : null;
+    const expectedOverrideReceipt = {
+      kind: 'salary_override',
+      leagueId,
+      roomId: String(roomId),
+      approved: true,
+      approvedBy: source.overrideApprovedBy,
+      tradeFingerprint: fingerprint,
+    };
+    const approvedOverride = type === 'room'
+      && verifyAuthorizationReceipt(authorization, expectedOverrideReceipt, receiptSecret);
+    const input = validationInput({
+      league, source, teamA, teamB, type, approvedOverride,
+    });
     const validation = validateTrade(input);
     if (!validation.valid) {
       throw new HttpsError(
@@ -399,6 +644,47 @@ exports.finalizeTrade = onCall(async (request) => {
     }
 
     const timestamp = FieldValue.serverTimestamp();
+    const sourceId = String(cpuRequestId || roomId);
+    const activityId = `trade_${type}_${sourceId}`;
+    const activityRef = leagueRef.collection('activity').doc(activityId);
+    const participantUids = type === 'cpu'
+      ? [source.proposerUid]
+      : [source.hostUid, source.guestUid];
+    const hostAssets = [...(input.offerA || []), ...(input.pickOfferA || [])]
+      .map((asset) => asset.full_name || asset.name || asset.id)
+      .filter(Boolean)
+      .join(', ') || 'assets';
+    const guestAssets = [...(input.offerB || []), ...(input.pickOfferB || [])]
+      .map((asset) => asset.full_name || asset.name || asset.id)
+      .filter(Boolean)
+      .join(', ') || 'assets';
+    tx.set(activityRef, {
+      type: 'trade_executed',
+      sourceType: type,
+      sourceId,
+      message: type === 'cpu'
+        ? `${source.proposerName || 'A GM'} completed a trade with ${source.cpuName || source.cpuAbbr || 'a CPU team'}.`
+        : `${source.hostTeamName || 'Team A'} traded ${hostAssets} to ${source.guestTeamName || 'Team B'} for ${guestAssets}`,
+      hostTeamId: teamAId,
+      guestTeamId: teamBId,
+      hostName: source.hostTeamName || source.proposerName || '',
+      guestName: source.guestTeamName || source.cpuName || source.cpuAbbr || '',
+      createdAt: timestamp,
+    }, { merge: true });
+    participantUids.filter(Boolean).forEach((recipientUid) => {
+      tx.set(db.collection('users').doc(recipientUid), {
+        notifications: FieldValue.arrayUnion({
+          id: `trade-executed:${leagueId}:${type}:${sourceId}:${recipientUid}`,
+          type: type === 'cpu' ? 'cpu_trade_result' : 'trade_executed',
+          leagueId,
+          roomId: type === 'room' ? sourceId : '',
+          createdAt: notificationCreatedAt,
+          message: type === 'cpu'
+            ? `Your CPU trade with ${source.cpuName || source.cpuAbbr || 'the CPU team'} was approved. Rosters updated.`
+            : 'Your trade was approved and has been completed.',
+        }),
+      }, { merge: true });
+    });
     if (type === 'cpu') {
       tx.update(sourceRef, {
         status: 'approved',
@@ -411,10 +697,14 @@ exports.finalizeTrade = onCall(async (request) => {
         executedAt: timestamp,
         updatedAt: timestamp,
       });
+      tx.delete(overrideAuthorizationRef);
+      tx.delete(voteAuthorizationRef);
     }
     return {
       executed: true,
       sourceType: type,
+      activityId,
+      notifiedUserIds: participantUids.filter(Boolean),
       validation: {
         payrollAfter: validation.payrollAfter,
         rosterAfter: validation.rosterAfter,

@@ -9,6 +9,8 @@ const {
   validateTeamBindings,
   resolveCpuIdentity,
   swapAssets,
+  tradeFingerprint,
+  validationInput,
 } = require('../../functions/domain/finalizeTrade.js');
 
 describe('finalizeTrade domain', () => {
@@ -77,7 +79,7 @@ describe('finalizeTrade domain', () => {
     })).toBe(false);
   });
 
-  it('allows pending veto auto-approval after the deadline for members and participants', () => {
+  it('allows pending veto auto-approval after the deadline only for participants or commissioners', () => {
     const league = { commissionerId: 'comm', members: ['member'] };
     const expired = {
       status: 'pending_veto',
@@ -89,7 +91,7 @@ describe('finalizeTrade domain', () => {
 
     expect(authorizeFinalization({
       uid: 'member', league, source: expired, type: 'room', now: 1000,
-    })).toBe(true);
+    })).toBe(false);
     expect(authorizeFinalization({
       uid: 'host', league: { ...league, members: [] }, source: expired, type: 'room', now: 1000,
     })).toBe(true);
@@ -236,5 +238,42 @@ describe('finalizeTrade domain', () => {
       ],
       liveTeams: [],
     })).toBeNull();
+  });
+
+  it('honors salary override only when finalization supplies a server approval receipt', () => {
+    const base = {
+      league: { sport: 'nba', commissionerCanOverride: true, commissionerId: 'comm' },
+      source: {
+        salaryOverrideApplied: true,
+        overrideApprovedBy: 'comm',
+        hostOffer: [],
+        guestOffer: [],
+      },
+      teamA: {},
+      teamB: {},
+      type: 'room',
+    };
+
+    expect(validationInput(base).commissionerOverride).toBe(false);
+    expect(validationInput({ ...base, approvedOverride: true }).commissionerOverride).toBe(true);
+  });
+
+  it('binds override receipts to the exact teams and assets', () => {
+    const source = {
+      hostTeamId: 'a',
+      guestTeamId: 'b',
+      hostOffer: [{ player_id: 'p2' }, { player_id: 'p1' }],
+      guestOffer: [{ player_id: 'p3' }],
+      hostPicks: [{ id: 'pick-1' }],
+      guestPicks: [],
+    };
+    expect(tradeFingerprint(source)).toBe(tradeFingerprint({
+      ...source,
+      hostOffer: [...source.hostOffer].reverse(),
+    }));
+    expect(tradeFingerprint(source)).not.toBe(tradeFingerprint({
+      ...source,
+      guestOffer: [{ player_id: 'changed' }],
+    }));
   });
 });
