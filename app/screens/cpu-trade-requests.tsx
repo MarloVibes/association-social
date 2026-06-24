@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { arrayUnion, collection, doc, onSnapshot, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { useEffect, useMemo, useState } from 'react';
+import { arrayUnion, collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
-const keyOf = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
 const names = (arr: any[]) => (arr || []).map(p => p.full_name).filter(Boolean).join(', ') || '—';
 
 export default function CpuTradeRequestsScreen() {
@@ -14,6 +14,7 @@ export default function CpuTradeRequestsScreen() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const approvingRef = useRef<Set<string>>(new Set());
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -44,57 +45,14 @@ export default function CpuTradeRequestsScreen() {
   const resolved = useMemo(() => requests.filter(r => r.status !== 'pending'), [requests]);
 
   const approve = async (req: any) => {
-    if (!user) return;
+    if (!user || approvingRef.current.has(req.id)) return;
+    approvingRef.current.add(req.id);
     setBusy(req.id);
     try {
-      const result = await runTransaction(db, async (tx) => {
-        const reqRef = doc(db, 'leagues', leagueId, 'cpu_trade_requests', req.id);
-        const proposerRef = doc(db, 'leagues', leagueId, 'teams', req.proposerTeamId);
-        const cpuRef = doc(db, 'leagues', leagueId, 'teams', 'cpu_' + req.cpuTeamId);
-        const [rSnap, pSnap, cSnap] = await Promise.all([tx.get(reqRef), tx.get(proposerRef), tx.get(cpuRef)]);
-        if (!rSnap.exists()) throw new Error('Request missing');
-        const r = rSnap.data() as any;
-        if (r.status !== 'pending') return { done: false, reason: 'resolved' };
-        if (!pSnap.exists()) { tx.update(reqRef, { status: 'voided', reason: 'team_missing', resolvedAt: serverTimestamp() }); return { done: false, reason: 'team_missing' }; }
-
-        const pData = pSnap.data() as any;
-        const cpuExists = cSnap.exists();
-        const cPlayers: any[] = cpuExists ? ((cSnap.data() as any).players || []) : (r.cpuRoster || []);
-
-        const giveKeys = new Set((r.give || []).map(keyOf));
-        const getKeys = new Set((r.get || []).map(keyOf));
-
-        const proposerHasAll = (r.give || []).every((p: any) => (pData.players || []).some((pp: any) => keyOf(pp) === keyOf(p)));
-        const cpuHasAll = (r.get || []).every((p: any) => cPlayers.some((cp: any) => keyOf(cp) === keyOf(p)));
-        if (!proposerHasAll || !cpuHasAll) {
-          tx.update(reqRef, { status: 'voided', reason: 'roster_changed', resolvedAt: serverTimestamp() });
-          return { done: false, reason: 'roster_changed' };
-        }
-
-        const newProposer = (pData.players || []).filter((p: any) => !giveKeys.has(keyOf(p))).concat(r.get || []);
-        const newCpu = cPlayers.filter((p: any) => !getKeys.has(keyOf(p))).concat(r.give || []);
-
-        tx.update(proposerRef, { players: newProposer });
-        if (cpuExists) {
-          tx.update(cpuRef, { players: newCpu });
-        } else {
-          // Materialize the CPU team as a real doc so its new roster persists
-          tx.set(cpuRef, {
-            gmId: null,
-            isCpu: true,
-            teamId: r.cpuTeamId,
-            name: r.cpuName || r.cpuAbbr,
-            abbreviation: r.cpuAbbr,
-            era: league?.era || 'current',
-            players: newCpu,
-            tradeBlock: [],
-          });
-        }
-        tx.update(reqRef, { status: 'approved', resolvedAt: serverTimestamp(), resolvedBy: user.uid });
-        return { done: true };
-      });
-
-      if (result?.done) {
+      const callable = httpsCallable(functions, 'finalizeTrade');
+      const response: any = await callable({ leagueId, cpuRequestId: req.id });
+      const result = response?.data || {};
+      if (result.executed) {
         Alert.alert('Approved', 'Rosters have been updated.');
         try {
           await updateDoc(doc(db, 'users', req.proposerUid), {
@@ -107,15 +65,27 @@ export default function CpuTradeRequestsScreen() {
             }),
           });
         } catch {}
-      } else if (result?.reason === 'roster_changed') {
-        Alert.alert('Could not approve', 'A player in this trade is no longer on the expected roster, so it was voided.');
-      } else if (result?.reason === 'resolved') {
+      } else if (result.alreadyFinalized) {
         Alert.alert('Already handled', 'This request was already resolved.');
       } else {
-        Alert.alert('Could not approve', 'The proposing team could not be found.');
+        Alert.alert('Could not approve', 'This trade could not be finalized.');
       }
-    } catch (e: any) { Alert.alert('Error', e.message); }
-    setBusy(null);
+    } catch (e: any) {
+      const errors = e?.details?.errors;
+      const code = String(e?.code || '');
+      if (Array.isArray(errors) && errors.length > 0) {
+        Alert.alert('Could not approve', errors.join('\n'));
+      } else if (code.includes('permission-denied')) {
+        Alert.alert('Not allowed', 'Only an active league commissioner can approve this CPU trade.');
+      } else if (code.includes('failed-precondition')) {
+        Alert.alert('Could not approve', e?.message || 'The trade is no longer valid.');
+      } else {
+        Alert.alert('Error', e?.message || 'Could not finalize the trade.');
+      }
+    } finally {
+      approvingRef.current.delete(req.id);
+      setBusy(null);
+    }
   };
 
   const deny = (req: any) => {
