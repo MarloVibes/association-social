@@ -87,7 +87,11 @@ export default function LeagueSettingsScreen() {
       ));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
-      setSalaryCap(String(data.salaryCap || getEraCap(data.era)));
+      const loadedFinanceMode = getSportRules(data.sport).financeMode;
+      const financeValue = loadedFinanceMode === 'team_budget'
+        ? (data.teamBudget ?? data.salaryCap)
+        : data.salaryCap;
+      setSalaryCap(String(financeValue || getEraCap(data.era)));
       setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
       setVotePassThreshold(data.votePassThreshold || 'majority');
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
@@ -99,7 +103,9 @@ export default function LeagueSettingsScreen() {
   const isFounder = league?.commissionerId === user?.uid;
   const [pendingCount, setPendingCount] = useState(0);
   const isCommissioner = isFounder || (league?.coCommissioners || []).includes(user?.uid || '');
-  const teamLimit = getSportRules(league?.sport).teamCount;
+  const sportRules = getSportRules(league?.sport);
+  const teamLimit = sportRules.teamCount;
+  const financeMode = sportRules.financeMode;
 
   if (loading) {
     return (
@@ -166,11 +172,14 @@ export default function LeagueSettingsScreen() {
     if (isNaN(max) || max < 1 || max > 15) { Alert.alert('Invalid', 'Max players per trade must be between 1 and 15.'); return; }
     const capNum = parseInt(salaryCap.replace(/[^0-9]/g, ''), 10) || 154647000;
     const tolNum = parseFloat(tradeApronTolerance) || 1.25;
-    if (tolNum < 1.0 || tolNum > 2.0) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
+    if (financeMode === 'nba_cap' && (tolNum < 1.0 || tolNum > 2.0)) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
     const mm = parseInt(maxMembers, 10);
     const currentMembers = league?.members?.length || 1;
     if (isNaN(mm) || mm < 1 || mm > teamLimit) { Alert.alert('Invalid', 'Max GMs must be between 1 and ' + teamLimit + '.'); return; }
     if (mm < currentMembers) { Alert.alert('Too low', 'This league already has ' + currentMembers + ' GMs, so the max can\'t be set below that. Remove members first if you want a smaller cap.'); return; }
+    const financePatch = financeMode === 'team_budget'
+      ? { teamBudget: capNum, salaryCap: capNum }
+      : { salaryCap: capNum };
     await saveField({
       name: name.trim(),
       description: description.trim(),
@@ -179,8 +188,8 @@ export default function LeagueSettingsScreen() {
       tradeApprovalMode,
       maxPlayersPerTrade: max,
       maxMembers: mm,
-      salaryCap: capNum,
-      tradeApronTolerance: tolNum,
+      ...financePatch,
+      ...(financeMode === 'nba_cap' ? { tradeApronTolerance: tolNum } : {}),
       votePassThreshold,
       voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
       commissionerCanOverride,
@@ -377,10 +386,14 @@ export default function LeagueSettingsScreen() {
           <Text style={styles.helper}>How many GMs can be in this league (1-{teamLimit}). Once full, new applicants join a waitlist.</Text>
         </View>
 
-        {/* Salary Cap */}
-        <Text style={styles.sectionLabel}>SALARY CAP (CURRENT ERA ONLY)</Text>
+        {/* League finances */}
+        <Text style={styles.sectionLabel}>
+          {financeMode === 'team_budget' ? 'TEAM BUDGET' : financeMode === 'hard_cap' ? 'HARD SALARY CAP' : 'SALARY CAP (CURRENT ERA ONLY)'}
+        </Text>
         <View style={styles.card}>
-          <Text style={styles.fieldLabel}>League Salary Cap (USD)</Text>
+          <Text style={styles.fieldLabel}>
+            {financeMode === 'team_budget' ? 'Team Budget (USD)' : financeMode === 'hard_cap' ? 'Hard Salary Cap (USD)' : 'League Salary Cap (USD)'}
+          </Text>
           <TextInput
             style={styles.input}
             value={salaryCap}
@@ -389,18 +402,28 @@ export default function LeagueSettingsScreen() {
             placeholder='154647000'
             placeholderTextColor='#555'
           />
-          <Text style={styles.helper}>2025-26 NBA cap is $154.6M. Change for custom leagues.</Text>
+          <Text style={styles.helper}>
+            {financeMode === 'team_budget'
+              ? 'Sets the default team payroll budget for this league.'
+              : financeMode === 'hard_cap'
+                ? 'Sets the hard payroll limit for teams in this league.'
+                : '2025-26 NBA cap is $154.6M. Change for custom leagues.'}
+          </Text>
 
-          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Trade Tolerance Multiplier</Text>
-          <TextInput
-            style={styles.input}
-            value={tradeApronTolerance}
-            onChangeText={setTradeApronTolerance}
-            keyboardType='decimal-pad'
-            placeholder='1.25'
-            placeholderTextColor='#555'
-          />
-          <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
+          {financeMode === 'nba_cap' && (
+            <>
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Trade Tolerance Multiplier</Text>
+              <TextInput
+                style={styles.input}
+                value={tradeApronTolerance}
+                onChangeText={setTradeApronTolerance}
+                keyboardType='decimal-pad'
+                placeholder='1.25'
+                placeholderTextColor='#555'
+              />
+              <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
+            </>
+          )}
 
           <TouchableOpacity
             style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }]}
@@ -412,7 +435,11 @@ export default function LeagueSettingsScreen() {
           <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.toggleLabel}>Allow Commissioner Override</Text>
-              <Text style={styles.toggleDesc}>Lets commissioners force-execute trades that fail the salary check</Text>
+              <Text style={styles.toggleDesc}>
+                {financeMode === 'nba_cap'
+                  ? 'Lets commissioners force-execute trades that fail the salary check'
+                  : 'Lets commissioners approve trades that fail financial checks'}
+              </Text>
             </View>
             <Switch
               value={commissionerCanOverride}
