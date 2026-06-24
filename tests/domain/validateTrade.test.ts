@@ -107,7 +107,7 @@ describe('validateTrade', () => {
     }).errors).toContain('financial_limit');
   });
 
-  it('applies NBA salary matching, roster limits, and cap limits', () => {
+  it('applies NBA salary matching and roster limits without treating salaryCap as a hard cap', () => {
     const teamA = team('a', 15, 140);
     const teamB = team('b', 15, 120);
 
@@ -124,8 +124,143 @@ describe('validateTrade', () => {
     });
 
     expect(result.errors).toContain('roster_limit');
-    expect(result.errors).toContain('financial_limit');
+    expect(result.errors).not.toContain('financial_limit');
     expect(result.errors).toContain('nba_matching');
+  });
+
+  it('rejects duplicate player and pick keys as ownership errors', () => {
+    const teamA = team('a', 5, 50, ['a-pick']);
+    const teamB = team('b', 5, 50, ['b-pick']);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      const duplicatePlayers = validate({
+        sport: 'mlb',
+        teamA,
+        teamB,
+        offerA: [teamA.players[0], teamA.players[0]],
+        teamABudget: 100,
+        teamBBudget: 100,
+        commissionerOverride: true,
+      });
+      const duplicatePicks = validate({
+        sport: 'mlb',
+        teamA,
+        teamB,
+        pickOfferA: [{ id: 'a-pick' }, { id: 'a-pick' }],
+        teamABudget: 100,
+        teamBBudget: 100,
+        commissionerOverride: true,
+      });
+
+      expect(duplicatePlayers.errors).toContain('ownership');
+      expect(duplicatePicks.errors).toContain('ownership');
+    }
+  });
+
+  it('normalizes nfl to Madden and unknown or malformed sports to NBA', () => {
+    const teamA = team('a', 15, 150);
+    const teamB = team('b', 15, 300);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      const nfl = validate({
+        sport: 'nfl',
+        teamA,
+        teamB,
+        teamACap: 1_000,
+        teamBCap: 1_000,
+      });
+      expect(nfl.errors).not.toContain('roster_limit');
+
+      for (const sport of ['soccer', '', null, 42]) {
+        const result = validate({
+          sport,
+          teamA,
+          teamB,
+          offerA: [teamA.players[0]],
+          offerB: [teamB.players[0]],
+          teamACap: 1,
+          teamBCap: 1,
+          nbaMatchingTolerance: 1.25,
+          nbaMatchingBuffer: 0,
+        } as Parameters<typeof validateTrade>[0]);
+
+        expect(result.errors).toContain('nba_matching');
+        expect(result.errors).not.toContain('financial_limit');
+      }
+    }
+  });
+
+  it('rejects invalid authoritative salaries when an offered player requires salary', () => {
+    for (const invalidSalary of [-1, Number.NaN, '10', undefined]) {
+      const teamA = {
+        players: [{ player_id: 'a-0', salary: invalidSalary }],
+        picks: [],
+      };
+      const teamB = team('b', 1, 10);
+
+      for (const validate of [validateTrade, validateTradeJs]) {
+        const result = validate({
+          sport: 'mlb',
+          teamA,
+          teamB,
+          offerA: [{ player_id: 'a-0', salary: 999 }],
+          teamABudget: 100,
+          teamBBudget: 100,
+          commissionerOverride: false,
+        } as Parameters<typeof validateTrade>[0]);
+
+        expect(result.errors).toContain('financial_limit');
+      }
+    }
+  });
+
+  it('requires finite caps for NFL and finite budgets for MLB', () => {
+    const teamA = team('a', 5, 50);
+    const teamB = team('b', 5, 50);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      for (const teamACap of [undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(validate({
+          sport: 'nfl',
+          teamA,
+          teamB,
+          teamACap,
+          teamBCap: 100,
+        }).errors).toContain('financial_limit');
+      }
+
+      for (const teamABudget of [undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(validate({
+          sport: 'mlb',
+          teamA,
+          teamB,
+          teamABudget,
+          teamBBudget: 100,
+        }).errors).toContain('financial_limit');
+      }
+    }
+  });
+
+  it('does not let commissioner override remove duplicate ownership or roster errors', () => {
+    const teamA = team('a', 53, 100);
+    const teamB = team('b', 53, 100);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      const result = validate({
+        sport: 'madden',
+        teamA,
+        teamB,
+        offerA: [teamA.players[0], teamA.players[0]],
+        offerB: [teamB.players[0], teamB.players[1], teamB.players[2]],
+        teamACap: Number.NaN,
+        teamBCap: Number.NaN,
+        commissionerOverride: true,
+      });
+
+      expect(result.errors).toContain('ownership');
+      expect(result.errors).toContain('roster_limit');
+      expect(result.errors).not.toContain('financial_limit');
+    }
   });
 
   it('uses authoritative roster salaries instead of offered salary snapshots', () => {

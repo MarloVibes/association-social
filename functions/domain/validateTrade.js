@@ -8,8 +8,18 @@ function pickKey(pick) {
   return String(pick.id || '');
 }
 
+function normalizeSport(sport) {
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function validSalary(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 function salary(player) {
-  return Number.isFinite(player.salary) ? Number(player.salary) : 0;
+  return validSalary(player.salary) ? player.salary : 0;
 }
 
 function sumPayroll(players) {
@@ -24,6 +34,19 @@ function ownedAssets(owned, offered, keyOf) {
   });
 }
 
+function uniqueAssets(offered, keyOf) {
+  const keys = offered.map(keyOf);
+  return keys.every(Boolean) && new Set(keys).size === keys.length;
+}
+
+function offeredSalariesValid(owned, offered) {
+  const byKey = new Map(owned.map((player) => [playerKey(player), player]));
+  return offered.every((asset) => {
+    const authoritative = byKey.get(playerKey(asset));
+    return !!authoritative && validSalary(authoritative.salary);
+  });
+}
+
 function offeredSalary(owned, offered) {
   const byKey = new Map(owned.map((player) => [playerKey(player), player]));
   return offered.reduce((total, asset) => {
@@ -33,7 +56,7 @@ function offeredSalary(owned, offered) {
 }
 
 function validateTrade(input) {
-  const sport = input.sport === 'nfl' ? 'madden' : (input.sport || 'nba');
+  const sport = normalizeSport(input.sport);
   const playersA = input.teamA.players || [];
   const playersB = input.teamB.players || [];
   const picksA = input.teamA.picks || [];
@@ -49,8 +72,16 @@ function validateTrade(input) {
     || !ownedAssets(playersB, offerB, playerKey)
     || !ownedAssets(picksA, pickOfferA, pickKey)
     || !ownedAssets(picksB, pickOfferB, pickKey)
+    || !uniqueAssets(offerA, playerKey)
+    || !uniqueAssets(offerB, playerKey)
+    || !uniqueAssets(pickOfferA, pickKey)
+    || !uniqueAssets(pickOfferB, pickKey)
   ) {
     errors.add('ownership');
+  }
+
+  if (!offeredSalariesValid(playersA, offerA) || !offeredSalariesValid(playersB, offerB)) {
+    errors.add('financial_limit');
   }
 
   const outgoingA = offeredSalary(playersA, offerA);
@@ -69,13 +100,17 @@ function validateTrade(input) {
     errors.add('roster_limit');
   }
 
-  const limitA = sport === 'mlb' ? input.teamABudget : input.teamACap;
-  const limitB = sport === 'mlb' ? input.teamBBudget : input.teamBCap;
-  if (
-    (Number.isFinite(limitA) && payrollAfter.teamA > Number(limitA))
-    || (Number.isFinite(limitB) && payrollAfter.teamB > Number(limitB))
-  ) {
-    errors.add('financial_limit');
+  if (sport !== 'nba') {
+    const limitA = sport === 'mlb' ? input.teamABudget : input.teamACap;
+    const limitB = sport === 'mlb' ? input.teamBBudget : input.teamBCap;
+    if (
+      !Number.isFinite(limitA)
+      || !Number.isFinite(limitB)
+      || payrollAfter.teamA > Number(limitA)
+      || payrollAfter.teamB > Number(limitB)
+    ) {
+      errors.add('financial_limit');
+    }
   }
 
   if (sport === 'nba' && (outgoingA > 0 || outgoingB > 0)) {
