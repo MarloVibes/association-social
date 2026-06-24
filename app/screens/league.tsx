@@ -487,6 +487,12 @@ export default function LeagueScreen() {
             >
               <Text style={[styles.rostersBtnText, { color: titleColor }]}>Coaching Presets</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+              onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+            >
+              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Season Calendar</Text>
+            </TouchableOpacity>
           </>
         )}
 

@@ -53,6 +53,7 @@ export default function LeagueSettingsScreen() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
 
   useEffect(() => { loadData(); }, [leagueId]);
 
@@ -97,6 +98,7 @@ export default function LeagueSettingsScreen() {
       setVotePassThreshold(data.votePassThreshold || 'majority');
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
+      setScheduleGamesPerTeam(String(data.gamesPerTeam || 29));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
   };
@@ -142,6 +144,25 @@ export default function LeagueSettingsScreen() {
       if (successMsg) Alert.alert('Saved', successMsg);
     } catch (e: any) { Alert.alert('Error', e.message); }
     setSaving(false);
+  };
+
+  const generateSchedule = async () => {
+    if (!leagueId) return;
+    setSaving(true);
+    try {
+      const createSchedule = httpsCallable(functions, 'generateNbaSchedule');
+      const result = await createSchedule({
+        leagueId,
+        gamesPerTeam: Number(scheduleGamesPerTeam),
+      });
+      const data = result.data as any;
+      Alert.alert('Schedule created', `${data.games || 0} games locked for this season.`);
+      await loadData();
+    } catch (error: any) {
+      Alert.alert('Schedule failed', error.message || 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const pickLeaguePhoto = async () => {
@@ -460,6 +481,44 @@ export default function LeagueSettingsScreen() {
             />
           </View>
         </View>
+
+        {league?.sport === 'nba' && (
+          <>
+            <Text style={styles.sectionLabel}>NBA SCHEDULE</Text>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Games Per Team</Text>
+              {['14', '29', '58', '82'].map(value => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.optionRow, scheduleGamesPerTeam === value && styles.optionRowActive]}
+                  onPress={() => setScheduleGamesPerTeam(value)}
+                  disabled={league?.scheduleLocked === true}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionLabel, scheduleGamesPerTeam === value && styles.optionLabelActive]}>{value} games</Text>
+                    <Text style={styles.optionDesc}>{value === '82' ? 'Full-length season' : 'Condensed league season'}</Text>
+                  </View>
+                  {scheduleGamesPerTeam === value && <Text style={styles.check}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }, league?.scheduleLocked && { opacity: 0.45 }]}
+                onPress={generateSchedule}
+                disabled={saving || league?.scheduleLocked === true}
+              >
+                <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>
+                  {league?.scheduleLocked ? 'SCHEDULE LOCKED' : 'CREATE AND LOCK SCHEDULE'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteBtn, { backgroundColor: '#101410', borderColor: '#00ff87', borderWidth: 1, marginTop: 12 }]}
+                onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+              >
+                <Text style={[styles.deleteBtnText, { color: '#00ff87' }]}>VIEW CALENDAR</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveBasics} disabled={saving}>
           {saving ? <ActivityIndicator color='#000' /> : <Text style={styles.saveBtnText}>SAVE CHANGES</Text>}

@@ -43,6 +43,9 @@ const {
   createCutRosterPlayerHandler,
   createStartNextSeasonHandler,
 } = require('./franchise/newSeason');
+const {
+  createGenerateScheduleHandler,
+} = require('./franchise/schedule');
 
 initializeApp();
 
@@ -325,6 +328,12 @@ exports.cutRosterPlayer = onCall(createCutRosterPlayerHandler({
 }));
 
 exports.startNextSeason = onCall(createStartNextSeasonHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.generateNbaSchedule = onCall(createGenerateScheduleHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
