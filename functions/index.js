@@ -34,6 +34,11 @@ const {
   createMutateDraftClassHandler,
   createPublishDraftClassHandler,
 } = require('./franchise/draftClass');
+const {
+  createAutoPickHandler,
+  createDraftPickHandler,
+  createInitializeLiveDraftHandler,
+} = require('./franchise/liveDraft');
 
 initializeApp();
 
@@ -288,6 +293,24 @@ exports.mutateDraftClass = onCall(createMutateDraftClassHandler({
 exports.publishDraftClass = onCall(createPublishDraftClassHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.initializeLiveDraft = onCall(createInitializeLiveDraftHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.makeDraftPick = onCall(createDraftPickHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.autoPickDraftSelection = onCall(createAutoPickHandler({
+  getFirestore,
+  now: () => Date.now(),
   HttpsError,
 }));
 

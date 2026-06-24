@@ -145,6 +145,43 @@ describe('offseason callable helpers', () => {
     }).stage).toBe('live_draft');
   });
 
+  it('requires the season draft session to complete before leaving live draft', () => {
+    const league = {
+      sport: 'madden',
+      commissionerId: 'comm',
+      offseason: {
+        stage: 'live_draft',
+        seasonYear: 2027,
+        stageStartedAt: null,
+        completedTeamIds: [],
+        draftTimerSeconds: 120,
+        draftStatus: 'live',
+        version: 5,
+      },
+    };
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: [],
+      expectedStage: 'live_draft',
+      expectedVersion: 5,
+      liveDraftComplete: false,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(transitionForCallable({
+      uid: 'comm',
+      league: {
+        ...league,
+        offseason: { ...league.offseason, draftStatus: 'complete' },
+      },
+      teams: [],
+      expectedStage: 'live_draft',
+      expectedVersion: 5,
+      liveDraftComplete: true,
+      stageStartedAt: 'now',
+    }).stage).toBe('roster_cuts');
+  });
+
   it('runs one transaction, reads league and teams before updating offseason', async () => {
     const operations: string[] = [];
     const leagueRef = {

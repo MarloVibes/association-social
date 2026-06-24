@@ -95,6 +95,7 @@ function transitionForCallable(input) {
     teams,
     expectedStage,
     draftClassPublished,
+    liveDraftComplete,
   } = input;
   if (
     expectedStage === 'draft_class_review'
@@ -107,6 +108,19 @@ function transitionForCallable(input) {
     throw new OffseasonTransitionError(
       'failed-precondition',
       'Publish the draft class before starting the live draft.',
+    );
+  }
+  if (
+    expectedStage === 'live_draft'
+    && (
+      !league.offseason
+      || league.offseason.draftStatus !== 'complete'
+      || liveDraftComplete !== true
+    )
+  ) {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Complete every draft pick before advancing to roster cuts.',
     );
   }
   if (TEAM_ACTION_STAGES.has(expectedStage)) {
@@ -173,6 +187,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           };
         const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
         let draftClassPublished;
+        let liveDraftComplete;
         if (input.expectedStage === 'draft_class_review') {
           const draftClassRef = leagueRef
             .collection('draft_classes')
@@ -181,6 +196,14 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           draftClassPublished = draftClassSnap.exists
             && (draftClassSnap.data() || {}).published === true;
         }
+        if (input.expectedStage === 'live_draft') {
+          const sessionRef = leagueRef
+            .collection('draft_sessions')
+            .doc(String(league.offseason.seasonYear));
+          const sessionSnap = await tx.get(sessionRef);
+          liveDraftComplete = sessionSnap.exists
+            && (sessionSnap.data() || {}).status === 'complete';
+        }
         const offseason = transitionForCallable({
           uid,
           league,
@@ -188,6 +211,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           expectedStage: input.expectedStage,
           expectedVersion: input.expectedVersion,
           draftClassPublished,
+          liveDraftComplete,
           stageStartedAt: serverTimestamp(),
         });
         tx.update(leagueRef, { offseason });

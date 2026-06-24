@@ -139,7 +139,9 @@ export default function OffseasonScreen() {
       ? '/screens/offseason/free-agency'
       : offseason?.stage === 'draft_class_review'
         ? '/screens/offseason/draft-class'
-      : null;
+        : offseason?.stage === 'live_draft'
+          ? '/screens/offseason/live-draft'
+          : null;
 
   const advanceStage = () => {
     if (!leagueId || !offseason || !nextStage || !canAdvance) return;
