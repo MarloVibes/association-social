@@ -34,6 +34,17 @@ const normalizeSeasons = (seasons: any[], year: string, sport?: string | null): 
   });
 };
 
+const sanitizeEditableRatings = (ratings: Record<string, any>, sport?: string | null) => {
+  if (!ratings || typeof ratings !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(ratings).filter(([key]) => {
+      const normalized = key.toLowerCase();
+      if (normalized === 'overall' || normalized === 'ovr') return false;
+      return sport !== 'nba';
+    })
+  );
+};
+
 
 // Auto-format height on blur. User types digits, gets feet'inches".
 // Examples: "7" -> 7'0", "66" -> 6'6", "611" -> 6'11", "6-11" -> 6'11"
@@ -233,7 +244,7 @@ export default function CreatePlayerScreen() {
         sport: leagueSport,
         contractYears: contractYears ? parseInt(contractYears, 10) || 0 : 0,
         role: role.trim(),
-        ratings,
+        ratings: sanitizeEditableRatings(ratings, leagueSport),
         seasons: seasonsClean,
         awards,
         isCustom: true,

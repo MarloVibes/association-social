@@ -2,6 +2,7 @@ import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firest
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
+import type { VisibleNbaIdentity } from '@/domain/nba/identity';
 
 type Props = {
   player: any;
@@ -109,6 +110,13 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
   }));
 }
 
+function getVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | null {
+  const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
+  if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
+  if (!identity.grades || typeof identity.grades !== 'object') return null;
+  return identity as VisibleNbaIdentity;
+}
+
 export default function PlayerCard({ player, era, sport, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -204,6 +212,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
     : (player.passing_yards != null || player.rushing_yards != null || player.receiving_yards != null || player.sacks != null) ? 'madden'
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
+  const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
 
   // Headshot source per sport. MLB derives from the MLB person id; NFL uses a
   // stored photo url (from the roster seed); NBA uses basketball-reference.
@@ -282,6 +291,60 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                   ) : null}
                 </View>
               </View>
+
+              {/* NBA Identity */}
+              {identity && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Player Identity</Text>
+                  <View style={styles.identityHeader}>
+                    <View style={styles.identityRoleBlock}>
+                      <Text style={styles.identityRole}>{identity.primaryRole}</Text>
+                      <Text style={styles.identitySubRole}>{identity.secondaryRole}</Text>
+                    </View>
+                    <View style={styles.reputationPill}>
+                      <Text style={styles.reputationText}>{identity.reputation}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.gradeGrid}>
+                    {Object.entries(identity.grades).map(([key, grade]) => (
+                      <View key={key} style={styles.gradeItem}>
+                        <Text style={styles.gradeValue}>{grade}</Text>
+                        <Text style={styles.gradeLabel}>{key.replace(/([A-Z])/g, ' $1').toUpperCase()}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.traitRow}>
+                    <View style={styles.traitBlock}>
+                      <Text style={styles.traitLabel}>Consistency</Text>
+                      <Text style={styles.traitValue}>{identity.consistency}</Text>
+                    </View>
+                    <View style={styles.traitBlock}>
+                      <Text style={styles.traitLabel}>Chemistry</Text>
+                      <Text style={styles.traitValue}>{identity.chemistry}</Text>
+                    </View>
+                    <View style={styles.traitBlock}>
+                      <Text style={styles.traitLabel}>Development</Text>
+                      <Text style={styles.traitValue}>{identity.developmentTrait}</Text>
+                    </View>
+                  </View>
+                  {(identity.strengths.length > 0 || identity.weaknesses.length > 0) && (
+                    <View style={styles.identityLists}>
+                      {identity.strengths.length > 0 && (
+                        <View style={styles.identityList}>
+                          <Text style={styles.identityListTitle}>Strengths</Text>
+                          <Text style={styles.identityListText}>{identity.strengths.join(' / ')}</Text>
+                        </View>
+                      )}
+                      {identity.weaknesses.length > 0 && (
+                        <View style={styles.identityList}>
+                          <Text style={styles.identityListTitle}>Weaknesses</Text>
+                          <Text style={styles.identityListText}>{identity.weaknesses.join(' / ')}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* Accolades */}
               {accolades.length > 0 && (
@@ -459,9 +522,6 @@ const styles = StyleSheet.create({
   photo: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#1a1a1a' },
   photoPlaceholder: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center' },
   photoInitial: { fontSize: 36, fontWeight: '900' },
-  ovrBadge: { position: 'absolute', bottom: -6, right: -6, width: 36, height: 36, borderRadius: 18, borderWidth: 2, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
-  ovrNum: { fontSize: 12, fontWeight: '900', lineHeight: 14 },
-  ovrLbl: { fontSize: 7, color: '#666', fontWeight: '700' },
   heroInfo: { flex: 1, paddingTop: 4 },
   heroName: { fontSize: 22, fontWeight: '900', color: '#ffffff', marginBottom: 8 },
   heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
@@ -479,6 +539,24 @@ const styles = StyleSheet.create({
   accoladeChipText: { color: '#ffffff', fontSize: 11, fontWeight: '500', flexShrink: 1 },
   accoladeIcon: { fontSize: 16, marginTop: 1 },
   accoladeText: { flex: 1, color: '#cccccc', fontSize: 13, lineHeight: 20 },
+  identityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  identityRoleBlock: { flex: 1 },
+  identityRole: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
+  identitySubRole: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  reputationPill: { borderRadius: 999, borderWidth: 1, borderColor: '#00ff8755', backgroundColor: '#0a2a1a', paddingHorizontal: 10, paddingVertical: 5 },
+  reputationText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  gradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gradeItem: { width: '30%', backgroundColor: '#181818', borderRadius: 8, borderWidth: 1, borderColor: '#252525', padding: 8, alignItems: 'center' },
+  gradeValue: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
+  gradeLabel: { color: '#666', fontSize: 8, fontWeight: '800', marginTop: 3, textAlign: 'center' },
+  traitRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  traitBlock: { flex: 1, backgroundColor: '#101820', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: '#1c2a35' },
+  traitLabel: { color: '#667', fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
+  traitValue: { color: '#ffffff', fontSize: 12, fontWeight: '800', marginTop: 4 },
+  identityLists: { gap: 8, marginTop: 10 },
+  identityList: { backgroundColor: '#151515', borderRadius: 8, padding: 10 },
+  identityListTitle: { color: '#888', fontSize: 10, fontWeight: '900', marginBottom: 4, textTransform: 'uppercase' },
+  identityListText: { color: '#cccccc', fontSize: 12, fontWeight: '600' },
   statsHeader: { flexDirection: 'row', marginBottom: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
   statsHeaderCell: { flex: 1, color: '#555', fontSize: 10, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase' },
   statsRow: { flexDirection: 'row', paddingVertical: 7, borderRadius: 6 },
