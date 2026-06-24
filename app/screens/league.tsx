@@ -473,6 +473,23 @@ export default function LeagueScreen() {
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>🔁 Propose Trade</Text>
         </TouchableOpacity>
 
+        {isNBASport && myTeam && (
+          <>
+            <TouchableOpacity
+              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+              onPress={() => router.push({ pathname: '/screens/season/rotation', params: { leagueId } })}
+            >
+              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Manage Rotation</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+              onPress={() => router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } })}
+            >
+              <Text style={[styles.rostersBtnText, { color: titleColor }]}>Coaching Presets</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
