@@ -90,7 +90,25 @@ function initializeOffseason(league, expectedStage, expectedVersion) {
 }
 
 function transitionForCallable(input) {
-  const { league, teams, expectedStage } = input;
+  const {
+    league,
+    teams,
+    expectedStage,
+    draftClassPublished,
+  } = input;
+  if (
+    expectedStage === 'draft_class_review'
+    && (
+      !league.offseason
+      || league.offseason.draftStatus !== 'published'
+      || draftClassPublished !== true
+    )
+  ) {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Publish the draft class before starting the live draft.',
+    );
+  }
   if (TEAM_ACTION_STAGES.has(expectedStage)) {
     return transitionOffseasonState(input);
   }
@@ -154,12 +172,22 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
             ),
           };
         const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+        let draftClassPublished;
+        if (input.expectedStage === 'draft_class_review') {
+          const draftClassRef = leagueRef
+            .collection('draft_classes')
+            .doc(String(league.offseason.seasonYear));
+          const draftClassSnap = await tx.get(draftClassRef);
+          draftClassPublished = draftClassSnap.exists
+            && (draftClassSnap.data() || {}).published === true;
+        }
         const offseason = transitionForCallable({
           uid,
           league,
           teams,
           expectedStage: input.expectedStage,
           expectedVersion: input.expectedVersion,
+          draftClassPublished,
           stageStartedAt: serverTimestamp(),
         });
         tx.update(leagueRef, { offseason });

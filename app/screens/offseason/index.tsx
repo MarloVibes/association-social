@@ -137,6 +137,8 @@ export default function OffseasonScreen() {
     ? '/screens/offseason/re-signing'
     : offseason?.stage === 'free_agency'
       ? '/screens/offseason/free-agency'
+      : offseason?.stage === 'draft_class_review'
+        ? '/screens/offseason/draft-class'
       : null;
 
   const advanceStage = () => {
@@ -232,6 +234,18 @@ export default function OffseasonScreen() {
             );
           })}
         </View>
+
+        {stageRoute && !isOffseasonTeamActionStage(offseason.stage) && (
+          <View style={styles.actionSection}>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: stageRoute, params: { leagueId } } as any)}
+              style={styles.openStageButton}
+            >
+              <Text style={styles.openStageText}>Open {getOffseasonStageLabel(offseason.stage)}</Text>
+              <Ionicons color="#00e58b" name="arrow-forward" size={18} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {isOffseasonTeamActionStage(offseason.stage) && (
           <View style={styles.actionSection}>

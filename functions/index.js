@@ -30,6 +30,10 @@ const {
   createResolveContractRoundHandler,
   createSubmitContractOfferHandler,
 } = require('./franchise/contracts');
+const {
+  createMutateDraftClassHandler,
+  createPublishDraftClassHandler,
+} = require('./franchise/draftClass');
 
 initializeApp();
 
@@ -270,6 +274,18 @@ exports.resolveFreeAgencyRound = onCall(createResolveContractRoundHandler({
 }));
 
 exports.completeOffseasonTeamAction = onCall(createCompleteOffseasonActionHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.mutateDraftClass = onCall(createMutateDraftClassHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.publishDraftClass = onCall(createPublishDraftClassHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,

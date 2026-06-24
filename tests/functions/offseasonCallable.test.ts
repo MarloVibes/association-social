@@ -108,6 +108,43 @@ describe('offseason callable helpers', () => {
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
+  it('requires a published draft class before entering the live draft', () => {
+    const league = {
+      sport: 'mlb',
+      commissionerId: 'comm',
+      offseason: {
+        stage: 'draft_class_review',
+        seasonYear: 2027,
+        stageStartedAt: null,
+        completedTeamIds: [],
+        draftTimerSeconds: 120,
+        draftStatus: 'review',
+        version: 4,
+      },
+    };
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: [],
+      expectedStage: 'draft_class_review',
+      expectedVersion: 4,
+      draftClassPublished: false,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(transitionForCallable({
+      uid: 'comm',
+      league: {
+        ...league,
+        offseason: { ...league.offseason, draftStatus: 'published' },
+      },
+      teams: [],
+      expectedStage: 'draft_class_review',
+      expectedVersion: 4,
+      draftClassPublished: true,
+      stageStartedAt: 'now',
+    }).stage).toBe('live_draft');
+  });
+
   it('runs one transaction, reads league and teams before updating offseason', async () => {
     const operations: string[] = [];
     const leagueRef = {
