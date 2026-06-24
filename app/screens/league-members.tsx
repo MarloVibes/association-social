@@ -23,7 +23,7 @@ export default function LeagueMembersScreen() {
     try {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
       if (!leagueSnap.exists()) return;
-      const leagueData = { id: leagueSnap.id, ...leagueSnap.data() };
+      const leagueData: any = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
       setCommissionerId(leagueData.commissionerId || '');
 
@@ -31,7 +31,7 @@ export default function LeagueMembersScreen() {
       const memberProfiles = await Promise.all(
         memberIds.map((uid: string) => getDoc(doc(db, 'users', uid)))
       );
-      setMembers(memberProfiles.filter(d => d.exists()).map(d => ({ uid: d.id, ...d.data() })));
+      setMembers(memberProfiles.filter((d: any) => d.exists()).map((d: any) => ({ uid: d.id, ...d.data() })));
 
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       setTeams(teamsSnap.docs.map(d => ({ id: d.id, ...d.data() })));

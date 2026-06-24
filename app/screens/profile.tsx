@@ -131,10 +131,10 @@ export default function ProfileScreen() {
   };
 
   const saveProfile = async () => {
-    if (!profileUid) return;
+    if (!user?.uid || profileUid !== user.uid) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateDoc(doc(db, 'users', profileUid), {
         bio,
         gamerTag,
         dmEnabled,

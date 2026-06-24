@@ -43,38 +43,45 @@ export default function JoinLeagueScreen() {
 
   const loadAllLeagues = async () => {
     setLoading(true);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     try {
       const snap = await getDocs(collection(db, 'leagues'));
-      const allLeagues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Get user's memberships and requests
+      const allLeagues = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       const memberSet = new Set<string>();
       const requestSet = new Set<string>();
       const waitlistSet = new Set<string>();
-      for (const league of allLeagues) {
-        if ((league as any).members?.includes(user?.uid)) memberSet.add(league.id);
-        const reqSnap = await getDoc(doc(db, 'leagues', league.id, 'join_requests', user!.uid));
-        if (reqSnap.exists()) requestSet.add(league.id);
-        // Waitlist only applies to full leagues
-        const maxMembers = typeof (league as any).maxMembers === 'number'
-          ? (league as any).maxMembers
-          : getSportRules((league as any).sport).teamCount;
-        if (((league as any).members?.length || 0) >= maxMembers) {
-          const wSnap = await getDoc(doc(db, 'leagues', league.id, 'waitlist', user!.uid));
-          if (wSnap.exists()) waitlistSet.add(league.id);
-        }
-      }
-      setAlreadyMember(memberSet);
-      setAlreadyRequested(requestSet);
-      setAlreadyWaitlisted(waitlistSet);
 
-      // Load commissioner names
       const enriched = await Promise.all(allLeagues.map(async (league: any) => {
+        const maxMembers = typeof league.maxMembers === 'number'
+          ? league.maxMembers
+          : getSportRules(league.sport).teamCount;
+        const isFull = (league.members?.length || 0) >= maxMembers;
+        const [reqSnap, waitlistSnap, commSnap] = await Promise.all([
+          getDoc(doc(db, 'leagues', league.id, 'join_requests', user.uid)),
+          isFull
+            ? getDoc(doc(db, 'leagues', league.id, 'waitlist', user.uid))
+            : Promise.resolve(null),
+          league.commissionerId
+            ? getDoc(doc(db, 'users', league.commissionerId))
+            : Promise.resolve(null),
+        ]);
+
+        if (league.members?.includes(user.uid)) memberSet.add(league.id);
+        if (reqSnap.exists()) requestSet.add(league.id);
+        if (waitlistSnap?.exists()) waitlistSet.add(league.id);
+
         try {
-          const commSnap = await getDoc(doc(db, 'users', league.commissionerId));
-          const commData = commSnap.data() || {};
+          const commData = commSnap?.data() || {};
           return { ...league, commDisplayName: commData.displayName || '', commUsername: commData.username || '' };
         } catch { return league; }
       }));
+
+      setAlreadyMember(memberSet);
+      setAlreadyRequested(requestSet);
+      setAlreadyWaitlisted(waitlistSet);
       setLeagues(enriched);
     } catch (e) { console.error(e); }
     setLoading(false);

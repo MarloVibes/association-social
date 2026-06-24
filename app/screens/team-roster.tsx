@@ -8,21 +8,12 @@ import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { pickLabel } from '@/constants/draftPicks';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
-  projectId: "association-social",
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
 
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
 
@@ -159,9 +150,9 @@ export default function TeamRosterScreen() {
   const abbr = team.abbreviation || 'ATL';
   const isNBARoster = !sport || sport === 'nba';
   const sportTheme = getSportTeamTheme(sport || 'nba', abbr);
-  const colors = isNBARoster ? getTeamColors(abbr, leagueEra) : [sportTheme.tintColor, sportTheme.titleColor];
-  const logoLocal = isNBARoster ? getTeamLogoLocal(abbr, leagueEra) : null;
-  const logoUri = isNBARoster ? getTeamLogoUrl(abbr, leagueEra) : '';
+  const colors = isNBARoster ? getTeamColors(abbr, currentYear) : [sportTheme.tintColor, sportTheme.titleColor];
+  const logoLocal = isNBARoster ? getTeamLogoLocal(abbr, currentYear) : null;
+  const logoUri = isNBARoster ? getTeamLogoUrl(abbr, currentYear) : '';
   const isOwned = !!team.gmId;
   const isMyTeam = team.gmId === myUid;
   const untouchables: string[] = team.untouchables || [];
@@ -254,7 +245,7 @@ export default function TeamRosterScreen() {
       </View>
 
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
-        <SportTeamLogo sport={sport || 'nba'} abbr={abbr} era={leagueEra} style={styles.teamLogo} textColor="#ffffff" fontSize={16} />
+        <SportTeamLogo sport={sport || 'nba'} abbr={abbr} era={currentYear} style={styles.teamLogo} textColor="#ffffff" fontSize={16} />
         <View style={{ flex: 1 }}>
           <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>

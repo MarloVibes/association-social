@@ -2,19 +2,11 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeams, getSportTeamTheme, getSportLogoUrl } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
-  projectId: "association-social",
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
 
 // Adjust hex color brightness by percentage. Negative = darker, positive = lighter.
 function adjustColor(hex: string, percent: number): string {
@@ -28,8 +20,6 @@ function adjustColor(hex: string, percent: number): string {
   b = Math.max(0, Math.min(255, b + amt));
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
-
-const auth = getAuth();
 
 export default function LeagueRostersScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();

@@ -2,17 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc, deleteField, where, getDocs } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc, deleteField, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 const MESSAGE_REACTIONS = ['👍', '❤️', '😂', '😱', '‼️', '💯', '🤯'];
 
@@ -104,7 +95,7 @@ export default function LockerConsoleChatScreen() {
     }, (err) => {
       console.warn('console chat listener', err);
       setLoading(false);
-    }, err => { if (err.code !== 'permission-denied') console.error(err); });
+    });
     return () => unsub();
   }, [consoleKey]);
 

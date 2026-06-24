@@ -80,8 +80,8 @@ function adjustColor(hex: string, amt: number): string {
 }
 
 // Reusable team card matching the League Rosters layout. Optionally face-down (flip).
-function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
-  team: any; eraKey: string; sport?: string; faceDown?: boolean; flipAnim?: Animated.Value;
+function RosterTeamCard({ team, currentYear, sport, faceDown, flipAnim }: {
+  team: any; currentYear?: number; sport?: string; faceDown?: boolean; flipAnim?: Animated.Value;
 }) {
   const isNBA = !sport || sport === 'nba';
   const base = isNBA
@@ -101,7 +101,7 @@ function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
       <SportTeamLogo
         sport={sport}
         abbr={team.abbreviation}
-        era={eraKey}
+        era={currentYear}
         style={styles.rosterLogo}
         textColor="#ffffff"
         fontSize={15}
@@ -156,6 +156,7 @@ export default function TeamSelectScreen() {
   const [flippedId, setFlippedId] = useState<string | null>(null);
   const [spinChoices, setSpinChoices] = useState(1);
   const [spunResults, setSpunResults] = useState<any[]>([]);
+  const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
   const spinY = useRef(new Animated.Value(0)).current;
   const flipAnims = useRef<Record<string, Animated.Value>>({});
 
@@ -192,6 +193,7 @@ export default function TeamSelectScreen() {
       const ld = lSnap.data() || {};
       const sportVal = ld.sport || sport || 'nba';
       setSportResolved(sportVal);
+      setCurrentYear(typeof ld.currentYear === 'number' ? ld.currentYear : undefined);
       const isNBALocal = sportVal === 'nba';
       const poolKeyLocal = isNBALocal ? eraKey : sportVal;
 
@@ -436,7 +438,7 @@ export default function TeamSelectScreen() {
                       disabled={!!flippedId && flippedId !== team.id}
                       style={[styles.faceDownItem, !!flippedId && flippedId !== team.id && { opacity: 0.4 }]}
                     >
-                      <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} faceDown flipAnim={getFlipAnim(team.id)} />
+                      <RosterTeamCard team={team} currentYear={currentYear} sport={sportResolved} faceDown flipAnim={getFlipAnim(team.id)} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -448,7 +450,7 @@ export default function TeamSelectScreen() {
                   <Animated.View style={{ transform: [{ translateY: spinY }] }}>
                     {reel.map((team, i) => (
                       <View key={team.id + '_' + i} style={styles.reelCard}>
-                        <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} />
+                        <RosterTeamCard team={team} currentYear={currentYear} sport={sportResolved} />
                       </View>
                     ))}
                   </Animated.View>
@@ -485,7 +487,7 @@ export default function TeamSelectScreen() {
                           onPress={() => setSelectedTeam(t)}
                           style={[styles.resultItem, sel && styles.resultItemSel]}
                         >
-                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} sport={sportResolved} /></View>
+                          <View style={{ flex: 1 }}><RosterTeamCard team={t} currentYear={currentYear} sport={sportResolved} /></View>
                           {sel && <Text style={styles.resultCheck}>✓</Text>}
                         </TouchableOpacity>
                       );
@@ -536,7 +538,7 @@ export default function TeamSelectScreen() {
                 >
                   <View style={[styles.teamColorBar, { backgroundColor: colors[0] }]} />
                   <Image
-                    source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
+                    source={getTeamLogoLocal(team.abbreviation, currentYear) || { uri: getTeamLogoUrl(team.abbreviation, currentYear) }}
                     style={styles.teamRowLogo}
                     resizeMode='contain'
                   />

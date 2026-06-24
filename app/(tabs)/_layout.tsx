@@ -14,7 +14,7 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarStyle: { display: 'none' },
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} /> }} />
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <IconSymbol size={28} name="home" color={color} /> }} />
       <Tabs.Screen name="auth" options={{ href: null }} />
       <Tabs.Screen name="profile-setup" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />

@@ -1,17 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 function statSummary(player: any, sport: string) {
   const season = player.seasons?.[0] || {};

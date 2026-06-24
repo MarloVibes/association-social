@@ -72,7 +72,7 @@ export default function AdvanceSeasonScreen() {
     try {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
       if (!leagueSnap.exists()) return;
-      const leagueData = { id: leagueSnap.id, ...leagueSnap.data() };
+      const leagueData: any = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
 
       const nextYear = (leagueData.currentYear || 2024) + 1;

@@ -97,7 +97,7 @@ export default function LeagueScreen() {
         router.replace('/(tabs)/dashboard');
         return;
       }
-      const leagueData = { id: leagueSnap.id, ...leagueSnap.data() };
+      const leagueData: any = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
 
       const memberProfiles = await Promise.all(

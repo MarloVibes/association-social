@@ -142,7 +142,7 @@ export default function TradeChannelScreen() {
     setLoading(true);
     try {
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setAllTeams(teams);
       // League sport drives archetype labels (NBA playstyle vs MLB/NFL archetypes).
       let leagueSport = 'nba';
@@ -619,6 +619,7 @@ const styles = StyleSheet.create({
   col: { flex: 1, gap: 6 },
   colTitle: { color: '#888', fontSize: 9, fontWeight: '800', letterSpacing: 1, textAlign: 'center', marginBottom: 4, textTransform: 'uppercase' },
   playerSlot: { backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden', marginBottom: 4, minHeight: 80 },
+  blockSlot: { minHeight: 80 },
   playerSlotEmpty: { borderStyle: 'dashed', borderColor: '#333', alignItems: 'center', justifyContent: 'center', height: 80 },
   addItemText: { color: '#333', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   playerSlotInner: { flexDirection: 'row', alignItems: 'center', padding: 6, gap: 6 },
