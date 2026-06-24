@@ -49,6 +49,13 @@ export function getSportRules(sport?: string | null): SportRules {
   return SPORT_RULES[normalizeSport(sport)];
 }
 
+export function getChannelTheme(sport?: string | null): 'court' | 'field' | 'diamond' {
+  const normalized = normalizeSport(sport);
+  if (normalized === 'madden') return 'field';
+  if (normalized === 'mlb') return 'diamond';
+  return 'court';
+}
+
 export function seasonLabel(sport: SportKey | string | null, year: number): string {
   if (normalizeSport(sport) === 'nba') {
     return `${year}-${String(year + 1).slice(-2)}`;
