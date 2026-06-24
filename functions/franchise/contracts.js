@@ -1,5 +1,8 @@
 'use strict';
 
+const { serverRosterCompliance } = require('./newSeason');
+const { buildDraftFranchises } = require('./liveDraft');
+
 const CONTRACT_STAGES = new Set(['re_signing', 'free_agency']);
 const CONTRACT_ROLES = new Set(['franchise', 'starter', 'rotation', 'depth']);
 const TEAM_ACTION_STAGES = new Set([
@@ -322,6 +325,14 @@ function pendingTeamOfferIds(offers, teamId, stage, version) {
     .map(offer => String(offer.id));
 }
 
+function teamCompletionBlocker(stage, team, league) {
+  if (stage !== 'roster_cuts') return null;
+  const compliance = serverRosterCompliance(league.sport, team, league);
+  return compliance.valid
+    ? null
+    : { reason: 'roster_noncompliant', compliance };
+}
+
 function selectOfferBatch(offers, maxOffers = MAX_OFFERS_PER_ROUND) {
   const groups = new Map();
   for (const offer of offers || []) {
@@ -356,21 +367,22 @@ function buildCpuContractOffers({
   const offers = [];
   for (const team of teams || []) {
     if (team.gmId) continue;
+    const cpuTeam = { ...team, needs: deriveCpuNeeds(sport, team) };
     const candidates = stage === 're_signing'
-      ? (team.players || []).filter(candidate => (
+      ? (cpuTeam.players || []).filter(candidate => (
         Number(candidate.age) <= 27
         && Number(candidate.overall || candidate.rating || candidate.value) >= 80
         && (candidate.contractYears == null || candidate.contractYears <= 1)
       ))
       : (freeAgents || []).filter(candidate => (
-        Array.isArray(team.needs) && team.needs.includes(candidate.position)
+        cpuTeam.needs.includes(contractPositionGroup(sport, candidate.position))
       ));
     for (const candidate of candidates) {
       const id = cpuContractDecisionId({
         leagueId,
         seasonYear,
         stage,
-        teamId: team.id,
+        teamId: cpuTeam.id,
         playerId: playerKey(candidate),
       });
       if (!playerKey(candidate) || existing.has(id)) continue;
@@ -386,7 +398,7 @@ function buildCpuContractOffers({
         seasonYear,
         stage,
         version,
-        teamId: String(team.id),
+        teamId: String(cpuTeam.id),
         playerId: playerKey(candidate),
         player: candidate,
         salary,
@@ -394,10 +406,10 @@ function buildCpuContractOffers({
         role: Number(candidate.overall || candidate.rating || candidate.value) >= 88
           ? 'franchise'
           : 'starter',
-        contender: Number.isFinite(team.contender) ? team.contender : 0.5,
+        contender: Number.isFinite(cpuTeam.contender) ? cpuTeam.contender : 0.5,
         need: stage === 'free_agency' ? 1 : 0.5,
         loyalty: stage === 're_signing' ? 0.8 : 0.2,
-        reputation: Number.isFinite(team.reputation) ? team.reputation : 0.5,
+        reputation: Number.isFinite(cpuTeam.reputation) ? cpuTeam.reputation : 0.5,
         seed: id,
         status: 'pending',
         source: 'cpu',
@@ -405,7 +417,7 @@ function buildCpuContractOffers({
       if (offerFit({
         sport: normalizeSport(sport),
         league,
-        team,
+        team: cpuTeam,
         offer: { ...offer, expectedStage: stage },
       }).valid) {
         offers.push(offer);
@@ -414,6 +426,32 @@ function buildCpuContractOffers({
     }
   }
   return offers;
+}
+
+function deriveCpuNeeds(sportInput, team) {
+  if (Array.isArray(team.needs) && team.needs.length > 0) return team.needs;
+  const sport = normalizeSport(sportInput);
+  const counts = (team.players || []).reduce((result, player) => {
+    const position = contractPositionGroup(sport, player.position);
+    result[position] = (result[position] || 0) + 1;
+    return result;
+  }, {});
+  const targets = sport === 'madden'
+    ? { QB: 2, HB: 3, WR: 6, TE: 3, OL: 8, EDGE: 4, DT: 4, MLB: 3, CB: 5, FS: 2, SS: 2 }
+    : { SP: 5, RP: 7, C: 2, '1B': 2, '2B': 2, '3B': 2, SS: 2, OF: 5 };
+  return Object.entries(targets)
+    .filter(([position, target]) => (counts[position] || 0) < target)
+    .map(([position]) => position);
+}
+
+function contractPositionGroup(sportInput, positionInput) {
+  const sport = normalizeSport(sportInput);
+  const position = String(positionInput || '');
+  if (sport === 'mlb' && ['LF', 'CF', 'RF', 'OF'].includes(position)) return 'OF';
+  if (sport === 'madden' && ['LT', 'LG', 'C', 'RG', 'RT', 'OL'].includes(position)) return 'OL';
+  if (sport === 'madden' && ['HB', 'RB'].includes(position)) return 'HB';
+  if (sport === 'madden' && ['EDGE', 'DE', 'LOLB', 'ROLB', 'OLB'].includes(position)) return 'EDGE';
+  return position;
 }
 
 function createSubmitContractOfferHandler({
@@ -534,6 +572,7 @@ function createSubmitContractOfferHandler({
         'offseason.completedTeamIds': (offseason.completedTeamIds || [])
           .map(String)
           .filter(completedTeamId => completedTeamId !== teamId),
+        'offseason.contractRoundsComplete': false,
       });
       tx.set(offerRef, storedOffer);
       return { offer: storedOffer };
@@ -568,17 +607,20 @@ function createResolveContractRoundHandler({
     const resolutionsQuery = leagueRef.collection('contract_resolutions');
     const freeAgentsQuery = leagueRef.collection('free_agents');
     return db.runTransaction(async tx => {
-      const [leagueSnap, teamsSnap, offersSnap, resolutionsSnap, freeAgentsSnap] = await Promise.all([
-        tx.get(leagueRef),
-        tx.get(teamsQuery),
-        tx.get(offersQuery),
-        tx.get(resolutionsQuery),
-        tx.get(freeAgentsQuery),
-      ]);
+      const leagueSnap = await tx.get(leagueRef);
       if (!leagueSnap.exists) {
         throw callableError(HttpsError, 'not-found', 'League not found.');
       }
       const league = leagueSnap.data() || {};
+      const sport = normalizeSport(league.sport);
+      const poolRef = db.collection('era_player_pools').doc(sport);
+      const [teamsSnap, offersSnap, resolutionsSnap, freeAgentsSnap, poolSnap] = await Promise.all([
+        tx.get(teamsQuery),
+        tx.get(offersQuery),
+        tx.get(resolutionsQuery),
+        tx.get(freeAgentsQuery),
+        tx.get(poolRef),
+      ]);
       const commissioner = league.commissionerId === uid
         || (league.coCommissioners || []).includes(uid);
       if (!commissioner) {
@@ -589,7 +631,13 @@ function createResolveContractRoundHandler({
         throw callableError(HttpsError, 'aborted', 'The offseason stage changed before resolution.');
       }
 
-      const teams = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+      const storedTeams = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+      const poolPlayers = poolSnap.exists && Array.isArray((poolSnap.data() || {}).players)
+        ? poolSnap.data().players
+        : [];
+      const teams = sport === 'madden' || sport === 'mlb'
+        ? buildDraftFranchises(sport, storedTeams, poolPlayers)
+        : storedTeams;
       const storedOffers = offersSnap.docs
         .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
         .filter(offer => (
@@ -631,7 +679,10 @@ function createResolveContractRoundHandler({
 
       const changedTeamIds = new Set(result.resolutions.map(resolution => resolution.winnerTeamId));
       for (const team of result.teams) {
-        if (changedTeamIds.has(String(team.id))) {
+        if (team.virtual) {
+          const { virtual, ...storedTeam } = team;
+          tx.set(teamsQuery.doc(team.id), storedTeam);
+        } else if (changedTeamIds.has(String(team.id))) {
           tx.update(teamsQuery.doc(team.id), { players: team.players || [] });
         }
       }
@@ -658,6 +709,9 @@ function createResolveContractRoundHandler({
           resolvedBy: uid,
         });
       }
+      tx.update(leagueRef, {
+        'offseason.contractRoundsComplete': offers.length >= allOffers.length,
+      });
       return {
         resolvedCount: result.resolutions.length,
         resolutions: result.resolutions,
@@ -709,6 +763,15 @@ function createCompleteOffseasonActionHandler({
       if (!team) {
         throw callableError(HttpsError, 'permission-denied', 'You must control a team in this league.');
       }
+      const completionBlocker = teamCompletionBlocker(expectedStage, team.data() || {}, league);
+      if (completionBlocker) {
+        throw callableError(
+          HttpsError,
+          'failed-precondition',
+          'Your roster must meet its sport limits before it can be marked complete.',
+          completionBlocker,
+        );
+      }
       const pendingOfferIds = pendingTeamOfferIds(
         offersSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })),
         team.id,
@@ -746,8 +809,10 @@ module.exports = {
   createCompleteOffseasonActionHandler,
   createResolveContractRoundHandler,
   createSubmitContractOfferHandler,
+  deriveCpuNeeds,
   pendingTeamOfferIds,
   selectOfferBatch,
+  teamCompletionBlocker,
   resolveContractRound,
   scoreContractOffer,
   validateContractOffer,

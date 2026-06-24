@@ -7,9 +7,11 @@ const {
   contractResolutionId,
   buildCpuContractOffers,
   createSubmitContractOfferHandler,
+  deriveCpuNeeds,
   pendingTeamOfferIds,
   resolveContractRound,
   selectOfferBatch,
+  teamCompletionBlocker,
   validateContractOffer,
 } = require('../../functions/franchise/contracts.js');
 
@@ -72,6 +74,17 @@ describe('contract orchestration', () => {
     ], 'team', 'free_agency', 2)).toEqual(['a']);
   });
 
+  it('blocks roster-cut completion until the team is compliant', () => {
+    expect(teamCompletionBlocker('roster_cuts', {
+      players: Array.from({ length: 54 }, (_, index) => ({ id: String(index), salary: 1 })),
+      salaryCap: 100,
+    }, {
+      sport: 'madden',
+      salaryCap: 100,
+    })).toMatchObject({ reason: 'roster_noncompliant' });
+    expect(teamCompletionBlocker('ready_for_season', {}, {})).toBe(null);
+  });
+
   it('keeps every competing offer for a selected player in the same batch', () => {
     expect(selectOfferBatch([
       { id: 'a1', playerId: 'a' },
@@ -113,6 +126,15 @@ describe('contract orchestration', () => {
     }).map((offer: any) => [offer.teamId, offer.playerId])).toEqual([
       ['cpu-a', 'wr'],
     ]);
+  });
+
+  it('derives sport positional needs when a vacant team has none stored', () => {
+    expect(deriveCpuNeeds('madden', {
+      players: [{ position: 'QB' }, { position: 'WR' }],
+    })).toEqual(expect.arrayContaining(['HB', 'TE', 'CB']));
+    expect(deriveCpuNeeds('mlb', {
+      players: [{ position: 'SP' }, { position: 'SS' }],
+    })).toEqual(expect.arrayContaining(['RP', 'C', 'OF']));
   });
 
   it('rejects invalid stages, terms, ownership, and sport finance violations', () => {

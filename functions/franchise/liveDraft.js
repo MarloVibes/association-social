@@ -32,7 +32,7 @@ function teamIdentity(team) {
   ).toUpperCase();
 }
 
-function buildDraftFranchises(sportInput, liveTeams) {
+function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
   const canonicalIds = sport === 'madden'
     ? NFL_TEAM_IDS
@@ -57,7 +57,7 @@ function buildDraftFranchises(sportInput, liveTeams) {
         abbreviation: identity,
         name: identity,
         gmId: null,
-        players: [],
+        players: poolPlayers.filter(player => String(player.team || '').toUpperCase() === identity),
         needs: [],
         virtual: true,
       };
@@ -290,17 +290,22 @@ function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
       const offseason = assertLeagueDraftIsLive(league);
       const classRef = leagueRef.collection('draft_classes').doc(String(offseason.seasonYear));
       const sessionRef = leagueRef.collection('draft_sessions').doc(String(offseason.seasonYear));
-      const [classSnap, sessionSnap] = await Promise.all([
+      const sport = league.sport === 'nfl' ? 'madden' : league.sport;
+      const poolRef = db.collection('era_player_pools').doc(sport);
+      const [classSnap, sessionSnap, poolSnap] = await Promise.all([
         tx.get(classRef),
         tx.get(sessionRef),
+        tx.get(poolRef),
       ]);
       if (!classSnap.exists || (classSnap.data() || {}).published !== true) {
         throw new HttpsError('failed-precondition', 'Publish the draft class first.');
       }
       if (sessionSnap.exists) return { session: sessionSnap.data() };
-      const sport = league.sport === 'nfl' ? 'madden' : league.sport;
       const teamDocs = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
-      const draftTeams = buildDraftFranchises(sport, teamDocs);
+      const poolPlayers = poolSnap.exists && Array.isArray((poolSnap.data() || {}).players)
+        ? poolSnap.data().players
+        : [];
+      const draftTeams = buildDraftFranchises(sport, teamDocs, poolPlayers);
       const teamOrder = buildDraftOrder(draftTeams, league.draftOrder);
       const session = createDraftSession({
         seasonYear: offseason.seasonYear,

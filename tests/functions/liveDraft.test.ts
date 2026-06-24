@@ -32,7 +32,9 @@ describe('live draft domain', () => {
       abbreviation: 'BUF',
       gmId: 'gm',
       name: 'Buffalo Bills',
-    }]);
+    }], [
+      { player_id: 'mia-player', team: 'MIA' },
+    ]);
     expect(nfl).toHaveLength(32);
     expect(nfl.find((team: any) => team.teamId === 'BUF')).toMatchObject({
       id: 'league_gm',
@@ -42,6 +44,7 @@ describe('live draft domain', () => {
       id: 'cpu_MIA',
       gmId: null,
       virtual: true,
+      players: [{ player_id: 'mia-player', team: 'MIA' }],
     });
     expect(buildDraftFranchises('mlb', [])).toHaveLength(30);
   });

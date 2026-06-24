@@ -129,10 +129,19 @@ export default function OffseasonScreen() {
     ? getUnresolvedOffseasonTeams(teams, offseason.completedTeamIds)
     : [];
   const isRegularSeason = offseason?.stage === 'regular_season';
+  const contractRoundsReady = (
+    offseason?.stage !== 're_signing'
+    && offseason?.stage !== 'free_agency'
+  ) || offseason.contractRoundsComplete === true;
+  const myTeam = teams.find(team => team.gmId === user?.uid);
+  const myTeamComplete = Boolean(
+    myTeam && offseason?.completedTeamIds?.includes(myTeam.id),
+  );
   const canAdvance = isCommissioner
     && !advancing
     && !isRegularSeason
-    && unresolvedTeams.length === 0;
+    && unresolvedTeams.length === 0
+    && contractRoundsReady;
   const stageRoute = offseason?.stage === 're_signing'
     ? '/screens/offseason/re-signing'
     : offseason?.stage === 'free_agency'
@@ -141,13 +150,17 @@ export default function OffseasonScreen() {
         ? '/screens/offseason/draft-class'
         : offseason?.stage === 'live_draft'
           ? '/screens/offseason/live-draft'
+          : offseason?.stage === 'roster_cuts'
+            ? '/screens/offseason/roster-cuts'
           : null;
 
   const advanceStage = () => {
     if (!leagueId || !offseason || !nextStage || !canAdvance) return;
     Alert.alert(
       'Advance offseason?',
-      `Move from ${getOffseasonStageLabel(offseason.stage)} to ${getOffseasonStageLabel(nextStage)}?`,
+      offseason.stage === 'ready_for_season'
+        ? `Start the ${offseason.seasonYear + 1} regular season?`
+        : `Move from ${getOffseasonStageLabel(offseason.stage)} to ${getOffseasonStageLabel(nextStage)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -155,12 +168,20 @@ export default function OffseasonScreen() {
           onPress: async () => {
             setAdvancing(true);
             try {
-              const advance = httpsCallable(functions, 'advanceOffseasonStage');
-              await advance({
-                leagueId,
-                expectedStage: offseason.stage,
-                expectedVersion: offseason.version,
-              });
+              if (offseason.stage === 'ready_for_season') {
+                const startNextSeason = httpsCallable(functions, 'startNextSeason');
+                await startNextSeason({
+                  leagueId,
+                  expectedVersion: offseason.version,
+                });
+              } else {
+                const advance = httpsCallable(functions, 'advanceOffseasonStage');
+                await advance({
+                  leagueId,
+                  expectedStage: offseason.stage,
+                  expectedVersion: offseason.version,
+                });
+              }
             } catch (error: any) {
               Alert.alert('Could not advance', callableMessage(error));
             } finally {
@@ -170,6 +191,23 @@ export default function OffseasonScreen() {
         },
       ],
     );
+  };
+
+  const markTeamReady = async () => {
+    if (!leagueId || !offseason || !myTeam || myTeamComplete) return;
+    setAdvancing(true);
+    try {
+      const complete = httpsCallable(functions, 'completeOffseasonTeamAction');
+      await complete({
+        leagueId,
+        expectedStage: offseason.stage,
+        expectedVersion: offseason.version,
+      });
+    } catch (error: any) {
+      Alert.alert('Could not mark team ready', callableMessage(error));
+    } finally {
+      setAdvancing(false);
+    }
   };
 
   if (loading || !league || !offseason) {
@@ -261,6 +299,22 @@ export default function OffseasonScreen() {
                 <Ionicons color="#00e58b" name="arrow-forward" size={18} />
               </TouchableOpacity>
             )}
+            {offseason.stage === 'ready_for_season' && myTeam && (
+              <TouchableOpacity
+                disabled={advancing || myTeamComplete}
+                onPress={markTeamReady}
+                style={[styles.openStageButton, myTeamComplete && styles.readyButtonComplete]}
+              >
+                <Text style={styles.openStageText}>
+                  {myTeamComplete ? 'Your team is ready' : 'Mark your team ready'}
+                </Text>
+                <Ionicons
+                  color="#00e58b"
+                  name={myTeamComplete ? 'checkmark-circle' : 'flag-outline'}
+                  size={18}
+                />
+              </TouchableOpacity>
+            )}
             {unresolvedTeams.length === 0 ? (
               <View style={styles.statusRow}>
                 <Ionicons color="#00e58b" name="checkmark-circle" size={20} />
@@ -295,7 +349,11 @@ export default function OffseasonScreen() {
               ) : (
                 <>
                   <Text style={styles.advanceButtonText}>
-                    {isRegularSeason ? 'Season is active' : `Advance to ${getOffseasonStageLabel(nextStage!)}`}
+                    {isRegularSeason
+                      ? 'Season is active'
+                      : offseason.stage === 'ready_for_season'
+                        ? `Start ${offseason.seasonYear + 1} Season`
+                        : `Advance to ${getOffseasonStageLabel(nextStage!)}`}
                   </Text>
                   {!isRegularSeason && <Ionicons color="#06120c" name="arrow-forward" size={19} />}
                 </>
@@ -303,6 +361,9 @@ export default function OffseasonScreen() {
             </TouchableOpacity>
             {unresolvedTeams.length > 0 && (
               <Text style={styles.blockedText}>Complete all claimed-team actions before advancing.</Text>
+            )}
+            {!contractRoundsReady && (
+              <Text style={styles.blockedText}>Resolve every submitted and CPU contract round before advancing.</Text>
             )}
           </View>
         ) : (
@@ -391,6 +452,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   openStageText: { color: '#00e58b', fontSize: 14, fontWeight: '800' },
+  readyButtonComplete: { opacity: 0.65 },
   sectionHeading: { color: '#ffffff', fontSize: 16, fontWeight: '800', marginBottom: 12 },
   bodyText: { color: '#9aa19c', fontSize: 14, lineHeight: 20, marginBottom: 10 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },

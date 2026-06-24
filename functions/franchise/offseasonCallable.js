@@ -96,7 +96,21 @@ function transitionForCallable(input) {
     expectedStage,
     draftClassPublished,
     liveDraftComplete,
+    pendingContractOfferCount,
   } = input;
+  if (
+    (expectedStage === 're_signing' || expectedStage === 'free_agency')
+    && (
+      !league.offseason
+      || league.offseason.contractRoundsComplete !== true
+      || pendingContractOfferCount !== 0
+    )
+  ) {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Resolve every contract offer round before advancing.',
+    );
+  }
   if (
     expectedStage === 'draft_class_review'
     && (
@@ -121,6 +135,12 @@ function transitionForCallable(input) {
     throw new OffseasonTransitionError(
       'failed-precondition',
       'Complete every draft pick before advancing to roster cuts.',
+    );
+  }
+  if (expectedStage === 'ready_for_season') {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Use the sport-aware next-season action to finish the offseason.',
     );
   }
   if (TEAM_ACTION_STAGES.has(expectedStage)) {
@@ -188,6 +208,17 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
         const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
         let draftClassPublished;
         let liveDraftComplete;
+        let pendingContractOfferCount;
+        if (input.expectedStage === 're_signing' || input.expectedStage === 'free_agency') {
+          const offersSnap = await tx.get(leagueRef.collection('contract_offers'));
+          pendingContractOfferCount = offersSnap.docs
+            .map(doc => doc.data() || {})
+            .filter(offer => (
+              offer.status === 'pending'
+              && offer.stage === input.expectedStage
+              && offer.version === input.expectedVersion
+            )).length;
+        }
         if (input.expectedStage === 'draft_class_review') {
           const draftClassRef = leagueRef
             .collection('draft_classes')
@@ -212,6 +243,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           expectedVersion: input.expectedVersion,
           draftClassPublished,
           liveDraftComplete,
+          pendingContractOfferCount,
           stageStartedAt: serverTimestamp(),
         });
         tx.update(leagueRef, { offseason });

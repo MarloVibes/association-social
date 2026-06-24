@@ -135,7 +135,7 @@ function transitionOffseasonState({
     current.stage,
     expansionEnabledForLeague(league),
   );
-  return {
+  const nextState = {
     ...current,
     stage: nextStage,
     stageStartedAt,
@@ -143,6 +143,10 @@ function transitionOffseasonState({
     draftStatus: nextDraftStatus(current, nextStage),
     version: current.version + 1,
   };
+  if (nextStage === 're_signing' || nextStage === 'free_agency') {
+    nextState.contractRoundsComplete = false;
+  }
+  return nextState;
 }
 
 module.exports = {

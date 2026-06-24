@@ -67,6 +67,7 @@ describe('offseason state machine', () => {
       completedTeamIds: string[];
       draftTimerSeconds: number;
       draftStatus: 'none' | 'review' | 'published' | 'live' | 'complete';
+      contractRoundsComplete?: boolean;
       version: number;
     }>();
   });

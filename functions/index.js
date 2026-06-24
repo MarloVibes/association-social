@@ -39,6 +39,10 @@ const {
   createDraftPickHandler,
   createInitializeLiveDraftHandler,
 } = require('./franchise/liveDraft');
+const {
+  createCutRosterPlayerHandler,
+  createStartNextSeasonHandler,
+} = require('./franchise/newSeason');
 
 initializeApp();
 
@@ -311,6 +315,18 @@ exports.makeDraftPick = onCall(createDraftPickHandler({
 exports.autoPickDraftSelection = onCall(createAutoPickHandler({
   getFirestore,
   now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.cutRosterPlayer = onCall(createCutRosterPlayerHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.startNextSeason = onCall(createStartNextSeasonHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
 }));
 

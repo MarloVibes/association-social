@@ -108,6 +108,54 @@ describe('offseason callable helpers', () => {
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
+  it('requires all contract rounds and pending offers to resolve before advancing', () => {
+    const league = {
+      sport: 'mlb',
+      commissionerId: 'comm',
+      offseason: {
+        stage: 'free_agency',
+        seasonYear: 2027,
+        completedTeamIds: [],
+        draftStatus: 'none',
+        version: 3,
+        contractRoundsComplete: false,
+      },
+    };
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: [],
+      expectedStage: 'free_agency',
+      expectedVersion: 3,
+      pendingContractOfferCount: 0,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league: {
+        ...league,
+        offseason: { ...league.offseason, contractRoundsComplete: true },
+      },
+      teams: [],
+      expectedStage: 'free_agency',
+      expectedVersion: 3,
+      pendingContractOfferCount: 1,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(transitionForCallable({
+      uid: 'comm',
+      league: {
+        ...league,
+        offseason: { ...league.offseason, contractRoundsComplete: true },
+      },
+      teams: [],
+      expectedStage: 'free_agency',
+      expectedVersion: 3,
+      pendingContractOfferCount: 0,
+      stageStartedAt: 'now',
+    }).stage).toBe('draft_class_review');
+  });
+
   it('requires a published draft class before entering the live draft', () => {
     const league = {
       sport: 'mlb',
@@ -180,6 +228,27 @@ describe('offseason callable helpers', () => {
       liveDraftComplete: true,
       stageStartedAt: 'now',
     }).stage).toBe('roster_cuts');
+  });
+
+  it('routes ready-for-season advancement through the sport-aware season callable', () => {
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league: {
+        sport: 'mlb',
+        commissionerId: 'comm',
+        offseason: {
+          stage: 'ready_for_season',
+          seasonYear: 2027,
+          completedTeamIds: [],
+          draftStatus: 'complete',
+          version: 7,
+        },
+      },
+      teams: [],
+      expectedStage: 'ready_for_season',
+      expectedVersion: 7,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
   it('runs one transaction, reads league and teams before updating offseason', async () => {

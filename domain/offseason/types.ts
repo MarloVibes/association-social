@@ -26,5 +26,6 @@ export type OffseasonState = {
   completedTeamIds: string[];
   draftTimerSeconds: number;
   draftStatus: DraftStatus;
+  contractRoundsComplete?: boolean;
   version: number;
 };
