@@ -2,6 +2,16 @@ const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { validateTrade } = require('./domain/validateTrade');
+const {
+  authorizeFinalization,
+  canonicalCpuTeams,
+  matchesCpuIdentity,
+  resolveCpuIdentity,
+  swapAssets,
+  validateTeamBindings,
+  validationInput,
+} = require('./domain/finalizeTrade');
 
 initializeApp();
 
@@ -219,4 +229,196 @@ exports.deleteLeague = onCall(async (request) => {
   }
 
   return { deleted: true };
+});
+
+exports.finalizeTrade = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const data = request.data || {};
+  const leagueId = data.leagueId ? String(data.leagueId) : '';
+  const roomId = data.roomId || data.tradeRoomId;
+  const cpuRequestId = data.cpuRequestId || data.requestId;
+  if (!leagueId || (!roomId && !cpuRequestId) || (roomId && cpuRequestId)) {
+    throw new HttpsError('invalid-argument', 'Provide a league and exactly one trade source.');
+  }
+
+  const db = getFirestore();
+  const leagueRef = db.collection('leagues').doc(leagueId);
+  const type = cpuRequestId ? 'cpu' : 'room';
+  const sourceRef = type === 'cpu'
+    ? leagueRef.collection('cpu_trade_requests').doc(String(cpuRequestId))
+    : leagueRef.collection('trade_rooms').doc(String(roomId));
+
+  return db.runTransaction(async (tx) => {
+    const [leagueSnap, sourceSnap] = await Promise.all([
+      tx.get(leagueRef),
+      tx.get(sourceRef),
+    ]);
+    if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+    if (!sourceSnap.exists) throw new HttpsError('not-found', 'Trade not found.');
+
+    const league = leagueSnap.data() || {};
+    const source = sourceSnap.data() || {};
+    if (
+      (type === 'room' && source.status === 'executed')
+      || (type === 'cpu' && source.status === 'approved')
+    ) {
+      return { executed: false, alreadyFinalized: true };
+    }
+    if (!authorizeFinalization({ uid, league, source, type })) {
+      throw new HttpsError('permission-denied', 'This trade cannot be finalized by this user in its current state.');
+    }
+
+    const teamAId = type === 'cpu' ? source.proposerTeamId : source.hostTeamId;
+    const rawCpuId = String(source.cpuTeamId || '').replace(/^cpu_/, '');
+    const requestedCpuAbbr = String(source.cpuAbbr || '');
+    let teamBId = type === 'cpu' ? '' : source.guestTeamId;
+    if (!teamAId || (type === 'room' && !teamBId) || (type === 'cpu' && !rawCpuId && !requestedCpuAbbr)) {
+      throw new HttpsError('failed-precondition', 'Trade is missing a team.', { errors: ['team_missing'] });
+    }
+
+    const teamARef = leagueRef.collection('teams').doc(String(teamAId));
+    let teamBRef = type === 'room' ? leagueRef.collection('teams').doc(String(teamBId)) : null;
+    const sport = league.sport === 'nfl' ? 'madden' : (league.sport || 'nba');
+    const eraKey = league.era || 'current';
+    const poolKey = sport === 'madden' || sport === 'mlb' ? sport : eraKey;
+    const poolRef = db.collection('era_player_pools').doc(poolKey);
+    const eraTeamsRef = db.collection('era_rosters').doc(eraKey).collection('teams');
+    const liveTeamsRef = leagueRef.collection('teams');
+    const reads = [tx.get(teamARef)];
+    if (type === 'room') reads.push(tx.get(teamBRef));
+    if (type === 'cpu') {
+      reads.push(tx.get(poolRef), tx.get(liveTeamsRef));
+      if (sport === 'nba') reads.push(tx.get(eraTeamsRef));
+    }
+    const results = await Promise.all(reads);
+    const teamASnap = results[0];
+    const teamBSnap = type === 'room' ? results[1] : null;
+    const poolSnap = type === 'cpu' ? results[1] : null;
+    const liveTeamsSnap = type === 'cpu' ? results[2] : null;
+    const eraTeamsSnap = type === 'cpu' && sport === 'nba' ? results[3] : null;
+    if (!teamASnap.exists) {
+      throw new HttpsError('failed-precondition', 'A trade team no longer exists.', { errors: ['team_missing'] });
+    }
+
+    const teamA = teamASnap.data() || {};
+    let teamBExists = type === 'room' && teamBSnap.exists;
+    let teamB = teamBExists ? (teamBSnap.data() || {}) : {};
+    if (type === 'room' && !teamBExists) {
+      throw new HttpsError('failed-precondition', 'A trade team no longer exists.', { errors: ['team_missing'] });
+    }
+
+    let cpuIdentity = null;
+    if (type === 'cpu') {
+      const poolPlayers = poolSnap.exists && Array.isArray(poolSnap.data().players)
+        ? poolSnap.data().players
+        : null;
+      if (!poolPlayers) {
+        throw new HttpsError('failed-precondition', 'Trusted CPU roster or identity is unavailable.', {
+          errors: ['cpu_identity_unavailable'],
+        });
+      }
+      const eraTeams = eraTeamsSnap
+        ? eraTeamsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        : [];
+      const canonicalTeams = canonicalCpuTeams(sport, poolPlayers, eraTeams);
+      const liveTeamDocs = liveTeamsSnap.docs.map((doc) => ({ ref: doc.ref, id: doc.id, ...doc.data() }));
+      const liveTeams = liveTeamDocs.map(({ ref, ...team }) => team);
+      cpuIdentity = resolveCpuIdentity({
+        requestedId: rawCpuId,
+        requestedAbbr: requestedCpuAbbr,
+        eraTeams: canonicalTeams,
+        liveTeams,
+      });
+      const cpuAbbr = cpuIdentity && String(cpuIdentity.abbreviation || cpuIdentity.abbr || '').toUpperCase();
+      const trustedPlayers = poolPlayers && cpuAbbr
+        ? poolPlayers.filter((player) => String(player.team || '').toUpperCase() === cpuAbbr)
+        : [];
+      if (!cpuIdentity || trustedPlayers.length === 0) {
+        throw new HttpsError('failed-precondition', 'Trusted CPU roster or identity is unavailable.', {
+          errors: ['cpu_identity_unavailable'],
+        });
+      }
+      const existingCpu = liveTeamDocs.find((team) => matchesCpuIdentity(team, cpuIdentity) && !team.gmId);
+      teamBId = existingCpu ? existingCpu.id : `cpu_${cpuIdentity.id || cpuIdentity.abbreviation}`;
+      teamBRef = existingCpu ? existingCpu.ref : leagueRef.collection('teams').doc(teamBId);
+      teamBExists = !!existingCpu;
+      teamB = existingCpu || {};
+      if (teamBExists && teamB.gmId) {
+        throw new HttpsError('permission-denied', 'The requested CPU team is already claimed.');
+      }
+      if (teamBExists && !matchesCpuIdentity(teamB, cpuIdentity)) {
+        throw new HttpsError('failed-precondition', 'CPU team identity does not match the request.', {
+          errors: ['cpu_identity_mismatch'],
+        });
+      }
+      if (!teamBExists) {
+        teamB = { players: trustedPlayers, picks: [] };
+      }
+    }
+
+    const binding = validateTeamBindings({
+      leagueId, type, source, teamAId, teamBId, teamA, teamB,
+    });
+    if (!binding.valid) {
+      throw new HttpsError('permission-denied', 'Trade team ownership does not match the source.', {
+        errors: [binding.reason],
+      });
+    }
+
+    const input = validationInput({ league, source, teamA, teamB, type });
+    const validation = validateTrade(input);
+    if (!validation.valid) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Trade validation failed.',
+        {
+          errors: validation.errors,
+          payrollAfter: validation.payrollAfter,
+          rosterAfter: validation.rosterAfter,
+        },
+      );
+    }
+
+    const swapped = swapAssets(input);
+    tx.update(teamARef, swapped.teamA);
+    if (teamBExists) {
+      tx.update(teamBRef, swapped.teamB);
+    } else {
+      tx.set(teamBRef, {
+        gmId: null,
+        isCpu: true,
+        teamId: cpuIdentity.id || cpuIdentity.teamId || source.cpuTeamId,
+        name: cpuIdentity.full_name || cpuIdentity.name || source.cpuName || source.cpuAbbr || '',
+        abbreviation: cpuIdentity.abbreviation || cpuIdentity.abbr || source.cpuAbbr || '',
+        era: league.era || 'current',
+        tradeBlock: [],
+        ...swapped.teamB,
+      });
+    }
+
+    const timestamp = FieldValue.serverTimestamp();
+    if (type === 'cpu') {
+      tx.update(sourceRef, {
+        status: 'approved',
+        resolvedAt: timestamp,
+        resolvedBy: uid,
+      });
+    } else {
+      tx.update(sourceRef, {
+        status: 'executed',
+        executedAt: timestamp,
+        updatedAt: timestamp,
+      });
+    }
+    return {
+      executed: true,
+      sourceType: type,
+      validation: {
+        payrollAfter: validation.payrollAfter,
+        rosterAfter: validation.rosterAfter,
+      },
+    };
+  });
 });
