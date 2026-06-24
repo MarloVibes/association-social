@@ -9,9 +9,9 @@ import {
   Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
+import SportBackground from '@/components/channel/SportBackground';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
@@ -23,7 +23,7 @@ const EMOJI_LIST = [
 ];
 
 export default function ChannelScreen() {
-  const { leagueId, leagueName, channelId, channelLabel, channelIcon, commissionerId, coCommissioners } =
+  const { leagueId, leagueName, channelId, channelLabel, channelIcon, commissionerId, coCommissioners, sport } =
     useLocalSearchParams<{
       leagueId: string;
       leagueName: string;
@@ -32,9 +32,11 @@ export default function ChannelScreen() {
       channelIcon: string;
       commissionerId: string;
       coCommissioners: string;
+      sport: string;
     }>();
 
   const [messages, setMessages] = useState<any[]>([]);
+  const [resolvedSport, setResolvedSport] = useState(sport || '');
   const [blockSet, setBlockSet] = useState<Set<string>>(new Set());
 
   // Load block sets: who I blocked + who blocked me. Filter their messages out.
@@ -176,7 +178,9 @@ export default function ChannelScreen() {
   const loadMembers = async () => {
     const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
     if (!leagueSnap.exists()) return;
-    const memberIds: string[] = leagueSnap.data().members || [];
+    const league = leagueSnap.data();
+    setResolvedSport(league.sport || '');
+    const memberIds: string[] = league.members || [];
 
     // Load team data for each member
     const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
@@ -706,6 +710,7 @@ export default function ChannelScreen() {
   if (channelId === 'league-rules') {
     return (
       <View style={styles.chalkContainer}>
+        <SportBackground sport={resolvedSport} />
         {/* Chalkboard header */}
         <View style={styles.chalkHeader}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -787,6 +792,7 @@ export default function ChannelScreen() {
     const totalMembers = Object.keys(members).length;
     return (
       <View style={styles.voteContainer}>
+        <SportBackground sport={resolvedSport} />
         {/* Vote room header */}
         <View style={styles.voteHeader}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -992,6 +998,7 @@ export default function ChannelScreen() {
 
     return (
       <View style={styles.wantedContainer}>
+        <SportBackground sport={resolvedSport} />
         {/* Header */}
         <View style={styles.wantedHeader}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -1186,6 +1193,7 @@ export default function ChannelScreen() {
 
     return (
       <View style={styles.resetContainer}>
+        <SportBackground sport={resolvedSport} />
         <View style={styles.resetHeader}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.resetBack}>← Back</Text>
@@ -1479,6 +1487,7 @@ export default function ChannelScreen() {
   if (channelId === 'announcements') {
     return (
       <View style={styles.bulletinContainer}>
+        <SportBackground sport={resolvedSport} />
         <View style={styles.bulletinHeader}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.bulletinBack}>← Back</Text>
@@ -1710,6 +1719,7 @@ export default function ChannelScreen() {
 
     return (
       <View style={styles.hlContainer}>
+        <SportBackground sport={resolvedSport} />
         {/* Broadcast header */}
         <View style={styles.hlHeader}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -2018,31 +2028,7 @@ export default function ChannelScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
-      {/* Basketball Court Background */}
-      <View style={styles.courtBg} pointerEvents='none'>
-        <LinearGradient
-          colors={['#b9854a', '#9a6a37', '#a9763f', '#855227']}
-          locations={[0, 0.4, 0.7, 1]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0.15, y: 1 }}
-          style={styles.courtFloor}
-        />
-        <View style={styles.plankRow}>
-          {Array.from({ length: 16 }).map((_, i) => (
-            <View key={i} style={[styles.plank, i % 2 === 0 ? styles.plankDark : styles.plankLight]} />
-          ))}
-        </View>
-        <View style={styles.courtLine} />
-        <View style={styles.centerCircle} />
-        <View style={styles.centerDot} />
-        <View style={styles.paintTop} />
-        <View style={styles.paintBottom} />
-        <View style={styles.ftCircleTop} />
-        <View style={styles.ftCircleBottom} />
-        <View style={styles.threeTop} />
-        <View style={styles.threeBottom} />
-        <View style={styles.courtDark} />
-      </View>
+      <SportBackground sport={resolvedSport} />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
@@ -2180,7 +2166,7 @@ export default function ChannelScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0600' },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // Court background
   courtBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
@@ -2265,7 +2251,7 @@ const styles = StyleSheet.create({
   gifItem: { flex: 1, margin: 4 },
   gifThumb: { width: '100%', height: 120, borderRadius: 8 },
 
-  bulletinContainer: { flex: 1, backgroundColor: '#8B6914' },
+  bulletinContainer: { flex: 1, backgroundColor: 'rgba(139,105,20,0.82)' },
   bulletinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#5C3D11', borderBottomWidth: 3, borderBottomColor: '#3a2408' },
   bulletinBack: { color: '#FFD700', fontSize: 15, fontWeight: '700', width: 60 },
   bulletinHeaderCenter: { flex: 1, alignItems: 'center' },
@@ -2303,7 +2289,7 @@ const styles = StyleSheet.create({
   bulletinModalPost: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 6, backgroundColor: '#5C3D11' },
   bulletinModalPostText: { color: '#FFD700', fontWeight: '800', fontSize: 15 },
 
-  chalkContainer: { flex: 1, backgroundColor: '#2d5a27' },
+  chalkContainer: { flex: 1, backgroundColor: 'rgba(45,90,39,0.82)' },
   chalkHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#1a3d16', borderBottomWidth: 3, borderBottomColor: '#0d2409' },
   chalkBack: { color: '#a8d5a2', fontSize: 15, fontWeight: '700', width: 60 },
   chalkTitle: { color: '#ffffff', fontSize: 17, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
@@ -2332,7 +2318,7 @@ const styles = StyleSheet.create({
   chalkWriteBtn: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   chalkWriteBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
 
-  voteContainer: { flex: 1, backgroundColor: '#0d0d1a' },
+  voteContainer: { flex: 1, backgroundColor: 'rgba(13,13,26,0.84)' },
   voteHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#0a0a14', borderBottomWidth: 1, borderBottomColor: '#1a1a2a' },
   voteBack: { color: '#8888ff', fontSize: 15, fontWeight: '700', width: 60 },
   voteHeaderCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -2388,7 +2374,7 @@ const styles = StyleSheet.create({
   voteAddOption: { marginTop: 8, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#2a2a4a', borderStyle: 'dashed' },
   voteAddOptionText: { color: '#555', fontSize: 14 },
 
-  wantedContainer: { flex: 1, backgroundColor: '#1a0000' },
+  wantedContainer: { flex: 1, backgroundColor: 'rgba(26,0,0,0.84)' },
   wantedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#0d0000', borderBottomWidth: 2, borderBottomColor: '#440000' },
   wantedBack: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
   wantedHeaderCenter: { alignItems: 'center' },
@@ -2443,7 +2429,7 @@ const styles = StyleSheet.create({
   wantedProfileBadge: { backgroundColor: '#330000', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4, alignSelf: 'flex-start' },
   wantedProfileBadgeText: { color: '#ff9999', fontSize: 12, fontWeight: '600' },
 
-  resetContainer: { flex: 1, backgroundColor: '#0a0a14' },
+  resetContainer: { flex: 1, backgroundColor: 'rgba(10,10,20,0.84)' },
   resetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#060610', borderBottomWidth: 1, borderBottomColor: '#1a1a2a' },
   resetBack: { color: '#8888ff', fontSize: 15, fontWeight: '700', width: 60 },
   resetHeaderCenter: { alignItems: 'center' },
@@ -2491,7 +2477,7 @@ const styles = StyleSheet.create({
   resetProofBtnText: { color: '#555', fontSize: 14 },
   resetProofPreview: { width: '100%', height: 180, borderRadius: 8 },
 
-  hlContainer: { flex: 1, backgroundColor: '#0a0000' },
+  hlContainer: { flex: 1, backgroundColor: 'rgba(10,0,0,0.84)' },
   hlHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#000000', borderBottomWidth: 2, borderBottomColor: '#cc0000' },
   hlBack: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
   hlHeaderCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },

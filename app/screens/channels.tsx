@@ -1,7 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
-import { auth } from '@/constants/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import SportBackground from '@/components/channel/SportBackground';
 
 const CHANNELS = [
   { id: 'league-chat', label: 'League Chat', icon: '💬', desc: 'General conversation', commOnly: false },
@@ -23,18 +26,36 @@ export default function ChannelsScreen() {
   }>();
 
   const user = auth.currentUser;
+  const [resolvedLeagueName, setResolvedLeagueName] = useState(leagueName || '');
+  const [resolvedSport, setResolvedSport] = useState(sport || '');
   const coComms: string[] = coCommissioners ? JSON.parse(coCommissioners) : [];
   const isCommOrCoComm = user?.uid === commissionerId || coComms.includes(user?.uid || '');
 
+  useEffect(() => {
+    let active = true;
+
+    getDoc(doc(db, 'leagues', leagueId)).then(snapshot => {
+      if (!active || !snapshot.exists()) return;
+      const league = snapshot.data();
+      setResolvedLeagueName(league.name || leagueName || '');
+      setResolvedSport(league.sport || '');
+    }).catch(error => {
+      console.warn('league load failed', error);
+    });
+
+    return () => { active = false; };
+  }, [leagueId, leagueName]);
+
   return (
     <View style={styles.container}>
+      <SportBackground sport={resolvedSport} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.title}>{sport === 'nba' ? 'Inside the NBA' : sport === 'madden' ? 'Inside the NFL' : sport === 'mlb' ? 'Inside MLB' : 'Channels'}</Text>
-          <Text style={styles.subtitle}>{leagueName}</Text>
+          <Text style={styles.title}>{resolvedSport === 'nba' ? 'Inside the NBA' : resolvedSport === 'madden' ? 'Inside the NFL' : resolvedSport === 'mlb' ? 'Inside MLB' : 'Channels'}</Text>
+          <Text style={styles.subtitle}>{resolvedLeagueName}</Text>
         </View>
         <View style={{ width: 60 }} />
       </View>
@@ -51,7 +72,7 @@ export default function ChannelsScreen() {
                 if (channel.id === 'trade-center' || channel.id === 'trade-block') {
                   router.push({
                     pathname: '/screens/trade-channel',
-                    params: { leagueId, channelId: channel.id },
+                    params: { leagueId, channelId: channel.id, sport: resolvedSport },
                   });
                 } else {
                   router.push({
@@ -62,6 +83,7 @@ export default function ChannelsScreen() {
                       channelId: channel.id,
                       channelLabel: channel.label,
                       channelIcon: channel.icon,
+                      sport: resolvedSport,
                       commissionerId,
                       coCommissioners,
                     },
@@ -97,13 +119,13 @@ export default function ChannelsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: 'rgba(10,10,10,0.78)', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   backText: { color: '#00ff87', fontSize: 15, fontWeight: '600', width: 60 },
   headerCenter: { alignItems: 'center' },
   title: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
   subtitle: { fontSize: 12, color: '#666', marginTop: 2 },
   list: { padding: 20, gap: 10 },
-  channelCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', gap: 14 },
+  channelCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(26,26,26,0.9)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', gap: 14 },
   channelCardLocked: { opacity: 0.5 },
   channelIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
   channelIconText: { fontSize: 20 },
