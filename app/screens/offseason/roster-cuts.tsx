@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
+import { gradeFromHiddenValue } from '@/domain/nba/identity';
 import { rosterCompliance, rosterPayroll } from '@/domain/offseason/rosterCuts';
 import type { OffseasonState } from '@/domain/offseason/types';
 
@@ -63,6 +64,11 @@ function money(value: number): string {
 function isTwoWayPlayer(player: Player): boolean {
   const type = String(player.contractType || player.contract_type || player.rosterSlot || player.slot || '').trim().toLowerCase();
   return type === 'two_way' || type === 'two-way' || type === 'twoway' || type === 'two way';
+}
+
+function playerGradeLabel(player: Player): string | null {
+  if (!Number.isFinite(player.overall)) return null;
+  return `Grade ${gradeFromHiddenValue(Number(player.overall))}`;
 }
 
 export default function RosterCutsScreen() {
@@ -225,7 +231,7 @@ export default function RosterCutsScreen() {
             <View style={styles.playerCopy}>
               <Text style={styles.playerName}>{playerName(item)}</Text>
               <Text style={styles.playerMeta}>
-                {[item.overall ? `${item.overall} OVR` : null, Number.isFinite(item.salary) ? money(Number(item.salary)) : null]
+                {[playerGradeLabel(item), Number.isFinite(item.salary) ? money(Number(item.salary)) : null]
                   .filter(Boolean).join(' · ')}
               </Text>
             </View>

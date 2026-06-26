@@ -474,4 +474,12 @@ describe('source safety regressions', () => {
     expect(injuries).toContain("httpsCallable(functions, 'manageTeamInjury')");
     expect(functionsIndex).toContain('exports.manageTeamInjury');
   });
+
+  it('does not show raw player OVR labels in NBA franchise management screens', () => {
+    const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
+
+    expect(rosterCuts).not.toContain(' OVR');
+    expect(rosterCuts).toContain('gradeFromHiddenValue');
+    expect(rosterCuts).toContain('Grade ');
+  });
 });
