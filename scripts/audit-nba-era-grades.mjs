@@ -27,6 +27,56 @@ function hidden(player, key) {
   return numberFrom(player?.hidden?.[key] ?? player?.[key]);
 }
 
+function hasHidden(player, key) {
+  return player?.hidden?.[key] !== undefined || player?.[key] !== undefined;
+}
+
+function positionIncludes(player, values) {
+  const position = String(player.position || '').toUpperCase();
+  return values.some(value => position.includes(value));
+}
+
+function isWing(player) {
+  return positionIncludes(player, ['SG', 'SF', 'G-F', 'F-G']);
+}
+
+function salaryCoreSignal(player) {
+  const salary = stat(player, ['salary', 'currentSalary', 'seasonSalary']);
+  const salaryRank = stat(player, ['teamSalaryRank', 'salaryRank']);
+  return salary >= 8_000_000 || (salaryRank > 0 && salaryRank <= 3);
+}
+
+function careerCoreSignal(player) {
+  const winShares = stat(player, ['career_WS', 'careerWinShares', 'winShares']);
+  const per = stat(player, ['career_PER', 'careerPer', 'per']);
+  return winShares >= 40 || (winShares >= 25 && per >= 14);
+}
+
+function wingDefensiveWorkloadSignal(player) {
+  const minutes = stat(player, ['minutes', 'mpg', 'min']);
+  const ppg = stat(player, ['ppg', 'points', 'pts']);
+  const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
+  const spg = stat(player, ['spg', 'steals', 'stl']);
+  return isWing(player) && minutes >= 32 && ppg >= 11 && rpg >= 4 && spg >= 0.7;
+}
+
+function inferredDefense(player) {
+  return hidden(player, 'defense') || (wingDefensiveWorkloadSignal(player) ? 84 : 0);
+}
+
+function inferredIq(player) {
+  const iq = hidden(player, 'basketballIq');
+  if (iq) return iq;
+  return salaryCoreSignal(player) && careerCoreSignal(player) ? 82 : 0;
+}
+
+function inferredStamina(player) {
+  const stamina = hidden(player, 'stamina');
+  const minutes = stat(player, ['minutes', 'mpg', 'min']);
+  if (stamina) return stamina;
+  return minutes >= 36 ? 90 : minutes >= 32 ? 86 : 0;
+}
+
 function gradeFromScore(score) {
   const value = Math.max(0, Math.min(100, Math.round(numberFrom(score))));
   if (value >= 99) return 'S Legend';
@@ -50,15 +100,25 @@ function auditPlayer(player) {
   const ppg = stat(player, ['ppg', 'points', 'pts']);
   const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
   const apg = stat(player, ['apg', 'assists', 'ast']);
-  const defense = hidden(player, 'defense');
-  const iq = hidden(player, 'basketballIq');
-  const stamina = hidden(player, 'stamina');
+  const defense = inferredDefense(player);
+  const iq = inferredIq(player);
+  const stamina = inferredStamina(player);
   const shooting = hidden(player, 'shooting') || hidden(player, 'threePoint');
   const playmaking = hidden(player, 'playmaking') || hidden(player, 'passing');
   const rebounding = hidden(player, 'rebounding');
-  const coreRole = minutes >= 32 || (minutes >= 28 && ppg + rpg + apg >= 20) || (defense >= 84 && stamina >= 86);
+  const salarySignal = salaryCoreSignal(player);
+  const careerSignal = careerCoreSignal(player);
+  const wingDefenseSignal = wingDefensiveWorkloadSignal(player);
+  const coreRole = minutes >= 32
+    || salarySignal
+    || careerSignal
+    || (minutes >= 28 && ppg + rpg + apg >= 20)
+    || (defense >= 84 && stamina >= 86);
   const reasons = [];
   if (minutes >= 32) reasons.push(`${minutes} MPG workload`);
+  if (salarySignal) reasons.push('core salary signal');
+  if (wingDefenseSignal) reasons.push('wing defensive workload signal');
+  if (careerSignal) reasons.push('career win-share/core signal');
   if (defense >= 84) reasons.push('high defensive grade signal');
   if (iq >= 82) reasons.push('strong basketball IQ signal');
   if (stamina >= 88) reasons.push('high stamina/core-minute signal');
@@ -69,6 +129,9 @@ function auditPlayer(player) {
   else if (playmaking >= 86) archetype = 'Lead Creator';
   else if (defense >= 84 && rebounding >= 80) archetype = 'Defensive Anchor';
   else if (stamina >= 88 && defense >= 78) archetype = 'High-Minute Connector';
+  const missingCoreHiddenGrades = coreRole && !hasHidden(player, 'defense') && !hasHidden(player, 'basketballIq') && !hasHidden(player, 'stamina');
+  const needsReview = missingCoreHiddenGrades || (coreRole && archetype === 'Rotation Player');
+  const priority = needsReview ? 'high' : coreRole ? 'medium' : 'normal';
   const talent = [hidden(player, 'shooting'), hidden(player, 'playmaking'), defense, hidden(player, 'rebounding'), hidden(player, 'athleticism'), iq].filter(Boolean);
   const talentScore = talent.reduce((sum, value) => sum + value, 0) / Math.max(1, talent.length);
   return {
@@ -76,6 +139,7 @@ function auditPlayer(player) {
     team: player.team || '-',
     position: player.position || '-',
     coreRole,
+    priority,
     archetype,
     talent: gradeFromScore(talentScore || 74),
     potential: gradeFromScore(hidden(player, 'potential') || talentScore || 74),
@@ -94,9 +158,9 @@ function buildEraAuditReport(eraKey, players) {
     '',
     'This report is read-only. Review suggested player roles before applying any vault updates.',
     '',
-    '| Player | Team | Pos | Core Role | Suggested Archetype | Talent | Potential | Reasons |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...rows.map(row => `| ${row.name} | ${row.team} | ${row.position} | ${row.coreRole ? 'Yes' : 'No'} | ${row.archetype} | ${row.talent} | ${row.potential} | ${row.reasons} |`),
+    '| Player | Team | Pos | Core Role | Priority | Suggested Archetype | Talent | Potential | Reasons |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...rows.map(row => `| ${row.name} | ${row.team} | ${row.position} | ${row.coreRole ? 'Yes' : 'No'} | ${row.priority} | ${row.archetype} | ${row.talent} | ${row.potential} | ${row.reasons} |`),
     '',
   ].join('\n');
 }

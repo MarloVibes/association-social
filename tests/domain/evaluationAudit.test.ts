@@ -19,6 +19,32 @@ describe('NBA evaluation audit', () => {
     });
   });
 
+  it('uses salary, workload, and production to catch core players before hidden grades exist', () => {
+    const result = auditEraPlayer({
+      full_name: 'Luol Deng',
+      team: 'CHI',
+      position: 'SF',
+      minutes: 39,
+      ppg: 17.4,
+      rpg: 5.8,
+      apg: 2.8,
+      spg: 1,
+      salary: 11345000,
+      career_WS: 74,
+      career_PER: 15.4,
+    });
+
+    expect(result.coreRole).toBe(true);
+    expect(result.needsReview).toBe(true);
+    expect(result.reviewPriority).toBe('high');
+    expect(result.suggestedArchetype).toContain('Two-Way');
+    expect(result.reviewReasons).toEqual(expect.arrayContaining([
+      'core salary signal',
+      'wing defensive workload signal',
+      'career win-share/core signal',
+    ]));
+  });
+
   it('produces a markdown report without Firestore writes', () => {
     const report = buildEraAuditReport('rose', [
       {
@@ -38,6 +64,7 @@ describe('NBA evaluation audit', () => {
     expect(report).toContain('rose');
     expect(report).toContain('Luol Deng');
     expect(report).toContain('Two-Way');
+    expect(report).toContain('Priority');
     expect(report).not.toContain('setDoc');
   });
 });
