@@ -14,9 +14,10 @@ import { previewNbaScheduleOwnershipRepair, repairNbaScheduleOwnershipLocally } 
 
 type CalendarViewMode = ScheduleViewMode | 'cup';
 type CalendarGame = NbaScheduleGame & {
-  competition?: 'nbaCup';
+  competition?: 'nbaCup' | 'playoffs';
   groupId?: string;
   stage?: string;
+  liveTimeline?: unknown;
 };
 
 type Team = {
@@ -425,6 +426,7 @@ export default function CalendarScreen() {
           const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || item.homeTeamId, abbr: normalizeScheduleKey(item.homeTeamId) };
           const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || item.awayTeamId, abbr: normalizeScheduleKey(item.awayTeamId) };
           const cupGame = selectedViewMode === 'cup' || item.competition === 'nbaCup';
+          const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
           const mine = myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid);
           const openable = Boolean(mine || isLeagueAdmin);
           const needsReset = isLeagueAdmin && item.status !== 'scheduled';
@@ -445,8 +447,9 @@ export default function CalendarScreen() {
               style={[styles.gameRow, mine && styles.myGame, !openable && styles.disabledGame]}
               disabled={!openable}
               onPress={() => {
-                const destination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
-                router.push({ pathname: destination as any, params: { leagueId, gameId: item.id, competition: cupGame ? 'nbaCup' : 'regular' } });
+                const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
+                const destination = item.status === 'final' && item.liveTimeline ? '/screens/season/live-mode' : resultDestination;
+                router.push({ pathname: destination as any, params: { leagueId, gameId: item.id, competition: competitionParam } });
               }}
             >
               <View style={styles.gameCopy}>

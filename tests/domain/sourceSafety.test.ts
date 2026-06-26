@@ -198,6 +198,22 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain('Trap Star');
   });
 
+  it('routes simulated games and timeline replays into live mode', () => {
+    const matchup = source('app/screens/season/matchup.tsx');
+    const calendar = source('app/screens/season/calendar.tsx');
+    const result = source('app/screens/season/game-result.tsx');
+
+    expect(matchup).toContain('/screens/season/live-mode');
+    expect(calendar).toContain('/screens/season/live-mode');
+    expect(result).toContain('/screens/season/live-mode');
+    expect(matchup).toContain("(response.data as any)?.status !== 'final') {\n        await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/game-result'");
+    expect(matchup).toContain("router.replace({ pathname: '/screens/season/game-result'");
+    expect(matchup).toContain('liveTimeline,');
+    expect(matchup).toContain('liveMode,');
+    expect(matchup).toContain('arenaTheme,');
+    expect(calendar).toContain("item.status === 'final' && item.liveTimeline");
+  });
+
   it('lets commissioners reset finalized games from the result screen', () => {
     const result = source('app/screens/season/game-result.tsx');
 

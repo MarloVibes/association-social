@@ -29,9 +29,13 @@ type BoxScorePlayer = {
 };
 
 type ResultGame = NbaScheduleGame & {
-  competition?: 'nbaCup';
+  competition?: 'nbaCup' | 'playoffs';
   groupId?: string;
   stage?: string;
+  round?: string;
+  seriesId?: string;
+  playoffGame?: number;
+  liveTimeline?: unknown;
   boxScore?: {
     home?: { points?: number; players?: BoxScorePlayer[] };
     away?: { points?: number; players?: BoxScorePlayer[] };
@@ -44,6 +48,13 @@ type ScheduleDoc = {
   games?: ResultGame[];
   nbaCup?: {
     games?: ResultGame[];
+  } | null;
+  playoffs?: {
+    rounds?: {
+      series?: {
+        games?: ResultGame[];
+      }[];
+    }[];
   } | null;
 };
 
@@ -96,10 +107,17 @@ export default function GameResultScreen() {
   }, [leagueId]);
 
   const isCupGame = competition === 'nbaCup';
+  const isPlayoffGame = competition === 'playoffs';
+  const competitionParam = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const uid = auth.currentUser?.uid;
+  const playoffGames = useMemo(() => (
+    schedule?.playoffs?.rounds?.flatMap(round => (
+      round.series?.flatMap(series => series.games || []) || []
+    )) || []
+  ), [schedule?.playoffs?.rounds]);
   const games = useMemo(() => (
-    isCupGame ? schedule?.nbaCup?.games || [] : schedule?.games || []
-  ), [isCupGame, schedule?.games, schedule?.nbaCup?.games]);
+    isCupGame ? schedule?.nbaCup?.games || [] : isPlayoffGame ? playoffGames : schedule?.games || []
+  ), [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
   const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
@@ -119,6 +137,7 @@ export default function GameResultScreen() {
       || (league.coCommissioners || []).includes(uid)
     ),
   );
+  const showLiveReplay = Boolean(game?.liveTimeline);
 
   const resetGame = () => {
     if (!leagueId || !gameId || !isLeagueAdmin || resetting) return;
@@ -134,8 +153,8 @@ export default function GameResultScreen() {
             setResetting(true);
             try {
               const resetScheduledGame = httpsCallable(functions, 'resetScheduledGame');
-              await resetScheduledGame({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : 'regular' });
-              router.replace({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition: isCupGame ? 'nbaCup' : 'regular' } });
+              await resetScheduledGame({ leagueId, gameId, competition: competitionParam });
+              router.replace({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition: competitionParam } });
             } catch (error: any) {
               Alert.alert('Reset failed', error.message || 'Please try again.');
             } finally {
@@ -159,7 +178,7 @@ export default function GameResultScreen() {
             <Ionicons color="#ffffff" name="chevron-back" size={24} />
           </TouchableOpacity>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>{isCupGame ? 'NBA Cup' : league?.name || 'League'}</Text>
+            <Text style={styles.eyebrow}>{isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'League'}</Text>
             <Text style={styles.title}>Final Score</Text>
           </View>
         </View>
@@ -188,6 +207,15 @@ export default function GameResultScreen() {
                 <Text style={styles.teamScore}>{stat(game.homeScore)}</Text>
               </View>
             </View>
+            {showLiveReplay ? (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } })}
+                style={styles.replayButton}
+              >
+                <Ionicons color="#06130c" name="play" size={17} />
+                <Text style={styles.replayButtonText}>Replay Live Mode</Text>
+              </TouchableOpacity>
+            ) : null}
             {isLeagueAdmin && game.status === 'final' ? (
               <TouchableOpacity
                 disabled={resetting}
@@ -281,6 +309,8 @@ const styles = StyleSheet.create({
   scoreText: { color: '#fff', fontSize: 13, fontWeight: '900', textAlign: 'center' },
   status: { color: '#777', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   panel: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 14, marginBottom: 14 },
+  replayButton: { minHeight: 44, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 14 },
+  replayButtonText: { color: '#06130c', fontSize: 13, fontWeight: '900' },
   resetButton: { minHeight: 44, borderRadius: 8, backgroundColor: '#2a0c0c', borderWidth: 1, borderColor: '#ff5c5c88', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 14 },
   resetButtonDisabled: { opacity: 0.6 },
   resetButtonText: { color: '#fff', fontSize: 13, fontWeight: '900' },

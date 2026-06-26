@@ -27,13 +27,23 @@ type ScheduleDoc = {
     name?: string;
     games?: MatchupGame[];
   } | null;
+  playoffs?: {
+    rounds?: {
+      series?: {
+        games?: MatchupGame[];
+      }[];
+    }[];
+  } | null;
 };
 
 type MatchupGame = Omit<NbaScheduleGame, 'status'> & {
   status: NbaScheduleGame['status'] | 'requested' | 'preparing' | 'expired' | 'simulating';
-  competition?: 'nbaCup';
+  competition?: 'nbaCup' | 'playoffs';
   groupId?: string;
   stage?: string;
+  round?: string;
+  seriesId?: string;
+  playoffGame?: number;
   requestedByUid?: string;
   preparationDeadlineMs?: number;
   resetByUid?: string;
@@ -43,7 +53,7 @@ type MatchupGame = Omit<NbaScheduleGame, 'status'> & {
     home?: { points?: number; players?: BoxScorePlayer[] };
     away?: { points?: number; players?: BoxScorePlayer[] };
   };
-  quarters?: Array<{ quarter: number; home: number; away: number }>;
+  quarters?: { quarter: number; home: number; away: number }[];
   story?: string;
 };
 
@@ -106,7 +116,18 @@ export default function MatchupScreen() {
   }, [leagueId]);
 
   const isCupGame = competition === 'nbaCup';
-  const scheduledGames = isCupGame ? schedule?.nbaCup?.games || [] : schedule?.games || [];
+  const isPlayoffGame = competition === 'playoffs';
+  const competitionParam = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
+  const playoffGames = useMemo(() => (
+    schedule?.playoffs?.rounds?.flatMap(round => (
+      round.series?.flatMap(series => series.games || []) || []
+    )) || []
+  ), [schedule?.playoffs?.rounds]);
+  const scheduledGames = useMemo(() => {
+    if (isCupGame) return schedule?.nbaCup?.games || [];
+    if (isPlayoffGame) return playoffGames;
+    return schedule?.games || [];
+  }, [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
   const game = useMemo<MatchupGame | null>(
     () => scheduledGames.find(item => item.id === gameId) || null,
     [gameId, scheduledGames],
@@ -130,6 +151,8 @@ export default function MatchupScreen() {
   const gameContextLabel = game
     ? isCupGame
       ? `NBA Cup · ${game.groupId || 'Group Play'} · Game ${game.sequence} · ${game.status}`
+      : isPlayoffGame
+        ? `Playoffs · Game ${game.playoffGame || game.sequence} · ${game.status}`
       : `Week ${game.week} · Game ${game.sequence} · ${game.status}`
     : '';
   const isLeagueAdmin = Boolean(
@@ -186,6 +209,9 @@ export default function MatchupScreen() {
         winnerTeamId,
         loserTeamId,
         finalAtMs,
+        liveTimeline,
+        liveMode,
+        arenaTheme,
         ...baseGame
       } = item as any;
       void requestedByUid;
@@ -202,6 +228,9 @@ export default function MatchupScreen() {
       void winnerTeamId;
       void loserTeamId;
       void finalAtMs;
+      void liveTimeline;
+      void liveMode;
+      void arenaTheme;
       return {
         ...baseGame,
         status: 'scheduled',
@@ -211,6 +240,17 @@ export default function MatchupScreen() {
     });
     await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), isCupGame ? {
       'nbaCup.games': nextGames,
+    } : isPlayoffGame ? {
+      playoffs: {
+        ...(schedule.playoffs || {}),
+        rounds: schedule.playoffs?.rounds?.map(round => ({
+          ...round,
+          series: round.series?.map(series => ({
+            ...series,
+            games: series.games?.map(item => nextGames.find(next => next.id === item.id) || item) || [],
+          })) || [],
+        })) || [],
+      },
     } : {
       games: nextGames,
     });
@@ -255,6 +295,17 @@ export default function MatchupScreen() {
     ));
     await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), isCupGame ? {
       'nbaCup.games': nextGames,
+    } : isPlayoffGame ? {
+      playoffs: {
+        ...(schedule.playoffs || {}),
+        rounds: schedule.playoffs?.rounds?.map(round => ({
+          ...round,
+          series: round.series?.map(series => ({
+            ...series,
+            games: series.games?.map(item => nextGames.find(next => next.id === item.id) || item) || [],
+          })) || [],
+        })) || [],
+      },
     } : {
       games: nextGames,
     });
@@ -280,6 +331,17 @@ export default function MatchupScreen() {
     ));
     await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), isCupGame ? {
       'nbaCup.games': nextGames,
+    } : isPlayoffGame ? {
+      playoffs: {
+        ...(schedule.playoffs || {}),
+        rounds: schedule.playoffs?.rounds?.map(round => ({
+          ...round,
+          series: round.series?.map(series => ({
+            ...series,
+            games: series.games?.map(item => nextGames.find(next => next.id === item.id) || item) || [],
+          })) || [],
+        })) || [],
+      },
     } : {
       games: nextGames,
     });
@@ -290,14 +352,20 @@ export default function MatchupScreen() {
     setWorking(true);
     try {
       const fn = httpsCallable(functions, name);
-      const response = await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : 'regular' });
+      const response = await fn({ leagueId, gameId, competition: competitionParam });
       if (name === 'simulateScheduledGame' && isLeagueAdmin && (response.data as any)?.status !== 'final') {
         await simulateGameLocally();
+        router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
+        return;
+      }
+      if (name === 'simulateScheduledGame') {
+        router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
       }
     } catch (error: any) {
       if (name === 'simulateScheduledGame' && isMissingCallable(error) && isLeagueAdmin) {
         try {
           await simulateGameLocally();
+          router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
           return;
         } catch (fallbackError: any) {
           Alert.alert('Matchup action failed', fallbackError.message || 'Please try again.');
@@ -330,7 +398,7 @@ export default function MatchupScreen() {
     setWorking(true);
     try {
       const fn = httpsCallable(functions, 'reportGameScore');
-      await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : 'regular', awayScore, homeScore });
+      await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular', awayScore, homeScore });
     } catch (error: any) {
       if (isMissingCallable(error) && isLeagueAdmin) {
         try {
@@ -351,7 +419,7 @@ export default function MatchupScreen() {
     if (!game) return;
     Alert.alert(
       'Reset game?',
-      `This will move ${isCupGame ? `NBA Cup ${game.groupId || 'Group Play'}, Game ${game.sequence}` : `Week ${game.week}, Game ${game.sequence}`} back to scheduled.`,
+      `This will move ${isCupGame ? `NBA Cup ${game.groupId || 'Group Play'}, Game ${game.sequence}` : isPlayoffGame ? `Playoff Game ${game.playoffGame || game.sequence}` : `Week ${game.week}, Game ${game.sequence}`} back to scheduled.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
