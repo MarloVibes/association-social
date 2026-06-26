@@ -96,11 +96,13 @@ describe('source safety regressions', () => {
 
     expect(hook).toContain("pathname: '/screens/season/matchup'");
     expect(hook).toContain("pathname: '/screens/season/calendar'");
+    expect(hook).toContain("pathname: '/screens/season/injuries'");
     expect(hook).toContain("pathname: '/screens/offseason'");
     expect(hook).toContain("pathname: '/screens/offseason/live-draft'");
     expect(hook).toContain("pathname: '/screens/offseason/roster-cuts'");
     expect(hook).toContain("pathname: '/screens/season/awards'");
     expect(hook).toContain("pathname: '/screens/season/player-upgrades'");
+    expect(hook).not.toContain("['matchup_request', 'matchup_accepted', 'game_ready', 'injury_update']");
     expect(hook).not.toContain("['season_awards', 'awards_finalized', 'upgrade_points']");
   });
 
@@ -110,10 +112,13 @@ describe('source safety regressions', () => {
     expect(notifications).toContain('routeNotification');
     expect(notifications).toContain("pathname: '/screens/season/matchup'");
     expect(notifications).toContain("pathname: '/screens/season/calendar'");
+    expect(notifications).toContain("pathname: '/screens/season/injuries'");
     expect(notifications).toContain("pathname: '/screens/offseason/live-draft'");
     expect(notifications).toContain("pathname: '/screens/offseason/roster-cuts'");
     expect(notifications).toContain("pathname: '/screens/season/awards'");
     expect(notifications).toContain("pathname: '/screens/season/player-upgrades'");
+    expect(notifications).not.toContain("['matchup_request', 'matchup_accepted', 'game_ready', 'injury_update']");
+    expect(notifications).toContain("if (type === 'injury_update') return 'View Injuries");
     expect(notifications).not.toContain("['season_awards', 'awards_finalized', 'upgrade_points']");
   });
 

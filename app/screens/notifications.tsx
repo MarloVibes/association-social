@@ -43,7 +43,9 @@ function routeNotification(n: any) {
     router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: n.leagueName || '', channelId: 'announcements', channelLabel: 'League News', channelIcon: '📰', commissionerId: '', coCommissioners: '[]' } });
   } else if (['game_simulated', 'game_final', 'score_reported'].includes(type) && gameId) {
     router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition } });
-  } else if (['matchup_request', 'matchup_accepted', 'game_ready', 'injury_update'].includes(type)) {
+  } else if (type === 'injury_update') {
+    router.push({ pathname: '/screens/season/injuries', params: { leagueId } });
+  } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
     if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
     else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
   } else if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) {
@@ -99,7 +101,8 @@ function notificationActionLabel(type: string) {
   if (type === 'mention') return 'View Message →';
   if (type === 'announcement') return 'View League News →';
   if (['game_simulated', 'game_final', 'score_reported'].includes(type)) return 'View Result →';
-  if (['matchup_request', 'matchup_accepted', 'game_ready', 'injury_update'].includes(type)) return 'View Matchup →';
+  if (type === 'injury_update') return 'View Injuries →';
+  if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) return 'View Matchup →';
   if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) return 'View Calendar →';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) return 'View Draft →';
   if (['draft_class_ready', 'contract_round', 'free_agency', 'offseason_stage'].includes(type)) return 'View Offseason →';

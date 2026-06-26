@@ -32,7 +32,11 @@ function routeFromData(data: any) {
       router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
     } else if (['game_simulated', 'game_final', 'score_reported'].includes(type) && gameId) {
       router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition } });
-    } else if (['matchup_request', 'matchup_accepted', 'game_ready', 'injury_update'].includes(type)) {
+    } else if (type === 'injury_update') {
+      if (leagueId) {
+        router.push({ pathname: '/screens/season/injuries', params: { leagueId } });
+      }
+    } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
       if (gameId) {
         router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
       } else if (leagueId) {
