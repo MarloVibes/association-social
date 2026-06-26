@@ -50,6 +50,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Marcus Camby | POR | Center and Power Forward | high | 11749832 | 81.6 | 17.8 | 9.5/9.8/1.9 | core salary, career win shares, above-average PER, rebounding value |
 | Josh Smith | ATL | Small Forward and Power Forward | high | 11600000 | 51 | 17.4 | 14.5/7.4/3.1 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Emeka Okafor | NOH | Power Forward and Center | high | 11495000 | 45.3 | 17 | 12/9.7/0.8 | core salary, above-average PER, rebounding value |
+| Nene Hilario | DEN | Power Forward and Center | high | 11360000 | 73.3 | 17.1 | 11.3/6/1.8 | core salary, career win shares, above-average PER, rebounding value |
 | Luol Deng | CHI | Power Forward and Small Forward | high | 11345000 | 74 | 15.4 | 14.8/6.1/2.3 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | LaMarcus Aldridge | POR | Power Forward and Center | high | 11244000 | 107 | 20.9 | 19.6/8.4/2 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Tayshaun Prince | DET | Small Forward | high | 11148760 | 63.1 | 13.7 | 11.1/4.3/2.4 | core salary, career win shares |
@@ -84,6 +85,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Shawn Marion | DAL | Small Forward and Power Forward | high | 7305500 | 124.9 | 18.8 | 15.2/8.7/1.9 | career win shares, above-average PER, scoring load, rebounding value |
 | Andre Miller | POR | Point Guard and Shooting Guard | high | 7269264 | 100.8 | 17.4 | 12.5/3.7/6.5 | career win shares, above-average PER, creator value |
 | Marvin Williams | ATL | Power Forward and Small Forward | high | 6712500 | 62.7 | 13.7 | 10.5/5.3/1.3 | career win shares |
+| Ron Artest | LAL | Small Forward | high | 6322320 | 61.1 | 14.8 | 13.2/4.5/2.7 | career win shares, above-average PER |
 | Trevor Ariza | NOH | Small Forward and Shooting Guard | high | 6322320 | 60 | 13.3 | 10.7/4.8/2.2 | career win shares |
 | Kevin Durant | OKC | Power Forward and Small Forward and Shooting Guard | high | 6053663 | 141.7 | 25.2 | 27/7.1/4.1 | career win shares, above-average PER, scoring load, rebounding value |
 | Kyle Lowry | HOU | Point Guard | high | 5750000 | 86.7 | 18.4 | 14.4/4.3/6.1 | career win shares, above-average PER, scoring load, creator value |
@@ -184,8 +186,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Chase Budinger | HOU | Small Forward | normal | 780871 | 13.9 | 13 | 7.9/3/1.2 | - |
 | Gary Neal | SAS | Shooting Guard | normal | 525000 | 10.7 | 12.6 | 9.9/2.2/1.6 | - |
 | Landry Fields | NYK | Shooting Guard and Small Forward | normal | 473604 | 10.5 | 12.1 | 6.8/4.3/1.6 | - |
-| Nene Hilario | DEN | C | normal | 0 | 0 | 0 | 0/0/0 | - |
-| Ron Artest | LAL | F | normal | 0 | 0 | 0 | 0/0/0 | - |
 
 ## Duplicate Player Warnings
 
@@ -197,8 +197,3 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 - Kendrick Perkins: BOS, OKC
 - Richard Hamilton: CHI, DET
 - Vince Carter: ORL, PHX
-
-## No Local Profile Match Warnings
-
-- Nene Hilario: DEN
-- Ron Artest: LAL

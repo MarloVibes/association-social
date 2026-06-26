@@ -47,6 +47,16 @@ export function normalizeName(value) {
     .trim();
 }
 
+const PROFILE_NAME_ALIASES = {
+  [normalizeName('Nene Hilario')]: normalizeName('Nene'),
+  [normalizeName('Ron Artest')]: normalizeName('Metta World Peace'),
+};
+
+function profileKeyForName(name) {
+  const normalized = normalizeName(name);
+  return PROFILE_NAME_ALIASES[normalized] || normalized;
+}
+
 function column(headers, ...names) {
   const normalized = headers.map(header => String(header).toLowerCase().trim());
   for (const name of names) {
@@ -153,7 +163,7 @@ export function buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playe
   const players = [];
   for (const team of teams) {
     for (const player of team.players || []) {
-      const key = normalizeName(player.full_name);
+      const key = profileKeyForName(player.full_name);
       const profile = byName[key] || {};
       const salaryByYear = salaries[key] || {};
       const matchedProfile = Boolean(byName[key]);

@@ -61,6 +61,46 @@ describe('local NBA era audit data builder', () => {
     ]);
   });
 
+  it('matches known NBA name aliases used across era roster and profile sources', () => {
+    const rosterSource = `
+      const ERA_LEBRON = {
+        era: 'lebron',
+        season: '2010-11',
+        teams: [
+          { id: 'den_2011', abbreviation: 'DEN', full_name: 'Denver Nuggets', city: 'Denver', name: 'Nuggets',
+            players: [
+              p('l_den_2', 'Nene', 'Hilario', 'C', '31', 'DEN'),
+              p('l_lal_5', 'Ron', 'Artest', 'F', '15', 'LAL'),
+            ]
+          },
+        ]
+      };
+    `;
+    const playersCsv = [
+      'index,_id,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,hilarne01,1.8,17.1,11.3,6.0,73.3,Nene,Power Forward and Center',
+      '2,artesro01,2.7,14.8,13.2,4.5,61.1,Metta World Peace,Small Forward',
+    ].join('\n');
+    const salariesCsv = [
+      'player_id,salary,season,season_end,team',
+      'hilarne01,11200000,2010-11,2011,DEN',
+      'artesro01,6322600,2010-11,2011,LAL',
+    ].join('\n');
+
+    const players = buildLocalEraAuditPlayers({
+      era: 'lebron',
+      seasonStartYear: 2010,
+      rosters: parseEraRosters(rosterSource),
+      playersCsv,
+      salariesCsv,
+    });
+
+    expect(players).toEqual([
+      expect.objectContaining({ full_name: 'Nene Hilario', matchedProfile: true, salary: 11200000, career_WS: 73.3 }),
+      expect.objectContaining({ full_name: 'Ron Artest', matchedProfile: true, salary: 6322600, career_WS: 61.1 }),
+    ]);
+  });
+
   it('builds a readable markdown audit report from local evidence', () => {
     const report = buildLocalEraAuditReport('lebron', [
       {
