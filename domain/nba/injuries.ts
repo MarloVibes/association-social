@@ -1,11 +1,20 @@
 export type InjurySeverity = 'minor' | 'severe';
 
 export type InjuryEvent = {
+  id?: string;
+  teamId?: string;
+  playerId?: string;
+  playerName?: string;
   severity: InjurySeverity;
   gamesRemaining: number;
   label: string;
   recoveryTag: string;
 };
+
+export type InjuryAction =
+  | { type: 'add'; injury: InjuryEvent }
+  | { type: 'update'; injuryId: string; patch: Partial<InjuryEvent> }
+  | { type: 'remove'; injuryId: string };
 
 export type GenerateInjuryEventInput = {
   minorCount: number;
@@ -73,6 +82,38 @@ export function updateTeamFatigue(input: UpdateTeamFatigueInput): number {
   const recovery = input.recoveryDays * 3;
   const next = input.current + gameLoad - recovery;
   return Math.max(0, Math.min(20, Math.round(next * 10) / 10));
+}
+
+function normalizedInjury(injury: InjuryEvent): InjuryEvent {
+  const gamesRemaining = Number(injury.gamesRemaining);
+  if (!Number.isInteger(gamesRemaining) || gamesRemaining < 0 || gamesRemaining > 82) {
+    throw new Error('Enter a valid games remaining value.');
+  }
+  if (injury.severity !== 'minor' && injury.severity !== 'severe') {
+    throw new Error('Choose a valid injury severity.');
+  }
+  return {
+    ...injury,
+    id: String(injury.id || `${injury.playerId || 'manual'}-${Date.now()}`),
+    label: String(injury.label || (injury.severity === 'minor' ? 'Minor injury' : 'Severe injury')),
+    recoveryTag: String(injury.recoveryTag || (injury.severity === 'minor' ? 'day-to-day' : 'out')),
+    gamesRemaining,
+  };
+}
+
+export function applyInjuryAction({ injuries, action }: { injuries: InjuryEvent[]; action: InjuryAction }): InjuryEvent[] {
+  const current = Array.isArray(injuries) ? injuries : [];
+  if (action.type === 'add') {
+    const next = normalizedInjury(action.injury);
+    return [...current.filter(injury => injury.id !== next.id), next];
+  }
+  if (action.type === 'remove') {
+    return current.filter(injury => injury.id !== action.injuryId);
+  }
+  return current.map((injury) => {
+    if (injury.id !== action.injuryId) return injury;
+    return normalizedInjury({ ...injury, ...action.patch });
+  });
 }
 
 function pickSeverity(seed: string): InjurySeverity | null {

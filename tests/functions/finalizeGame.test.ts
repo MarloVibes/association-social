@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
+  applyInjuryAction,
   finalizeGame,
 } = require('../../functions/franchise/finalizeGame.js');
 
@@ -65,5 +66,34 @@ describe('NBA game finalization', () => {
     expect(result.game.fatigue.home.sequence).toBe(4);
     expect(result.game.fatigue.away.sequence).toBe(8);
     expect(result.game.injuries.home).toEqual([]);
+  });
+
+  it('applies commissioner injury actions to team injury lists', () => {
+    const added = applyInjuryAction({
+      injuries: [],
+      action: {
+        type: 'add',
+        injury: {
+          id: 'manual-1',
+          playerId: 'cp3',
+          playerName: 'Chris Paul',
+          severity: 'minor',
+          gamesRemaining: 2,
+          label: 'Ankle soreness',
+          recoveryTag: 'day-to-day',
+        },
+      },
+    });
+    const updated = applyInjuryAction({
+      injuries: added,
+      action: { type: 'update', injuryId: 'manual-1', patch: { gamesRemaining: 1 } },
+    });
+    const removed = applyInjuryAction({
+      injuries: updated,
+      action: { type: 'remove', injuryId: 'manual-1' },
+    });
+
+    expect(updated[0].gamesRemaining).toBe(1);
+    expect(removed).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePlayoffSeries, buildPlayoffBracket } from '@/domain/nba/playoffs';
+import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames } from '@/domain/nba/playoffs';
 import type { StandingsRow } from '@/domain/nba/standings';
 
 function standings(count: number): StandingsRow[] {
@@ -136,5 +136,49 @@ describe('NBA playoffs', () => {
       seriesId: bracket.rounds[0].series[0].id,
       winnerTeamId: 'T99',
     })).toThrow('Winner must be one of the teams in the series.');
+  });
+
+  it('advances a series from four completed playoff game wins', () => {
+    const bracket = buildPlayoffBracket({
+      standings: standings(8),
+      format: 'short_8',
+      seasonYear: 2026,
+      seed: 'game-flow',
+    });
+    const series = bracket.rounds[0].series[0];
+    const completedGames = series.games.map((game, index) => ({
+      ...game,
+      status: index < 4 ? 'final' as const : 'scheduled' as const,
+      winnerTeamId: index < 4 ? series.awayTeamId : undefined,
+    }));
+
+    const synced = syncPlayoffSeriesFromGames({
+      bracket,
+      games: completedGames,
+    });
+
+    expect(synced.rounds[0].series[0].winnerTeamId).toBe(series.awayTeamId);
+  });
+
+  it('does not advance a playoff series before a team reaches four wins', () => {
+    const bracket = buildPlayoffBracket({
+      standings: standings(8),
+      format: 'short_8',
+      seasonYear: 2026,
+      seed: 'game-flow-pending',
+    });
+    const series = bracket.rounds[0].series[0];
+    const completedGames = series.games.map((game, index) => ({
+      ...game,
+      status: index < 3 ? 'final' as const : 'scheduled' as const,
+      winnerTeamId: index < 3 ? series.homeTeamId : undefined,
+    }));
+
+    const synced = syncPlayoffSeriesFromGames({
+      bracket,
+      games: completedGames,
+    });
+
+    expect(synced.rounds[0].series[0].winnerTeamId).toBeNull();
   });
 });

@@ -442,6 +442,13 @@ export default function LeagueScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/season/injuries', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>➕</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Injuries</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
                 onPress={() => {
                   if (!myTeam) { Alert.alert('No team yet', 'Claim a team before saving coaching presets.'); return; }
                   router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } });

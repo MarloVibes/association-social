@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { advancePlayoffSeries, buildPlayoffBracket, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
+import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
 import { buildNbaStandings } from '@/domain/nba/standings';
 
 type Team = {
@@ -19,13 +19,13 @@ type Team = {
 
 type ScheduleDoc = {
   games?: NbaScheduleGame[];
-  participants?: Array<{
+  participants?: {
     scheduleTeamId?: string;
     sourceTeamDocId?: string | null;
     gmId?: string | null;
     abbreviation?: string;
     name?: string;
-  }>;
+  }[];
   playoffs?: PlayoffBracket | null;
 };
 
@@ -42,6 +42,7 @@ export default function PlayoffsScreen() {
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [advancingSeries, setAdvancingSeries] = useState('');
   const [format, setFormat] = useState<PlayoffFormat>('short_8');
 
@@ -130,6 +131,28 @@ export default function PlayoffsScreen() {
     }
   };
 
+  const syncCompletedGames = async () => {
+    if (!leagueId || !league || !bracket) return;
+    setSyncing(true);
+    try {
+      const scheduleId = league.scheduleId || String(league.currentYear || 2025);
+      const games = bracket.rounds.flatMap(round => round.series.flatMap(item => item.games));
+      const nextBracket = syncPlayoffSeriesFromGames({ bracket, games });
+      await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), {
+        playoffs: nextBracket,
+      });
+    } catch (error: any) {
+      Alert.alert('Playoffs not synced', error.message || 'Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const openGame = (game: NbaScheduleGame) => {
+    const destination = game.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
+    router.push({ pathname: destination as any, params: { leagueId, gameId: game.id, competition: 'playoffs' } });
+  };
+
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
 
   return (
@@ -175,6 +198,11 @@ export default function PlayoffsScreen() {
                 </TouchableOpacity>
               </View>
             ) : null}
+            {bracket && isLeagueAdmin ? (
+              <TouchableOpacity disabled={syncing} style={[styles.syncButton, syncing && styles.disabled]} onPress={syncCompletedGames}>
+                {syncing ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>Sync Completed Games</Text>}
+              </TouchableOpacity>
+            ) : null}
           </>
         )}
         renderItem={({ item }) => (
@@ -218,6 +246,15 @@ export default function PlayoffsScreen() {
                 </TouchableOpacity>
               </View>
             ) : null}
+            <View style={styles.gamesGrid}>
+              {item.games.map(game => (
+                <TouchableOpacity key={game.id} style={[styles.gameButton, game.status === 'final' && styles.gameButtonFinal]} onPress={() => openGame(game)}>
+                  <Text style={[styles.gameButtonText, game.status === 'final' && styles.gameButtonTextFinal]}>
+                    G{game.playoffGame}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>{bracket ? 'No playoff series are available.' : 'No playoff bracket has been started yet.'}</Text>}
@@ -245,6 +282,7 @@ const styles = StyleSheet.create({
   segmentText: { color: '#777', fontSize: 12, fontWeight: '900' },
   segmentTextActive: { color: '#00e58b' },
   startButton: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
+  syncButton: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   startText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   disabled: { opacity: 0.5 },
   seriesCard: { backgroundColor: '#111', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 10 },
@@ -261,5 +299,10 @@ const styles = StyleSheet.create({
   winnerActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   winnerButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', backgroundColor: '#0a1d14', alignItems: 'center', justifyContent: 'center' },
   winnerButtonText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  gamesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
+  gameButton: { width: 38, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
+  gameButtonFinal: { backgroundColor: '#0a1d14', borderColor: '#00e58b55' },
+  gameButtonText: { color: '#aaa', fontSize: 11, fontWeight: '900' },
+  gameButtonTextFinal: { color: '#00e58b' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20, marginTop: 12 },
 });

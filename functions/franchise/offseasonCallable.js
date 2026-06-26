@@ -244,7 +244,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
             ),
           };
         const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
-        const expansionTeamDocs = input.expectedStage === 'expansion'
+        const expansionTeamDocs = input.expectedStage === 'expansion' && league.expansionDraftCompleted !== true
           ? buildExpansionTeamDocs({
             proposal: league.expansionProposal,
             existingTeams: teams,

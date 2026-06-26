@@ -58,6 +58,42 @@ function updateTeamFatigue({ current, minutesPlayed, recoveryDays }) {
   return Math.max(0, Math.min(20, Math.round(next * 10) / 10));
 }
 
+function normalizedInjury(injury) {
+  const gamesRemaining = Number(injury && injury.gamesRemaining);
+  if (!Number.isInteger(gamesRemaining) || gamesRemaining < 0 || gamesRemaining > 82) {
+    throw new FinalizeGameError('invalid-argument', 'Enter a valid games remaining value.');
+  }
+  if (!injury || (injury.severity !== 'minor' && injury.severity !== 'severe')) {
+    throw new FinalizeGameError('invalid-argument', 'Choose a valid injury severity.');
+  }
+  return {
+    ...injury,
+    id: String(injury.id || `${injury.playerId || 'manual'}-${Date.now()}`),
+    label: String(injury.label || (injury.severity === 'minor' ? 'Minor injury' : 'Severe injury')),
+    recoveryTag: String(injury.recoveryTag || (injury.severity === 'minor' ? 'day-to-day' : 'out')),
+    gamesRemaining,
+  };
+}
+
+function applyInjuryAction({ injuries, action }) {
+  const current = Array.isArray(injuries) ? injuries : [];
+  if (!action || !action.type) throw new FinalizeGameError('invalid-argument', 'Choose an injury action.');
+  if (action.type === 'add') {
+    const next = normalizedInjury(action.injury || {});
+    return [...current.filter(injury => injury.id !== next.id), next];
+  }
+  if (action.type === 'remove') {
+    return current.filter(injury => injury.id !== action.injuryId);
+  }
+  if (action.type === 'update') {
+    return current.map((injury) => {
+      if (injury.id !== action.injuryId) return injury;
+      return normalizedInjury({ ...injury, ...(action.patch || {}) });
+    });
+  }
+  throw new FinalizeGameError('invalid-argument', 'Choose an injury action.');
+}
+
 function normalizeScore(value, label) {
   const score = Number(value);
   if (!Number.isInteger(score) || score < 0) {
@@ -191,8 +227,75 @@ function finalizeGame({
   };
 }
 
+function isCommissioner(uid, league) {
+  return Boolean(
+    uid
+    && league
+    && (
+      league.commissionerId === uid
+      || (league.coCommissioners || []).includes(uid)
+    )
+  );
+}
+
+function teamKeyMatches(team, docId, teamId) {
+  return [docId, team && team.id, team && team.teamId, team && team.abbreviation]
+    .map(value => String(value || '').trim())
+    .includes(String(teamId || '').trim());
+}
+
+function createManageTeamInjuryHandler({ getFirestore, HttpsError }) {
+  return async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+    const data = request.data || {};
+    const leagueId = String(data.leagueId || '').trim();
+    const teamId = String(data.teamId || '').trim();
+    const action = data.action || null;
+    if (!leagueId || !teamId || !action) {
+      throw new HttpsError('invalid-argument', 'Provide leagueId, teamId, and action.');
+    }
+
+    const db = getFirestore();
+    const leagueRef = db.collection('leagues').doc(leagueId);
+    return db.runTransaction(async (tx) => {
+      const [leagueSnap, teamsSnap] = await Promise.all([
+        tx.get(leagueRef),
+        tx.get(leagueRef.collection('teams')),
+      ]);
+      if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+      const league = leagueSnap.data() || {};
+      if (!isCommissioner(uid, league)) {
+        throw new HttpsError('permission-denied', 'Only commissioners can manage injuries.');
+      }
+      const teamDoc = teamsSnap.docs.find((doc) => teamKeyMatches(doc.data() || {}, doc.id, teamId));
+      if (!teamDoc) throw new HttpsError('not-found', 'Team not found.');
+      let injuries;
+      try {
+        injuries = applyInjuryAction({
+          injuries: (teamDoc.data() || {}).injuries || [],
+          action,
+        });
+      } catch (error) {
+        if (error instanceof FinalizeGameError) {
+          throw new HttpsError(error.code, error.message, error.details);
+        }
+        throw error;
+      }
+      tx.update(teamDoc.ref, {
+        injuries,
+        injuriesUpdatedAt: new Date().toISOString(),
+        injuriesUpdatedByUid: uid,
+      });
+      return { teamId: teamDoc.id, injuries };
+    });
+  };
+}
+
 module.exports = {
   FinalizeGameError,
+  applyInjuryAction,
+  createManageTeamInjuryHandler,
   finalizeGame,
   generateInjuryEvent,
   updateTeamFatigue,

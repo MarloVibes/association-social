@@ -62,6 +62,13 @@ const {
 const {
   createFinalizeSeasonAwardsHandler,
 } = require('./franchise/awards');
+const {
+  createManageTeamInjuryHandler,
+} = require('./franchise/finalizeGame');
+const {
+  createRunExpansionDraftHandler,
+  createSubmitExpansionProtectionHandler,
+} = require('./franchise/expansion');
 
 initializeApp();
 
@@ -443,6 +450,21 @@ exports.finalizeSeasonAwards = onCall(createFinalizeSeasonAwardsHandler({
   getFirestore,
   HttpsError,
   FieldValue,
+}));
+
+exports.submitExpansionProtection = onCall(createSubmitExpansionProtectionHandler({
+  getFirestore,
+  HttpsError,
+}));
+
+exports.runExpansionDraft = onCall(createRunExpansionDraftHandler({
+  getFirestore,
+  HttpsError,
+}));
+
+exports.manageTeamInjury = onCall(createManageTeamInjuryHandler({
+  getFirestore,
+  HttpsError,
 }));
 
 exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (request) => {

@@ -315,3 +315,28 @@ export function advancePlayoffSeries({
   }));
   return appendNextRound({ ...bracket, rounds });
 }
+
+export function syncPlayoffSeriesFromGames({
+  bracket,
+  games,
+}: {
+  bracket: PlayoffBracket;
+  games: Array<Partial<PlayoffGame> & { id?: string; winnerTeamId?: string | null; status?: string }>;
+}): PlayoffBracket {
+  const gameById = new Map((games || []).map(game => [game.id, game]));
+  const rounds = bracket.rounds.map(round => ({
+    ...round,
+    series: round.series.map((series) => {
+      if (series.winnerTeamId) return series;
+      const wins = new Map<string, number>();
+      series.games.forEach((game) => {
+        const source = gameById.get(game.id) || game;
+        if (source.status !== 'final' || !source.winnerTeamId) return;
+        wins.set(source.winnerTeamId, (wins.get(source.winnerTeamId) || 0) + 1);
+      });
+      const winningEntry = [...wins.entries()].find(([, winCount]) => winCount >= 4);
+      return winningEntry ? { ...series, winnerTeamId: winningEntry[0] } : series;
+    }),
+  }));
+  return appendNextRound({ ...bracket, rounds });
+}
