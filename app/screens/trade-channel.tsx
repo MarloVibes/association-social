@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard from '@/components/PlayerCard';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getPlaystyle } from '@/constants/playstyle';
 import { getSportArchetype } from '@/constants/sportArchetype';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters, matchesPositionFilter } from '@/domain/sports/playerFields';
@@ -33,20 +34,15 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?:
       </TouchableOpacity>
     );
   }
-  const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
+  const fallback = (
+    <View style={styles.playerSlotPhotoPlaceholder}>
+      <Text style={styles.playerSlotInitial}>{(player?.full_name || '?')[0]}</Text>
+    </View>
+  );
   return (
     <TouchableOpacity style={[styles.playerSlot, style]} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.playerSlotInner}>
-        {brefId ? (
-          <Image
-            source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }}
-            style={styles.playerSlotPhoto}
-          />
-        ) : (
-          <View style={styles.playerSlotPhotoPlaceholder}>
-            <Text style={styles.playerSlotInitial}>{(player?.full_name || '?')[0]}</Text>
-          </View>
-        )}
+        <PlayerHeadshot player={player} sport={sport} imageStyle={styles.playerSlotPhoto} fallback={fallback} />
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>

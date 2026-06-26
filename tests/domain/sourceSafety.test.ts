@@ -24,6 +24,14 @@ describe('source safety regressions', () => {
     expect(select).not.toContain('source={getTeamLogoLocal(team.abbreviation, currentYear)');
   });
 
+  it('uses sport-aware player photos in the trade center', () => {
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+
+    expect(tradeChannel).toContain("import PlayerHeadshot from '@/components/PlayerHeadshot'");
+    expect(tradeChannel).toContain('<PlayerHeadshot player={player} sport={sport}');
+    expect(tradeChannel).not.toContain('basketball-reference.com/req/202106291/images/headshots/');
+  });
+
   it('does not dereference a nullable auth user while saving a profile', () => {
     const profile = source('app/screens/profile.tsx');
 
