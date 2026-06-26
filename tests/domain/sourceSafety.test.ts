@@ -343,6 +343,15 @@ describe('source safety regressions', () => {
     expect(settings).toContain("'offseason.draftTimerSeconds': draftTimer");
   });
 
+  it('backfills sport defaults when league settings are saved', () => {
+    const settings = source('app/screens/league-settings.tsx');
+
+    expect(settings).toContain('rosterLimit: sportRules.standardRosterLimit');
+    expect(settings).toContain('twoWayLimit: sportRules.twoWayLimit');
+    expect(settings).toContain('draftRounds: sportRules.draftRounds');
+    expect(settings).toContain('financeMode: sportRules.financeMode');
+  });
+
   it('lets commissioners apply award and lottery upgrade points from the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
     const functionsIndex = source('functions/index.js');
