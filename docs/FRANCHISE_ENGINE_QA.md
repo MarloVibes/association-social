@@ -33,6 +33,11 @@ Use this checklist before merging or deploying the franchise-engine branch.
 - [ ] CPU games can be simulated from the matchup screen when allowed.
 - [ ] Final games update standings, box scores, player stats, fatigue, and injuries.
 - [ ] Final games open the dedicated result screen from calendar cards and game-result notifications.
+- [ ] Live Mode opens after simulated regular season, NBA Cup, and playoff games.
+- [ ] Live Mode shows home-team arena colors and logo/abbreviation.
+- [ ] Live Mode has no in-game GM adjustment buttons.
+- [ ] Live Mode reveals score-by-score events and then links to final result.
+- [ ] Overtime games show OT columns in Live Mode and final result.
 - [ ] Resetting a final game rolls back team/player season stats and condition.
 - [ ] Playoffs generate from standings, advance series, and record champion/runner-up outcomes.
 - [ ] Trophy Case shows rings, NBA Cup, MVP, Finals MVP, DPOY, ROY, Sixth Man, MIP, All-NBA, All-Defense, and All-Star records.
