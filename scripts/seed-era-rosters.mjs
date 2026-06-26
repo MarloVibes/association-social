@@ -1305,7 +1305,7 @@ const ERA_STEPH = {
         p('s_det_2', 'Reggie', 'Jackson', 'PG', '1', 'DET'),
         p('s_det_3', 'Marcus', 'Morris', 'PF', '13', 'DET'),
         p('s_det_4', 'Tobias', 'Harris', 'SF', '12', 'DET'),
-        p('s_det_5', 'Avery', 'Bradley', 'SG', '0', 'DET'),
+        p('s_det_5', 'Kentavious', 'Caldwell-Pope', 'SG', '5', 'DET'),
         p('s_det_6', 'Ish', 'Smith', 'G', '14', 'DET'),
       ]
     },
@@ -1423,7 +1423,7 @@ const ERA_STEPH = {
       players: [
         p('s_okc_1', 'Russell', 'Westbrook', 'PG', '0', 'OKC'),
         p('s_okc_2', 'Victor', 'Oladipo', 'SG', '4', 'OKC'),
-        p('s_okc_3', 'Paul', 'George', 'SF', '13', 'OKC'),
+        p('s_okc_3', 'Steven', 'Adams', 'C', '12', 'OKC'),
         p('s_okc_4', 'Enes', 'Kanter', 'C', '11', 'OKC'),
         p('s_okc_5', 'Jerami', 'Grant', 'PF', '9', 'OKC'),
         p('s_okc_6', 'Andre', 'Roberson', 'G', '21', 'OKC'),
@@ -1471,7 +1471,7 @@ const ERA_STEPH = {
     },
     { id: 'sac_2017', abbreviation: 'SAC', full_name: 'Sacramento Kings', city: 'Sacramento', name: 'Kings',
       players: [
-        p('s_sac_1', 'DeMarcus', 'Cousins', 'C', '15', 'SAC'),
+        p('s_sac_1', 'Buddy', 'Hield', 'SG', '24', 'SAC'),
         p('s_sac_2', 'Rudy', 'Gay', 'SF', '8', 'SAC'),
         p('s_sac_3', 'Darren', 'Collison', 'PG', '7', 'SAC'),
         p('s_sac_4', 'Ty', 'Lawson', 'G', '3', 'SAC'),

@@ -16,6 +16,27 @@ describe('local NBA era audit data builder', () => {
     ]);
   });
 
+  it('parses escaped apostrophes in seeded roster names', () => {
+    const rosters = parseEraRosters(`
+      const ERA_STEPH = {
+        era: 'steph',
+        season: '2016-17',
+        teams: [
+          { id: 'nop_2017', abbreviation: 'NOP', full_name: 'New Orleans Pelicans', city: 'New Orleans', name: 'Pelicans',
+            players: [
+              p('s_nop_5', 'E\\'Twaun', 'Moore', 'SG', '55', 'NOP'),
+            ]
+          },
+        ]
+      };
+    `);
+
+    expect(rosters.steph[0].players[0]).toMatchObject({
+      first_name: "E'Twaun",
+      full_name: "E'Twaun Moore",
+    });
+  });
+
   it('enriches seeded era players with local profile and salary evidence', () => {
     const rosterSource = `
       const ERA_LEBRON = {
@@ -126,6 +147,35 @@ describe('local NBA era audit data builder', () => {
     const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
     const rosters = parseEraRosters(source);
     const shortTeams = (rosters.lebron || [])
+      .filter(team => (team.players || []).length !== 6)
+      .map(team => `${team.abbreviation}: ${(team.players || []).length}`);
+
+    expect(shortTeams).toEqual([]);
+  });
+
+  it('keeps the real Steph era seed roster free of duplicate players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const rosters = parseEraRosters(source);
+    const teamsByPlayer = new Map();
+    for (const team of rosters.steph || []) {
+      for (const player of team.players || []) {
+        const key = normalizeName(player.full_name);
+        const teams = teamsByPlayer.get(key) || new Set();
+        teams.add(team.abbreviation);
+        teamsByPlayer.set(key, teams);
+      }
+    }
+    const duplicates = [...teamsByPlayer.entries()]
+      .filter(([, teams]) => teams.size > 1)
+      .map(([player, teams]) => `${player}: ${[...teams].sort().join(', ')}`);
+
+    expect(duplicates).toEqual([]);
+  });
+
+  it('keeps every real Steph era seed team at six players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const rosters = parseEraRosters(source);
+    const shortTeams = (rosters.steph || [])
       .filter(team => (team.players || []).length !== 6)
       .map(team => `${team.abbreviation}: ${(team.players || []).length}`);
 

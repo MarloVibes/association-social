@@ -50,6 +50,7 @@ export function normalizeName(value) {
 const PROFILE_NAME_ALIASES = {
   [normalizeName('Nene Hilario')]: normalizeName('Nene'),
   [normalizeName('Ron Artest')]: normalizeName('Metta World Peace'),
+  [normalizeName('D Angelo Russell')]: normalizeName("D'Angelo Russell"),
 };
 
 function profileKeyForName(name) {
@@ -83,10 +84,17 @@ export function parseEraRosters(source) {
     while ((teamMatch = teamRegex.exec(teamsSource))) {
       const [, id, abbreviation, playersSource] = teamMatch;
       const players = [];
-      const playerRegex = /p\('([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']*)'\s*,\s*'([^']+)'\)/g;
+      const playerRegex = /p\(([^)]*)\)/g;
       let playerMatch;
       while ((playerMatch = playerRegex.exec(playersSource))) {
-        const [, player_id, first_name, last_name, position, jersey_number, team] = playerMatch;
+        const args = [];
+        const argRegex = /'((?:\\'|[^'])*)'/g;
+        let argMatch;
+        while ((argMatch = argRegex.exec(playerMatch[1]))) {
+          args.push(argMatch[1].replace(/\\'/g, "'"));
+        }
+        if (args.length < 6) continue;
+        const [player_id, first_name, last_name, position, jersey_number, team] = args;
         players.push({
           player_id,
           first_name,

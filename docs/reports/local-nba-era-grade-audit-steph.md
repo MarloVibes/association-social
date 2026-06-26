@@ -35,7 +35,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Paul Millsap | ATL | Power Forward | high | 20072033 | 88.2 | 19 | 14.1/7.4/2.3 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Ryan Anderson | HOU | Power Forward | high | 18735364 | 46.7 | 16.5 | 12.4/5.3/0.9 | core salary, above-average PER |
 | Paul George | IND | Small Forward and Shooting Guard | high | 18314532 | 65.2 | 19.2 | 19.8/6.4/3.3 | core salary, career win shares, above-average PER, scoring load, rebounding value |
-| Paul George | OKC | Small Forward and Shooting Guard | high | 18314532 | 65.2 | 19.2 | 19.8/6.4/3.3 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Kawhi Leonard | SAS | Small Forward | high | 17638063 | 65.8 | 22.6 | 17.7/6.3/2.4 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Kyrie Irving | CLE | Point Guard | high | 17638063 | 58.4 | 22.1 | 22.2/3.6/5.7 | core salary, career win shares, above-average PER, scoring load, creator value |
 | Jimmy Butler | CHI | Shooting Guard and Small Forward | high | 17552209 | 66.1 | 20 | 16.7/4.9/3.5 | core salary, career win shares, above-average PER, scoring load |
@@ -45,7 +44,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Evan Fournier | ORL | Small Forward and Shooting Guard | high | 17000000 | 19.4 | 13.3 | 13.5/2.8/2.5 | core salary |
 | Joakim Noah | NYK | Center | high | 17000000 | 61.8 | 17.6 | 8.8/9.1/2.8 | core salary, career win shares, above-average PER, rebounding value |
 | DeMarcus Cousins | NOP | Center | high | 16957900 | 44.1 | 22.4 | 21.2/10.9/3.2 | core salary, above-average PER, scoring load, rebounding value |
-| DeMarcus Cousins | SAC | Center | high | 16957900 | 44.1 | 22.4 | 21.2/10.9/3.2 | core salary, above-average PER, scoring load, rebounding value |
 | John Wall | WAS | Point Guard | high | 16957900 | 44.3 | 19.4 | 19/4.3/9.2 | core salary, above-average PER, scoring load, creator value |
 | Klay Thompson | GSW | Shooting Guard | high | 16663575 | 46.8 | 16.4 | 19.5/3.5/2.3 | core salary, above-average PER, scoring load |
 | Evan Turner | POR | Small Forward and Shooting Guard and Point Guard | high | 16393443 | 20.5 | 12 | 9.9/4.7/3.5 | core salary |
@@ -96,7 +94,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Meyers Leonard | POR | Power Forward and Center | high | 9213484 | 13.4 | 12.3 | 5.6/3.7/0.9 | core salary |
 | Jeff Teague | IND | Point Guard | high | 8800000 | 48.3 | 17.1 | 12.7/2.5/5.8 | core salary, above-average PER, creator value |
 | Avery Bradley | BOS | Point Guard and Shooting Guard | high | 8269663 | 14.6 | 11.2 | 12/3/1.8 | core salary |
-| Avery Bradley | DET | Point Guard and Shooting Guard | high | 8269663 | 14.6 | 11.2 | 12/3/1.8 | core salary |
+| E'Twaun Moore | NOP | Point Guard and Shooting Guard | high | 8081363 | 13.5 | 11.4 | 8/2/1.8 | core salary |
 | George Hill | UTA | Point Guard | high | 8000000 | 59.9 | 14.9 | 11.2/3.1/3.2 | core salary, career win shares, above-average PER |
 | Trevor Ariza | HOU | Small Forward and Shooting Guard | high | 7806971 | 60 | 13.3 | 10.7/4.8/2.2 | career win shares |
 | J.J. Redick | LAC | Shooting Guard and Point Guard | high | 7377500 | 58.9 | 15 | 12.9/2/2 | career win shares, above-average PER |
@@ -106,6 +104,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Andrew Wiggins | MIN | Small Forward | high | 6006600 | 13 | 14.5 | 19.4/4.3/2.2 | above-average PER, scoring load |
 | Karl-Anthony Towns | MIN | Center | high | 5960160 | 45.4 | 25 | 22.3/11.9/2.6 | above-average PER, scoring load, rebounding value |
 | Ben Simmons | PHI | Point Guard | high | 5903160 | 17.5 | 20 | 16.4/8.5/7.9 | above-average PER, scoring load, rebounding value, creator value |
+| D Angelo Russell | LAL | Point Guard | high | 5332800 | 6.6 | 16 | 16.5/3.7/5.1 | above-average PER, scoring load, creator value |
 | Brandon Ingram | LAL | Small Forward | high | 5281680 | 4.5 | 11.7 | 13.9/4.7/2.9 | - |
 | Kyle Korver | CLE | Small Forward and Shooting Guard and Power Forward | high | 5239437 | 70.9 | 12.8 | 9.9/3/1.7 | career win shares |
 | Darren Collison | SAC | Point Guard | high | 5229454 | 49.9 | 16.2 | 12.5/2.7/5 | above-average PER, creator value |
@@ -113,6 +112,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Aaron Gordon | ORL | Power Forward and Small Forward | high | 4351320 | 18 | 15.3 | 12.5/6.2/2.2 | above-average PER, rebounding value |
 | Kristaps Porzingis | NYK | Power Forward | high | 4317720 | 12.1 | 18.3 | 17.8/7.1/1.3 | above-average PER, scoring load, rebounding value |
 | Vince Carter | MEM | Small Forward and Shooting Guard | high | 4264057 | 125.5 | 18.8 | 17.2/4.4/3.2 | career win shares, above-average PER, scoring load |
+| Buddy Hield | SAC | Shooting Guard | high | 3517200 | 10 | 15.4 | 14.9/4/2 | above-average PER, scoring load |
 | Julius Randle | LAL | Power Forward and Center | high | 3267120 | 17.8 | 17.7 | 15.4/8.9/2.7 | above-average PER, scoring load, rebounding value |
 | CJ McCollum | POR | Shooting Guard | high | 3219579 | 27.9 | 17.2 | 17.8/3.1/2.9 | above-average PER, scoring load |
 | Jamal Murray | DEN | Shooting Guard and Point Guard | high | 3210840 | 12 | 15 | 14.8/3.5/3.4 | above-average PER, scoring load |
@@ -149,6 +149,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | J.J. Barea | DAL | Point Guard and Shooting Guard | medium | 4096950 | 23.1 | 14.5 | 9/2.1/3.9 | above-average PER |
 | James Johnson | MIA | Power Forward and Small Forward | medium | 4000000 | 23.5 | 14.5 | 7.9/3.6/2.1 | above-average PER |
 | Patty Mills | SAS | Point Guard | medium | 3578948 | 27.5 | 14.4 | 8.4/1.7/2.4 | above-average PER |
+| Steven Adams | OKC | Center | medium | 3140517 | 38.7 | 16.7 | 9.7/7.4/1 | above-average PER, rebounding value |
 | Gorgui Dieng | MIN | Center and Power Forward | medium | 2348783 | 24.4 | 16.1 | 8/6.2/1.4 | above-average PER, rebounding value |
 | Mason Plumlee | POR | Center | medium | 2328530 | 31 | 17.8 | 8.5/6.3/2.2 | above-average PER, rebounding value |
 | Luc Mbah a Moute | LAC | Small Forward and Power Forward | medium | 2203000 | 26 | 10.7 | 6.4/4.1/0.9 | - |
@@ -158,6 +159,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Matt Barnes | SAC | Small Forward and Power Forward | medium | 383351 | 42.8 | 12.7 | 8.2/4.6/1.8 | - |
 | Jordan Crawford | NOP | Shooting Guard and Point Guard | medium | 234915 | 6.3 | 14.1 | 12.2/2.5/3.1 | above-average PER |
 | Bojan Bogdanovic | BKN | Small Forward | normal | 3730653 | 18.4 | 13.4 | 13.3/3.4/1.4 | - |
+| Kentavious Caldwell-Pope | DET | Shooting Guard | normal | 3678319 | 23.8 | 12.1 | 11.9/3.3/1.6 | - |
 | Marcus Smart | BOS | Shooting Guard and Point Guard | normal | 3578880 | 16.2 | 11.8 | 9.3/3.5/3.9 | - |
 | Brandon Rush | MIN | Shooting Guard and Small Forward | normal | 3500000 | 11.2 | 9.9 | 6.8/2.9/1 | - |
 | Emmanuel Mudiay | DEN | Point Guard | normal | 3241800 | -1.2 | 11.6 | 11.8/3.1/4.2 | - |
@@ -184,14 +186,3 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Josh Richardson | MIA | Shooting Guard and Small Forward | normal | 874636 | 15.7 | 12.8 | 12.1/3.2/2.9 | - |
 | Norman Powell | TOR | Shooting Guard | normal | 874636 | 7.3 | 12.4 | 7.1/2.1/1.2 | - |
 | T.J. McConnell | PHI | Point Guard | normal | 874636 | 12.4 | 13.5 | 6.4/2.9/4.7 | - |
-| D Angelo Russell | LAL | PG | normal | 0 | 0 | 0 | 0/0/0 | - |
-
-## Duplicate Player Warnings
-
-- Avery Bradley: BOS, DET
-- DeMarcus Cousins: NOP, SAC
-- Paul George: IND, OKC
-
-## No Local Profile Match Warnings
-
-- D Angelo Russell: LAL
