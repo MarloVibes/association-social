@@ -464,7 +464,6 @@ export default function CalendarScreen() {
                     leagueId,
                     gameId: item.id,
                     competition: competitionParam,
-                    ...(destination === '/screens/season/live-mode' ? { replayStartedAtMs: String(Date.now()) } : {}),
                   },
                 });
               }}

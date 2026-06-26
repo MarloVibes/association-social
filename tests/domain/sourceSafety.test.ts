@@ -263,7 +263,7 @@ describe('source safety regressions', () => {
     expect(matchup).toContain('arenaTheme,');
     expect(calendar).toContain('const resultRevealed = isLiveResultRevealed(item, nowMs);');
     expect(calendar).toContain("const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;");
-    expect(calendar).toContain('replayStartedAtMs: String(Date.now())');
+    expect(calendar).not.toContain('replayStartedAtMs: String(Date.now())');
     expect(result).toContain('!resultVisible');
     expect(result).toContain('The final score unlocks when the live simulation reaches the final buzzer.');
     expect(result).toContain('replayStartedAtMs: String(Date.now())');
