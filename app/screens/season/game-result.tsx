@@ -67,6 +67,12 @@ function scoreText(game: ResultGame | null) {
   return `${game.awayScore} - ${game.homeScore}`;
 }
 
+function periodLabel(quarter: { quarter?: number }) {
+  const period = Number(quarter.quarter || 0);
+  if (period <= 4) return `Q${period}`;
+  return quarter.quarter === 5 ? 'OT' : `${period - 4}OT`;
+}
+
 export default function GameResultScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
   const router = useRouter();
@@ -246,7 +252,7 @@ export default function GameResultScreen() {
                 <View style={styles.tableHeader}>
                   <Text style={styles.tableTeam}>Team</Text>
                   {game.quarters.map(quarter => (
-                    <Text key={quarter.quarter} style={styles.tableCell}>Q{quarter.quarter}</Text>
+                    <Text key={quarter.quarter} style={styles.tableCell}>{periodLabel(quarter)}</Text>
                   ))}
                   <Text style={styles.tableCell}>T</Text>
                 </View>

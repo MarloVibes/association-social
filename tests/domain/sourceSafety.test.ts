@@ -222,6 +222,13 @@ describe('source safety regressions', () => {
     expect(result).toContain('Only commissioners can reset completed games');
   });
 
+  it('labels overtime periods on the result screen', () => {
+    const result = source('app/screens/season/game-result.tsx');
+
+    expect(result).toContain('periodLabel');
+    expect(result).toContain("quarter.quarter === 5 ? 'OT'");
+  });
+
   it('exposes NBA playoffs from the season hub and router', () => {
     const league = source('app/screens/league.tsx');
     const rootLayout = source('app/_layout.tsx');
