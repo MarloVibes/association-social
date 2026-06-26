@@ -125,8 +125,11 @@ export function usePushNotifications() {
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
+    let pushNotificationsMounted = true;
+    let coldStartRouteTimer: ReturnType<typeof setTimeout> | null = null;
 
     registerForPushNotificationsAsync().then(async (token) => {
+      if (!pushNotificationsMounted) return;
       if (token) {
         setExpoPushToken(token);
 
@@ -151,6 +154,19 @@ export function usePushNotifications() {
       }
     });
 
+    const getLastNotificationResponseAsync = (Notifications as any).getLastNotificationResponseAsync;
+    if (typeof getLastNotificationResponseAsync === 'function') {
+      getLastNotificationResponseAsync().then((response: Notifications.NotificationResponse | null) => {
+        if (!pushNotificationsMounted || !response) return;
+        coldStartRouteTimer = setTimeout(() => {
+          if (!pushNotificationsMounted) return;
+          routeFromData(response.notification.request.content.data);
+        }, 1000);
+      }).catch((error: unknown) => {
+        console.log('Push cold-start route lookup failed:', error);
+      });
+    }
+
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       console.log('Notification received (foreground):', notification);
     });
@@ -160,6 +176,8 @@ export function usePushNotifications() {
     });
 
     return () => {
+      pushNotificationsMounted = false;
+      if (coldStartRouteTimer) clearTimeout(coldStartRouteTimer);
       if (notificationListener.current) notificationListener.current.remove();
       if (responseListener.current) responseListener.current.remove();
     };

@@ -86,9 +86,16 @@ describe('source safety regressions', () => {
 
     expect(hook).toContain("if (Platform.OS === 'web') return;");
     expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
+      hook.indexOf('(Notifications as any).getLastNotificationResponseAsync'),
+    );
+    expect(hook).toContain('const getLastNotificationResponseAsync = (Notifications as any).getLastNotificationResponseAsync;');
+    expect(hook).toContain("if (typeof getLastNotificationResponseAsync === 'function')");
+    expect(hook.indexOf('(Notifications as any).getLastNotificationResponseAsync')).toBeLessThan(
       hook.indexOf('Notifications.addNotificationReceivedListener'),
     );
-    expect(hook).not.toContain('getLastNotificationResponseAsync');
+    expect(hook).toContain('let pushNotificationsMounted = true;');
+    expect(hook).toContain('if (!pushNotificationsMounted || !response) return;');
+    expect(hook).toContain('pushNotificationsMounted = false;');
   });
 
   it('routes franchise push taps to their destination screens', () => {
@@ -204,7 +211,8 @@ describe('source safety regressions', () => {
     const notifications = source('app/screens/notifications.tsx');
     const result = source('app/screens/season/game-result.tsx');
 
-    expect(rootLayout).toContain('screens/season/game-result');
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/game-result');
     expect(seasonLayout).toContain('game-result');
     expect(calendar).toContain("item.status === 'final' ? '/screens/season/game-result'");
     expect(hook).toContain("pathname: '/screens/season/game-result'");
@@ -219,7 +227,8 @@ describe('source safety regressions', () => {
     const seasonLayout = source('app/screens/season/_layout.tsx');
     const liveMode = source('app/screens/season/live-mode.tsx');
 
-    expect(rootLayout).toContain('screens/season/live-mode');
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/live-mode');
     expect(seasonLayout).toContain('live-mode');
     expect(liveMode).toContain('liveTimeline');
     expect(liveMode).toContain('arenaTheme');
@@ -279,7 +288,8 @@ describe('source safety regressions', () => {
 
     expect(league).toContain('/screens/season/playoffs');
     expect(league).toContain('Playoffs');
-    expect(rootLayout).toContain('screens/season/playoffs');
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/playoffs');
     expect(seasonLayout).toContain('playoffs');
   });
 
@@ -287,9 +297,10 @@ describe('source safety regressions', () => {
     const rootLayout = source('app/_layout.tsx');
     const offseasonLayout = source('app/screens/offseason/_layout.tsx');
 
-    expect(rootLayout).toContain('screens/offseason/index');
-    expect(rootLayout).toContain('screens/offseason/live-draft');
-    expect(rootLayout).toContain('screens/offseason/roster-cuts');
+    expect(rootLayout).toContain('screens/offseason');
+    expect(rootLayout).not.toContain('screens/offseason/index');
+    expect(rootLayout).not.toContain('screens/offseason/live-draft');
+    expect(rootLayout).not.toContain('screens/offseason/roster-cuts');
     expect(offseasonLayout).toContain('draft-class');
     expect(offseasonLayout).toContain('free-agency');
     expect(offseasonLayout).toContain('expansion');
@@ -336,7 +347,8 @@ describe('source safety regressions', () => {
 
     expect(league).toContain('/screens/season/scouting');
     expect(league).toContain('Scouting');
-    expect(rootLayout).toContain('screens/season/scouting');
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/scouting');
     expect(seasonLayout).toContain('scouting');
     expect(scouting).toContain('Active game plans stay hidden');
   });
@@ -442,7 +454,8 @@ describe('source safety regressions', () => {
     const functionsIndex = source('functions/index.js');
 
     expect(offseason).toContain('/screens/offseason/expansion');
-    expect(rootLayout).toContain('screens/offseason/expansion');
+    expect(rootLayout).toContain('screens/offseason');
+    expect(rootLayout).not.toContain('screens/offseason/expansion');
     expect(expansion).toContain('Expansion Teams');
     expect(expansion).toContain("httpsCallable(functions, 'submitExpansionProtection')");
     expect(expansion).toContain("httpsCallable(functions, 'runExpansionDraft')");
@@ -472,7 +485,8 @@ describe('source safety regressions', () => {
     const functionsIndex = source('functions/index.js');
 
     expect(league).toContain('/screens/season/injuries');
-    expect(rootLayout).toContain('screens/season/injuries');
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/injuries');
     expect(seasonLayout).toContain('injuries');
     expect(injuries).toContain("httpsCallable(functions, 'manageTeamInjury')");
     expect(functionsIndex).toContain('exports.manageTeamInjury');
