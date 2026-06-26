@@ -924,7 +924,7 @@ const ERA_LEBRON = {
         p('l_bos_2', 'Kevin', 'Garnett', 'PF', '5', 'BOS'),
         p('l_bos_3', 'Ray', 'Allen', 'SG', '20', 'BOS'),
         p('l_bos_4', 'Rajon', 'Rondo', 'PG', '9', 'BOS'),
-        p('l_bos_5', 'Kendrick', 'Perkins', 'C', '43', 'BOS'),
+        p('l_bos_5', 'Nenad', 'Krstic', 'C', '4', 'BOS'),
         p('l_bos_6', 'Glen', 'Davis', 'F', '11', 'BOS'),
       ]
     },
@@ -970,8 +970,8 @@ const ERA_LEBRON = {
     },
     { id: 'den_2011', abbreviation: 'DEN', full_name: 'Denver Nuggets', city: 'Denver', name: 'Nuggets',
       players: [
-        p('l_den_1', 'Carmelo', 'Anthony', 'SF', '15', 'DEN'),
-        p('l_den_2', 'Chauncey', 'Billups', 'PG', '1', 'DEN'),
+        p('l_den_1', 'Ty', 'Lawson', 'PG', '3', 'DEN'),
+        p('l_den_2', 'Wilson', 'Chandler', 'SF', '21', 'DEN'),
         p('l_den_3', 'Kenyon', 'Martin', 'PF', '4', 'DEN'),
         p('l_den_4', 'Nene', 'Hilario', 'C', '31', 'DEN'),
         p('l_den_5', 'Danilo', 'Gallinari', 'SF', '8', 'DEN'),
@@ -980,7 +980,7 @@ const ERA_LEBRON = {
     },
     { id: 'det_2011', abbreviation: 'DET', full_name: 'Detroit Pistons', city: 'Detroit', name: 'Pistons',
       players: [
-        p('l_det_1', 'Richard', 'Hamilton', 'SG', '32', 'DET'),
+        p('l_det_1', 'Ben', 'Gordon', 'SG', '7', 'DET'),
         p('l_det_2', 'Tayshaun', 'Prince', 'SF', '22', 'DET'),
         p('l_det_3', 'Ben', 'Wallace', 'C', '6', 'DET'),
         p('l_det_4', 'Rodney', 'Stuckey', 'PG', '3', 'DET'),
@@ -1081,7 +1081,7 @@ const ERA_LEBRON = {
     { id: 'nok_2011', abbreviation: 'NOH', full_name: 'New Orleans Hornets', city: 'New Orleans', name: 'Hornets',
       players: [
         p('l_nok_1', 'Chris', 'Paul', 'PG', '3', 'NOH'),
-        p('l_nok_2', 'David', 'West', 'PF', '30', 'NOH'),
+        p('l_nok_2', 'Jarrett', 'Jack', 'PG', '2', 'NOH'),
         p('l_nok_3', 'Emeka', 'Okafor', 'C', '50', 'NOH'),
         p('l_nok_4', 'Marco', 'Belinelli', 'SG', '0', 'NOH'),
         p('l_nok_5', 'Trevor', 'Ariza', 'SF', '1', 'NOH'),
@@ -1123,7 +1123,7 @@ const ERA_LEBRON = {
         p('l_orl_1', 'Dwight', 'Howard', 'C', '12', 'ORL'),
         p('l_orl_2', 'Jameer', 'Nelson', 'PG', '14', 'ORL'),
         p('l_orl_3', 'Hedo', 'Turkoglu', 'SF', '15', 'ORL'),
-        p('l_orl_4', 'Vince', 'Carter', 'SG', '15', 'ORL'),
+        p('l_orl_4', 'Gilbert', 'Arenas', 'SG', '1', 'ORL'),
         p('l_orl_5', 'Ryan', 'Anderson', 'PF', '33', 'ORL'),
         p('l_orl_6', 'Jason', 'Richardson', 'G', '23', 'ORL'),
       ]
@@ -1190,8 +1190,8 @@ const ERA_LEBRON = {
     },
     { id: 'uta_2011', abbreviation: 'UTA', full_name: 'Utah Jazz', city: 'Utah', name: 'Jazz',
       players: [
-        p('l_uta_1', 'Deron', 'Williams', 'PG', '8', 'UTA'),
-        p('l_uta_2', 'Carlos', 'Boozer', 'PF', '5', 'UTA'),
+        p('l_uta_1', 'Devin', 'Harris', 'PG', '5', 'UTA'),
+        p('l_uta_2', 'Andrei', 'Kirilenko', 'SF', '47', 'UTA'),
         p('l_uta_3', 'Paul', 'Millsap', 'F', '24', 'UTA'),
         p('l_uta_4', 'Al', 'Jefferson', 'C', '25', 'UTA'),
         p('l_uta_5', 'Gordon', 'Hayward', 'SF', '20', 'UTA'),

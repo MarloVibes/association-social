@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   buildLocalEraAuditReport,
   buildLocalEraAuditPlayers,
+  normalizeName,
   parseCsv,
   parseEraRosters,
 } from '../../scripts/lib/local-era-audit.mjs';
@@ -99,6 +101,35 @@ describe('local NBA era audit data builder', () => {
       expect.objectContaining({ full_name: 'Nene Hilario', matchedProfile: true, salary: 11200000, career_WS: 73.3 }),
       expect.objectContaining({ full_name: 'Ron Artest', matchedProfile: true, salary: 6322600, career_WS: 61.1 }),
     ]);
+  });
+
+  it('keeps the real LeBron era seed roster free of duplicate players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const rosters = parseEraRosters(source);
+    const teamsByPlayer = new Map();
+    for (const team of rosters.lebron || []) {
+      for (const player of team.players || []) {
+        const key = normalizeName(player.full_name);
+        const teams = teamsByPlayer.get(key) || new Set();
+        teams.add(team.abbreviation);
+        teamsByPlayer.set(key, teams);
+      }
+    }
+    const duplicates = [...teamsByPlayer.entries()]
+      .filter(([, teams]) => teams.size > 1)
+      .map(([player, teams]) => `${player}: ${[...teams].sort().join(', ')}`);
+
+    expect(duplicates).toEqual([]);
+  });
+
+  it('keeps every real LeBron era seed team at six players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const rosters = parseEraRosters(source);
+    const shortTeams = (rosters.lebron || [])
+      .filter(team => (team.players || []).length !== 6)
+      .map(team => `${team.abbreviation}: ${(team.players || []).length}`);
+
+    expect(shortTeams).toEqual([]);
   });
 
   it('builds a readable markdown audit report from local evidence', () => {
