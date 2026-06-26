@@ -320,7 +320,7 @@ const ERA_JORDAN = {
       players: [
         p('j_atl_1', 'Dominique', 'Wilkins', 'SF', '21', 'ATL'),
         p('j_atl_2', 'Kevin', 'Willis', 'PF', '42', 'ATL'),
-        p('j_atl_3', 'Moses', 'Malone', 'C', '2', 'ATL'),
+        p('j_atl_3', 'Jon', 'Koncak', 'C', '45', 'ATL'),
         p('j_atl_4', 'Doc', 'Rivers', 'PG', '25', 'ATL'),
         p('j_atl_5', 'Mookie', 'Blaylock', 'G', '10', 'ATL'),
         p('j_atl_6', 'Stacey', 'Augmon', 'SF', '3', 'ATL'),
@@ -400,7 +400,7 @@ const ERA_JORDAN = {
       players: [
         p('j_gsw_1', 'Tim', 'Hardaway', 'PG', '10', 'GSW'),
         p('j_gsw_2', 'Chris', 'Mullin', 'SF', '17', 'GSW'),
-        p('j_gsw_3', 'Mitch', 'Richmond', 'SG', '23', 'GSW'),
+        p('j_gsw_3', 'Mario', 'Elie', 'SG', '17', 'GSW'),
         p('j_gsw_4', 'Billy', 'Owens', 'PF', '21', 'GSW'),
         p('j_gsw_5', 'Tyrone', 'Hill', 'C', '52', 'GSW'),
         p('j_gsw_6', 'Sarunas', 'Marciulionis', 'G', '13', 'GSW'),
@@ -432,7 +432,7 @@ const ERA_JORDAN = {
         p('j_lac_2', 'Ron', 'Harper', 'SG', '12', 'LAC'),
         p('j_lac_3', 'Charles', 'Smith', 'PF', '52', 'LAC'),
         p('j_lac_4', 'Gary', 'Grant', 'PG', '20', 'LAC'),
-        p('j_lac_5', 'Benoit', 'Benjamin', 'C', '41', 'LAC'),
+        p('j_lac_5', 'Olden', 'Polynice', 'C', '0', 'LAC'),
         p('j_lac_6', 'Ken', 'Norman', 'F', '25', 'LAC'),
       ]
     },
@@ -508,12 +508,12 @@ const ERA_JORDAN = {
     },
     { id: 'phi_1992', abbreviation: 'PHI', full_name: 'Philadelphia 76ers', city: 'Philadelphia', name: '76ers',
       players: [
-        p('j_phi_1', 'Charles', 'Barkley', 'PF', '34', 'PHI'),
+        p('j_phi_1', 'Clarence', 'Weatherspoon', 'PF', '35', 'PHI'),
         p('j_phi_2', 'Hersey', 'Hawkins', 'SG', '33', 'PHI'),
         p('j_phi_3', 'Johnny', 'Dawkins', 'PG', '12', 'PHI'),
         p('j_phi_4', 'Ron', 'Anderson', 'SF', '10', 'PHI'),
         p('j_phi_5', 'Armon', 'Gilliam', 'PF', '35', 'PHI'),
-        p('j_phi_6', 'Jeff', 'Ruland', 'C', '45', 'PHI'),
+        p('j_phi_6', 'Manute', 'Bol', 'C', '10', 'PHI'),
       ]
     },
     { id: 'phx_1992', abbreviation: 'PHX', full_name: 'Phoenix Suns', city: 'Phoenix', name: 'Suns',
@@ -542,7 +542,7 @@ const ERA_JORDAN = {
         p('j_sac_2', 'Mitch', 'Richmond', 'SG', '2', 'SAC'),
         p('j_sac_3', 'Lionel', 'Simmons', 'SF', '44', 'SAC'),
         p('j_sac_4', 'Spud', 'Webb', 'PG', '4', 'SAC'),
-        p('j_sac_5', 'Antoine', 'Carr', 'C', '35', 'SAC'),
+        p('j_sac_5', 'Walt', 'Williams', 'SF', '42', 'SAC'),
         p('j_sac_6', 'Randy', 'Brown', 'G', '3', 'SAC'),
       ]
     },

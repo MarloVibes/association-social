@@ -52,6 +52,8 @@ const PROFILE_NAME_ALIASES = {
   [normalizeName('Ron Artest')]: normalizeName('Metta World Peace'),
   [normalizeName('D Angelo Russell')]: normalizeName("D'Angelo Russell"),
   [normalizeName('David Greenwood')]: normalizeName('Dave Greenwood'),
+  [normalizeName('Chris Jackson')]: normalizeName('Mahmoud Abdul-Rauf'),
+  [normalizeName('Armon Gilliam')]: normalizeName('Armen Gilliam'),
 };
 
 const TEAM_PROFILE_ID_ALIASES = {

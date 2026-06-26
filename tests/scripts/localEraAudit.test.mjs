@@ -160,6 +160,50 @@ describe('local NBA era audit data builder', () => {
     ]);
   });
 
+  it('matches Jordan era profile aliases used by local player history', () => {
+    const rosterSource = `
+      const ERA_JORDAN = {
+        era: 'jordan',
+        season: '1991-92',
+        teams: [
+          { id: 'den_1992', abbreviation: 'DEN', full_name: 'Denver Nuggets', city: 'Denver', name: 'Nuggets',
+            players: [
+              p('j_den_3', 'Chris', 'Jackson', 'PG', '7', 'DEN'),
+            ]
+          },
+          { id: 'phi_1992', abbreviation: 'PHI', full_name: 'Philadelphia 76ers', city: 'Philadelphia', name: '76ers',
+            players: [
+              p('j_phi_5', 'Armon', 'Gilliam', 'PF', '35', 'PHI'),
+            ]
+          },
+        ]
+      };
+    `;
+    const playersCsv = [
+      'index,_id,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,abdulma02,3.5,15.4,14.6,1.9,25.2,Mahmoud Abdul-Rauf,Point Guard',
+      '2,gilliar01,1.2,16.4,13.7,6.9,58.1,Armen Gilliam,Power Forward and Small Forward',
+    ].join('\n');
+    const salariesCsv = [
+      'player_id,salary,season,season_end,team',
+      'abdulma02,1660000,1991-92,1992,DEN',
+      'gilliar01,1995000,1991-92,1992,PHI',
+    ].join('\n');
+
+    const players = buildLocalEraAuditPlayers({
+      era: 'jordan',
+      seasonStartYear: 1991,
+      rosters: parseEraRosters(rosterSource),
+      playersCsv,
+      salariesCsv,
+    });
+
+    expect(players).toEqual([
+      expect.objectContaining({ full_name: 'Chris Jackson', matchedProfile: true, salary: 1660000, career_WS: 25.2 }),
+      expect.objectContaining({ full_name: 'Armon Gilliam', matchedProfile: true, salary: 1995000, career_WS: 58.1 }),
+    ]);
+  });
+
   it('keeps the real LeBron era seed roster free of duplicate players', () => {
     const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
     const rosters = parseEraRosters(source);
@@ -225,6 +269,31 @@ describe('local NBA era audit data builder', () => {
     const players = buildLocalEraAuditPlayers({
       era: 'magic_bird',
       seasonStartYear: 1983,
+      rosters: parseEraRosters(source),
+      playersCsv,
+      salariesCsv,
+    });
+    const teamsByPlayer = new Map();
+    for (const player of players) {
+      const key = player.matchedProfileId || normalizeName(player.full_name);
+      const value = teamsByPlayer.get(key) || { name: player.full_name, teams: new Set() };
+      value.teams.add(player.team);
+      teamsByPlayer.set(key, value);
+    }
+    const duplicates = [...teamsByPlayer.values()]
+      .filter(value => value.teams.size > 1)
+      .map(value => `${value.name}: ${[...value.teams].sort().join(', ')}`);
+
+    expect(duplicates).toEqual([]);
+  });
+
+  it('keeps the real Jordan era seed roster free of true duplicate players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const playersCsv = readFileSync('players.csv', 'utf8');
+    const salariesCsv = readFileSync('salaries_1985to2018.csv', 'utf8');
+    const players = buildLocalEraAuditPlayers({
+      era: 'jordan',
+      seasonStartYear: 1991,
       rosters: parseEraRosters(source),
       playersCsv,
       salariesCsv,
