@@ -116,6 +116,73 @@ function draftRoundsForSport(sportInput) {
   return 5;
 }
 
+function normalizeSport(sportInput) {
+  if (sportInput === 'nfl' || sportInput === 'madden') return 'madden';
+  if (sportInput === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function roundMoney(value) {
+  return Math.round(value / 1_000) * 1_000;
+}
+
+function rookieContractForPick({ sport: sportInput, round, overall, league = {} }) {
+  const sport = normalizeSport(sportInput);
+  const draftRound = Number.isInteger(round) && round > 0 ? round : 1;
+  const overallPick = Number.isInteger(overall) && overall > 0 ? overall : 1;
+  if (sport === 'madden') {
+    const roundSalary = [5_000_000, 2_800_000, 1_600_000, 1_100_000, 950_000, 850_000, 800_000];
+    return {
+      rookie: true,
+      contractType: 'rookie',
+      contractYears: 4,
+      salary: roundSalary[Math.max(0, Math.min(roundSalary.length - 1, draftRound - 1))],
+    };
+  }
+  if (sport === 'mlb') {
+    return {
+      rookie: true,
+      contractType: 'pre_arbitration',
+      contractYears: 3,
+      salary: Number.isFinite(league.minimumSalary) ? league.minimumSalary : 760_000,
+    };
+  }
+
+  const minimumSalary = Number.isFinite(league.minimumSalary) ? league.minimumSalary : 1_200_000;
+  if (draftRound >= 2) {
+    return {
+      rookie: true,
+      contractType: 'minimum_rookie',
+      contractYears: 2,
+      salary: minimumSalary,
+    };
+  }
+  const capBasedBase = Number.isFinite(league.salaryCap) ? league.salaryCap * 0.05 : 8_000_000;
+  const rookieScaleBase = Number.isFinite(league.rookieScaleBase) ? league.rookieScaleBase : capBasedBase;
+  const scaleFactor = Math.max(0.35, 1 - Math.max(0, overallPick - 1) * 0.02);
+  return {
+    rookie: true,
+    contractType: 'rookie_scale',
+    contractYears: 4,
+    salary: Math.max(minimumSalary, roundMoney(rookieScaleBase * scaleFactor)),
+  };
+}
+
+function buildDraftedPlayer({ prospect, session, league = {} }) {
+  return {
+    ...prospect,
+    ...rookieContractForPick({
+      sport: session && (session.sport || league.sport),
+      round: session && session.round,
+      overall: session && session.currentOverallPick,
+      league,
+    }),
+    draftedSeason: session && session.seasonYear,
+    draftedOverall: session && session.currentOverallPick,
+    draftedRound: session && session.round,
+  };
+}
+
 function createDraftSession({
   seasonYear,
   sport,
@@ -427,12 +494,7 @@ function createDraftPickHandler({ getFirestore, now, HttpsError }) {
             : offseason.draftTimerSeconds || 120,
         });
         tx.update(teamRef, {
-          players: [...(team.players || []), {
-            ...prospect,
-            draftedSeason: seasonYear,
-            draftedOverall: session.currentOverallPick,
-            draftedRound: session.round,
-          }],
+          players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
         });
         tx.set(sessionRef, next);
         if (next.status === 'complete') {
@@ -515,12 +577,7 @@ function createAutoPickHandler({ getFirestore, now, HttpsError }) {
           timerSeconds: offseason.draftTimerSeconds || 120,
         });
         tx.update(teamRef, {
-          players: [...(team.players || []), {
-            ...prospect,
-            draftedSeason: seasonYear,
-            draftedOverall: session.currentOverallPick,
-            draftedRound: session.round,
-          }],
+          players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
         });
         tx.set(sessionRef, next);
         if (next.status === 'complete') {
@@ -539,6 +596,7 @@ module.exports = {
   applyDraftPick,
   assertLeagueDraftIsLive,
   authorizeAutoPick,
+  buildDraftedPlayer,
   buildDraftFranchises,
   buildDraftOrder,
   chooseServerAutoPick,

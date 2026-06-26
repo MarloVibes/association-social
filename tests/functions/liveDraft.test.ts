@@ -6,6 +6,7 @@ const {
   applyDraftPick,
   assertLeagueDraftIsLive,
   authorizeAutoPick,
+  buildDraftedPlayer,
   buildDraftOrder,
   createDraftSession,
   draftRoundsForSport,
@@ -199,6 +200,57 @@ describe('live draft domain', () => {
       currentTeamId: null,
       deadlineMillis: null,
       version: 2,
+    });
+  });
+
+  it('adds sport-specific rookie contract data to drafted players', () => {
+    const prospect = { id: 'ace', full_name: 'Draft Ace', position: 'PG', talent: 95 };
+    const nbaLotteryPick = buildDraftedPlayer({
+      prospect,
+      session: { sport: 'nba', seasonYear: 2027, currentOverallPick: 3, round: 1 },
+      league: { salaryCap: 160_000_000, rookieScaleBase: 8_000_000, minimumSalary: 1_200_000 },
+    });
+    expect(nbaLotteryPick).toMatchObject({
+      rookie: true,
+      contractType: 'rookie_scale',
+      contractYears: 4,
+      draftedSeason: 2027,
+      draftedOverall: 3,
+      draftedRound: 1,
+    });
+    expect(nbaLotteryPick.salary).toBeGreaterThan(1_200_000);
+
+    expect(buildDraftedPlayer({
+      prospect,
+      session: { sport: 'nba', seasonYear: 2027, currentOverallPick: 45, round: 2 },
+      league: { minimumSalary: 1_200_000 },
+    })).toMatchObject({
+      rookie: true,
+      contractType: 'minimum_rookie',
+      contractYears: 2,
+      salary: 1_200_000,
+    });
+
+    expect(buildDraftedPlayer({
+      prospect,
+      session: { sport: 'madden', seasonYear: 2027, currentOverallPick: 1, round: 1 },
+      league: {},
+    })).toMatchObject({
+      rookie: true,
+      contractType: 'rookie',
+      contractYears: 4,
+      salary: 5_000_000,
+    });
+
+    expect(buildDraftedPlayer({
+      prospect,
+      session: { sport: 'mlb', seasonYear: 2027, currentOverallPick: 20, round: 1 },
+      league: {},
+    })).toMatchObject({
+      rookie: true,
+      contractType: 'pre_arbitration',
+      contractYears: 3,
+      salary: 760_000,
     });
   });
 
