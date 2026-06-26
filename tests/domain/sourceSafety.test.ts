@@ -202,16 +202,28 @@ describe('source safety regressions', () => {
     const matchup = source('app/screens/season/matchup.tsx');
     const calendar = source('app/screens/season/calendar.tsx');
     const result = source('app/screens/season/game-result.tsx');
+    const liveMode = source('app/screens/season/live-mode.tsx');
 
     expect(matchup).toContain('/screens/season/live-mode');
     expect(calendar).toContain('/screens/season/live-mode');
     expect(result).toContain('/screens/season/live-mode');
-    expect(matchup).toContain("(response.data as any)?.status !== 'final') {\n        await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/game-result'");
+    expect(liveMode).toContain('replayStartedAtMs');
+    expect(liveMode).toContain('safeElapsedMs(game, nowMs, replayStartedAtMs)');
+    expect(liveMode).toContain('const replayStartMs = Number(replayStartedAtMs || 0);');
+    expect(liveMode.indexOf('const replayStartMs = Number(replayStartedAtMs || 0);')).toBeLessThan(
+      liveMode.indexOf('const startedAt = replayStartMs > 0'),
+    );
+    expect(matchup).toContain("const responseData = response.data as any;");
+    expect(matchup).toContain("responseData?.status !== 'final') {\n        await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/game-result'");
+    expect(matchup).toContain("responseData?.status === 'final' && responseData?.liveTimeline");
+    expect(matchup).toContain("name === 'requestMatchup'");
     expect(matchup).toContain("router.replace({ pathname: '/screens/season/game-result'");
     expect(matchup).toContain('liveTimeline,');
     expect(matchup).toContain('liveMode,');
     expect(matchup).toContain('arenaTheme,');
     expect(calendar).toContain("item.status === 'final' && item.liveTimeline");
+    expect(calendar).toContain('replayStartedAtMs: String(Date.now())');
+    expect(result).toContain('replayStartedAtMs: String(Date.now())');
   });
 
   it('lets commissioners reset finalized games from the result screen', () => {

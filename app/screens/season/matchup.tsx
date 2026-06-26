@@ -49,6 +49,7 @@ type MatchupGame = Omit<NbaScheduleGame, 'status'> & {
   resetByUid?: string;
   resetAtMs?: number;
   finalScoreSubmittedByUid?: string;
+  liveTimeline?: unknown;
   boxScore?: {
     home?: { points?: number; players?: BoxScorePlayer[] };
     away?: { points?: number; players?: BoxScorePlayer[] };
@@ -353,12 +354,17 @@ export default function MatchupScreen() {
     try {
       const fn = httpsCallable(functions, name);
       const response = await fn({ leagueId, gameId, competition: competitionParam });
-      if (name === 'simulateScheduledGame' && isLeagueAdmin && (response.data as any)?.status !== 'final') {
+      const responseData = response.data as any;
+      if (name === 'simulateScheduledGame' && isLeagueAdmin && responseData?.status !== 'final') {
         await simulateGameLocally();
         router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
         return;
       }
       if (name === 'simulateScheduledGame') {
+        router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
+        return;
+      }
+      if (name === 'requestMatchup' && responseData?.status === 'final' && responseData?.liveTimeline) {
         router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
       }
     } catch (error: any) {

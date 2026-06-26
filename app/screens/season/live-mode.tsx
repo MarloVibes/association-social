@@ -86,15 +86,16 @@ function eventSide(event: LiveTimelineEvent | null, game: LiveGame | null) {
   return 'LIVE';
 }
 
-function safeElapsedMs(game: LiveGame | null, nowMs: number) {
+function safeElapsedMs(game: LiveGame | null, nowMs: number, replayStartedAtMs?: string) {
   if (!game?.liveTimeline) return 0;
-  const startedAt = Number(game.liveMode?.simulationStartedAtMs || 0);
+  const replayStartMs = Number(replayStartedAtMs || 0);
+  const startedAt = replayStartMs > 0 ? replayStartMs : Number(game.liveMode?.simulationStartedAtMs || 0);
   const rawElapsed = startedAt > 0 ? nowMs - startedAt : game.liveTimeline.revealDurationMs;
   return Math.max(0, Math.min(rawElapsed, game.liveTimeline.revealDurationMs || rawElapsed));
 }
 
 export default function LiveModeScreen() {
-  const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
+  const { leagueId, gameId, competition, replayStartedAtMs } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string; replayStartedAtMs?: string }>();
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const [league, setLeague] = useState<any>(null);
@@ -163,7 +164,7 @@ export default function LiveModeScreen() {
   const homeLabel = homeTeam?.abbreviation || homeTeam?.name || game?.homeTeamId || 'Home';
   const awayLabel = awayTeam?.abbreviation || awayTeam?.name || game?.awayTeamId || 'Away';
   const liveTimeline = game?.liveTimeline || null;
-  const elapsedMs = safeElapsedMs(game, nowMs);
+  const elapsedMs = safeElapsedMs(game, nowMs, replayStartedAtMs);
   const current = liveTimeline ? currentTimelineEvent(liveTimeline, elapsedMs) : { event: null, index: -1 as const };
   const currentEvent = current.event;
   const visibleEvents = useMemo(() => (

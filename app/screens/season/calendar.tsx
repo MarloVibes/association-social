@@ -449,7 +449,15 @@ export default function CalendarScreen() {
               onPress={() => {
                 const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
                 const destination = item.status === 'final' && item.liveTimeline ? '/screens/season/live-mode' : resultDestination;
-                router.push({ pathname: destination as any, params: { leagueId, gameId: item.id, competition: competitionParam } });
+                router.push({
+                  pathname: destination as any,
+                  params: {
+                    leagueId,
+                    gameId: item.id,
+                    competition: competitionParam,
+                    ...(destination === '/screens/season/live-mode' ? { replayStartedAtMs: String(Date.now()) } : {}),
+                  },
+                });
               }}
             >
               <View style={styles.gameCopy}>

@@ -215,7 +215,7 @@ export default function GameResultScreen() {
             </View>
             {showLiveReplay ? (
               <TouchableOpacity
-                onPress={() => router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } })}
+                onPress={() => router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam, replayStartedAtMs: String(Date.now()) } })}
                 style={styles.replayButton}
               >
                 <Ionicons color="#06130c" name="play" size={17} />
