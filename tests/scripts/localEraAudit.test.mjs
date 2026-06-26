@@ -312,6 +312,47 @@ describe('local NBA era audit data builder', () => {
     expect(duplicates).toEqual([]);
   });
 
+  it('keeps the real Kobe era seed roster free of true duplicate players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const playersCsv = readFileSync('players.csv', 'utf8');
+    const salariesCsv = readFileSync('salaries_1985to2018.csv', 'utf8');
+    const players = buildLocalEraAuditPlayers({
+      era: 'kobe',
+      seasonStartYear: 2002,
+      rosters: parseEraRosters(source),
+      playersCsv,
+      salariesCsv,
+    });
+    const teamsByPlayer = new Map();
+    for (const player of players) {
+      const key = player.matchedProfileId || normalizeName(player.full_name);
+      const value = teamsByPlayer.get(key) || { name: player.full_name, teams: new Set() };
+      value.teams.add(player.team);
+      teamsByPlayer.set(key, value);
+    }
+    const duplicates = [...teamsByPlayer.values()]
+      .filter(value => value.teams.size > 1)
+      .map(value => `${value.name}: ${[...value.teams].sort().join(', ')}`);
+
+    expect(duplicates).toEqual([]);
+  });
+
+  it('keeps every real Kobe era seed team free of repeated player slots', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const rosters = parseEraRosters(source);
+    const repeated = [];
+    for (const team of rosters.kobe || []) {
+      const seen = new Set();
+      for (const player of team.players || []) {
+        const key = normalizeName(player.full_name);
+        if (seen.has(key)) repeated.push(`${team.abbreviation}: ${player.full_name}`);
+        seen.add(key);
+      }
+    }
+
+    expect(repeated).toEqual([]);
+  });
+
   it('builds a readable markdown audit report from local evidence', () => {
     const report = buildLocalEraAuditReport('lebron', [
       {

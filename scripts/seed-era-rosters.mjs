@@ -619,17 +619,17 @@ const ERA_KOBE = {
     },
     { id: 'cha_2003', abbreviation: 'CHA', full_name: 'Charlotte Hornets', city: 'Charlotte', name: 'Hornets',
       players: [
-        p('k_cha_1', 'Baron', 'Davis', 'PG', '5', 'CHA'),
-        p('k_cha_2', 'Jamal', 'Mashburn', 'SF', '32', 'CHA'),
-        p('k_cha_3', 'P.J.', 'Brown', 'PF', '54', 'CHA'),
+        p('k_cha_1', 'Robert', 'Traylor', 'PF', '34', 'CHA'),
+        p('k_cha_2', 'Courtney', 'Alexander', 'SG', '1', 'CHA'),
+        p('k_cha_3', 'Stacey', 'Augmon', 'SF', '2', 'CHA'),
         p('k_cha_4', 'Elden', 'Campbell', 'C', '41', 'CHA'),
-        p('k_cha_5', 'David', 'Wesley', 'G', '11', 'CHA'),
+        p('k_cha_5', 'Bryce', 'Drew', 'G', '11', 'CHA'),
         p('k_cha_6', 'Lee', 'Nailon', 'F', '40', 'CHA'),
       ]
     },
     { id: 'chi_2003', abbreviation: 'CHI', full_name: 'Chicago Bulls', city: 'Chicago', name: 'Bulls',
       players: [
-        p('k_chi_1', 'Dwyane', 'Wade', 'SG', '3', 'CHI'),
+        p('k_chi_1', 'Kirk', 'Hinrich', 'PG', '12', 'CHI'),
         p('k_chi_2', 'Jalen', 'Rose', 'SF', '5', 'CHI'),
         p('k_chi_3', 'Jay', 'Williams', 'PG', '2', 'CHI'),
         p('k_chi_4', 'Eddy', 'Curry', 'C', '31', 'CHI'),
@@ -650,10 +650,10 @@ const ERA_KOBE = {
     { id: 'dal_2003', abbreviation: 'DAL', full_name: 'Dallas Mavericks', city: 'Dallas', name: 'Mavericks',
       players: [
         p('k_dal_1', 'Dirk', 'Nowitzki', 'PF', '41', 'DAL'),
-        p('k_dal_2', 'Steve', 'Nash', 'PG', '13', 'DAL'),
+        p('k_dal_2', 'Josh', 'Howard', 'SF', '5', 'DAL'),
         p('k_dal_3', 'Michael', 'Finley', 'SG', '4', 'DAL'),
         p('k_dal_4', 'Shawn', 'Bradley', 'C', '44', 'DAL'),
-        p('k_dal_5', 'Nick', 'Van Exel', 'G', '3', 'DAL'),
+        p('k_dal_5', 'Marquis', 'Daniels', 'G', '6', 'DAL'),
         p('k_dal_6', 'Eduardo', 'Najera', 'F', '14', 'DAL'),
       ]
     },
@@ -710,9 +710,9 @@ const ERA_KOBE = {
     { id: 'lac_2003', abbreviation: 'LAC', full_name: 'Los Angeles Clippers', city: 'Los Angeles', name: 'Clippers',
       players: [
         p('k_lac_1', 'Elton', 'Brand', 'PF', '42', 'LAC'),
-        p('k_lac_2', 'Lamar', 'Odom', 'SF', '7', 'LAC'),
-        p('k_lac_3', 'Andre', 'Miller', 'PG', '24', 'LAC'),
-        p('k_lac_4', 'Quentin', 'Richardson', 'SG', '15', 'LAC'),
+        p('k_lac_2', 'Corey', 'Maggette', 'SF', '50', 'LAC'),
+        p('k_lac_3', 'Keyon', 'Dooling', 'PG', '5', 'LAC'),
+        p('k_lac_4', 'Eddie', 'House', 'SG', '5', 'LAC'),
         p('k_lac_5', 'Chris', 'Kaman', 'C', '35', 'LAC'),
         p('k_lac_6', 'Marko', 'Jaric', 'G', '8', 'LAC'),
       ]
@@ -749,12 +749,12 @@ const ERA_KOBE = {
     },
     { id: 'mil_2003', abbreviation: 'MIL', full_name: 'Milwaukee Bucks', city: 'Milwaukee', name: 'Bucks',
       players: [
-        p('k_mil_1', 'Ray', 'Allen', 'SG', '34', 'MIL'),
-        p('k_mil_2', 'Glenn', 'Robinson', 'SF', '13', 'MIL'),
-        p('k_mil_3', 'Sam', 'Cassell', 'PG', '10', 'MIL'),
+        p('k_mil_1', 'Michael', 'Redd', 'SG', '22', 'MIL'),
+        p('k_mil_2', 'Tim', 'Thomas', 'SF', '5', 'MIL'),
+        p('k_mil_3', 'Mo', 'Williams', 'PG', '25', 'MIL'),
         p('k_mil_4', 'Toni', 'Kukoc', 'F', '7', 'MIL'),
         p('k_mil_5', 'Joel', 'Przybilla', 'C', '12', 'MIL'),
-        p('k_mil_6', 'Desmond', 'Mason', 'G', '21', 'MIL'),
+        p('k_mil_6', 'Ronald', 'Murray', 'G', '22', 'MIL'),
       ]
     },
     { id: 'min_2003', abbreviation: 'MIN', full_name: 'Minnesota Timberwolves', city: 'Minnesota', name: 'Timberwolves',
@@ -790,7 +790,7 @@ const ERA_KOBE = {
     { id: 'nyk_2003', abbreviation: 'NYK', full_name: 'New York Knicks', city: 'New York', name: 'Knicks',
       players: [
         p('k_nyk_1', 'Stephon', 'Marbury', 'PG', '3', 'NYK'),
-        p('k_nyk_2', 'Latrell', 'Sprewell', 'SG', '8', 'NYK'),
+        p('k_nyk_2', 'Anfernee', 'Hardaway', 'SG', '1', 'NYK'),
         p('k_nyk_3', 'Allan', 'Houston', 'SG', '20', 'NYK'),
         p('k_nyk_4', 'Kurt', 'Thomas', 'PF', '34', 'NYK'),
         p('k_nyk_5', 'Dikembe', 'Mutombo', 'C', '55', 'NYK'),
@@ -813,7 +813,7 @@ const ERA_KOBE = {
         p('k_phi_2', 'Eric', 'Snow', 'PG', '12', 'PHI'),
         p('k_phi_3', 'Keith', 'Van Horn', 'PF', '22', 'PHI'),
         p('k_phi_4', 'Derrick', 'Coleman', 'F', '44', 'PHI'),
-        p('k_phi_5', 'Theo', 'Ratliff', 'C', '42', 'PHI'),
+        p('k_phi_5', 'Samuel', 'Dalembert', 'C', '1', 'PHI'),
         p('k_phi_6', 'Aaron', 'McKie', 'G', '8', 'PHI'),
       ]
     },
@@ -829,11 +829,11 @@ const ERA_KOBE = {
     },
     { id: 'por_2003', abbreviation: 'POR', full_name: 'Portland Trail Blazers', city: 'Portland', name: 'Trail Blazers',
       players: [
-        p('k_por_1', 'Rasheed', 'Wallace', 'PF', '30', 'POR'),
+        p('k_por_1', 'Bonzi', 'Wells', 'SF', '6', 'POR'),
         p('k_por_2', 'Damon', 'Stoudamire', 'PG', '3', 'POR'),
         p('k_por_3', 'Zach', 'Randolph', 'F', '50', 'POR'),
         p('k_por_4', 'Derek', 'Anderson', 'SG', '21', 'POR'),
-        p('k_por_5', 'Theo', 'Ratliff', 'C', '42', 'POR'),
+        p('k_por_5', 'Dale', 'Davis', 'C', '34', 'POR'),
         p('k_por_6', 'Scottie', 'Pippen', 'SF', '33', 'POR'),
       ]
     },
@@ -869,8 +869,8 @@ const ERA_KOBE = {
     },
     { id: 'tor_2003', abbreviation: 'TOR', full_name: 'Toronto Raptors', city: 'Toronto', name: 'Raptors',
       players: [
-        p('k_tor_1', 'Vince', 'Carter', 'SG', '15', 'TOR'),
-        p('k_tor_2', 'Morris', 'Peterson', 'SF', '24', 'TOR'),
+        p('k_tor_1', 'Morris', 'Peterson', 'SG', '24', 'TOR'),
+        p('k_tor_2', 'Jerome', 'Williams', 'SF', '13', 'TOR'),
         p('k_tor_3', 'Alvin', 'Williams', 'PG', '7', 'TOR'),
         p('k_tor_4', 'Antonio', 'Davis', 'C', '33', 'TOR'),
         p('k_tor_5', 'Chris', 'Bosh', 'PF', '4', 'TOR'),
@@ -879,7 +879,7 @@ const ERA_KOBE = {
     },
     { id: 'uta_2003', abbreviation: 'UTA', full_name: 'Utah Jazz', city: 'Utah', name: 'Jazz',
       players: [
-        p('k_uta_1', 'Karl', 'Malone', 'PF', '32', 'UTA'),
+        p('k_uta_1', 'Carlos', 'Arroyo', 'PG', '30', 'UTA'),
         p('k_uta_2', 'John', 'Stockton', 'PG', '12', 'UTA'),
         p('k_uta_3', 'Andrei', 'Kirilenko', 'SF', '47', 'UTA'),
         p('k_uta_4', 'Matt', 'Harpring', 'F', '14', 'UTA'),
