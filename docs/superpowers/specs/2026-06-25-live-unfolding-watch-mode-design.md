@@ -1,4 +1,4 @@
-# Live Unfolding Watch Mode Design
+# Live Mode Design
 
 ## Purpose
 
@@ -8,7 +8,7 @@ The live screen is a cinematic reveal of a locked simulation: animated court mov
 
 ## Core Decision
 
-Use **Live Unfolding** instead of instant replay.
+Use **Live Mode** instead of instant replay.
 
 The server creates the deterministic game result and a matching event timeline. The app reveals that timeline over a short watch window. Users can join at any time, watch the score unfold, leave, return, or skip to the final result after the game is complete. No live input changes the result.
 
@@ -28,7 +28,7 @@ Before the simulation starts, each GM can set:
 
 These choices become immutable gameplan snapshots when the game begins.
 
-### Live Watch
+### Live Mode
 
 The live screen shows:
 
@@ -43,7 +43,7 @@ The live screen shows:
 - Key stat callouts such as runs, foul trouble, hot shooting, turnovers, and rebounding edge
 - Pregame plan labels for context only
 
-There are no GM buttons during live watch. The only actions are viewer actions such as pause animation, jump to latest, view box score, or leave the screen.
+There are no GM buttons during live mode. The only actions are viewer actions such as pause animation, jump to latest, view box score, or leave the screen.
 
 ### Overtime
 
@@ -54,7 +54,7 @@ Overtime rules:
 - Regulation has four quarters.
 - Each overtime period is five minutes.
 - The sim adds overtime periods until one team leads at the end of a period.
-- The live watch screen labels overtime as `OT`, `2OT`, `3OT`, and so on.
+- The live mode screen labels overtime as `OT`, `2OT`, `3OT`, and so on.
 - Quarter scoring includes overtime columns when needed.
 - Box scores and player minutes include overtime production.
 - Fatigue impact is higher for overtime games.
@@ -183,8 +183,8 @@ Function tests:
 
 App/source tests:
 
-- Matchup screen links to Watch Mode for simulating games.
-- Watch Mode has no live adjustment callables or mutation buttons.
+- Matchup screen links to Live Mode for simulating games.
+- Live Mode has no live adjustment callables or mutation buttons.
 - Result screen remains reachable after the timeline completes.
 - Home arena theme is used for NBA regular season, NBA Cup, and playoff games.
 
