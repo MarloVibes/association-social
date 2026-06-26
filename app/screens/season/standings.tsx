@@ -6,6 +6,7 @@ import { ActivityIndicator, SectionList, StyleSheet, Text, TouchableOpacity, Vie
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
+import { isLiveResultRevealed } from '@/domain/nba/scheduleView';
 import { buildNbaCupGroupStandings, buildNbaStandings, type StandingsRow } from '@/domain/nba/standings';
 
 type Team = {
@@ -23,18 +24,18 @@ type ScheduleDoc = {
   nbaCup?: {
     enabled?: boolean;
     games?: NbaScheduleGame[];
-    groups?: Array<{
+    groups?: {
       id: string;
       teamIds: string[];
-    }>;
+    }[];
   } | null;
-  participants?: Array<{
+  participants?: {
     scheduleTeamId?: string;
     sourceTeamDocId?: string | null;
     gmId?: string | null;
     abbreviation?: string;
     name?: string;
-  }>;
+  }[];
 };
 
 export default function StandingsScreen() {
@@ -45,6 +46,12 @@ export default function StandingsScreen() {
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<StandingsViewMode>('regular');
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -76,8 +83,12 @@ export default function StandingsScreen() {
     };
   }, [leagueId]);
 
-  const regularGames = schedule?.games || [];
-  const cupGames = schedule?.nbaCup?.games || [];
+  const regularGames = useMemo(() => (
+    (schedule?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
+  ), [nowMs, schedule?.games]);
+  const cupGames = useMemo(() => (
+    (schedule?.nbaCup?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
+  ), [nowMs, schedule?.nbaCup?.games]);
   const hasNbaCup = cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
   const selectedViewMode: StandingsViewMode = viewMode === 'cup' && hasNbaCup ? 'cup' : 'regular';
   const standingsGames = selectedViewMode === 'cup' ? cupGames : regularGames;

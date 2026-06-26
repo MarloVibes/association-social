@@ -55,6 +55,12 @@ function simulatedScore(game, nowMs) {
   return { homeScore, awayScore };
 }
 
+function displayScheduleAbbr(value) {
+  const raw = String(value || '').trim();
+  const eraMatch = raw.toUpperCase().match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraMatch ? eraMatch[1] : raw;
+}
+
 function numberFrom(value, fallback = 60) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -79,11 +85,12 @@ function simPlayerValue(player) {
 
 function simPlayersForTeam(team, teamId) {
   const source = Array.isArray(team && team.players) ? team.players : [];
+  const displayTeamId = displayScheduleAbbr(teamId) || 'CPU';
   const players = source.length > 0
     ? source
     : Array.from({ length: 8 }, (_, index) => ({
       player_id: `${teamId || 'cpu'}-${index}`,
-      full_name: `${teamId || 'CPU'} Player ${index + 1}`,
+      full_name: `${displayTeamId} Player ${index + 1}`,
       hidden: { shooting: 60, playmaking: 60, defense: 60, basketballIq: 60 },
     }));
   return [...players]
@@ -212,7 +219,7 @@ function quarterScores(homeScore, awayScore, seed) {
 }
 
 function teamAbbrForTheme(team, teamId) {
-  return team && (team.abbreviation || team.abbr || team.teamId || team.id) || teamId;
+  return displayScheduleAbbr(team && (team.abbreviation || team.abbr || team.teamId || team.id) || teamId);
 }
 
 function arenaThemeForHomeTeam({ game, homeTeam }) {
@@ -282,12 +289,13 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
     pointMargin: awayScore - homeScore,
   });
   const winnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
+  const winnerLabel = displayScheduleAbbr(winnerTeamId);
   return {
     homeScore,
     awayScore,
     boxScore: { home, away },
     quarters: quarterScores(homeScore, awayScore, seed),
-    story: `${winnerTeamId} controlled the decisive stretches behind roster strength and rotation production.`,
+    story: `${winnerLabel} controlled the decisive stretches behind roster strength and rotation production.`,
   };
 }
 

@@ -7,7 +7,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacit
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
 type Team = {
   id: string;
@@ -36,6 +36,9 @@ type ResultGame = NbaScheduleGame & {
   seriesId?: string;
   playoffGame?: number;
   liveTimeline?: unknown;
+  liveMode?: {
+    simulationEndsAtMs?: number | null;
+  } | null;
   boxScore?: {
     home?: { points?: number; players?: BoxScorePlayer[] };
     away?: { points?: number; players?: BoxScorePlayer[] };
@@ -81,6 +84,12 @@ export default function GameResultScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -127,10 +136,10 @@ export default function GameResultScreen() {
   const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
-  const awayAbbr = normalizeScheduleKey(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
-  const homeAbbr = normalizeScheduleKey(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
-  const awayLabel = awayTeam?.abbreviation || awayTeam?.name || game?.awayTeamId || 'Away';
-  const homeLabel = homeTeam?.abbreviation || homeTeam?.name || game?.homeTeamId || 'Home';
+  const awayAbbr = displayScheduleAbbr(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
+  const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
+  const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
+  const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const topPerformers = useMemo(() => [
     ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: awayLabel })),
     ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: homeLabel })),
@@ -144,6 +153,7 @@ export default function GameResultScreen() {
     ),
   );
   const showLiveReplay = Boolean(game?.liveTimeline);
+  const resultVisible = isLiveResultRevealed(game, nowMs);
 
   const resetGame = () => {
     if (!leagueId || !gameId || !isLeagueAdmin || resetting) return;
@@ -185,12 +195,26 @@ export default function GameResultScreen() {
           </TouchableOpacity>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>{isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'League'}</Text>
-            <Text style={styles.title}>Final Score</Text>
+            <Text style={styles.title}>{resultVisible ? 'Final Score' : 'Live Mode'}</Text>
           </View>
         </View>
 
         {!game ? (
           <Text style={styles.empty}>This result is not available yet.</Text>
+        ) : !resultVisible ? (
+          <>
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Live Mode in progress</Text>
+              <Text style={styles.story}>The final score unlocks when the live simulation reaches the final buzzer.</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } })}
+              style={styles.replayButton}
+            >
+              <Ionicons color="#06130c" name="play" size={17} />
+              <Text style={styles.replayButtonText}>Watch Live Mode</Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <>
             <View style={styles.scoreboard}>

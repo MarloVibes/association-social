@@ -1,5 +1,5 @@
 import type { NbaScheduleGame } from './schedule';
-import { scheduleKeyAliases } from './scheduleView';
+import { displayScheduleAbbr, displayScheduleName, scheduleKeyAliases } from './scheduleView';
 
 export type StandingsTeam = {
   id?: string | null;
@@ -51,7 +51,7 @@ function normalize(value?: string | null) {
 }
 
 function displayName(team: StandingsTeam | StandingsParticipant, fallback: string) {
-  return team.name || (team as StandingsTeam).full_name || team.abbreviation || (team as StandingsParticipant).scheduleTeamId || fallback;
+  return displayScheduleName(team) || fallback;
 }
 
 function registerTeam(
@@ -62,7 +62,7 @@ function registerTeam(
 ) {
   const teamId = normalize(rawId || (source as StandingsParticipant).scheduleTeamId || (source as StandingsTeam).teamId || source.abbreviation || (source as StandingsTeam).abbr || (source as StandingsTeam).id);
   if (!teamId) return;
-  const abbreviation = normalize(source.abbreviation || (source as StandingsTeam).abbr || teamId);
+  const abbreviation = displayScheduleAbbr(source.abbreviation || (source as StandingsTeam).abbr || teamId);
   const sourceAliases = [teamId, abbreviation, (source as StandingsTeam).teamId, (source as StandingsTeam).abbr, (source as StandingsTeam).id]
     .flatMap(scheduleKeyAliases);
   const existingKey = sourceAliases.map(key => aliases.get(key)).find(Boolean);

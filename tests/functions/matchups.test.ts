@@ -69,7 +69,7 @@ describe('matchup request state helpers', () => {
 
   it('permits immediate simulation by either participating GM', () => {
     const game = seedAvailableGame();
-    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000 });
+    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000, homeTeam: {}, awayTeam: {} });
 
     expect(result).toMatchObject({
       status: 'final',
@@ -144,7 +144,7 @@ describe('matchup request state helpers', () => {
       awayGmId: null,
       awayTeamId: 'cpu-away',
     });
-    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000 });
+    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000, homeTeam: {}, awayTeam: {} });
 
     expect(result.status).toBe('final');
     expect(result.quarters).toHaveLength(4);
@@ -168,6 +168,25 @@ describe('matchup request state helpers', () => {
       simulationEndsAtMs: 5_000 + result.liveTimeline.revealDurationMs,
       arenaTheme: expect.objectContaining({ centerText: expect.any(String) }),
     });
+  });
+
+  it('uses clean era abbreviations for fallback CPU box score players', () => {
+    const game = seedAvailableGame({
+      homeTeamId: 'SAS_2011',
+      awayTeamId: 'CHI',
+      awayGmId: null,
+    });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {},
+      awayTeam: {},
+    });
+
+    expect(result.boxScore.home.players[0].name).toMatch(/^SAS Player \d+$/);
+    expect(result.story).toContain('SAS');
+    expect(result.story).not.toContain('SAS_2011');
   });
 
   it('uses roster hidden values and stores a box score for simulated games', () => {

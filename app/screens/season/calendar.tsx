@@ -8,7 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advanceNbaCupStage, buildNbaCupSchedule, decorateScheduleGames, supportsNbaCupSchedule, type NbaScheduleParticipant } from '@/domain/nba/scheduleSetup';
-import { gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 import { previewNbaScheduleOwnershipRepair, repairNbaScheduleOwnershipLocally } from '@/utils/repairNbaScheduleOwnership';
 
@@ -37,21 +37,21 @@ type ScheduleDoc = {
     enabled?: boolean;
     name?: string;
     games?: CalendarGame[];
-    groups?: Array<{
+    groups?: {
       id: string;
       teamIds: string[];
-    }>;
+    }[];
     championTeamId?: string | null;
     championTeamName?: string | null;
     championTeamAbbr?: string | null;
   } | null;
-  participants?: Array<{
+  participants?: {
     scheduleTeamId?: string;
     sourceTeamDocId?: string | null;
     gmId?: string | null;
     abbreviation?: string;
     name?: string;
-  }>;
+  }[];
 };
 
 type TeamPresentation = {
@@ -104,7 +104,13 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [advancingCup, setAdvancingCup] = useState(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
+  const [nowMs, setNowMs] = useState(Date.now());
   const repairAttemptedRef = useRef('');
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -159,14 +165,14 @@ export default function CalendarScreen() {
   const teamNames = useMemo(() => {
     const names = new Map<string, string>();
     (schedule?.participants || []).forEach((team) => {
-      const label = team.abbreviation || team.name || team.scheduleTeamId || '';
+      const label = displayScheduleName(team);
       [team.scheduleTeamId, team.abbreviation].filter(Boolean).forEach(key => {
         names.set(String(key), label);
         names.set(normalizeScheduleKey(String(key)), label);
       });
     });
     teams.forEach((team) => {
-      const label = team.abbreviation || team.name || team.teamId || team.id;
+      const label = displayScheduleName(team);
       [team.id, team.teamId, team.abbreviation].filter(Boolean).forEach(key => {
         names.set(String(key), label);
         names.set(normalizeScheduleKey(String(key)), label);
@@ -176,20 +182,20 @@ export default function CalendarScreen() {
   }, [schedule?.participants, teams]);
   const teamPresentations = useMemo(() => {
     const presentations = new Map<string, TeamPresentation>();
-    const register = (keys: Array<string | undefined>, presentation: TeamPresentation) => {
+    const register = (keys: (string | undefined)[], presentation: TeamPresentation) => {
       keys.filter(Boolean).forEach((key) => {
         presentations.set(String(key), presentation);
         presentations.set(normalizeScheduleKey(String(key)), presentation);
       });
     };
     (schedule?.participants || []).forEach((team) => {
-      const abbr = normalizeScheduleKey(team.abbreviation || team.scheduleTeamId);
-      const label = team.name || team.abbreviation || team.scheduleTeamId || '';
+      const abbr = displayScheduleAbbr(team.abbreviation || team.scheduleTeamId);
+      const label = displayScheduleName(team);
       register([team.scheduleTeamId, team.abbreviation], { label, abbr });
     });
     teams.forEach((team) => {
-      const abbr = normalizeScheduleKey(team.abbreviation || team.teamId || team.id);
-      const label = team.abbreviation || team.name || team.teamId || team.id;
+      const abbr = displayScheduleAbbr(team.abbreviation || team.teamId || team.id);
+      const label = displayScheduleName(team);
       register([team.id, team.teamId, team.abbreviation], { label, abbr });
     });
     return presentations;
@@ -423,15 +429,18 @@ export default function CalendarScreen() {
           </View>
         )}
         renderItem={({ item }) => {
-          const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || item.homeTeamId, abbr: normalizeScheduleKey(item.homeTeamId) };
-          const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || item.awayTeamId, abbr: normalizeScheduleKey(item.awayTeamId) };
+          const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || displayScheduleName({ scheduleTeamId: item.homeTeamId }), abbr: displayScheduleAbbr(item.homeTeamId) };
+          const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || displayScheduleName({ scheduleTeamId: item.awayTeamId }), abbr: displayScheduleAbbr(item.awayTeamId) };
           const cupGame = selectedViewMode === 'cup' || item.competition === 'nbaCup';
           const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
           const mine = myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid);
           const openable = Boolean(mine || isLeagueAdmin);
-          const needsReset = isLeagueAdmin && item.status !== 'scheduled';
-          const finalScore = formatFinalScore(item);
-          const statusLabel = item.status === 'final'
+          const resultRevealed = isLiveResultRevealed(item, nowMs);
+          const needsReset = isLeagueAdmin && item.status !== 'scheduled' && resultRevealed;
+          const finalScore = resultRevealed ? formatFinalScore(item) : '';
+          const statusLabel = item.status === 'final' && !resultRevealed
+            ? 'Live'
+            : item.status === 'final'
             ? finalScore || 'Final'
             : item.status === 'scheduled' && mine
               ? 'Ready'
@@ -448,7 +457,7 @@ export default function CalendarScreen() {
               disabled={!openable}
               onPress={() => {
                 const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
-                const destination = item.status === 'final' && item.liveTimeline ? '/screens/season/live-mode' : resultDestination;
+                const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;
                 router.push({
                   pathname: destination as any,
                   params: {

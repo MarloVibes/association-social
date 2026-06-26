@@ -7,9 +7,10 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
+import { buildLiveCourtState } from '@/domain/nba/liveCourt';
 import { currentTimelineEvent, type LiveTimeline, type LiveTimelineEvent } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
 type Team = {
   id: string;
@@ -103,8 +104,6 @@ export default function LiveModeScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [nowMs, setNowMs] = useState(Date.now());
-  const tokenX = useSharedValue(0);
-  const tokenY = useSharedValue(0);
   const ballX = useSharedValue(0);
   const ballY = useSharedValue(0);
   const availableCourtWidth = Math.max(120, windowWidth - SCREEN_HORIZONTAL_PADDING);
@@ -159,10 +158,10 @@ export default function LiveModeScreen() {
   const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
-  const homeAbbr = normalizeScheduleKey(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
-  const awayAbbr = normalizeScheduleKey(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
-  const homeLabel = homeTeam?.abbreviation || homeTeam?.name || game?.homeTeamId || 'Home';
-  const awayLabel = awayTeam?.abbreviation || awayTeam?.name || game?.awayTeamId || 'Away';
+  const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
+  const awayAbbr = displayScheduleAbbr(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
+  const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
+  const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
   const liveTimeline = game?.liveTimeline || null;
   const elapsedMs = safeElapsedMs(game, nowMs, replayStartedAtMs);
   const current = liveTimeline ? currentTimelineEvent(liveTimeline, elapsedMs) : { event: null, index: -1 as const };
@@ -195,27 +194,25 @@ export default function LiveModeScreen() {
         : `${awayLabel} +${Math.abs(currentEvent.momentum)}`
     : 'Opening tip';
   const resultCompetition = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
+  const resultVisible = isLiveResultRevealed(game, nowMs);
   const scoreboardBackground = translucentColor(arenaTheme.primary, '22', 'rgba(255,255,255,0.06)');
   const courtBackground = translucentColor(arenaTheme.primary, '33', 'rgba(255,255,255,0.08)');
   const crowdGlowBackground = translucentColor(arenaTheme.crowdGlow, '44', 'rgba(255,255,255,0.12)');
+  const courtState = useMemo(() => buildLiveCourtState({
+    event: currentEvent,
+    homeTeamId: game?.homeTeamId || '',
+    awayTeamId: game?.awayTeamId || '',
+    homeAbbr,
+    awayAbbr,
+  }), [awayAbbr, currentEvent, game?.awayTeamId, game?.homeTeamId, homeAbbr]);
 
   useEffect(() => {
-    const eventX = currentEvent ? currentEvent.x : 50;
-    const eventY = currentEvent ? currentEvent.y : 50;
-    const nextX = (Math.max(0, Math.min(100, eventX)) / 100) * courtWidth;
-    const nextY = (Math.max(0, Math.min(100, eventY)) / 100) * courtHeight;
-    tokenX.value = withTiming(nextX, { duration: 650 });
-    tokenY.value = withTiming(nextY, { duration: 650 });
-    ballX.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtWidth - BALL_TOKEN_SIZE, nextX + 18)), { duration: 760 });
-    ballY.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtHeight - BALL_TOKEN_SIZE, nextY - 14)), { duration: 760 });
-  }, [ballX, ballY, courtHeight, courtWidth, currentEvent, tokenX, tokenY]);
+    const nextX = (courtState.ball.x / 100) * courtWidth;
+    const nextY = (courtState.ball.y / 100) * courtHeight;
+    ballX.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtWidth - BALL_TOKEN_SIZE, nextX)), { duration: 760 });
+    ballY.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtHeight - BALL_TOKEN_SIZE, nextY)), { duration: 760 });
+  }, [ballX, ballY, courtHeight, courtState.ball.x, courtState.ball.y, courtWidth]);
 
-  const tokenStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tokenX.value - PLAYER_TOKEN_SIZE / 2 },
-      { translateY: tokenY.value - PLAYER_TOKEN_SIZE / 2 },
-    ],
-  }));
   const ballStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: ballX.value - BALL_TOKEN_SIZE / 2 },
@@ -274,7 +271,23 @@ export default function LiveModeScreen() {
                   <Text style={[styles.centerText, { color: arenaTheme.text }]}>{arenaTheme.centerText}</Text>
                 </View>
                 <View style={[styles.midLine, { left: courtWidth / 2, height: courtHeight }]} />
-                <Animated.View style={[styles.playerToken, { backgroundColor: arenaTheme.primary, borderColor: arenaTheme.text }, tokenStyle]} />
+                {courtState.players.map(player => (
+                  <View
+                    key={player.id}
+                    style={[
+                      styles.playerToken,
+                      {
+                        left: (player.x / 100) * courtWidth - PLAYER_TOKEN_SIZE / 2,
+                        top: (player.y / 100) * courtHeight - PLAYER_TOKEN_SIZE / 2,
+                        backgroundColor: player.side === 'home' ? arenaTheme.primary : '#111111',
+                        borderColor: player.active ? '#fff' : player.side === 'home' ? arenaTheme.secondary : '#f4f4f4',
+                      },
+                      player.active && styles.activePlayerToken,
+                    ]}
+                  >
+                    <Text style={[styles.playerTokenText, { color: player.side === 'home' ? arenaTheme.text : '#ffffff' }]}>{player.label.slice(-1)}</Text>
+                  </View>
+                ))}
                 <Animated.View style={[styles.ballToken, ballStyle]} />
               </View>
             </View>
@@ -320,13 +333,19 @@ export default function LiveModeScreen() {
               )}
             </View>
 
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: resultCompetition } })}
-              style={[styles.resultButton, { backgroundColor: arenaTheme.text }]}
-            >
-              <Ionicons color="#050505" name="trophy" size={17} />
-              <Text style={styles.resultButtonText}>Final Result</Text>
-            </TouchableOpacity>
+            {resultVisible ? (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: resultCompetition } })}
+                style={[styles.resultButton, { backgroundColor: arenaTheme.text }]}
+              >
+                <Ionicons color="#050505" name="trophy" size={17} />
+                <Text style={styles.resultButtonText}>Final Result</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.lockedResult}>
+                <Text style={styles.lockedResultText}>Final result unlocks at the buzzer</Text>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -361,7 +380,9 @@ const styles = StyleSheet.create({
   centerCircle: { position: 'absolute', borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.16)' },
   centerText: { fontSize: 14, fontWeight: '900' },
   midLine: { position: 'absolute', top: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.5)' },
-  playerToken: { position: 'absolute', left: 0, top: 0, width: 28, height: 28, borderRadius: 14, borderWidth: 2 },
+  playerToken: { position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  activePlayerToken: { borderWidth: 3 },
+  playerTokenText: { fontSize: 10, fontWeight: '900' },
   ballToken: { position: 'absolute', left: 0, top: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#f97316', borderWidth: 1, borderColor: '#fff1d6' },
   panel: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 14, gap: 10 },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
@@ -383,6 +404,8 @@ const styles = StyleSheet.create({
   feedScore: { color: '#fff', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
   resultButton: { minHeight: 46, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   resultButtonText: { color: '#050505', fontSize: 13, fontWeight: '900' },
+  lockedResult: { minHeight: 46, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#262626', backgroundColor: '#101010' },
+  lockedResultText: { color: '#aaa', fontSize: 13, fontWeight: '900' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20 },
   emptySmall: { color: '#777', fontSize: 13, lineHeight: 19 },
 });

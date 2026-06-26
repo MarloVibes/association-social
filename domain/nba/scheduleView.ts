@@ -10,12 +10,23 @@ export type ScheduleViewGame = {
   awayTeamId: string;
   homeGmId?: string | null;
   awayGmId?: string | null;
+  status?: string;
+  liveTimeline?: unknown;
+  liveMode?: {
+    simulationEndsAtMs?: number | null;
+  } | null;
 };
 
 export type ScheduleViewMode = 'mine' | 'league';
 
 export function normalizeScheduleKey(value?: string | null) {
   return String(value || '').trim().toUpperCase();
+}
+
+export function displayScheduleAbbr(value?: string | null) {
+  const key = normalizeScheduleKey(value);
+  const eraSuffixMatch = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraSuffixMatch ? eraSuffixMatch[1] : key;
 }
 
 const TEAM_ALIASES: Record<string, string[]> = {
@@ -34,7 +45,34 @@ const TEAM_ALIASES: Record<string, string[]> = {
 
 export function scheduleKeyAliases(value?: string | null) {
   const key = normalizeScheduleKey(value);
-  return key ? [key, ...(TEAM_ALIASES[key] || [])] : [];
+  if (!key) return [];
+  const displayKey = displayScheduleAbbr(key);
+  return [...new Set([key, displayKey, ...(TEAM_ALIASES[key] || []), ...(TEAM_ALIASES[displayKey] || [])])];
+}
+
+export function displayScheduleName(team: {
+  name?: string | null;
+  full_name?: string | null;
+  abbreviation?: string | null;
+  abbr?: string | null;
+  scheduleTeamId?: string | null;
+  teamId?: string | null;
+  id?: string | null;
+}) {
+  const name = String(team.name || team.full_name || '').trim();
+  if (name) return name;
+  return displayScheduleAbbr(team.abbreviation || team.abbr || team.scheduleTeamId || team.teamId || team.id);
+}
+
+export function isLiveResultRevealed(game?: (Partial<ScheduleViewGame> & {
+  liveTimeline?: unknown;
+  liveMode?: {
+    simulationEndsAtMs?: number | null;
+  } | null;
+}) | null, nowMs = Date.now()) {
+  if (!game?.liveTimeline) return true;
+  const simulationEndsAtMs = Number(game.liveMode?.simulationEndsAtMs || 0);
+  return simulationEndsAtMs <= 0 || nowMs >= simulationEndsAtMs;
 }
 
 export function teamScheduleKeys(team?: ScheduleViewTeam | null) {

@@ -50,4 +50,22 @@ describe('NBA standings', () => {
       ['Group B', [['NYK', 1, 0], ['NOP', 0, 1]]],
     ]);
   });
+
+  it('uses clean labels for era schedule ids in standings', () => {
+    const standings = buildNbaStandings({
+      participants: [
+        { scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011' },
+        { scheduleTeamId: 'CHI', abbreviation: 'CHI', name: 'Chicago Bulls' },
+      ],
+      games: [
+        { id: 'g1', week: 1, sequence: 1, homeTeamId: 'SAS_2011', awayTeamId: 'CHI', homeScore: 114, awayScore: 112, status: 'final' },
+      ],
+    });
+
+    expect(standings.find(row => row.teamId === 'SAS_2011')).toMatchObject({
+      abbreviation: 'SAS',
+      name: 'SAS',
+      wins: 1,
+    });
+  });
 });

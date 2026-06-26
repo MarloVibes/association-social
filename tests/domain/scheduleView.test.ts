@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { gameMatchesMyTeam, normalizeScheduleKey, scheduleKeyAliases, teamScheduleKeys, visibleScheduleGames } from '@/domain/nba/scheduleView';
+import {
+  displayScheduleAbbr,
+  displayScheduleName,
+  gameMatchesMyTeam,
+  isLiveResultRevealed,
+  normalizeScheduleKey,
+  scheduleKeyAliases,
+  teamScheduleKeys,
+  visibleScheduleGames,
+} from '@/domain/nba/scheduleView';
 
 describe('NBA schedule view helpers', () => {
   it('normalizes team keys so lowercase era ids match schedule abbreviations', () => {
@@ -17,6 +26,13 @@ describe('NBA schedule view helpers', () => {
       { teamId: 'NOH', abbreviation: 'NOH' },
       'gm',
     )).toBe(true);
+  });
+
+  it('normalizes era schedule ids for display and matching', () => {
+    expect(scheduleKeyAliases('SAS_2011')).toContain('SAS');
+    expect(displayScheduleAbbr('SAS_2011')).toBe('SAS');
+    expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011' })).toBe('SAS');
+    expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011', name: 'San Antonio Spurs' })).toBe('San Antonio Spurs');
   });
 
   it('matches my games by normalized team id or stored GM id', () => {
@@ -42,5 +58,17 @@ describe('NBA schedule view helpers', () => {
 
     expect(visibleScheduleGames(games, 'mine', { teamId: 'bos' }, 'gm').map(game => game.id)).toEqual(['mine']);
     expect(visibleScheduleGames(games, 'league', { teamId: 'bos' }, 'gm').map(game => game.id)).toEqual(['mine', 'late']);
+  });
+
+  it('hides live simulation results until the reveal window finishes', () => {
+    const game = {
+      status: 'final',
+      liveTimeline: { version: 1 },
+      liveMode: { simulationEndsAtMs: 20_000 },
+    };
+
+    expect(isLiveResultRevealed(game, 19_999)).toBe(false);
+    expect(isLiveResultRevealed(game, 20_000)).toBe(true);
+    expect(isLiveResultRevealed({ status: 'final' }, 10_000)).toBe(true);
   });
 });
