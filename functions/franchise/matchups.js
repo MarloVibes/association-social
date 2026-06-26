@@ -1,6 +1,8 @@
 'use strict';
 
+const { buildArenaTheme } = require('./arenaTheme');
 const { FinalizeGameError, finalizeGame } = require('./finalizeGame');
+const { buildLiveTimeline } = require('./liveTimeline');
 
 const REQUEST_WINDOW_MS = 60 * 60 * 1000;
 const PREPARATION_WINDOW_MS = 5 * 60 * 1000;
@@ -207,6 +209,55 @@ function quarterScores(homeScore, awayScore, seed) {
   const home = split(homeScore, 'home');
   const away = split(awayScore, 'away');
   return [0, 1, 2, 3].map(index => ({ quarter: index + 1, home: home[index], away: away[index] }));
+}
+
+function teamAbbrForTheme(team, teamId) {
+  return team && (team.abbreviation || team.abbr || team.teamId || team.id) || teamId;
+}
+
+function arenaThemeForHomeTeam({ game, homeTeam }) {
+  return buildArenaTheme({
+    homeAbbr: teamAbbrForTheme(homeTeam, game.homeTeamId),
+    primaryColor: homeTeam && homeTeam.primaryColor,
+    secondaryColor: homeTeam && homeTeam.secondaryColor,
+    currentYear: game.currentYear || game.seasonYear || game.year,
+  });
+}
+
+function timelinePlayers(teamBoxScore) {
+  if (!teamBoxScore || !Array.isArray(teamBoxScore.players)) return [];
+  return teamBoxScore.players.map(player => ({
+    playerId: player.playerId,
+    name: player.name,
+    points: player.points,
+  }));
+}
+
+function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
+  const homePlayers = timelinePlayers(game.boxScore && game.boxScore.home);
+  const awayPlayers = timelinePlayers(game.boxScore && game.boxScore.away);
+  const liveTimeline = buildLiveTimeline({
+    gameId: game.id,
+    seed,
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeScore: game.homeScore,
+    awayScore: game.awayScore,
+    quarters: game.quarters,
+    homePlayers,
+    awayPlayers,
+  });
+
+  return {
+    ...game,
+    liveTimeline,
+    liveMode: {
+      status: 'ready',
+      simulationStartedAtMs: nowMs,
+      simulationEndsAtMs: nowMs + liveTimeline.revealDurationMs,
+      arenaTheme: arenaThemeForHomeTeam({ game, homeTeam }),
+    },
+  };
 }
 
 function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
@@ -484,6 +535,7 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam }) {
   const rosterSimulation = homeTeam || awayTeam
     ? simulateRosterGame({ game, homeTeam, awayTeam, nowMs })
     : null;
+  const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const { homeScore, awayScore } = rosterSimulation || simulatedScore(game, nowMs);
   const result = finalizeGame({
     game,
@@ -497,16 +549,26 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam }) {
       [game.awayTeamId]: teamStateForFinalization(awayTeam),
     },
   });
+  const simulatedGame = {
+    ...result.game,
+    ...(rosterSimulation
+      ? {
+        boxScore: rosterSimulation.boxScore,
+        quarters: rosterSimulation.quarters,
+        story: rosterSimulation.story,
+      }
+      : {
+        quarters: quarterScores(homeScore, awayScore, seed),
+      }),
+  };
   return {
     ...result,
-    game: rosterSimulation
-    ? {
-      ...result.game,
-      boxScore: rosterSimulation.boxScore,
-      quarters: rosterSimulation.quarters,
-      story: rosterSimulation.story,
-    }
-    : result.game,
+    game: gameWithLiveMode({
+      game: simulatedGame,
+      nowMs,
+      seed,
+      homeTeam,
+    }),
   };
 }
 
@@ -583,6 +645,8 @@ function resetScheduledGame({ game, uid, nowMs }) {
     injuries,
     boxScore,
     quarters,
+    liveTimeline,
+    liveMode,
     story,
     ...baseGame
   } = game;
@@ -607,6 +671,8 @@ function resetScheduledGame({ game, uid, nowMs }) {
   void injuries;
   void boxScore;
   void quarters;
+  void liveTimeline;
+  void liveMode;
   void story;
   return {
     ...baseGame,
@@ -617,7 +683,158 @@ function resetScheduledGame({ game, uid, nowMs }) {
 }
 
 function scheduleCompetition(data) {
-  return data && data.competition === 'nbaCup' ? 'nbaCup' : 'regular';
+  if (data && data.competition === 'nbaCup') return 'nbaCup';
+  if (data && data.competition === 'playoffs') return 'playoffs';
+  return 'regular';
+}
+
+function playoffGames(schedule) {
+  return schedule && schedule.playoffs && Array.isArray(schedule.playoffs.rounds)
+    ? schedule.playoffs.rounds.flatMap(round => (
+      (round.series || []).flatMap(series => series.games || [])
+    ))
+    : [];
+}
+
+const PLAYOFF_ROUND_NAMES = {
+  short_8: ['quarterfinal', 'semifinal', 'final'],
+  traditional_16: ['first_round', 'second_round', 'conference_final', 'final'],
+  play_in_16: ['play_in', 'first_round', 'second_round', 'conference_final', 'final'],
+};
+
+const PLAYOFF_ROUND_LABELS = {
+  play_in: 'Play-In',
+  quarterfinal: 'Quarterfinals',
+  semifinal: 'Semifinals',
+  final: 'Finals',
+  first_round: 'First Round',
+  second_round: 'Second Round',
+  conference_final: 'Conference Finals',
+};
+
+const FIRST_ROUND_16_PAIRINGS = [[1, 16], [8, 9], [5, 12], [4, 13], [3, 14], [6, 11], [7, 10], [2, 15]];
+
+function playoffGameId(seed, seriesId, playoffGame) {
+  return `nba_playoff_${seed}_${seriesId}_${playoffGame}`.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function gmIdForSeriesTeam(series, teamId) {
+  const games = Array.isArray(series.games) ? series.games : [];
+  for (const game of games) {
+    if (game.homeTeamId === teamId) return game.homeGmId || null;
+    if (game.awayTeamId === teamId) return game.awayGmId || null;
+  }
+  return null;
+}
+
+function winnerRowForSeries(series) {
+  const winnerTeamId = series && series.winnerTeamId;
+  if (!winnerTeamId) return null;
+  const isHome = winnerTeamId === series.homeTeamId;
+  return {
+    teamId: winnerTeamId,
+    abbreviation: winnerTeamId,
+    name: isHome ? series.homeTeamName : series.awayTeamName,
+    gmId: gmIdForSeriesTeam(series, winnerTeamId),
+    sourceHomeSeed: series.homeSeed,
+  };
+}
+
+function nextRoundPairings(count) {
+  return Array.from({ length: count / 2 }, (_, index) => [index * 2, index * 2 + 1]);
+}
+
+function buildPlayoffSeries({ bracket, round, roundIndex, seriesIndex, homeSeed, awaySeed, home, away }) {
+  const seriesId = `${round}_${seriesIndex + 1}`;
+  const seriesSeed = `${bracket.seed || 'playoffs'}:${bracket.seasonYear || 'season'}`;
+  const games = Array.from({ length: 7 }, (_, index) => {
+    const playoffGame = index + 1;
+    const homeHosts = [1, 2, 5, 7].includes(playoffGame);
+    const homeTeam = homeHosts ? home : away;
+    const awayTeam = homeHosts ? away : home;
+    return {
+      id: playoffGameId(seriesSeed, seriesId, playoffGame),
+      stage: 'playoffs',
+      round,
+      seriesId,
+      playoffGame,
+      week: 100 + roundIndex,
+      sequence: roundIndex * 100 + seriesIndex * 10 + playoffGame,
+      homeTeamId: homeTeam.teamId,
+      awayTeamId: awayTeam.teamId,
+      homeGmId: homeTeam.gmId || null,
+      awayGmId: awayTeam.gmId || null,
+      status: 'scheduled',
+    };
+  });
+  return {
+    id: seriesId,
+    round,
+    roundIndex,
+    seriesIndex,
+    homeSeed,
+    awaySeed,
+    homeTeamId: home.teamId,
+    awayTeamId: away.teamId,
+    homeTeamName: home.name,
+    awayTeamName: away.name,
+    winnerTeamId: null,
+    games,
+  };
+}
+
+function appendNextPlayoffRound(playoffs) {
+  if (!playoffs || !Array.isArray(playoffs.rounds) || playoffs.rounds.length === 0) return playoffs;
+  const currentRound = playoffs.rounds[playoffs.rounds.length - 1];
+  if (!currentRound || !Array.isArray(currentRound.series) || currentRound.series.some(series => !series.winnerTeamId)) {
+    return playoffs;
+  }
+  const roundNames = PLAYOFF_ROUND_NAMES[playoffs.format] || PLAYOFF_ROUND_NAMES.short_8;
+  const nextRoundName = roundNames[(currentRound.roundIndex || 0) + 1];
+  if (!nextRoundName) return playoffs;
+
+  if (playoffs.format === 'play_in_16' && currentRound.name === 'play_in') {
+    const seededRows = new Map((playoffs.seeds || []).map((row, index) => [index + 1, row]));
+    currentRound.series.forEach((series) => {
+      const winner = winnerRowForSeries(series);
+      if (winner) seededRows.set(series.homeSeed, winner);
+    });
+    const nextRound = {
+      name: 'first_round',
+      label: PLAYOFF_ROUND_LABELS.first_round,
+      roundIndex: 1,
+      series: FIRST_ROUND_16_PAIRINGS.map(([homeSeed, awaySeed], index) => buildPlayoffSeries({
+        bracket: playoffs,
+        round: 'first_round',
+        roundIndex: 1,
+        seriesIndex: index,
+        homeSeed,
+        awaySeed,
+        home: seededRows.get(homeSeed),
+        away: seededRows.get(awaySeed),
+      })),
+    };
+    return { ...playoffs, rounds: [...playoffs.rounds, nextRound] };
+  }
+
+  const winners = currentRound.series.map(winnerRowForSeries).filter(Boolean);
+  if (winners.length !== currentRound.series.length || winners.length < 2) return playoffs;
+  const nextRound = {
+    name: nextRoundName,
+    label: PLAYOFF_ROUND_LABELS[nextRoundName] || nextRoundName,
+    roundIndex: (currentRound.roundIndex || 0) + 1,
+    series: nextRoundPairings(winners.length).map(([homeIndex, awayIndex], index) => buildPlayoffSeries({
+      bracket: playoffs,
+      round: nextRoundName,
+      roundIndex: (currentRound.roundIndex || 0) + 1,
+      seriesIndex: index,
+      homeSeed: currentRound.series[homeIndex].homeSeed,
+      awaySeed: currentRound.series[awayIndex].homeSeed,
+      home: winners[homeIndex],
+      away: winners[awayIndex],
+    })),
+  };
+  return { ...playoffs, rounds: [...playoffs.rounds, nextRound] };
 }
 
 function gamesForCompetition(schedule, competition) {
@@ -626,11 +843,50 @@ function gamesForCompetition(schedule, competition) {
       ? schedule.nbaCup.games
       : [];
   }
+  if (competition === 'playoffs') return playoffGames(schedule);
   return schedule && Array.isArray(schedule.games) ? schedule.games : [];
 }
 
-function updatePayloadForCompetition(competition, games) {
-  return competition === 'nbaCup' ? { 'nbaCup.games': games } : { games };
+function syncPlayoffWinners(playoffs) {
+  if (!playoffs || !Array.isArray(playoffs.rounds)) return playoffs;
+  return appendNextPlayoffRound({
+    ...playoffs,
+    rounds: playoffs.rounds.map(round => ({
+      ...round,
+      series: (round.series || []).map((series) => {
+        if (series.winnerTeamId) return series;
+        const wins = new Map();
+        (series.games || []).forEach((game) => {
+          if (game.status !== 'final' || !game.winnerTeamId) return;
+          wins.set(game.winnerTeamId, (wins.get(game.winnerTeamId) || 0) + 1);
+        });
+        const winner = [...wins.entries()].find(([, count]) => count >= 4);
+        return winner ? { ...series, winnerTeamId: winner[0] } : series;
+      }),
+    })),
+  });
+}
+
+function updatePlayoffGames(schedule, games) {
+  const gameById = new Map((games || []).map(game => [game.id, game]));
+  const playoffs = schedule && schedule.playoffs ? schedule.playoffs : null;
+  if (!playoffs || !Array.isArray(playoffs.rounds)) return playoffs;
+  return syncPlayoffWinners({
+    ...playoffs,
+    rounds: playoffs.rounds.map(round => ({
+      ...round,
+      series: (round.series || []).map(series => ({
+        ...series,
+        games: (series.games || []).map(game => gameById.get(game.id) || game),
+      })),
+    })),
+  });
+}
+
+function updatePayloadForCompetition(competition, games, schedule) {
+  if (competition === 'nbaCup') return { 'nbaCup.games': games };
+  if (competition === 'playoffs') return { playoffs: updatePlayoffGames(schedule, games) };
+  return { games };
 }
 
 function mapError(error, HttpsError) {
@@ -683,7 +939,7 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
       }
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames));
+      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
       const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
       const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
       if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, homePayload);
@@ -792,7 +1048,7 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       }
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames));
+      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
       return nextGame;
     });
   };
@@ -846,7 +1102,7 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
       }
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames));
+      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
       return result.game;
     });
@@ -909,7 +1165,7 @@ function createSimulateScheduledGameHandler(deps) {
       }
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames));
+      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
       return result.game;
     });

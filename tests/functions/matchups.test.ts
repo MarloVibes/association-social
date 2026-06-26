@@ -80,7 +80,66 @@ describe('matchup request state helpers', () => {
     expect([game.homeTeamId, game.awayTeamId]).toContain(result.winnerTeamId);
   });
 
-  it('permits immediate CPU matchup simulation', () => {
+  it('stores live mode replay metadata for simulated games', () => {
+    const game = seedAvailableGame({
+      homeTeamId: 'LAL',
+      awayTeamId: 'BOS',
+    });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {
+        players: Array.from({ length: 8 }, (_, index) => ({
+          player_id: `home-${index}`,
+          full_name: `Home ${index}`,
+          hidden: { shooting: 92, playmaking: 88, defense: 84 },
+        })),
+      },
+      awayTeam: {
+        players: Array.from({ length: 8 }, (_, index) => ({
+          player_id: `away-${index}`,
+          full_name: `Away ${index}`,
+          hidden: { shooting: 55, playmaking: 54, defense: 53 },
+        })),
+      },
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.liveTimeline).toMatchObject({
+      version: 1,
+      gameId: game.id,
+      homeTeamId: game.homeTeamId,
+      awayTeamId: game.awayTeamId,
+      homeScore: result.homeScore,
+      awayScore: result.awayScore,
+    });
+    expect(result.liveTimeline.periods).toEqual(
+      result.quarters.map((quarter: { quarter: number; home: number; away: number }) => ({
+        period: quarter.quarter,
+        label: `Q${quarter.quarter}`,
+        home: quarter.home,
+        away: quarter.away,
+      })),
+    );
+    expect(result.liveTimeline.events.length).toBeGreaterThan(0);
+    expect(result.liveTimeline.events.at(-1)).toMatchObject({
+      eventType: 'final_buzzer',
+      homeScore: result.homeScore,
+      awayScore: result.awayScore,
+    });
+    expect(result.liveMode).toMatchObject({
+      status: 'ready',
+      simulationStartedAtMs: 5_000,
+      simulationEndsAtMs: 5_000 + result.liveTimeline.revealDurationMs,
+      arenaTheme: expect.objectContaining({
+        homeAbbr: 'LAL',
+        centerText: 'LAL',
+      }),
+    });
+  });
+
+  it('permits immediate CPU matchup simulation with live mode replay metadata', () => {
     const game = seedAvailableGame({
       awayGmId: null,
       awayTeamId: 'cpu-away',
@@ -88,6 +147,27 @@ describe('matchup request state helpers', () => {
     const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000 });
 
     expect(result.status).toBe('final');
+    expect(result.quarters).toHaveLength(4);
+    expect(result.liveTimeline).toMatchObject({
+      version: 1,
+      gameId: game.id,
+      homeScore: result.homeScore,
+      awayScore: result.awayScore,
+    });
+    expect(result.liveTimeline.periods).toEqual(
+      result.quarters.map((quarter: { quarter: number; home: number; away: number }) => ({
+        period: quarter.quarter,
+        label: `Q${quarter.quarter}`,
+        home: quarter.home,
+        away: quarter.away,
+      })),
+    );
+    expect(result.liveMode).toMatchObject({
+      status: 'ready',
+      simulationStartedAtMs: 5_000,
+      simulationEndsAtMs: 5_000 + result.liveTimeline.revealDurationMs,
+      arenaTheme: expect.objectContaining({ centerText: expect.any(String) }),
+    });
   });
 
   it('uses roster hidden values and stores a box score for simulated games', () => {
@@ -193,6 +273,8 @@ describe('matchup request state helpers', () => {
       finalAtMs: 6_000,
       boxScore: { home: { players: [] }, away: { players: [] } },
       quarters: [{ quarter: 1, home: 25, away: 20 }],
+      liveTimeline: { version: 1, events: [] },
+      liveMode: { status: 'ready' },
       story: 'Old result',
     });
 
@@ -215,6 +297,8 @@ describe('matchup request state helpers', () => {
     expect(result.finalAtMs).toBeUndefined();
     expect(result.boxScore).toBeUndefined();
     expect(result.quarters).toBeUndefined();
+    expect(result.liveTimeline).toBeUndefined();
+    expect(result.liveMode).toBeUndefined();
     expect(result.story).toBeUndefined();
   });
 
@@ -395,5 +479,110 @@ describe('matchup request state helpers', () => {
     expect(gamesForCompetition(schedule, 'regular')).toEqual([regularGame]);
     expect(updatePayloadForCompetition('nbaCup', [cupGame])).toEqual({ 'nbaCup.games': [cupGame] });
     expect(updatePayloadForCompetition('regular', [regularGame])).toEqual({ games: [regularGame] });
+  });
+
+  it('selects and updates playoff games inside the playoff bracket', () => {
+    const playoffGame = seedAvailableGame({ id: 'po-1' });
+    const finalGame = { ...playoffGame, status: 'final', winnerTeamId: playoffGame.homeTeamId };
+    const schedule = {
+      games: [],
+      playoffs: {
+        rounds: [{
+          series: [{
+            id: 'series-1',
+            homeTeamId: playoffGame.homeTeamId,
+            awayTeamId: playoffGame.awayTeamId,
+            games: [playoffGame, seedAvailableGame({ id: 'po-2' })],
+          }],
+        }],
+      },
+    };
+
+    expect(gamesForCompetition(schedule, 'playoffs')).toHaveLength(2);
+    expect(updatePayloadForCompetition('playoffs', [finalGame], schedule).playoffs.rounds[0].series[0].games[0]).toMatchObject({
+      id: 'po-1',
+      status: 'final',
+      winnerTeamId: playoffGame.homeTeamId,
+    });
+  });
+
+  it('advances playoff rounds when every series has four completed wins', () => {
+    const seriesAHomeGames = Array.from({ length: 4 }, (_, index) => seedAvailableGame({
+      id: `po-a-${index + 1}`,
+      homeTeamId: 'team-1',
+      awayTeamId: 'team-8',
+      homeGmId: 'gm-1',
+      awayGmId: 'gm-8',
+      status: 'final',
+      winnerTeamId: 'team-1',
+    }));
+    const seriesBHomeGames = Array.from({ length: 4 }, (_, index) => seedAvailableGame({
+      id: `po-b-${index + 1}`,
+      homeTeamId: 'team-4',
+      awayTeamId: 'team-5',
+      homeGmId: 'gm-4',
+      awayGmId: 'gm-5',
+      status: 'final',
+      winnerTeamId: 'team-4',
+    }));
+    const schedule = {
+      playoffs: {
+        format: 'short_8',
+        seasonYear: 2026,
+        seed: 'league-2026',
+        rounds: [{
+          name: 'quarterfinal',
+          label: 'Quarterfinals',
+          roundIndex: 0,
+          series: [
+            {
+              id: 'quarterfinal_1',
+              round: 'quarterfinal',
+              roundIndex: 0,
+              seriesIndex: 0,
+              homeSeed: 1,
+              awaySeed: 8,
+              homeTeamId: 'team-1',
+              awayTeamId: 'team-8',
+              homeTeamName: 'Team 1',
+              awayTeamName: 'Team 8',
+              games: seriesAHomeGames,
+            },
+            {
+              id: 'quarterfinal_2',
+              round: 'quarterfinal',
+              roundIndex: 0,
+              seriesIndex: 1,
+              homeSeed: 4,
+              awaySeed: 5,
+              homeTeamId: 'team-4',
+              awayTeamId: 'team-5',
+              homeTeamName: 'Team 4',
+              awayTeamName: 'Team 5',
+              games: seriesBHomeGames,
+            },
+          ],
+        }],
+      },
+    };
+
+    const playoffs = updatePayloadForCompetition('playoffs', [...seriesAHomeGames, ...seriesBHomeGames], schedule).playoffs;
+
+    expect(playoffs.rounds[0].series[0].winnerTeamId).toBe('team-1');
+    expect(playoffs.rounds[0].series[1].winnerTeamId).toBe('team-4');
+    expect(playoffs.rounds[1]).toMatchObject({
+      name: 'semifinal',
+      roundIndex: 1,
+    });
+    expect(playoffs.rounds[1].series[0]).toMatchObject({
+      homeTeamId: 'team-1',
+      awayTeamId: 'team-4',
+    });
+    expect(playoffs.rounds[1].series[0].games).toHaveLength(7);
+    expect(playoffs.rounds[1].series[0].games[0]).toMatchObject({
+      homeGmId: 'gm-1',
+      awayGmId: 'gm-4',
+      status: 'scheduled',
+    });
   });
 });
