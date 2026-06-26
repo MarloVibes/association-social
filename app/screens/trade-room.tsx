@@ -268,7 +268,7 @@ export default function TradeRoomScreen() {
         setTradeApprovalMode(data.tradeApprovalMode || 'instant');
         setLeagueMembers(data.members || []);
         setVotePassThreshold(data.votePassThreshold || 'majority');
-        setStepienRule(!!data.stepienRule);
+        setStepienRule((data.sport || 'nba') === 'nba' && !!data.stepienRule);
         setDraftBaseYear(data.draftBaseYear || (new Date().getFullYear() + 1));
         setVoteDeadlineDays(typeof data.voteDeadlineDays === 'number' ? data.voteDeadlineDays : 2);
       }
@@ -488,7 +488,7 @@ export default function TradeRoomScreen() {
 
     // Stepien Rule: block offering a first-round pick if it would leave this team
     // without a first-rounder in back-to-back drafts.
-    if (stepienRule && pick.round === 1) {
+    if (leagueSport === 'nba' && stepienRule && pick.round === 1) {
       const owned = side === 'mine' ? (myTeam?.picks || []) : otherTeamPicks;
       const offeredFirstIds = new Set<string>([...current.filter((p: any) => p.round === 1).map((p: any) => p.id), pick.id]);
       const remainingFirstYears = owned.filter((p: any) => p.round === 1 && !offeredFirstIds.has(p.id)).map((p: any) => p.year);

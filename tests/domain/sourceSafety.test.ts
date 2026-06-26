@@ -32,6 +32,13 @@ describe('source safety regressions', () => {
     expect(tradeChannel).not.toContain('basketball-reference.com/req/202106291/images/headshots/');
   });
 
+  it('keeps the Stepien Rule NBA-only in trade rooms', () => {
+    const tradeRoom = source('app/screens/trade-room.tsx');
+
+    expect(tradeRoom).toContain("setStepienRule((data.sport || 'nba') === 'nba' && !!data.stepienRule)");
+    expect(tradeRoom).toContain("if (leagueSport === 'nba' && stepienRule && pick.round === 1)");
+  });
+
   it('does not dereference a nullable auth user while saving a profile', () => {
     const profile = source('app/screens/profile.tsx');
 
