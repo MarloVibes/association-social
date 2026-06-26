@@ -30,6 +30,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Dan Roundfield | ATL | Power Forward | high | 0 | 66.5 | 17.9 | 14.3/9.2/2 | career win shares, above-average PER, scoring load, rebounding value |
 | Danny Ainge | BOS | Shooting Guard and Point Guard | high | 0 | 71.5 | 14.7 | 11.5/2.7/4 | career win shares, above-average PER |
 | Darrell Griffith | UTA | Shooting Guard | high | 0 | 22 | 14.6 | 16.2/3.3/2.1 | above-average PER, scoring load |
+| David Greenwood | CHI | Power Forward | high | 0 | 46.4 | 13.6 | 10.2/7.9/2 | rebounding value |
 | David Thompson | SEA | Shooting Guard and Small Forward | high | 0 | 63.3 | 19.9 | 22.7/4.1/3.3 | career win shares, above-average PER, scoring load |
 | Dennis Johnson | BOS | Point Guard and Shooting Guard | high | 0 | 82.6 | 14.6 | 14.1/3.9/5 | career win shares, above-average PER, scoring load, creator value |
 | Dennis Johnson | PHX | Point Guard and Shooting Guard | high | 0 | 82.6 | 14.6 | 14.1/3.9/5 | career win shares, above-average PER, scoring load, creator value |
@@ -136,7 +137,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Bobby Jones | PHI | Small Forward | normal | 0 | 1.1 | 9.7 | 3.2/1.6/0.5 | - |
 | Clint Richardson | IND | Shooting Guard | normal | 0 | 16.6 | 11.1 | 7/2.4/2.5 | - |
 | Darwin Cook | NJN | Point Guard and Shooting Guard | normal | 0 | 22.9 | 13.8 | 9.5/2.1/3.7 | - |
-| David Greenwood | CHI | PF | normal | 0 | 0 | 0 | 0/0/0 | - |
 | Frank Johnson | WAS | Point Guard | normal | 0 | 17.2 | 12.7 | 8.3/1.7/4.2 | - |
 | Jerry Sichting | IND | Point Guard | normal | 0 | 21.2 | 11.7 | 6.9/1.4/3.3 | - |
 | John Bagley | CLE | Point Guard | normal | 0 | 16.6 | 13 | 8.7/2.6/6 | creator value |
@@ -152,7 +152,3 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 - Junior Bridgeman: LAC, MIL
 - Reggie Theus: CHI, SAC
 - Terry Cummings: LAC, MIL
-
-## No Local Profile Match Warnings
-
-- David Greenwood: CHI

@@ -124,6 +124,42 @@ describe('local NBA era audit data builder', () => {
     ]);
   });
 
+  it('matches Magic/Bird era profile aliases used by local player history', () => {
+    const rosterSource = `
+      const ERA_MAGIC_BIRD = {
+        era: 'magic_bird',
+        season: '1983-84',
+        teams: [
+          { id: 'chi_1984', abbreviation: 'CHI', full_name: 'Chicago Bulls', city: 'Chicago', name: 'Bulls',
+            players: [
+              p('h_chi_5', 'David', 'Greenwood', 'PF', '32', 'CHI'),
+            ]
+          },
+        ]
+      };
+    `;
+    const playersCsv = [
+      'index,_id,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,greenda01,2.0,13.6,10.2,7.9,46.4,Dave Greenwood,Power Forward',
+    ].join('\n');
+    const salariesCsv = [
+      'player_id,salary,season,season_end,team',
+      'greenda01,425000,1983-84,1984,CHI',
+    ].join('\n');
+
+    const players = buildLocalEraAuditPlayers({
+      era: 'magic_bird',
+      seasonStartYear: 1983,
+      rosters: parseEraRosters(rosterSource),
+      playersCsv,
+      salariesCsv,
+    });
+
+    expect(players).toEqual([
+      expect.objectContaining({ full_name: 'David Greenwood', matchedProfile: true, salary: 425000, career_WS: 46.4 }),
+    ]);
+  });
+
   it('keeps the real LeBron era seed roster free of duplicate players', () => {
     const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
     const rosters = parseEraRosters(source);

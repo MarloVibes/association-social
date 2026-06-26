@@ -51,6 +51,7 @@ const PROFILE_NAME_ALIASES = {
   [normalizeName('Nene Hilario')]: normalizeName('Nene'),
   [normalizeName('Ron Artest')]: normalizeName('Metta World Peace'),
   [normalizeName('D Angelo Russell')]: normalizeName("D'Angelo Russell"),
+  [normalizeName('David Greenwood')]: normalizeName('Dave Greenwood'),
 };
 
 function profileKeyForName(name) {
