@@ -207,6 +207,32 @@ const NBA_SKILL_KEYS = [
   'chemistry',
 ];
 
+const NBA_DETAILED_SKILL_KEYS = [
+  ...NBA_SKILL_KEYS,
+  'closeShot',
+  'midRange',
+  'threePoint',
+  'freeThrow',
+  'dunking',
+  'shotIq',
+  'passing',
+  'ballHandle',
+  'offenseIq',
+  'clutch',
+  'perimeterDefense',
+  'postDefense',
+  'blocking',
+  'steals',
+  'defenseIq',
+  'helpDefense',
+  'speed',
+  'acceleration',
+  'strength',
+  'postOffense',
+  'stamina',
+  'potential',
+];
+
 function hash(value) {
   let h = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -239,7 +265,7 @@ function gradeFromHiddenValue(value) {
 }
 
 function buildNbaGrades(hidden) {
-  return NBA_SKILL_KEYS.reduce((grades, key) => {
+  return NBA_DETAILED_SKILL_KEYS.reduce((grades, key) => {
     grades[key] = gradeFromHiddenValue(Number(hidden[key] || 0));
     return grades;
   }, {});
@@ -263,10 +289,48 @@ function nbaRoleBonus(minutes) {
 
 function nbaProductionBonus(key, season) {
   if (key === 'shooting' && Number(season.points || season.pts || 0) >= 900) return 1;
+  if ((key === 'threePoint' || key === 'midRange' || key === 'closeShot' || key === 'shotIq') && Number(season.points || season.pts || 0) >= 900) return 1;
+  if ((key === 'dunking' || key === 'postOffense') && Number(season.points || season.pts || 0) >= 900 && Number(season.rebounds || season.reb || 0) >= 250) return 1;
   if (key === 'playmaking' && Number(season.assists || season.ast || 0) >= 250) return 1;
+  if ((key === 'passing' || key === 'ballHandle' || key === 'offenseIq') && Number(season.assists || season.ast || 0) >= 250) return 1;
   if (key === 'rebounding' && Number(season.rebounds || season.reb || 0) >= 300) return 1;
+  if ((key === 'strength' || key === 'postDefense') && Number(season.rebounds || season.reb || 0) >= 300) return 1;
+  if ((key === 'defense' || key === 'perimeterDefense' || key === 'helpDefense' || key === 'defenseIq' || key === 'steals') && Number(season.steals || season.stl || 0) >= 70) return 1;
+  if ((key === 'blocking' || key === 'postDefense' || key === 'helpDefense') && Number(season.blocks || season.blk || 0) >= 45) return 1;
+  if (key === 'stamina' && Number(season.minutes || season.min || 0) >= 2200) return 2;
   if (key === 'basketballIq' && Number(season.minutes || season.min || 0) >= 1800) return 1;
   return 0;
+}
+
+function nbaPotentialBonus(hidden, current) {
+  const potential = Number(hidden.potential || current);
+  if (potential >= 92) return current < potential ? 2 : 1;
+  if (potential >= 86) return current < potential ? 1 : 0;
+  if (potential <= 68 && current >= potential) return -1;
+  return 0;
+}
+
+function nbaFocusAreas(player, season) {
+  const label = `${player.playstyle || ''} ${player.archetype || ''} ${player.position || ''}`.toLowerCase();
+  const focus = new Set();
+  if (label.includes('two-way') || label.includes('wing') || label.includes('lockdown')) {
+    ['defense', 'perimeterDefense', 'helpDefense', 'defenseIq', 'stamina', 'shooting', 'threePoint'].forEach(key => focus.add(key));
+  }
+  if (label.includes('shooter') || label.includes('sharp')) {
+    ['shooting', 'threePoint', 'freeThrow', 'shotIq', 'clutch'].forEach(key => focus.add(key));
+  }
+  if (label.includes('play') || label.includes('point') || label.includes('creator')) {
+    ['playmaking', 'passing', 'ballHandle', 'offenseIq', 'clutch'].forEach(key => focus.add(key));
+  }
+  if (label.includes('post') || label.includes('big') || label.includes('center') || label.includes('pf') || label.includes('c')) {
+    ['rebounding', 'postOffense', 'postDefense', 'blocking', 'strength'].forEach(key => focus.add(key));
+  }
+  if (Number(season.points || season.pts || 0) >= 1000) ['shooting', 'shotIq', 'clutch'].forEach(key => focus.add(key));
+  if (Number(season.assists || season.ast || 0) >= 250) ['playmaking', 'passing', 'offenseIq'].forEach(key => focus.add(key));
+  if (Number(season.rebounds || season.reb || 0) >= 350) ['rebounding', 'strength'].forEach(key => focus.add(key));
+  if (Number(season.steals || season.stl || 0) >= 70 || Number(season.blocks || season.blk || 0) >= 45) ['defense', 'helpDefense', 'defenseIq'].forEach(key => focus.add(key));
+  if (Number(season.minutes || season.min || 0) >= 2200) focus.add('stamina');
+  return [...focus];
 }
 
 function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
@@ -280,11 +344,17 @@ function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
   const awardBonus = Array.isArray(season.awards) && season.awards.length > 0 ? 1 : 0;
   const injuryPenalty = Math.min(3, Math.floor(Number(season.injuryGamesMissed || season.gamesMissed || 0) / 10));
   const deltas = {};
+  const focusAreas = nbaFocusAreas(player, season);
 
-  NBA_SKILL_KEYS.forEach((key) => {
+  NBA_DETAILED_SKILL_KEYS.forEach((key) => {
     const current = Number(hidden[key] || 60);
     const variance = (hash(`${seed}:${playerId(player)}:${key}`) % 5) - 2;
-    let delta = base + awardBonus + nbaProductionBonus(key, season) - injuryPenalty + variance;
+    if (key === 'potential') {
+      deltas[key] = 0;
+      return;
+    }
+    const focusBonus = focusAreas.includes(key) ? 1 : 0;
+    let delta = base + awardBonus + nbaProductionBonus(key, season) + nbaPotentialBonus(hidden, current) + focusBonus - injuryPenalty + variance;
     if (age >= 33 && (key === 'athleticism' || key === 'defense')) {
       delta = Math.min(delta, -1);
     }
@@ -307,6 +377,8 @@ function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
     progression: {
       ...(player.progression || {}),
       seasonDelta: deltas,
+      focusAreas,
+      seasonDeltaTotal: Object.values(deltas).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0),
       progressedSeason: completedSeasonYear,
     },
     statHistory: archivePlayerSeasonStats(player, completedSeasonYear),

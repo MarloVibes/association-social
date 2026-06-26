@@ -2,6 +2,9 @@ import { buildVisibleIdentity, type HiddenIdentityValues, type VisibleNbaIdentit
 
 export type ProgressionPlayer = {
   id: string;
+  playstyle?: string;
+  archetype?: string;
+  position?: string;
   hidden: HiddenIdentityValues;
 };
 
@@ -10,6 +13,8 @@ export type ProgressionSeason = {
   points?: number;
   assists?: number;
   rebounds?: number;
+  steals?: number;
+  blocks?: number;
   awards?: string[];
   injuryGamesMissed?: number;
 };
@@ -18,6 +23,8 @@ export type ProgressedPlayer = ProgressionPlayer & {
   visible: VisibleNbaIdentity;
   progression: {
     seasonDelta: Partial<Record<keyof HiddenIdentityValues, number>>;
+    focusAreas: string[];
+    seasonDeltaTotal: number;
   };
 };
 
@@ -29,7 +36,28 @@ type SkillKey =
   | 'athleticism'
   | 'basketballIq'
   | 'consistency'
-  | 'chemistry';
+  | 'chemistry'
+  | 'closeShot'
+  | 'midRange'
+  | 'threePoint'
+  | 'freeThrow'
+  | 'dunking'
+  | 'shotIq'
+  | 'passing'
+  | 'ballHandle'
+  | 'offenseIq'
+  | 'clutch'
+  | 'perimeterDefense'
+  | 'postDefense'
+  | 'blocking'
+  | 'steals'
+  | 'defenseIq'
+  | 'helpDefense'
+  | 'speed'
+  | 'acceleration'
+  | 'strength'
+  | 'postOffense'
+  | 'stamina';
 
 const SKILL_KEYS: SkillKey[] = [
   'shooting',
@@ -40,6 +68,27 @@ const SKILL_KEYS: SkillKey[] = [
   'basketballIq',
   'consistency',
   'chemistry',
+  'closeShot',
+  'midRange',
+  'threePoint',
+  'freeThrow',
+  'dunking',
+  'shotIq',
+  'passing',
+  'ballHandle',
+  'offenseIq',
+  'clutch',
+  'perimeterDefense',
+  'postDefense',
+  'blocking',
+  'steals',
+  'defenseIq',
+  'helpDefense',
+  'speed',
+  'acceleration',
+  'strength',
+  'postOffense',
+  'stamina',
 ];
 
 function hash(value: string): number {
@@ -73,10 +122,48 @@ function roleBonus(minutes: number) {
 
 function productionBonus(key: SkillKey, season: ProgressionSeason) {
   if (key === 'shooting' && Number(season.points || 0) >= 900) return 1;
+  if ((key === 'threePoint' || key === 'midRange' || key === 'closeShot' || key === 'shotIq') && Number(season.points || 0) >= 900) return 1;
+  if ((key === 'dunking' || key === 'postOffense') && Number(season.points || 0) >= 900 && Number(season.rebounds || 0) >= 250) return 1;
   if (key === 'playmaking' && Number(season.assists || 0) >= 250) return 1;
+  if ((key === 'passing' || key === 'ballHandle' || key === 'offenseIq') && Number(season.assists || 0) >= 250) return 1;
   if (key === 'rebounding' && Number(season.rebounds || 0) >= 300) return 1;
+  if ((key === 'strength' || key === 'postDefense') && Number(season.rebounds || 0) >= 300) return 1;
+  if ((key === 'defense' || key === 'perimeterDefense' || key === 'helpDefense' || key === 'defenseIq' || key === 'steals') && Number(season.steals || 0) >= 70) return 1;
+  if ((key === 'blocking' || key === 'postDefense' || key === 'helpDefense') && Number(season.blocks || 0) >= 45) return 1;
+  if (key === 'stamina' && Number(season.minutes || 0) >= 2200) return 2;
   if (key === 'basketballIq' && Number(season.minutes || 0) >= 1800) return 1;
   return 0;
+}
+
+function potentialBonus(hidden: HiddenIdentityValues, current: number) {
+  const potential = Number(hidden.potential || current);
+  if (potential >= 92) return current < potential ? 2 : 1;
+  if (potential >= 86) return current < potential ? 1 : 0;
+  if (potential <= 68 && current >= potential) return -1;
+  return 0;
+}
+
+function focusAreasFor(player: ProgressionPlayer, season: ProgressionSeason): SkillKey[] {
+  const label = `${player.playstyle || ''} ${player.archetype || ''} ${player.position || ''}`.toLowerCase();
+  const focus = new Set<SkillKey>();
+  if (label.includes('two-way') || label.includes('wing') || label.includes('lockdown')) {
+    ['defense', 'perimeterDefense', 'helpDefense', 'defenseIq', 'stamina', 'shooting', 'threePoint'].forEach(key => focus.add(key as SkillKey));
+  }
+  if (label.includes('shooter') || label.includes('sharp')) {
+    ['shooting', 'threePoint', 'freeThrow', 'shotIq', 'clutch'].forEach(key => focus.add(key as SkillKey));
+  }
+  if (label.includes('play') || label.includes('point') || label.includes('creator')) {
+    ['playmaking', 'passing', 'ballHandle', 'offenseIq', 'clutch'].forEach(key => focus.add(key as SkillKey));
+  }
+  if (label.includes('post') || label.includes('big') || label.includes('center') || label.includes('pf') || label.includes('c')) {
+    ['rebounding', 'postOffense', 'postDefense', 'blocking', 'strength'].forEach(key => focus.add(key as SkillKey));
+  }
+  if (Number(season.points || 0) >= 1000) ['shooting', 'shotIq', 'clutch'].forEach(key => focus.add(key as SkillKey));
+  if (Number(season.assists || 0) >= 250) ['playmaking', 'passing', 'offenseIq'].forEach(key => focus.add(key as SkillKey));
+  if (Number(season.rebounds || 0) >= 350) ['rebounding', 'strength'].forEach(key => focus.add(key as SkillKey));
+  if (Number(season.steals || 0) >= 70 || Number(season.blocks || 0) >= 45) ['defense', 'helpDefense', 'defenseIq'].forEach(key => focus.add(key as SkillKey));
+  if (Number(season.minutes || 0) >= 2200) focus.add('stamina');
+  return [...focus];
 }
 
 export function progressPlayer(player: ProgressionPlayer, season: ProgressionSeason, seed: string): ProgressedPlayer {
@@ -86,11 +173,13 @@ export function progressPlayer(player: ProgressionPlayer, season: ProgressionSea
   const awardBonus = (season.awards || []).length > 0 ? 1 : 0;
   const injuryPenalty = Math.min(3, Math.floor(Number(season.injuryGamesMissed || 0) / 10));
   const deltas: Partial<Record<keyof HiddenIdentityValues, number>> = {};
+  const focusAreas = focusAreasFor(player, season);
 
   SKILL_KEYS.forEach((key) => {
     const current = Number(hidden[key] || 60);
     const variance = (hash(`${seed}:${player.id}:${key}`) % 5) - 2;
-    let delta = base + awardBonus + productionBonus(key, season) - injuryPenalty + variance;
+    const focusBonus = focusAreas.includes(key) ? 1 : 0;
+    let delta = base + awardBonus + productionBonus(key, season) + potentialBonus(hidden, current) + focusBonus - injuryPenalty + variance;
     if (age >= 33 && (key === 'athleticism' || key === 'defense')) {
       delta = Math.min(delta, -1);
     }
@@ -108,6 +197,8 @@ export function progressPlayer(player: ProgressionPlayer, season: ProgressionSea
     visible: buildVisibleIdentity(hidden),
     progression: {
       seasonDelta: deltas,
+      focusAreas,
+      seasonDeltaTotal: Object.values(deltas).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0),
     },
   };
 }

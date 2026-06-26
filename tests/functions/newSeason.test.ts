@@ -250,6 +250,41 @@ describe('new season orchestration', () => {
     expect(player.seasonStats).toEqual({});
   });
 
+  it('uses potential and playstyle to progress detailed NBA grades at season rollover', () => {
+    const player = advanceNbaPlayerForNewSeason({
+      id: 'deng',
+      full_name: 'Luol Deng',
+      age: 25,
+      contractYears: 2,
+      playstyle: 'Two-Way Wing',
+      hidden: {
+        shooting: 76,
+        defense: 84,
+        perimeterDefense: 84,
+        helpDefense: 82,
+        defenseIq: 83,
+        stamina: 91,
+        potential: 90,
+        age: 25,
+        seasonsPlayed: 6,
+      },
+      seasonStats: {
+        minutes: 3200,
+        points: 1400,
+        rebounds: 470,
+        steals: 85,
+        blocks: 45,
+        awards: ['All-Defense'],
+      },
+    }, 2012, 'deng-seed');
+
+    expect(player.hidden.potential).toBe(90);
+    expect(player.hidden.perimeterDefense).toBeGreaterThan(84);
+    expect(player.hidden.helpDefense).toBeGreaterThan(82);
+    expect(player.progression.focusAreas).toContain('perimeterDefense');
+    expect(player.grades.potential).toBeTruthy();
+  });
+
   it('resets team season condition when advancing rosters', () => {
     const result = autoCutTeamRoster('nba', {
       id: 'NOH',
