@@ -66,14 +66,65 @@ function numberFrom(value, fallback = 60) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+const GRADE_VALUES = {
+  S: 99,
+  'A+': 97,
+  A: 92,
+  'A-': 87,
+  'B+': 82,
+  B: 77,
+  'B-': 72,
+  'C+': 68,
+  C: 63,
+  'C-': 57,
+  D: 52,
+  F: 42,
+};
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function gradeValue(value) {
+  const key = String(value || '').trim().toUpperCase();
+  return GRADE_VALUES[key] || null;
+}
+
 function playerKey(player) {
   return String(player && (player.player_id || player.playerId || player.id || player.full_name || player.name) || '');
 }
 
 function playerSkill(player, key) {
-  if (player && player.hidden && typeof player.hidden === 'object') return numberFrom(player.hidden[key], 60);
+  if (player && player.hidden && typeof player.hidden === 'object' && player.hidden[key] != null) return numberFrom(player.hidden[key], 60);
   if (player && Number.isFinite(player[key])) return numberFrom(player[key], 60);
+  const directGrade = gradeValue(player && player.grades && player.grades[key]);
+  if (directGrade) return directGrade;
+  const visibleGrade = gradeValue(player && player.visible && player.visible.grades && player.visible.grades[key]);
+  if (visibleGrade) return visibleGrade;
+  if (key === 'shooting') return numberFrom(player && (player.ppg || player.points), 60);
+  if (key === 'playmaking') return numberFrom(player && (player.apg || player.assists), 60);
+  if (key === 'rebounding') return numberFrom(player && (player.rpg || player.rebounds), 60);
   return 60;
+}
+
+function positionFactor(player, kind) {
+  const position = String(player && player.position || '').toUpperCase();
+  const isGuard = position.includes('PG') || position.includes('SG') || position === 'G';
+  const isBig = position.includes('PF') || position.includes('C') || position === 'F-C';
+  if (kind === 'assist') {
+    if (position.includes('PG')) return 1.45;
+    if (isGuard) return 1.18;
+    if (isBig) return 0.62;
+    return 0.88;
+  }
+  if (kind === 'rebound') {
+    if (position.includes('C')) return 1.45;
+    if (position.includes('PF')) return 1.25;
+    if (isBig) return 1.08;
+    if (isGuard) return 0.68;
+    return 0.9;
+  }
+  return 1;
 }
 
 function simPlayerValue(player) {
@@ -131,6 +182,52 @@ function distributeTeamPoints(players, minutes, teamPoints, seed) {
   return points;
 }
 
+function distributeStatTotal(players, minutes, targetTotal, seed, weightForPlayer) {
+  const weights = players.map((player, index) => Math.max(0.01, weightForPlayer(player, minutes[index], index)));
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+  const raw = weights.map(weight => (weight / totalWeight) * targetTotal);
+  const values = raw.map(value => Math.floor(value));
+  let diff = targetTotal - values.reduce((sum, value) => sum + value, 0);
+  const order = raw
+    .map((value, index) => ({
+      index,
+      remainder: value - Math.floor(value),
+      tie: hash(`${seed}:${playerKey(players[index])}:stat-share`),
+    }))
+    .sort((left, right) => right.remainder - left.remainder || left.tie - right.tie);
+  let cursor = 0;
+  while (diff > 0 && order.length > 0) {
+    values[order[cursor].index] += 1;
+    diff -= 1;
+    cursor = (cursor + 1) % order.length;
+  }
+  return values;
+}
+
+function weightedTeamSkill(players, minutes, skillForPlayer) {
+  const totalMinutes = minutes.reduce((sum, value) => sum + value, 0) || 1;
+  return players.reduce((sum, player, index) => sum + skillForPlayer(player) * minutes[index], 0) / totalMinutes;
+}
+
+function targetTeamRebounds(players, minutes, seed) {
+  const rebounding = weightedTeamSkill(players, minutes, player => (
+    playerSkill(player, 'rebounding') * 0.62
+    + playerSkill(player, 'defense') * 0.22
+    + playerSkill(player, 'athleticism') * 0.16
+  ));
+  return clamp(Math.round(40 + ((rebounding - 60) / 3.4) + (hash(`${seed}:team-rebounds`) % 5)), 34, 58);
+}
+
+function targetTeamAssists(players, minutes, fieldGoalsMade, seed) {
+  const creation = weightedTeamSkill(players, minutes, player => (
+    playerSkill(player, 'playmaking') * 0.68
+    + playerSkill(player, 'basketballIq') * 0.22
+    + playerSkill(player, 'shooting') * 0.1
+  ));
+  const assistedRate = clamp(0.48 + ((creation - 60) / 155) + ((hash(`${seed}:team-assists`) % 7) - 3) / 100, 0.42, 0.76);
+  return clamp(Math.round(fieldGoalsMade * assistedRate), 12, Math.min(34, Math.max(12, fieldGoalsMade)));
+}
+
 function shootingLine(points, variance) {
   const threePointersMade = Math.min(Math.floor(points / 3), Math.floor((points * (15 + (variance % 18))) / 300));
   let remaining = points - (threePointersMade * 3);
@@ -153,24 +250,40 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
   const players = simPlayersForTeam(team, teamId);
   const minutes = normalizeSimulationMinutes(players);
   const points = distributeTeamPoints(players, minutes, targetPoints, seed);
+  const shootingLines = players.map((player, index) => shootingLine(points[index], hash(`${seed}:${teamId}:${playerKey(player)}:line`)));
+  const fieldGoalsMade = shootingLines.reduce((total, line) => total + line.fieldGoalsMade, 0);
+  const teamRebounds = targetTeamRebounds(players, minutes, seed);
+  const teamAssists = targetTeamAssists(players, minutes, fieldGoalsMade, seed);
+  const rebounds = distributeStatTotal(players, minutes, teamRebounds, `${seed}:rebounds`, (player, playerMinutes, index) => (
+    playerMinutes
+    * positionFactor(player, 'rebound')
+    * (playerSkill(player, 'rebounding') * 0.64 + playerSkill(player, 'defense') * 0.22 + playerSkill(player, 'athleticism') * 0.14)
+    * (0.95 + (hash(`${seed}:${index}:rebound-variance`) % 15) / 100)
+  ));
+  const assists = distributeStatTotal(players, minutes, teamAssists, `${seed}:assists`, (player, playerMinutes, index) => (
+    playerMinutes
+    * positionFactor(player, 'assist')
+    * (playerSkill(player, 'playmaking') * 0.72 + playerSkill(player, 'basketballIq') * 0.2 + playerSkill(player, 'shooting') * 0.08)
+    * (0.95 + (hash(`${seed}:${index}:assist-variance`) % 15) / 100)
+  ));
   const boxPlayers = players.map((player, index) => {
     const variance = hash(`${seed}:${teamId}:${playerKey(player)}:line`);
-    const rebounds = Math.max(0, Math.round(minutes[index] * (playerSkill(player, 'rebounding') || playerSkill(player, 'defense')) / 150) + (variance % 4));
-    const offensiveRebounds = Math.floor(rebounds * (20 + (variance % 18)) / 100);
-    const line = shootingLine(points[index], variance);
+    const playerRebounds = rebounds[index];
+    const offensiveRebounds = Math.floor(playerRebounds * (20 + (variance % 18)) / 100);
+    const line = shootingLines[index];
     return {
       playerId: playerKey(player),
       name: player.full_name || player.name || playerKey(player),
       minutes: minutes[index],
       points: points[index],
-      rebounds,
-      assists: Math.max(0, Math.round(minutes[index] * playerSkill(player, 'playmaking') / 170) + (variance % 3)),
+      rebounds: playerRebounds,
+      assists: assists[index],
       steals: variance % 3,
       blocks: Math.floor((variance / 7) % 3),
       turnovers: Math.floor((variance / 11) % 4),
       ...line,
       offensiveRebounds,
-      defensiveRebounds: rebounds - offensiveRebounds,
+      defensiveRebounds: playerRebounds - offensiveRebounds,
       fouls: 1 + (variance % 5),
       plusMinus: Math.round(pointMargin * (minutes[index] / 240) + ((variance % 7) - 3)),
       starter: index < 5,
@@ -936,8 +1049,8 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
       ]);
       let nextGame;
       try {
@@ -984,6 +1097,61 @@ function scheduleAliases(value) {
   return [key];
 }
 
+function schedulePoolKeys(teamId, participant) {
+  const values = [
+    teamId,
+    displayScheduleAbbr(teamId),
+    participant && participant.scheduleTeamId,
+    participant && displayScheduleAbbr(participant.scheduleTeamId),
+    participant && participant.abbreviation,
+    participant && displayScheduleAbbr(participant.abbreviation),
+  ].filter(Boolean);
+  return new Set(values.flatMap(scheduleAliases).map(normalizeScheduleKey));
+}
+
+function poolPlayersForScheduleTeam(poolPlayers, teamId, participant) {
+  if (!Array.isArray(poolPlayers)) return [];
+  const wanted = schedulePoolKeys(teamId, participant);
+  return poolPlayers.filter(player => (
+    scheduleAliases(player && (player.team || player.abbreviation || player.teamId)).some(key => wanted.has(key))
+  ));
+}
+
+function teamFromParticipantFallback({ teamId, participant, poolPlayers = [] }) {
+  const players = poolPlayersForScheduleTeam(poolPlayers, teamId, participant);
+  return {
+    id: participant && (participant.sourceTeamDocId || participant.scheduleTeamId) || teamId,
+    teamId: participant && participant.scheduleTeamId || teamId,
+    abbreviation: participant && participant.abbreviation || displayScheduleAbbr(teamId) || teamId,
+    name: participant && (participant.name || participant.abbreviation) || displayScheduleAbbr(teamId) || teamId,
+    players,
+  };
+}
+
+async function eraPoolPlayersForLeague({ tx, db, league }) {
+  if (!tx || !db || !league) return [];
+  const sport = String(league.sport || 'nba');
+  const poolKey = sport && sport !== 'nba' ? sport : String(league.era || 'current');
+  const poolSnap = await tx.get(db.collection('era_player_pools').doc(poolKey));
+  if (!poolSnap.exists) return [];
+  const pool = poolSnap.data() || {};
+  return Array.isArray(pool.players) ? pool.players : [];
+}
+
+async function withFallbackRoster({ tx, db, league, team, teamId, participant }) {
+  if (team && Array.isArray(team.players) && team.players.length > 0) return team;
+  const poolPlayers = await eraPoolPlayersForLeague({ tx, db, league });
+  const fallback = teamFromParticipantFallback({ teamId, participant, poolPlayers });
+  if (!fallback.players.length) return team || fallback;
+  return {
+    ...(team || fallback),
+    teamId: (team && team.teamId) || fallback.teamId,
+    abbreviation: (team && team.abbreviation) || fallback.abbreviation,
+    name: (team && team.name) || fallback.name,
+    players: fallback.players,
+  };
+}
+
 function participantForScheduledTeam(schedule, teamId) {
   const wanted = new Set(scheduleAliases(teamId));
   return (schedule.participants || []).find(participant => (
@@ -992,7 +1160,7 @@ function participantForScheduledTeam(schedule, teamId) {
   )) || null;
 }
 
-async function teamForScheduledGame({ tx, leagueRef, schedule, teamId }) {
+async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId }) {
   const participant = participantForScheduledTeam(schedule, teamId);
   const teamDocId = participant && participant.sourceTeamDocId
     ? participant.sourceTeamDocId
@@ -1000,18 +1168,32 @@ async function teamForScheduledGame({ tx, leagueRef, schedule, teamId }) {
   if (teamDocId) {
     const teamRef = leagueRef.collection('teams').doc(teamDocId);
     const teamSnap = await tx.get(teamRef);
-    if (teamSnap.exists) return { id: teamSnap.id, ref: teamRef, ...(teamSnap.data() || {}) };
+    if (teamSnap.exists) {
+      return withFallbackRoster({
+        tx,
+        db,
+        league,
+        team: { id: teamSnap.id, ref: teamRef, ...(teamSnap.data() || {}) },
+        teamId,
+        participant,
+      });
+    }
   }
   const directRef = leagueRef.collection('teams').doc(String(teamId));
   const directSnap = await tx.get(directRef);
-  if (directSnap.exists) return { id: directSnap.id, ref: directRef, ...(directSnap.data() || {}) };
-  return participant ? {
-    id: participant.sourceTeamDocId || participant.scheduleTeamId || teamId,
-    teamId: participant.scheduleTeamId || teamId,
-    abbreviation: participant.abbreviation || participant.scheduleTeamId || teamId,
-    name: participant.name || participant.abbreviation || teamId,
-    players: [],
-  } : null;
+  if (directSnap.exists) {
+    return withFallbackRoster({
+      tx,
+      db,
+      league,
+      team: { id: directSnap.id, ref: directRef, ...(directSnap.data() || {}) },
+      teamId,
+      participant,
+    });
+  }
+  if (!participant) return null;
+  const poolPlayers = await eraPoolPlayersForLeague({ tx, db, league });
+  return teamFromParticipantFallback({ teamId, participant, poolPlayers });
 }
 
 async function coachingSnapshotForTeam({ tx, scheduleRef, game, team }) {
@@ -1086,8 +1268,8 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
         throw new HttpsError('permission-denied', 'Only participating GMs or commissioners can submit this score.');
       }
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
       ]);
       const [homeSnapshot, awaySnapshot] = await Promise.all([
         coachingSnapshotForTeam({ tx, scheduleRef, game, team: homeTeam }),
@@ -1152,8 +1334,8 @@ function createSimulateScheduledGameHandler(deps) {
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, leagueRef, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
       ]);
       const [homeSnapshot, awaySnapshot] = await Promise.all([
         coachingSnapshotForTeam({ tx, scheduleRef, game, team: homeTeam }),
@@ -1215,6 +1397,7 @@ module.exports = {
   scheduleCompetition,
   simulateScheduledGame,
   simulateScheduledGameResult,
+  teamFromParticipantFallback,
   teamPersistencePayload,
   teamResetPayload,
   teamStateUpdatePayload,

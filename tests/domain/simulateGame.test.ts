@@ -53,4 +53,40 @@ describe('NBA game simulation', () => {
       starter: true,
     });
   });
+
+  it('keeps player production tied to skill profiles and realistic team totals', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'SAS',
+        players: [
+          { playerId: 'duncan', name: 'Tim Duncan', position: 'PF', minutes: 34, shooting: 84, playmaking: 62, rebounding: 94, defense: 96 },
+          { playerId: 'parker', name: 'Tony Parker', position: 'PG', minutes: 34, shooting: 88, playmaking: 91, rebounding: 45, defense: 72 },
+          { playerId: 'ginobili', name: 'Manu Ginobili', position: 'SG', minutes: 30, shooting: 89, playmaking: 86, rebounding: 58, defense: 78 },
+          { playerId: 'splitter', name: 'Tiago Splitter', position: 'C', minutes: 24, shooting: 66, playmaking: 45, rebounding: 82, defense: 80 },
+          { playerId: 'green', name: 'Danny Green', position: 'SG', minutes: 22, shooting: 80, playmaking: 52, rebounding: 55, defense: 82 },
+        ],
+      },
+      away: {
+        teamId: 'CHI',
+        players: [
+          { playerId: 'rose', name: 'Derrick Rose', position: 'PG', minutes: 38, shooting: 92, playmaking: 92, rebounding: 52, defense: 70 },
+          { playerId: 'boozer', name: 'Carlos Boozer', position: 'PF', minutes: 32, shooting: 80, playmaking: 50, rebounding: 88, defense: 62 },
+          { playerId: 'noah', name: 'Joakim Noah', position: 'C', minutes: 30, shooting: 62, playmaking: 70, rebounding: 90, defense: 90 },
+          { playerId: 'korver', name: 'Kyle Korver', position: 'SG', minutes: 22, shooting: 89, playmaking: 48, rebounding: 42, defense: 55 },
+          { playerId: 'asik', name: 'Omer Asik', position: 'C', minutes: 14, shooting: 45, playmaking: 34, rebounding: 84, defense: 82 },
+        ],
+      },
+    }, 'profile-seed');
+
+    expect(result.home.rebounds).toBeLessThanOrEqual(58);
+    expect(result.away.rebounds).toBeLessThanOrEqual(58);
+    expect(result.home.assists).toBeLessThanOrEqual(34);
+    expect(result.away.assists).toBeLessThanOrEqual(34);
+    const home = new Map(result.home.players.map(player => [player.name, player]));
+    const away = new Map(result.away.players.map(player => [player.name, player]));
+    expect(home.get('Tim Duncan')!.rebounds).toBeGreaterThan(home.get('Tony Parker')!.rebounds);
+    expect(home.get('Tony Parker')!.assists).toBeGreaterThan(home.get('Tim Duncan')!.assists);
+    expect(away.get('Derrick Rose')!.rebounds).toBeLessThanOrEqual(8);
+    expect(away.get('Omer Asik')!.assists).toBeLessThanOrEqual(2);
+  });
 });
