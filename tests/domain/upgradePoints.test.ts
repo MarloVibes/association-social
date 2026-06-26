@@ -70,10 +70,10 @@ describe('NBA upgrade points', () => {
       fg3_pct: 0.4,
     });
 
-    expect(grades.shooting).toBe('A');
-    expect(grades.playmaking).toBe('A-');
-    expect(grades.rebounding).toBe('A-');
-    expect(grades.defense).toBe('A-');
+    expect(grades.shooting).toBe('A+');
+    expect(grades.playmaking).toBe('B+');
+    expect(grades.rebounding).toBe('B');
+    expect(grades.defense).toBe('B');
   });
 
   it('combines award points and lottery boosts into team grants', () => {

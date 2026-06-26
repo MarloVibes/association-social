@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
 import type { VisibleNbaIdentity } from '@/domain/nba/identity';
+import { buildEvaluationLayers } from '@/domain/nba/evaluation';
 import {
   buildScoutingGrades,
   compareScoutingGrades,
@@ -368,6 +369,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
   const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
+  const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, profile) : null;
   const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, profile) : [];
   const playerGrades = isNBAPlayer ? buildScoutingGrades(player, profile) : null;
   const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer) : null;
@@ -466,6 +468,29 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                       </View>
                       <View style={styles.reputationPill}>
                         <Text style={styles.reputationText}>{identity.reputation}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {evaluationLayers && (
+                    <View style={styles.evaluationSummary}>
+                      {[
+                        { label: 'Overall Talent', value: evaluationLayers.overallTalent },
+                        { label: 'Current Form', value: evaluationLayers.currentForm },
+                        { label: 'Potential', value: evaluationLayers.potential },
+                      ].map(item => {
+                        const colors = gradeColors(item.value.grade);
+                        return (
+                          <View key={item.label} style={[styles.evaluationChip, { borderColor: colors.borderColor, backgroundColor: colors.backgroundColor }]}>
+                            <Text style={styles.evaluationLabel}>{item.label}</Text>
+                            <Text style={[styles.evaluationGrade, { color: colors.textColor }]}>{item.value.grade} <Text style={styles.evaluationTier}>{item.value.tier}</Text></Text>
+                          </View>
+                        );
+                      })}
+                      <View style={styles.evaluationStateRow}>
+                        <Text style={styles.evaluationState}>Confidence: {evaluationLayers.confidence.state}</Text>
+                        <Text style={styles.evaluationState}>Chemistry: {evaluationLayers.chemistry.state}</Text>
+                        <Text style={styles.evaluationState}>Fatigue: {evaluationLayers.fatigue.state}</Text>
+                        <Text style={styles.evaluationState}>Health: {evaluationLayers.health.state}</Text>
                       </View>
                     </View>
                   )}
@@ -862,6 +887,13 @@ const styles = StyleSheet.create({
   identitySubRole: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 2 },
   reputationPill: { borderRadius: 999, borderWidth: 1, borderColor: '#00ff8755', backgroundColor: '#0a2a1a', paddingHorizontal: 10, paddingVertical: 5 },
   reputationText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  evaluationSummary: { gap: 8, marginBottom: 14 },
+  evaluationChip: { borderRadius: 8, borderWidth: 1, padding: 10 },
+  evaluationLabel: { color: '#9a9a9a', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 3 },
+  evaluationGrade: { fontSize: 16, fontWeight: '900' },
+  evaluationTier: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
+  evaluationStateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  evaluationState: { color: '#cfcfcf', fontSize: 10, fontWeight: '800', backgroundColor: '#171717', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#262626' },
   gradeSection: { marginBottom: 14 },
   gradeSectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 8 },
   gradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

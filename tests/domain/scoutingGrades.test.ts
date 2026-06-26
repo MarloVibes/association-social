@@ -37,6 +37,15 @@ describe('NBA scouting grades', () => {
     expect(defense?.items.find(item => item.key === 'defenseIq')?.grade).toBe('A');
   });
 
+  it('shows Potential as a visible growth grade without exposing hidden scores', () => {
+    const growth = getScoutingGradeSections({
+      hidden: { potential: 91 },
+    }).find(section => section.title === 'Growth');
+
+    expect(growth?.items.find(item => item.key === 'potential')?.grade).toBe('A-');
+    expect(growth?.items.find(item => item.key === 'potential')?.colors.textColor).toBe('#00ff87');
+  });
+
   it('derives detailed grades from hidden ratings and legacy broad grades', () => {
     const hiddenGrades = buildScoutingGrades({
       hidden: {
@@ -49,7 +58,7 @@ describe('NBA scouting grades', () => {
     });
 
     expect(hiddenGrades.threePoint).toBe('S');
-    expect(hiddenGrades.dunking).toBe('D');
+    expect(hiddenGrades.dunking).toBe('F');
     expect(hiddenGrades.defenseIq).toBe('A');
     expect(hiddenGrades.offenseIq).toBe('A');
 

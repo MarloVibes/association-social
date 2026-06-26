@@ -443,6 +443,9 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('Compare');
     expect(playerCard).toContain('compareCandidates');
     expect(playerCard).toContain('getScoutingGradeSections');
+    expect(playerCard).toContain('buildEvaluationLayers');
+    expect(playerCard).toContain('Current Form');
+    expect(playerCard).toContain('Potential');
     expect(playerCard).toContain('compareScoutingGrades');
     expect(playerCard).toContain('getCompareRowModel');
   });

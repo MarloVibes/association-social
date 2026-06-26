@@ -9,21 +9,23 @@ class PlayerUpgradeError extends Error {
   }
 }
 
-const GRADE_LADDER = ['F', 'D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+const GRADE_LADDER = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
 const LIMITED_LABELS = new Set(['STAR', 'SUPERSTAR', 'LEGEND']);
 const S_ELIGIBLE_LABELS = new Set(['SUPERSTAR', 'LEGEND']);
 const GRADE_NUMERIC_FLOOR = {
   F: 25,
-  D: 50,
-  'C-': 55,
-  C: 60,
-  'C+': 68,
-  'B-': 70,
-  B: 75,
-  'B+': 80,
-  'A-': 85,
-  A: 90,
-  'A+': 97,
+  'D-': 60,
+  D: 65,
+  'D+': 68,
+  'C-': 71,
+  C: 74,
+  'C+': 77,
+  'B-': 80,
+  B: 83,
+  'B+': 86,
+  'A-': 89,
+  A: 92,
+  'A+': 95,
   S: 99,
 };
 
@@ -37,17 +39,20 @@ function numberFrom(value) {
 }
 
 function gradeFromRating(value) {
-  const rating = Math.max(25, Math.min(99, Math.round(value)));
-  if (rating >= 97) return 'A+';
-  if (rating >= 90) return 'A';
-  if (rating >= 85) return 'A-';
-  if (rating >= 80) return 'B+';
-  if (rating >= 75) return 'B';
-  if (rating >= 70) return 'B-';
-  if (rating >= 68) return 'C+';
-  if (rating >= 60) return 'C';
-  if (rating >= 55) return 'C-';
-  if (rating >= 50) return 'D';
+  const rating = Math.max(0, Math.min(100, Math.round(value)));
+  if (rating >= 99) return 'S';
+  if (rating >= 95) return 'A+';
+  if (rating >= 92) return 'A';
+  if (rating >= 89) return 'A-';
+  if (rating >= 86) return 'B+';
+  if (rating >= 83) return 'B';
+  if (rating >= 80) return 'B-';
+  if (rating >= 77) return 'C+';
+  if (rating >= 74) return 'C';
+  if (rating >= 71) return 'C-';
+  if (rating >= 68) return 'D+';
+  if (rating >= 65) return 'D';
+  if (rating >= 60) return 'D-';
   return 'F';
 }
 

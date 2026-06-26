@@ -89,4 +89,36 @@ describe('NBA game simulation', () => {
     expect(away.get('Derrick Rose')!.rebounds).toBeLessThanOrEqual(8);
     expect(away.get('Omer Asik')!.assists).toBeLessThanOrEqual(2);
   });
+
+  it('uses detailed grade profiles to shape shot selection and defensive impact', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'SKILL',
+        players: [
+          { playerId: 'shooter', name: 'Pure Shooter', position: 'SG', minutes: 36, shooting: 82, playmaking: 70, defense: 72, threePoint: 96, midRange: 82, closeShot: 68, dunking: 45, shotIq: 90 },
+          { playerId: 'driver', name: 'Paint Driver', position: 'SF', minutes: 36, shooting: 82, playmaking: 70, defense: 72, threePoint: 58, midRange: 74, closeShot: 92, dunking: 91, shotIq: 80 },
+          { playerId: 'lockdown', name: 'Lockdown Wing', position: 'SF', minutes: 34, shooting: 70, playmaking: 66, defense: 90, perimeterDefense: 96, defenseIq: 94, helpDefense: 91, stealsSkill: 88 },
+          { playerId: 'big', name: 'Glass Big', position: 'C', minutes: 30, shooting: 62, playmaking: 48, defense: 82, rebounding: 94, blocking: 88, postDefense: 86 },
+          { playerId: 'guard', name: 'Table Guard', position: 'PG', minutes: 30, shooting: 76, playmaking: 86, defense: 72, passing: 90, ballHandle: 88, offenseIq: 86 },
+        ],
+      },
+      away: {
+        teamId: 'PLAIN',
+        players: Array.from({ length: 8 }, (_, index) => ({
+          playerId: `plain${index}`,
+          name: `Plain ${index}`,
+          position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+          minutes: index < 5 ? 30 : 18,
+          shooting: 75,
+          playmaking: 70,
+          defense: 70,
+        })),
+      },
+    }, 'detailed-sim-seed');
+
+    const home = new Map(result.home.players.map(player => [player.name, player]));
+    expect(home.get('Pure Shooter')!.threePointersAttempted).toBeGreaterThan(home.get('Paint Driver')!.threePointersAttempted);
+    expect(home.get('Lockdown Wing')!.steals + home.get('Lockdown Wing')!.blocks).toBeGreaterThanOrEqual(2);
+    expect(result.home.points).toBeGreaterThan(result.away.points - 8);
+  });
 });

@@ -8,9 +8,9 @@ import {
 describe('NBA player identity', () => {
   it('maps hidden values to exact grades without exposing overall', () => {
     expect(gradeFromHiddenValue(98)).toBe('A+');
-    expect(gradeFromHiddenValue(91)).toBe('A');
-    expect(gradeFromHiddenValue(78)).toBe('B');
-    expect(gradeFromHiddenValue(65)).toBe('C');
+    expect(gradeFromHiddenValue(91)).toBe('A-');
+    expect(gradeFromHiddenValue(78)).toBe('C+');
+    expect(gradeFromHiddenValue(65)).toBe('D');
     expect(gradeFromHiddenValue(42)).toBe('F');
 
     const identity = buildVisibleIdentity({
@@ -20,9 +20,9 @@ describe('NBA player identity', () => {
     });
 
     expect(identity).not.toHaveProperty('overall');
-    expect(identity.grades.shooting).toBe('A');
-    expect(identity.grades.playmaking).toBe('B');
-    expect(identity.grades.defense).toBe('C');
+    expect(identity.grades.shooting).toBe('A-');
+    expect(identity.grades.playmaking).toBe('C+');
+    expect(identity.grades.defense).toBe('D');
   });
 
   it('derives roles, traits, strengths, weaknesses, and reputation from hidden values', () => {

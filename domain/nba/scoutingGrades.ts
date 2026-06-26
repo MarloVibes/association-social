@@ -1,4 +1,5 @@
 import type { NbaGrade } from './identity';
+import { gradeFromScore } from './evaluation';
 import { abilityGradesFromStats } from './upgradePoints';
 
 export type ScoutingGradeKey =
@@ -23,7 +24,8 @@ export type ScoutingGradeKey =
   | 'strength'
   | 'rebounding'
   | 'postOffense'
-  | 'stamina';
+  | 'stamina'
+  | 'potential';
 
 export type ScoutingGradeMap = Record<ScoutingGradeKey, NbaGrade>;
 
@@ -53,7 +55,7 @@ export type CompareGradeRow = {
   winner: 'left' | 'right' | 'tie';
 };
 
-const GRADE_ORDER: NbaGrade[] = ['F', 'D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+const GRADE_ORDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
 
 export const SCOUTING_GRADE_GROUPS: { title: string; items: { key: ScoutingGradeKey; label: string }[] }[] = [
   {
@@ -98,6 +100,12 @@ export const SCOUTING_GRADE_GROUPS: { title: string; items: { key: ScoutingGrade
       { key: 'stamina', label: 'Stamina' },
     ],
   },
+  {
+    title: 'Growth',
+    items: [
+      { key: 'potential', label: 'Potential' },
+    ],
+  },
 ];
 
 const SCOUTING_KEYS = SCOUTING_GRADE_GROUPS.flatMap(group => group.items.map(item => item.key));
@@ -116,19 +124,7 @@ function normalizedGrade(value: unknown): NbaGrade | null {
 function gradeFromRating(value: unknown): NbaGrade | null {
   const numeric = numberFrom(value);
   if (numeric === null) return null;
-  const rating = Math.max(25, Math.min(99, Math.round(numeric)));
-  if (rating >= 99) return 'S';
-  if (rating >= 97) return 'A+';
-  if (rating >= 90) return 'A';
-  if (rating >= 85) return 'A-';
-  if (rating >= 80) return 'B+';
-  if (rating >= 75) return 'B';
-  if (rating >= 70) return 'B-';
-  if (rating >= 68) return 'C+';
-  if (rating >= 60) return 'C';
-  if (rating >= 55) return 'C-';
-  if (rating >= 50) return 'D';
-  return 'F';
+  return gradeFromScore(numeric);
 }
 
 function firstGrade(...values: unknown[]): NbaGrade | null {
@@ -195,6 +191,8 @@ function gradeFromLegacy(player: Record<string, any>, profile: Record<string, an
       return grade('athleticism');
     case 'postOffense':
       return grade('rebounding') || grade('shooting');
+    case 'potential':
+      return grade('potential');
     default:
       return null;
   }
@@ -229,6 +227,7 @@ function gradeFromHidden(player: Record<string, any>, profile: Record<string, an
     case 'rebounding': return value('rebounding');
     case 'postOffense': return value('postOffense', 'insideScoring', 'closeShot', 'shooting');
     case 'stamina': return value('stamina', 'consistency');
+    case 'potential': return value('potential');
     default: return null;
   }
 }
@@ -265,7 +264,7 @@ export function gradeColors(grade: NbaGrade): GradeColorStyle {
   if (grade.startsWith('A')) return { textColor: '#00ff87', backgroundColor: '#062416', borderColor: '#00ff87' };
   if (grade.startsWith('B')) return { textColor: '#54a3ff', backgroundColor: '#071a2e', borderColor: '#2477d8' };
   if (grade.startsWith('C')) return { textColor: '#f7d154', backgroundColor: '#241f08', borderColor: '#c99c20' };
-  if (grade === 'D') return { textColor: '#ff9f43', backgroundColor: '#2a1605', borderColor: '#cc7420' };
+  if (grade.startsWith('D')) return { textColor: '#ff9f43', backgroundColor: '#2a1605', borderColor: '#cc7420' };
   return { textColor: '#ff4d5e', backgroundColor: '#2d080d', borderColor: '#bf2636' };
 }
 

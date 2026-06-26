@@ -221,17 +221,20 @@ function clamp(value, min, max) {
 }
 
 function gradeFromHiddenValue(value) {
-  const rating = clamp(Number.isFinite(value) ? value : 0, 0, 99);
-  if (rating >= 97) return 'A+';
-  if (rating >= 90) return 'A';
-  if (rating >= 85) return 'A-';
-  if (rating >= 80) return 'B+';
-  if (rating >= 75) return 'B';
-  if (rating >= 70) return 'B-';
-  if (rating >= 68) return 'C+';
-  if (rating >= 60) return 'C';
-  if (rating >= 55) return 'C-';
-  if (rating >= 50) return 'D';
+  const rating = clamp(Number.isFinite(value) ? value : 0, 0, 100);
+  if (rating >= 99) return 'S';
+  if (rating >= 95) return 'A+';
+  if (rating >= 92) return 'A';
+  if (rating >= 89) return 'A-';
+  if (rating >= 86) return 'B+';
+  if (rating >= 83) return 'B';
+  if (rating >= 80) return 'B-';
+  if (rating >= 77) return 'C+';
+  if (rating >= 74) return 'C';
+  if (rating >= 71) return 'C-';
+  if (rating >= 68) return 'D+';
+  if (rating >= 65) return 'D';
+  if (rating >= 60) return 'D-';
   return 'F';
 }
 
