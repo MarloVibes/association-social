@@ -183,6 +183,21 @@ describe('source safety regressions', () => {
     expect(result).toContain('Top Performers');
   });
 
+  it('exposes NBA live mode without in-game adjustment controls', () => {
+    const rootLayout = source('app/_layout.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+    const liveMode = source('app/screens/season/live-mode.tsx');
+
+    expect(rootLayout).toContain('screens/season/live-mode');
+    expect(seasonLayout).toContain('live-mode');
+    expect(liveMode).toContain('liveTimeline');
+    expect(liveMode).toContain('arenaTheme');
+    expect(liveMode).toContain('currentTimelineEvent');
+    expect(liveMode).not.toContain('httpsCallable(functions');
+    expect(liveMode).not.toContain('Push Tempo');
+    expect(liveMode).not.toContain('Trap Star');
+  });
+
   it('lets commissioners reset finalized games from the result screen', () => {
     const result = source('app/screens/season/game-result.tsx');
 
@@ -340,10 +355,42 @@ describe('source safety regressions', () => {
     const offseason = source('app/screens/offseason/index.tsx');
     const rootLayout = source('app/_layout.tsx');
     const expansion = source('app/screens/offseason/expansion.tsx');
+    const functionsIndex = source('functions/index.js');
 
     expect(offseason).toContain('/screens/offseason/expansion');
     expect(rootLayout).toContain('screens/offseason/expansion');
     expect(expansion).toContain('Expansion Teams');
+    expect(expansion).toContain("httpsCallable(functions, 'submitExpansionProtection')");
+    expect(expansion).toContain("httpsCallable(functions, 'runExpansionDraft')");
+    expect(functionsIndex).toContain('exports.submitExpansionProtection');
+    expect(functionsIndex).toContain('exports.runExpansionDraft');
     expect(expansion).not.toContain('completeOffseasonTeamAction');
+  });
+
+  it('routes playoff games through matchup/result screens and syncs completed series', () => {
+    const playoffs = source('app/screens/season/playoffs.tsx');
+    const matchup = source('app/screens/season/matchup.tsx');
+    const result = source('app/screens/season/game-result.tsx');
+    const matchupsFn = source('functions/franchise/matchups.js');
+
+    expect(playoffs).toContain('syncPlayoffSeriesFromGames');
+    expect(playoffs).toContain("competition: 'playoffs'");
+    expect(matchup).toContain("competition === 'playoffs'");
+    expect(result).toContain("competition === 'playoffs'");
+    expect(matchupsFn).toContain("data.competition === 'playoffs'");
+  });
+
+  it('exposes commissioner injury management from the season hub', () => {
+    const league = source('app/screens/league.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+    const injuries = source('app/screens/season/injuries.tsx');
+    const functionsIndex = source('functions/index.js');
+
+    expect(league).toContain('/screens/season/injuries');
+    expect(rootLayout).toContain('screens/season/injuries');
+    expect(seasonLayout).toContain('injuries');
+    expect(injuries).toContain("httpsCallable(functions, 'manageTeamInjury')");
+    expect(functionsIndex).toContain('exports.manageTeamInjury');
   });
 });

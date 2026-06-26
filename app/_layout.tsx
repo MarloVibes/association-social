@@ -54,7 +54,9 @@ export default function RootLayout() {
           <Stack.Screen name="screens/season/scouting" />
           <Stack.Screen name="screens/season/awards" />
           <Stack.Screen name="screens/season/player-upgrades" />
+          <Stack.Screen name="screens/season/injuries" />
           <Stack.Screen name="screens/season/matchup" />
+          <Stack.Screen name="screens/season/live-mode" />
           <Stack.Screen name="screens/season/game-result" />
           <Stack.Screen name="screens/team-select" />
           <Stack.Screen name="screens/my-mvp" />
