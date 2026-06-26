@@ -34,6 +34,7 @@ describe('seeded draft randomness', () => {
 
 describe('generateDraftClass', () => {
   it('generates stable sport-specific class sizes', () => {
+    expect(generateDraftClass({ sport: 'nba', teams: 30, seed: 'x' })).toHaveLength(60);
     expect(generateDraftClass({ sport: 'madden', teams: 32, seed: 'x' })).toHaveLength(224);
     expect(generateDraftClass({ sport: 'mlb', teams: 30, seed: 'x' })).toHaveLength(150);
   });
@@ -118,9 +119,25 @@ describe('generateDraftClass', () => {
     }
   });
 
+  it('generates NBA prospects with identity grades instead of visible overalls', () => {
+    const prospects = generateDraftClass({ sport: 'nba', teams: 30, seed: 'nba-class' });
+
+    for (const prospect of prospects) {
+      expect(prospect.sport).toBe('nba');
+      expect(['PG', 'SG', 'SF', 'PF', 'C']).toContain(prospect.position);
+      expect(prospect.age).toBeGreaterThanOrEqual(18);
+      expect(prospect.age).toBeLessThanOrEqual(23);
+      expect(prospect.projectedRound).toBeGreaterThanOrEqual(1);
+      expect(prospect.projectedRound).toBeLessThanOrEqual(2);
+      expect(prospect.hidden).toBeTruthy();
+      expect(prospect.visible.grades.shooting).toBeTruthy();
+      expect((prospect as any).overall).toBeUndefined();
+    }
+  });
+
   it('rejects unsupported sports and invalid team counts', () => {
-    expect(() => generateDraftClass({ sport: 'nba', teams: 30, seed: 'x' })).toThrow(
-      'Draft class generation supports only Madden/NFL and MLB',
+    expect(() => generateDraftClass({ sport: 'nhl', teams: 30, seed: 'x' })).toThrow(
+      'Draft class generation supports only NBA, Madden/NFL, and MLB',
     );
     expect(() => generateDraftClass({ sport: 'mlb', teams: 0, seed: 'x' })).toThrow(
       'teams must be a positive integer',

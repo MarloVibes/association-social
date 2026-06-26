@@ -746,7 +746,7 @@ export default function ChannelScreen() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.chalkContent}>
           {editingRules ? (
             <View style={styles.chalkEditArea}>
-              <Text style={styles.chalkEditLabel}>Write one rule per line — they're numbered automatically.</Text>
+              <Text style={styles.chalkEditLabel}>{"Write one rule per line — they're numbered automatically."}</Text>
               <TextInput
                 style={styles.chalkInput}
                 value={rulesText}

@@ -1,6 +1,6 @@
-export type NbaGrade = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
+export type NbaGrade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
 
-export type NbaReputation = 'Prospect' | 'Role Player' | 'Starter' | 'Star' | 'Legend';
+export type NbaReputation = 'Prospect' | 'Role Player' | 'Starter' | 'Star' | 'Superstar' | 'Legend';
 
 export type DevelopmentTrait = 'Raw' | 'Stable' | 'Rising' | 'Breakout' | 'Veteran';
 
@@ -81,10 +81,19 @@ function positiveCount(accolades: Record<string, number> | undefined, keys: stri
 export function reputationFromInputs(input: Pick<HiddenIdentityValues, 'accolades' | 'seasonsPlayed'>): NbaReputation {
   const accolades = input.accolades || {};
   const seasonsPlayed = Math.max(0, Number(input.seasonsPlayed || 0));
-  if (positiveCount(accolades, ['mvp', 'finals_mvp']) > 0 || positiveCount(accolades, ['championship']) >= 3) {
+  const allLeagueLevel = positiveCount(accolades, ['all_nba_1st', 'all_nba_2nd', 'all_nba_3rd', 'all_star']);
+  if (
+    positiveCount(accolades, ['mvp']) >= 2
+    || positiveCount(accolades, ['finals_mvp']) >= 2
+    || positiveCount(accolades, ['championship']) >= 3
+    || allLeagueLevel >= 8
+  ) {
     return 'Legend';
   }
-  if (positiveCount(accolades, ['all_nba_1st', 'all_nba_2nd', 'all_nba_3rd', 'all_star', 'championship']) > 0) {
+  if (positiveCount(accolades, ['mvp', 'finals_mvp', 'all_nba_1st']) > 0) {
+    return 'Superstar';
+  }
+  if (positiveCount(accolades, ['all_nba_2nd', 'all_nba_3rd', 'all_star', 'dpoy']) > 0) {
     return 'Star';
   }
   if (seasonsPlayed >= 5) return 'Starter';

@@ -4,6 +4,9 @@ const {
   OffseasonTransitionError,
   transitionOffseasonState,
 } = require('./offseason');
+const {
+  buildExpansionTeamDocs,
+} = require('./expansion');
 
 const OFFSEASON_STAGES = new Set([
   'season_end',
@@ -62,6 +65,31 @@ function validateAdvanceInput(data) {
 
 function defaultSeasonYear(sport) {
   return sport === 'mlb' ? 2026 : 2025;
+}
+
+function normalizeAbbr(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function validateExpansionProposalForCallable({ league, teams }) {
+  const proposal = league && league.expansionProposal;
+  const proposedTeams = Array.isArray(proposal && proposal.teams) ? proposal.teams : [];
+  const errors = [];
+  const currentTeams = Array.isArray(teams) ? teams.length : 0;
+  if (league && league.scheduleLocked) errors.push('schedule_locked');
+  if (proposedTeams.length < 1) errors.push('added_team_count_invalid');
+  if (currentTeams + proposedTeams.length > 36) errors.push('team_cap_exceeded');
+  const existing = new Set((teams || []).map(team => normalizeAbbr(team.abbreviation || team.teamId || team.id)));
+  const seen = new Set();
+  proposedTeams.forEach((team) => {
+    const abbr = normalizeAbbr(team && team.abbreviation);
+    if (!String(team && team.city || '').trim()) errors.push('city_missing');
+    if (!String(team && team.name || '').trim()) errors.push('name_missing');
+    if (!/^[A-Z]{3}$/.test(abbr)) errors.push('abbreviation_invalid');
+    if (existing.has(abbr) || seen.has(abbr)) errors.push('abbreviation_taken');
+    seen.add(abbr);
+  });
+  return { valid: errors.length === 0, errors };
 }
 
 function initializeOffseason(league, expectedStage, expectedVersion) {
@@ -137,6 +165,16 @@ function transitionForCallable(input) {
       'Complete every draft pick before advancing to roster cuts.',
     );
   }
+  if (expectedStage === 'expansion') {
+    const validation = validateExpansionProposalForCallable({ league, teams });
+    if (!validation.valid) {
+      throw new OffseasonTransitionError(
+        'failed-precondition',
+        'Fix the expansion proposal before advancing.',
+        { errors: validation.errors },
+      );
+    }
+  }
   if (expectedStage === 'ready_for_season') {
     throw new OffseasonTransitionError(
       'failed-precondition',
@@ -206,6 +244,13 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
             ),
           };
         const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+        const expansionTeamDocs = input.expectedStage === 'expansion'
+          ? buildExpansionTeamDocs({
+            proposal: league.expansionProposal,
+            existingTeams: teams,
+            seasonYear: league.offseason.seasonYear,
+          })
+          : [];
         let draftClassPublished;
         let liveDraftComplete;
         let pendingContractOfferCount;
@@ -246,6 +291,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           pendingContractOfferCount,
           stageStartedAt: serverTimestamp(),
         });
+        expansionTeamDocs.forEach(team => tx.set(teamsQuery.doc(team.id), team.data));
         tx.update(leagueRef, { offseason });
         return { offseason };
       });
@@ -263,5 +309,6 @@ module.exports = {
   initializeOffseason,
   toHttpsError,
   transitionForCallable,
+  validateExpansionProposalForCallable,
   validateAdvanceInput,
 };

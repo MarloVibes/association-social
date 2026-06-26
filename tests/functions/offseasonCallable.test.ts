@@ -230,6 +230,42 @@ describe('offseason callable helpers', () => {
     }).stage).toBe('roster_cuts');
   });
 
+  it('validates NBA expansion proposals before leaving expansion stage', () => {
+    const league = {
+      sport: 'nba',
+      commissionerId: 'comm',
+      expansionProposal: {
+        enabled: true,
+        teams: [{ city: 'Seattle', name: 'Sonics', abbreviation: 'SEA' }],
+      },
+      offseason: {
+        stage: 'expansion',
+        seasonYear: 2028,
+        completedTeamIds: [],
+        draftStatus: 'complete',
+        version: 7,
+      },
+    };
+
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: Array.from({ length: 36 }, (_, index) => ({ id: `T${index}`, abbreviation: `T${index}` })),
+      expectedStage: 'expansion',
+      expectedVersion: 7,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+
+    expect(transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: Array.from({ length: 30 }, (_, index) => ({ id: `T${index}`, abbreviation: `T${index}` })),
+      expectedStage: 'expansion',
+      expectedVersion: 7,
+      stageStartedAt: 'now',
+    }).stage).toBe('roster_cuts');
+  });
+
   it('routes ready-for-season advancement through the sport-aware season callable', () => {
     expect(() => transitionForCallable({
       uid: 'comm',
@@ -295,6 +331,73 @@ describe('offseason callable helpers', () => {
       offseason: expect.objectContaining({ stage: 're_signing', version: 1 }),
     });
     expect(operations).toEqual(['read-league', 'read-teams', 'write']);
+  });
+
+  it('writes expansion teams before advancing out of expansion', async () => {
+    const teamsCollection = {
+      kind: 'teams-query',
+      doc: (id: string) => ({ kind: 'team-doc', id }),
+    };
+    const leagueRef = {
+      collection: (name: string) => (name === 'teams' ? teamsCollection : { kind: name }),
+    };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({
+        sport: 'nba',
+        commissionerId: 'comm',
+        expansionProposal: {
+          enabled: true,
+          teams: [{ city: 'Seattle', name: 'Sonics', abbreviation: 'SEA' }],
+        },
+        offseason: {
+          stage: 'expansion',
+          seasonYear: 2028,
+          completedTeamIds: [],
+          draftStatus: 'complete',
+          version: 7,
+        },
+      }),
+    };
+    const teamsSnap = {
+      docs: Array.from({ length: 30 }, (_, index) => ({
+        id: `T${index}`,
+        data: () => ({ abbreviation: `T${index}` }),
+      })),
+    };
+    const writes: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => (ref === leagueRef ? leagueSnap : teamsSnap)),
+      set: vi.fn((ref, data) => writes.push({ ref, data })),
+      update: vi.fn((_ref, update) => {
+        expect(update.offseason.stage).toBe('roster_cuts');
+      }),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createAdvanceOffseasonHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      HttpsError: FakeHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', expectedStage: 'expansion', expectedVersion: 7 },
+    });
+
+    expect(writes).toEqual([{
+      ref: { kind: 'team-doc', id: 'EXP_SEA' },
+      data: expect.objectContaining({
+        teamId: 'EXP_SEA',
+        abbreviation: 'SEA',
+        name: 'Seattle Sonics',
+        players: [],
+        isExpansionTeam: true,
+      }),
+    }]);
   });
 
   it('requires authentication and maps transition errors to HttpsError', async () => {

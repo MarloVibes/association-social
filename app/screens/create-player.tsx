@@ -401,7 +401,7 @@ export default function CreatePlayerScreen() {
           <TextInput style={styles.input} value={age} onChangeText={setAge} keyboardType='number-pad' placeholder='22' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Salary (USD per year)</Text>
           <TextInput style={styles.input} value={salary} onChangeText={setSalary} keyboardType='number-pad' placeholder='e.g. 25000000' placeholderTextColor='#555' />
-          <Text style={styles.helper}>Enter the player's annual cap hit. Used for trade balance math.</Text>
+          <Text style={styles.helper}>{"Enter the player's annual cap hit. Used for trade balance math."}</Text>
           <Text style={styles.fieldLabel}>Contract Years</Text>
           <TextInput style={styles.input} value={contractYears} onChangeText={setContractYears} keyboardType='number-pad' placeholder='1' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Role</Text>

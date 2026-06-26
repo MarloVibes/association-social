@@ -945,7 +945,7 @@ export default function TradeRoomScreen() {
             </View>
           )}
           {isPendingVote && !isEligibleVoter && (
-            <Text style={styles.vetoBannerSub}>You're in this trade — the rest of the league decides.</Text>
+            <Text style={styles.vetoBannerSub}>{"You're in this trade — the rest of the league decides."}</Text>
           )}
         </View>
       )}
@@ -1273,7 +1273,7 @@ export default function TradeRoomScreen() {
           </View>
           <View style={styles.pickModalBody}>
             <Text style={styles.pickModalWho}>
-              {pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName}'s available picks
+              {`${pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName}'s available picks`}
             </Text>
             {(() => {
               const owned = (pickModalSide === 'mine' ? (myTeam?.picks || []) : otherTeamPicks);

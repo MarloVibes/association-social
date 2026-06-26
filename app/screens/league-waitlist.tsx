@@ -176,7 +176,7 @@ export default function LeagueWaitlistScreen() {
             );
           })}
           {visible.length > 0 ? (
-            <Text style={styles.footnote}>Listed in the order they applied. Invite opens a normal league invite they can accept once there's room.</Text>
+            <Text style={styles.footnote}>{"Listed in the order they applied. Invite opens a normal league invite they can accept once there's room."}</Text>
           ) : null}
         </ScrollView>
       )}

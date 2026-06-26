@@ -120,7 +120,7 @@ export default function CpuTradeScreen() {
 
       {loading ? <ActivityIndicator color='#00ff87' style={{ marginTop: 24 }} /> : (
         <ScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.note}>Build a trade with {cpuName || cpuAbbr} (CPU). It's sent to the commissioner to approve before rosters change.</Text>
+          <Text style={styles.note}>Build a trade with {cpuName || cpuAbbr} (CPU). {"It's sent to the commissioner to approve before rosters change."}</Text>
 
           <Text style={styles.section}>📤 You give ({give.size}) — from {myTeam?.name || 'your team'}</Text>
           {myRoster.length === 0 ? <Text style={styles.empty}>No players on your roster.</Text> :

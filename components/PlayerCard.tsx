@@ -117,6 +117,61 @@ function getVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | nul
   return identity as VisibleNbaIdentity;
 }
 
+function firstStat(stats: any, keys: string[]) {
+  for (const key of keys) {
+    if (stats?.[key] !== undefined && stats?.[key] !== null && stats?.[key] !== '') return stats[key];
+  }
+  return null;
+}
+
+function franchiseSeasonStats(stats: any, sport: string): { label: string; value: any }[] {
+  const common = [{ label: 'GP', value: firstStat(stats, ['games', 'gp']) }];
+  if (sport === 'mlb') {
+    return [
+      ...common,
+      { label: 'AVG', value: firstStat(stats, ['avg']) },
+      { label: 'HR', value: firstStat(stats, ['hr', 'homeRuns']) },
+      { label: 'RBI', value: firstStat(stats, ['rbi']) },
+      { label: 'SB', value: firstStat(stats, ['sb', 'stolenBases']) },
+      { label: 'ERA', value: firstStat(stats, ['era']) },
+      { label: 'SO', value: firstStat(stats, ['so', 'strikeouts']) },
+      { label: 'SV', value: firstStat(stats, ['saves', 'sv']) },
+    ].filter(stat => stat.value !== null);
+  }
+  if (sport === 'madden') {
+    return [
+      ...common,
+      { label: 'PASS', value: firstStat(stats, ['passing_yards', 'passingYards']) },
+      { label: 'PTD', value: firstStat(stats, ['passing_tds', 'passingTds']) },
+      { label: 'RUSH', value: firstStat(stats, ['rushing_yards', 'rushingYards']) },
+      { label: 'REC', value: firstStat(stats, ['receiving_yards', 'receivingYards']) },
+      { label: 'SACK', value: firstStat(stats, ['sacks']) },
+      { label: 'INT', value: firstStat(stats, ['interceptions']) },
+    ].filter(stat => stat.value !== null);
+  }
+  return [
+    ...common,
+    { label: 'MIN', value: firstStat(stats, ['minutes', 'min']) },
+    { label: 'PTS', value: firstStat(stats, ['points', 'pts']) },
+    { label: 'REB', value: firstStat(stats, ['rebounds', 'reb']) },
+    { label: 'AST', value: firstStat(stats, ['assists', 'ast']) },
+    { label: 'STL', value: firstStat(stats, ['steals', 'stl']) },
+    { label: 'BLK', value: firstStat(stats, ['blocks', 'blk']) },
+  ].filter(stat => stat.value !== null);
+}
+
+function buildFranchiseSeasons(player: any, sport: string) {
+  const statHistory = player?.statHistory && typeof player.statHistory === 'object' ? player.statHistory : {};
+  return Object.entries(statHistory)
+    .sort(([left], [right]) => Number(right) - Number(left))
+    .map(([year, stats]: [string, any]) => ({
+      year,
+      stats,
+      statItems: franchiseSeasonStats(stats, sport),
+      awards: Array.isArray(stats?.awards) ? stats.awards : [],
+    }));
+}
+
 export default function PlayerCard({ player, era, sport, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -195,7 +250,9 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   const pos = profile?.position || player.position || '?';
   const posColor = POSITION_COLORS[pos.split('-')[0]] || '#888';
   const seasons = profile?.seasons || [];
-  const accolades = profile?.accolades || [];
+  const profileAccolades = Array.isArray(profile?.accolades) ? profile.accolades : [];
+  const playerAccolades = Array.isArray(player?.accolades) ? player.accolades : [];
+  const accolades = [...new Set([...profileAccolades, ...playerAccolades])];
   // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
   const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
   // Origin line: college if known, else high school (prep-to-pro), else country (overseas)
@@ -213,6 +270,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
   const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
+  const franchiseSeasons = buildFranchiseSeasons(player, effectiveSport);
 
   // Headshot source per sport. MLB derives from the MLB person id; NFL uses a
   // stored photo url (from the roster seed); NBA uses basketball-reference.
@@ -379,6 +437,30 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>📊 Season Stats</Text>
                   <Text style={styles.physical}>No recorded stats — depth/free-agent player.</Text>
+                </View>
+              )}
+
+              {franchiseSeasons.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Franchise Seasons</Text>
+                  {franchiseSeasons.map(season => (
+                    <View key={season.year} style={styles.franchiseSeasonRow}>
+                      <View style={styles.franchiseSeasonHeader}>
+                        <Text style={styles.franchiseSeasonYear}>{season.year}</Text>
+                        {season.awards.length > 0 ? (
+                          <Text style={styles.franchiseSeasonAwards} numberOfLines={1}>{season.awards.join(' / ')}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.franchiseSeasonGrid}>
+                        {season.statItems.slice(0, 8).map(stat => (
+                          <View key={`${season.year}-${stat.label}`} style={styles.franchiseSeasonStat}>
+                            <Text style={styles.franchiseSeasonValue}>{stat.value ?? '—'}</Text>
+                            <Text style={styles.franchiseSeasonLabel}>{stat.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               )}
 
@@ -568,6 +650,14 @@ const styles = StyleSheet.create({
   expandedStatItem: { width: '18%', alignItems: 'center', backgroundColor: '#0a0a1a', borderRadius: 8, padding: 8 },
   expandedStatValue: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   expandedStatLabel: { color: '#555', fontSize: 9, fontWeight: '700', marginTop: 2 },
+  franchiseSeasonRow: { backgroundColor: '#151515', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#242424', marginBottom: 10 },
+  franchiseSeasonHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  franchiseSeasonYear: { color: '#00ff87', fontSize: 13, fontWeight: '900' },
+  franchiseSeasonAwards: { flex: 1, color: '#d7b56d', fontSize: 11, fontWeight: '800' },
+  franchiseSeasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  franchiseSeasonStat: { minWidth: 58, flex: 1, backgroundColor: '#0a0a0a', borderRadius: 8, padding: 7, alignItems: 'center' },
+  franchiseSeasonValue: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  franchiseSeasonLabel: { color: '#666', fontSize: 9, fontWeight: '800', marginTop: 2 },
   noData: { alignItems: 'center', padding: 40 },
   noDataText: { color: '#444', fontSize: 13, textAlign: 'center' },
   actionBtns: { paddingHorizontal: 20, paddingBottom: 30, gap: 10 },

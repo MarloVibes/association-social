@@ -11,8 +11,10 @@ class DraftClassError extends Error {
 
 const SERVER_FIRST_NAMES = ['Aiden', 'Caleb', 'Darius', 'Elias', 'Jalen', 'Malik', 'Noah', 'Theo'];
 const SERVER_LAST_NAMES = ['Adams', 'Brooks', 'Carter', 'Davis', 'Hayes', 'Lewis', 'Parker', 'Walker'];
+const SERVER_NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
 const SERVER_NFL_POSITIONS = ['QB', 'HB', 'WR', 'TE', 'LT', 'EDGE', 'DT', 'MLB', 'CB', 'FS', 'SS'];
 const SERVER_MLB_POSITIONS = ['SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+const NBA_IDENTITY_KEYS = ['shooting', 'playmaking', 'defense', 'rebounding', 'athleticism', 'basketballIq', 'consistency', 'chemistry'];
 
 function seededRandom(seed) {
   let state = 2166136261;
@@ -37,16 +39,43 @@ function serverInt(random, min, max) {
   return Math.floor(random() * (max - min + 1)) + min;
 }
 
+function gradeFromHidden(value) {
+  const rating = Math.max(0, Math.min(99, Number(value || 0)));
+  if (rating >= 97) return 'A+';
+  if (rating >= 90) return 'A';
+  if (rating >= 85) return 'A-';
+  if (rating >= 80) return 'B+';
+  if (rating >= 75) return 'B';
+  if (rating >= 70) return 'B-';
+  if (rating >= 68) return 'C+';
+  if (rating >= 60) return 'C';
+  if (rating >= 55) return 'C-';
+  if (rating >= 50) return 'D';
+  return 'F';
+}
+
+function visibleNbaIdentity(hidden) {
+  const grades = NBA_IDENTITY_KEYS
+    .reduce((acc, key) => ({ ...acc, [key]: gradeFromHidden(hidden[key]) }), {});
+  return {
+    grades,
+    consistency: grades.consistency,
+    chemistry: grades.chemistry,
+    reputation: 'Prospect',
+    developmentTrait: Number(hidden.consistency || 0) >= 82 ? 'Breakout' : 'Rising',
+  };
+}
+
 function generateServerDraftClass(sportInput, teams, seed) {
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
-  if (!['madden', 'mlb'].includes(sport)) {
-    throw new DraftClassError('failed-precondition', 'Draft generation supports NFL and MLB leagues.');
+  if (!['nba', 'madden', 'mlb'].includes(sport)) {
+    throw new DraftClassError('failed-precondition', 'Draft generation supports NBA, NFL, and MLB leagues.');
   }
   if (!Number.isInteger(teams) || teams <= 0 || !seed) {
     throw new DraftClassError('invalid-argument', 'Valid teams and seed are required.');
   }
-  const rounds = sport === 'madden' ? 7 : 5;
-  const positions = sport === 'madden' ? SERVER_NFL_POSITIONS : SERVER_MLB_POSITIONS;
+  const rounds = sport === 'nba' ? 2 : sport === 'madden' ? 7 : 5;
+  const positions = sport === 'nba' ? SERVER_NBA_POSITIONS : sport === 'madden' ? SERVER_NFL_POSITIONS : SERVER_MLB_POSITIONS;
   const random = seededRandom(`${sport}:${seed}`);
   return Array.from({ length: teams * rounds }, (_, index) => {
     const projectedRound = Math.floor(index / teams) + 1;
@@ -68,6 +97,31 @@ function generateServerDraftClass(sportInput, teams, seed) {
       projectedRound,
       summary: `${first} ${last} is a developing ${position} prospect with a projected round ${projectedRound} grade and long-term upside.`,
     };
+    if (sport === 'nba') {
+      const hidden = {
+        shooting: serverInt(random, 48, 96 - projectedRound * 3),
+        playmaking: serverInt(random, 48, 96 - projectedRound * 3),
+        defense: serverInt(random, 48, 96 - projectedRound * 3),
+        rebounding: serverInt(random, ['PF', 'C'].includes(position) ? 52 : 42, 96 - projectedRound * 3),
+        athleticism: serverInt(random, 50, 96 - projectedRound * 3),
+        basketballIq: serverInt(random, 46, 96 - projectedRound * 3),
+        consistency: serverInt(random, 44, 96 - projectedRound * 3),
+        chemistry: serverInt(random, 50, 96 - projectedRound * 3),
+        age: base.age,
+        seasonsPlayed: 0,
+      };
+      const visible = visibleNbaIdentity(hidden);
+      return {
+        ...base,
+        archetype: serverPick(random, ['Shot Creator', 'Two-Way Prospect', 'Floor Spacer', 'Rim Protector', 'Connector']),
+        hidden,
+        visible,
+        grades: visible.grades,
+        playerLabel: 'PROSPECT',
+        developmentTrait: visible.developmentTrait,
+        summary: `${first} ${last} is a developing ${position} prospect with visible skill grades and hidden simulation values.`,
+      };
+    }
     if (sport === 'madden') {
       const heightInches = serverInt(random, 66, 81);
       return {
@@ -106,6 +160,12 @@ function draftClassDocumentId(seasonYear) {
     throw new DraftClassError('invalid-argument', 'A valid draft season is required.');
   }
   return String(seasonYear);
+}
+
+function defaultDraftTeamCount(sportInput) {
+  const sport = sportInput === 'nfl' ? 'madden' : sportInput;
+  if (sport === 'madden') return 32;
+  return 30;
 }
 
 function isCommissioner(uid, league) {
@@ -170,10 +230,12 @@ function normalizeProspectForSport(prospect, sportInput) {
     throw new DraftClassError('invalid-argument', 'A valid prospect is required.');
   }
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
-  const positions = sport === 'madden'
+  const positions = sport === 'nba'
+    ? SERVER_NBA_POSITIONS
+    : sport === 'madden'
     ? SERVER_NFL_POSITIONS
     : sport === 'mlb' ? SERVER_MLB_POSITIONS : [];
-  const maxRound = sport === 'madden' ? 7 : sport === 'mlb' ? 5 : 0;
+  const maxRound = sport === 'nba' ? 2 : sport === 'madden' ? 7 : sport === 'mlb' ? 5 : 0;
   if (
     !positions.includes(prospect.position)
     || !Number.isInteger(prospect.projectedRound)
@@ -198,6 +260,28 @@ function normalizeProspectForSport(prospect, sportInput) {
       || `${fullName} is a commissioner-created ${prospect.position} prospect.`,
     ).slice(0, 500),
   };
+  if (sport === 'nba') {
+    const hiddenSource = prospect.hidden || {};
+    const hidden = NBA_IDENTITY_KEYS.reduce((acc, key) => ({
+      ...acc,
+      [key]: boundedNumber(hiddenSource[key], 60, 0, 99),
+    }), {
+      age: boundedNumber(prospect.age, 20, 18, 24),
+      seasonsPlayed: boundedNumber(hiddenSource.seasonsPlayed, 0, 0, 30),
+    });
+    const visible = prospect.visible && prospect.visible.grades
+      ? prospect.visible
+      : visibleNbaIdentity(hidden);
+    const { overall, ratings, ...nbaBase } = base;
+    return {
+      ...nbaBase,
+      hidden,
+      visible,
+      grades: visible.grades || visibleNbaIdentity(hidden).grades,
+      playerLabel: prospect.playerLabel || 'PROSPECT',
+      developmentTrait: visible.developmentTrait || prospect.developmentTrait || 'Rising',
+    };
+  }
   if (sport === 'madden') {
     const heightInches = boundedNumber(prospect.heightInches, 74, 66, 81);
     const ratings = prospect.ratings || {};
@@ -329,12 +413,18 @@ function createMutateDraftClassHandler({ getFirestore, serverTimestamp, HttpsErr
           ? classSnap.data() || {}
           : { players: [], published: false, version: 0 };
         assertDraftClassEditable({ uid, league, expectedVersion, draftClass });
+        let teamCount = defaultDraftTeamCount(league.sport);
+        if (action === 'regenerate') {
+          const teamsSnap = await tx.get(leagueRef.collection('teams'));
+          const liveCount = teamsSnap && Array.isArray(teamsSnap.docs) ? teamsSnap.docs.length : 0;
+          if (liveCount > 0) teamCount = liveCount;
+        }
         const mutation = action === 'regenerate'
           ? {
             action,
             generatedPlayers: generateServerDraftClass(
               league.sport,
-              league.sport === 'madden' || league.sport === 'nfl' ? 32 : 30,
+              teamCount,
               `${leagueId}:${seasonYear}:${data.seed || 'default'}`,
             ),
           }

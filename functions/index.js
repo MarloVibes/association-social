@@ -44,14 +44,24 @@ const {
   createStartNextSeasonHandler,
 } = require('./franchise/newSeason');
 const {
+  createAdvanceNbaCupHandler,
   createGenerateScheduleHandler,
 } = require('./franchise/schedule');
 const {
   createAcceptMatchupHandler,
   createExpireMatchupRequestHandler,
+  createReportGameScoreHandler,
   createRequestMatchupHandler,
+  createResetScheduledGameHandler,
   createSimulateScheduledGameHandler,
 } = require('./franchise/matchups');
+const {
+  createApplyUpgradeGrantsHandler,
+  createSpendPlayerUpgradeHandler,
+} = require('./franchise/playerUpgrades');
+const {
+  createFinalizeSeasonAwardsHandler,
+} = require('./franchise/awards');
 
 initializeApp();
 
@@ -77,6 +87,33 @@ function titleFor(type) {
     case 'cocomm_promoted': return '🏛️ You\'re a Co-Commissioner';
     case 'cocomm_demoted': return 'Role Updated';
     case 'mention': return '📣 You were mentioned';
+    case 'matchup_request': return '🏀 Matchup Request';
+    case 'matchup_accepted': return '✅ Matchup Accepted';
+    case 'game_ready': return '🎮 Game Ready';
+    case 'game_simulated': return '📊 Game Simulated';
+    case 'game_final': return '🏁 Final Score';
+    case 'score_reported': return '🧾 Score Reported';
+    case 'injury_update': return '🩺 Injury Update';
+    case 'schedule_created': return '📅 Schedule Ready';
+    case 'schedule_updated': return '📅 Schedule Updated';
+    case 'nba_cup':
+    case 'nba_cup_advanced': return '🏆 NBA Cup Update';
+    case 'game_reset': return '🔁 Game Reset';
+    case 'draft_started': return '🎙️ Draft Started';
+    case 'draft_pick': return '✅ Draft Pick In';
+    case 'draft_auto_pick': return '⏱️ Auto Pick Made';
+    case 'draft_turn': return '⏳ You Are On The Clock';
+    case 'draft_class_ready': return '📋 Draft Class Ready';
+    case 'contract_round': return '💼 Contract Round';
+    case 'free_agency': return '📝 Free Agency';
+    case 'offseason_stage': return '🏛️ Offseason Update';
+    case 'roster_compliance':
+    case 'roster_cuts': return '✂️ Roster Cuts';
+    case 'expansion':
+    case 'expansion_draft': return '🌆 Expansion Update';
+    case 'season_awards':
+    case 'awards_finalized': return '🏆 Trophy Case';
+    case 'upgrade_points': return '⬆️ Upgrade Points';
     default: return 'Franchise Social';
   }
 }
@@ -132,6 +169,11 @@ exports.pushOnNotification = onDocumentUpdated('users/{uid}', async (event) => {
       otherUid: n.otherUid || n.fromUid || '',
       otherTeamId: n.otherTeamId || '',
       otherTeamName: n.otherTeamName || n.fromTeamName || '',
+      gameId: n.gameId || n.scheduleGameId || n.matchupId || '',
+      competition: n.competition || n.scheduleCompetition || 'regular',
+      scheduleId: n.scheduleId || '',
+      teamId: n.teamId || n.otherTeamId || '',
+      seasonYear: n.seasonYear || '',
     },
   }));
 
@@ -345,6 +387,11 @@ exports.generateNbaSchedule = onCall(createGenerateScheduleHandler({
   HttpsError,
 }));
 
+exports.advanceNbaCup = onCall(createAdvanceNbaCupHandler({
+  getFirestore,
+  HttpsError,
+}));
+
 exports.requestMatchup = onCall(createRequestMatchupHandler({
   getFirestore,
   now: () => Date.now(),
@@ -363,10 +410,39 @@ exports.simulateScheduledGame = onCall(createSimulateScheduledGameHandler({
   HttpsError,
 }));
 
+exports.reportGameScore = onCall(createReportGameScoreHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
 exports.expireMatchupRequest = onCall(createExpireMatchupRequestHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
+}));
+
+exports.resetScheduledGame = onCall(createResetScheduledGameHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.spendPlayerUpgrade = onCall(createSpendPlayerUpgradeHandler({
+  getFirestore,
+  HttpsError,
+}));
+
+exports.applyUpgradeGrants = onCall(createApplyUpgradeGrantsHandler({
+  getFirestore,
+  HttpsError,
+  FieldValue,
+}));
+
+exports.finalizeSeasonAwards = onCall(createFinalizeSeasonAwardsHandler({
+  getFirestore,
+  HttpsError,
+  FieldValue,
 }));
 
 exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (request) => {

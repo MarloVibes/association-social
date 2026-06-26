@@ -70,6 +70,7 @@ export default function CreateLeagueScreen() {
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
   const [draftPickMode, setDraftPickMode] = useState('standard');
   const [stepienRule, setStepienRule] = useState(false);
+  const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
   const [loading, setLoading] = useState(false);
 
   const sports = [
@@ -141,6 +142,8 @@ export default function CreateLeagueScreen() {
         era: finalEra,
         draftPickMode,
         stepienRule: sport === 'nba' ? stepienRule : false,
+        gamesPerTeam: sport === 'nba' ? Number(scheduleGamesPerTeam) : null,
+        scheduleLocked: false,
         draftBaseYear: draftBaseYearFor(leagueSeasonYear),
         rosterLimit: defaults.rosterLimit,
         twoWayLimit: defaults.twoWayLimit,
@@ -457,7 +460,6 @@ export default function CreateLeagueScreen() {
             <Text style={styles.sectionLabel}>Draft Pick Ownership</Text>
             {[
               { value: 'standard', label: 'Standard', desc: 'Every team owns its own picks for the next 7 drafts. Fair and balanced.', disabled: false },
-              { value: 'realistic', label: 'Realistic (coming soon)', desc: 'Real current pick ownership from actual trades. Available soon.', disabled: true },
             ].map(opt => (
               <TouchableOpacity
                 key={opt.value}
@@ -474,6 +476,22 @@ export default function CreateLeagueScreen() {
 
             {sport === 'nba' && (
               <>
+                <Text style={styles.sectionLabel}>NBA Schedule</Text>
+                {['14', '29', '58', '82'].map(value => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.optionRow, scheduleGamesPerTeam === value && styles.optionRowActive]}
+                    onPress={() => setScheduleGamesPerTeam(value)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.optionLabel, scheduleGamesPerTeam === value && styles.optionLabelActive]}>{value} games</Text>
+                      <Text style={styles.optionDesc}>{value === '82' ? 'Full-length season' : 'Condensed league season'}</Text>
+                    </View>
+                    {scheduleGamesPerTeam === value && <Text style={styles.check}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+                <Text style={styles.helperSmall}>Your schedule will be created after you claim your team.</Text>
+
                 <Text style={styles.sectionLabel}>Stepien Rule</Text>
                 {[
                   { value: true, label: 'On', desc: "Can't trade away first-rounders in back-to-back drafts (real NBA rule)." },

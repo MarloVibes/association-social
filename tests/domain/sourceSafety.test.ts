@@ -16,6 +16,14 @@ describe('source safety regressions', () => {
     expect(select).toContain('currentYear={currentYear}');
   });
 
+  it('uses sport-aware team logos in the team picker', () => {
+    const select = source('app/screens/team-select.tsx');
+
+    expect(select).toContain('<SportTeamLogo');
+    expect(select).toContain('sport={sportResolved}');
+    expect(select).not.toContain('source={getTeamLogoLocal(team.abbreviation, currentYear)');
+  });
+
   it('does not dereference a nullable auth user while saving a profile', () => {
     const profile = source('app/screens/profile.tsx');
 
@@ -65,10 +73,43 @@ describe('source safety regressions', () => {
     expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
       hook.indexOf('Notifications.addNotificationReceivedListener'),
     );
-    expect(hook.indexOf("if (Platform.OS === 'web') return;")).toBeLessThan(
-      hook.indexOf('Notifications.getLastNotificationResponseAsync'),
-    );
-    expect(hook).toContain('Push cold-start response unavailable');
+    expect(hook).not.toContain('getLastNotificationResponseAsync');
+  });
+
+  it('routes franchise push taps to their destination screens', () => {
+    const hook = source('hooks/usePushNotifications.ts');
+
+    expect(hook).toContain("pathname: '/screens/season/matchup'");
+    expect(hook).toContain("pathname: '/screens/season/calendar'");
+    expect(hook).toContain("pathname: '/screens/offseason'");
+    expect(hook).toContain("pathname: '/screens/offseason/live-draft'");
+    expect(hook).toContain("pathname: '/screens/offseason/roster-cuts'");
+    expect(hook).toContain("pathname: '/screens/season/awards'");
+    expect(hook).toContain("pathname: '/screens/season/player-upgrades'");
+    expect(hook).not.toContain("['season_awards', 'awards_finalized', 'upgrade_points']");
+  });
+
+  it('routes franchise inbox notification taps to their destination screens', () => {
+    const notifications = source('app/screens/notifications.tsx');
+
+    expect(notifications).toContain('routeNotification');
+    expect(notifications).toContain("pathname: '/screens/season/matchup'");
+    expect(notifications).toContain("pathname: '/screens/season/calendar'");
+    expect(notifications).toContain("pathname: '/screens/offseason/live-draft'");
+    expect(notifications).toContain("pathname: '/screens/offseason/roster-cuts'");
+    expect(notifications).toContain("pathname: '/screens/season/awards'");
+    expect(notifications).toContain("pathname: '/screens/season/player-upgrades'");
+    expect(notifications).not.toContain("['season_awards', 'awards_finalized', 'upgrade_points']");
+  });
+
+  it('sends franchise push payload fields and titles from functions', () => {
+    const functionsIndex = source('functions/index.js');
+
+    expect(functionsIndex).toContain("case 'game_ready'");
+    expect(functionsIndex).toContain("case 'draft_started'");
+    expect(functionsIndex).toContain("case 'season_awards'");
+    expect(functionsIndex).toContain('gameId: n.gameId || n.scheduleGameId || n.matchupId ||');
+    expect(functionsIndex).toContain("competition: n.competition || n.scheduleCompetition || 'regular'");
   });
 
   it('keeps the NBA season calendar visible without requiring a claimed team', () => {
@@ -76,5 +117,233 @@ describe('source safety regressions', () => {
 
     expect(league).toContain('Season Hub');
     expect(league).not.toContain('isNBASport && myTeam && (');
+    expect(league.indexOf('Season Hub')).toBeLessThan(league.indexOf('Recent Activity'));
+  });
+
+  it('puts NBA schedule setup in the league creation flow', () => {
+    const createLeague = source('app/screens/create-league.tsx');
+
+    expect(createLeague).toContain('scheduleGamesPerTeam');
+    expect(createLeague).toContain('NBA Schedule');
+    expect(createLeague).toContain("gamesPerTeam: sport === 'nba'");
+  });
+
+  it('lets standings switch between regular season and NBA Cup tables', () => {
+    const standings = source('app/screens/season/standings.tsx');
+
+    expect(standings).toContain("type StandingsViewMode = 'regular' | 'cup'");
+    expect(standings).toContain('schedule?.nbaCup?.games');
+    expect(standings).toContain('buildNbaCupGroupStandings');
+    expect(standings).toContain('NBA Cup');
+  });
+
+  it('wires commissioner NBA Cup advancement from calendar to functions', () => {
+    const calendar = source('app/screens/season/calendar.tsx');
+    const functionsIndex = source('functions/index.js');
+
+    expect(calendar).toContain("httpsCallable(functions, 'advanceNbaCup')");
+    expect(calendar).toContain('advanceNbaCupStage');
+    expect(calendar).toContain('Advance NBA Cup');
+    expect(functionsIndex).toContain('exports.advanceNbaCup');
+  });
+
+  it('loads scheduled team rosters before server-side NBA simulation', () => {
+    const matchups = source('functions/franchise/matchups.js');
+
+    expect(matchups).toContain('teamForScheduledGame');
+    expect(matchups).toContain('sourceTeamDocId');
+    expect(matchups).toContain('homeTeam');
+    expect(matchups).toContain('awayTeam');
+  });
+
+  it('shows simulated game stories and box scores on the matchup screen', () => {
+    const matchup = source('app/screens/season/matchup.tsx');
+
+    expect(matchup).toContain('game.boxScore');
+    expect(matchup).toContain('game.quarters');
+    expect(matchup).toContain('game.story');
+    expect(matchup).toContain('Top Performers');
+  });
+
+  it('routes completed games to a dedicated result screen', () => {
+    const calendar = source('app/screens/season/calendar.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+    const hook = source('hooks/usePushNotifications.ts');
+    const notifications = source('app/screens/notifications.tsx');
+    const result = source('app/screens/season/game-result.tsx');
+
+    expect(rootLayout).toContain('screens/season/game-result');
+    expect(seasonLayout).toContain('game-result');
+    expect(calendar).toContain("item.status === 'final' ? '/screens/season/game-result'");
+    expect(hook).toContain("pathname: '/screens/season/game-result'");
+    expect(notifications).toContain("pathname: '/screens/season/game-result'");
+    expect(result).toContain('Final Score');
+    expect(result).toContain('Quarter Scores');
+    expect(result).toContain('Top Performers');
+  });
+
+  it('lets commissioners reset finalized games from the result screen', () => {
+    const result = source('app/screens/season/game-result.tsx');
+
+    expect(result).toContain("httpsCallable(functions, 'resetScheduledGame')");
+    expect(result).toContain('Reset Game');
+    expect(result).toContain('Only commissioners can reset completed games');
+  });
+
+  it('exposes NBA playoffs from the season hub and router', () => {
+    const league = source('app/screens/league.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+
+    expect(league).toContain('/screens/season/playoffs');
+    expect(league).toContain('Playoffs');
+    expect(rootLayout).toContain('screens/season/playoffs');
+    expect(seasonLayout).toContain('playoffs');
+  });
+
+  it('registers the full offseason route stack', () => {
+    const rootLayout = source('app/_layout.tsx');
+    const offseasonLayout = source('app/screens/offseason/_layout.tsx');
+
+    expect(rootLayout).toContain('screens/offseason/index');
+    expect(rootLayout).toContain('screens/offseason/live-draft');
+    expect(rootLayout).toContain('screens/offseason/roster-cuts');
+    expect(offseasonLayout).toContain('draft-class');
+    expect(offseasonLayout).toContain('free-agency');
+    expect(offseasonLayout).toContain('expansion');
+  });
+
+  it('includes deployable Firestore index configuration', () => {
+    const firebase = source('firebase.json');
+    const indexes = source('firestore.indexes.json');
+
+    expect(firebase).toContain('firestore.indexes.json');
+    expect(indexes).toContain('"indexes"');
+    expect(indexes).toContain('"collectionGroup": "trade_rooms"');
+    expect(indexes).toContain('"collectionGroup": "contract_offers"');
+    expect(indexes).toContain('"collectionGroup": "draft_sessions"');
+    expect(indexes).toContain('"collectionGroup": "mvp_players"');
+    expect(indexes).toContain('"fieldPath": "ownerUid"');
+    expect(indexes).toContain('"fieldOverrides"');
+    expect(indexes).toContain('"fieldPath": "status"');
+    expect(indexes).toContain('"queryScope": "COLLECTION_GROUP"');
+  });
+
+  it('documents the franchise engine QA matrix', () => {
+    const qa = source('docs/FRANCHISE_ENGINE_QA.md');
+
+    expect(qa).toContain('NBA schedule creation');
+    expect(qa).toContain('Player upgrades');
+    expect(qa).toContain('Expansion');
+    expect(qa).toContain('Functions deploy');
+  });
+
+  it('lets commissioners advance playoff series from the playoff screen', () => {
+    const playoffs = source('app/screens/season/playoffs.tsx');
+
+    expect(playoffs).toContain('advancePlayoffSeries');
+    expect(playoffs).toContain('markSeriesWinner');
+    expect(playoffs).toContain('winnerTeamId');
+  });
+
+  it('exposes historical scouting from the season hub and router', () => {
+    const league = source('app/screens/league.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+    const scouting = source('app/screens/season/scouting.tsx');
+
+    expect(league).toContain('/screens/season/scouting');
+    expect(league).toContain('Scouting');
+    expect(rootLayout).toContain('screens/season/scouting');
+    expect(seasonLayout).toContain('scouting');
+    expect(scouting).toContain('Active game plans stay hidden');
+  });
+
+  it('does not show the commissioner a deleted-league alert after they delete their own league', () => {
+    const league = source('app/screens/league.tsx');
+    const settings = source('app/screens/league-settings.tsx');
+
+    expect(settings).toContain('suppressDeletedLeagueAlert(leagueId)');
+    expect(league).toContain('isDeletedLeagueAlertSuppressed(leagueId)');
+  });
+
+  it('lets commissioners apply award and lottery upgrade points from the trophy case', () => {
+    const awards = source('app/screens/season/awards.tsx');
+    const functionsIndex = source('functions/index.js');
+
+    expect(awards).toContain("httpsCallable(functions, 'applyUpgradeGrants')");
+    expect(awards).toContain('seasonUpgradeGrants');
+    expect(awards).toContain('Apply Upgrade Points');
+    expect(awards).toContain('grantsAlreadyApplied');
+    expect(awards).toContain('(result.data as any)?.updatedTeams');
+    expect(awards).toContain('Already Applied');
+    expect(functionsIndex).toContain('exports.applyUpgradeGrants');
+  });
+
+  it('uses trophy and ring-style visuals in the Trophy Case', () => {
+    const awards = source('app/screens/season/awards.tsx');
+
+    expect(awards).toContain('awardIconName');
+    expect(awards).toContain("'diamond'");
+    expect(awards).toContain("'trophy'");
+    expect(awards).toContain('<Ionicons');
+  });
+
+  it('persists archived awards when starting the next season', () => {
+    const newSeason = source('functions/franchise/newSeason.js');
+
+    expect(newSeason).toContain('archiveSeasonAwards');
+    expect(newSeason).toContain('awardHistory: nextLeague.awardHistory');
+    expect(newSeason).toContain('seasonAwards: nextLeague.seasonAwards');
+    expect(newSeason).toContain('awardsFinalizedSeason: nextLeague.awardsFinalizedSeason');
+  });
+
+  it('shows player upgrade buttons using the same seasonal limit rule as the server', () => {
+    const upgrades = source('app/screens/season/player-upgrades.tsx');
+
+    expect(upgrades).toContain('canUpgradePlayerThisSeason');
+    expect(upgrades).toContain('upgradesUsedThisSeason: used');
+    expect(upgrades).toContain('selectedTeamId');
+    expect(upgrades).toContain('One point raises one grade');
+    expect(upgrades).toContain('getUpgradeStatus');
+  });
+
+  it('shows archived franchise player seasons in player cards', () => {
+    const playerCard = source('components/PlayerCard.tsx');
+
+    expect(playerCard).toContain('statHistory');
+    expect(playerCard).toContain('Franchise Seasons');
+    expect(playerCard).toContain('franchiseSeasons');
+    expect(playerCard).toContain('player?.accolades');
+  });
+
+  it('does not present the franchise game as a mini game on the dashboard', () => {
+    const dashboard = source('app/(tabs)/dashboard.tsx');
+    const createLeague = source('app/screens/create-league.tsx');
+
+    expect(dashboard).not.toContain('MINI GAME');
+    expect(dashboard).not.toContain('Mini Games are on the way');
+    expect(dashboard).not.toContain('miniGameCard');
+    expect(createLeague).not.toContain('coming soon');
+  });
+
+  it('shows NBA standard and two-way roster slots during roster cuts', () => {
+    const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
+
+    expect(rosterCuts).toContain('standardPlayers.length');
+    expect(rosterCuts).toContain('twoWayPlayers.length');
+    expect(rosterCuts).toContain('Two-way');
+  });
+
+  it('routes NBA expansion stage to an expansion screen', () => {
+    const offseason = source('app/screens/offseason/index.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const expansion = source('app/screens/offseason/expansion.tsx');
+
+    expect(offseason).toContain('/screens/offseason/expansion');
+    expect(rootLayout).toContain('screens/offseason/expansion');
+    expect(expansion).toContain('Expansion Teams');
+    expect(expansion).not.toContain('completeOffseasonTeamAction');
   });
 });

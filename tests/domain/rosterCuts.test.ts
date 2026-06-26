@@ -32,6 +32,24 @@ describe('roster cut compliance', () => {
     }).errors).toContain('invalid_limit');
   });
 
+  it('distinguishes NBA standard contracts from two-way slots', () => {
+    expect(rosterCompliance('nba', {
+      standard: 15,
+      twoWay: 3,
+      payroll: 200,
+    }).valid).toBe(true);
+    expect(rosterCompliance('nba', {
+      standard: 16,
+      twoWay: 3,
+      payroll: 200,
+    }).errors).toContain('standard_roster_limit');
+    expect(rosterCompliance('nba', {
+      standard: 15,
+      twoWay: 4,
+      payroll: 200,
+    }).errors).toContain('two_way_limit');
+  });
+
   it('cuts the lowest-value surplus while preserving positional minimums', () => {
     const players = [
       { id: 'qb1', position: 'QB', value: 90, salary: 30 },

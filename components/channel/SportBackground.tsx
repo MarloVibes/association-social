@@ -28,14 +28,7 @@ export default function SportBackground({ sport }: { sport?: string | null }) {
     );
   }
 
-  return (
-    <View pointerEvents="none" style={[styles.fill, styles.court]}>
-      <View style={styles.centerLine} />
-      <View style={styles.centerCircle} />
-      <View style={[styles.key, styles.keyTop]} />
-      <View style={[styles.key, styles.keyBottom]} />
-    </View>
-  );
+  return null;
 }
 
 const LINE = 'rgba(255,255,255,0.075)';

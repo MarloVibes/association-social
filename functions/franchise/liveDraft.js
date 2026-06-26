@@ -20,6 +20,11 @@ const MLB_TEAM_IDS = [
   'HOU', 'LAA', 'ATH', 'SEA', 'TEX', 'ATL', 'MIA', 'NYM', 'PHI', 'WSH',
   'CHC', 'CIN', 'MIL', 'PIT', 'STL', 'ARI', 'COL', 'LAD', 'SD', 'SF',
 ];
+const NBA_TEAM_IDS = [
+  'ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW',
+  'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NOP', 'NYK',
+  'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS',
+];
 
 function prospectId(prospect) {
   return String(prospect && (prospect.id || prospect.player_id) || '');
@@ -34,7 +39,9 @@ function teamIdentity(team) {
 
 function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
-  const canonicalIds = sport === 'madden'
+  const canonicalIds = sport === 'nba'
+    ? NBA_TEAM_IDS
+    : sport === 'madden'
     ? NFL_TEAM_IDS
     : sport === 'mlb' ? MLB_TEAM_IDS : [];
   if (canonicalIds.length === 0) {
@@ -47,7 +54,7 @@ function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
     const existing = byIdentity.get(identity);
     if (!existing || (!existing.gmId && team.gmId)) byIdentity.set(identity, team);
   }
-  return canonicalIds.map(identity => {
+  const franchises = canonicalIds.map(identity => {
     const existing = byIdentity.get(identity);
     return existing
       ? { ...existing, teamId: identity, abbreviation: existing.abbreviation || identity, virtual: false }
@@ -62,6 +69,24 @@ function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
         virtual: true,
       };
   });
+  if (sport !== 'nba') return franchises;
+  const seen = new Set(canonicalIds);
+  for (const team of liveTeams || []) {
+    const identity = teamIdentity(team);
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    franchises.push({
+      ...team,
+      teamId: identity,
+      abbreviation: team.abbreviation || identity,
+      players: Array.isArray(team.players) && team.players.length > 0
+        ? team.players
+        : poolPlayers.filter(player => String(player.team || '').toUpperCase() === identity),
+      needs: team.needs || [],
+      virtual: false,
+    });
+  }
+  return franchises;
 }
 
 function buildDraftOrder(teams, preferredOrder) {
@@ -82,6 +107,13 @@ function buildDraftOrder(teams, preferredOrder) {
     if (!order.includes(id)) order.push(id);
   }
   return order;
+}
+
+function draftRoundsForSport(sportInput) {
+  const sport = sportInput === 'nfl' ? 'madden' : sportInput;
+  if (sport === 'nba') return 2;
+  if (sport === 'madden') return 7;
+  return 5;
 }
 
 function createDraftSession({
@@ -311,7 +343,7 @@ function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
         seasonYear: offseason.seasonYear,
         sport,
         teamOrder,
-        rounds: sport === 'madden' ? 7 : 5,
+        rounds: draftRoundsForSport(sport),
         timerSeconds: offseason.draftTimerSeconds || league.draftTimerSeconds || 120,
         now: now(),
       });
@@ -513,6 +545,7 @@ module.exports = {
   createAutoPickHandler,
   createDraftPickHandler,
   createDraftSession,
+  draftRoundsForSport,
   createInitializeLiveDraftHandler,
   validateManualDraftPick,
 };

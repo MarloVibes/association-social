@@ -25,6 +25,10 @@ type Player = {
   position?: string;
   salary?: number;
   overall?: number;
+  contractType?: string;
+  contract_type?: string;
+  rosterSlot?: string;
+  slot?: string;
 };
 
 type Team = {
@@ -54,6 +58,11 @@ function playerName(player: Player): string {
 
 function money(value: number): string {
   return value >= 1000000 ? `$${(value / 1000000).toFixed(1)}M` : `$${Math.round(value / 1000)}K`;
+}
+
+function isTwoWayPlayer(player: Player): boolean {
+  const type = String(player.contractType || player.contract_type || player.rosterSlot || player.slot || '').trim().toLowerCase();
+  return type === 'two_way' || type === 'two-way' || type === 'twoway' || type === 'two way';
 }
 
 export default function RosterCutsScreen() {
@@ -99,11 +108,15 @@ export default function RosterCutsScreen() {
     ? team?.budget ?? league?.teamBudget ?? league?.salaryCap
     : team?.salaryCap ?? league?.salaryCap;
   const payroll = rosterPayroll(players);
+  const standardPlayers = players.filter(player => !isTwoWayPlayer(player));
+  const twoWayPlayers = players.filter(isTwoWayPlayer);
   const compliance = rosterCompliance(league?.sport || 'nba', {
-    standard: players.length,
+    standard: standardPlayers.length,
+    twoWay: twoWayPlayers.length,
     payroll,
     limit: financeLimit,
   });
+  const isNba = (league?.sport || 'nba') === 'nba';
   const completed = Boolean(
     team && league?.offseason?.completedTeamIds?.includes(team.id),
   );
@@ -169,7 +182,10 @@ export default function RosterCutsScreen() {
                   <View>
                     <Text style={styles.teamName}>{team.name || 'Your Team'}</Text>
                     <Text style={styles.summaryMeta}>
-                      {players.length}/{compliance.rosterLimit} players · {money(payroll)}
+                      {isNba
+                        ? `${standardPlayers.length}/${compliance.rosterLimit} standard · ${twoWayPlayers.length}/${compliance.twoWayLimit} Two-way`
+                        : `${players.length}/${compliance.rosterLimit} players`}
+                      {' · '}{money(payroll)}
                       {Number.isFinite(financeLimit) ? ` / ${money(Number(financeLimit))}` : ''}
                     </Text>
                   </View>
@@ -181,6 +197,8 @@ export default function RosterCutsScreen() {
                 </View>
                 {!compliance.valid && (
                   <Text style={styles.warning}>
+                    {compliance.errors.includes('standard_roster_limit') ? 'Reduce standard roster spots. ' : ''}
+                    {compliance.errors.includes('two_way_limit') ? 'Reduce two-way slots. ' : ''}
                     {compliance.errors.includes('roster_limit') ? 'Reduce your roster size. ' : ''}
                     {compliance.errors.includes('financial_limit') ? 'Reduce team payroll. ' : ''}
                     {compliance.errors.includes('invalid_limit') ? 'A commissioner must set the sport finance limit.' : ''}

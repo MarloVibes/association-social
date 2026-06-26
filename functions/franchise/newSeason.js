@@ -39,16 +39,37 @@ function financeLimit(sport, team, league) {
   return league.salaryCap;
 }
 
+function isTwoWayPlayer(player) {
+  const type = String(
+    player && (
+      player.contractType
+      || player.contract_type
+      || player.rosterSlot
+      || player.slot
+      || ''
+    )
+  ).trim().toLowerCase();
+  return type === 'two_way' || type === 'two-way' || type === 'twoway' || type === 'two way';
+}
+
 function serverRosterCompliance(sportInput, team, league, rosterLimitOverride) {
   const sport = normalizeSport(sportInput);
   const rosterLimit = Number.isInteger(rosterLimitOverride)
     ? rosterLimitOverride
     : sport === 'madden' ? 53 : sport === 'mlb' ? 40 : 15;
+  const twoWayLimit = sport === 'nba' ? 3 : 0;
   const players = Array.isArray(team.players) ? team.players : [];
+  const twoWayCount = sport === 'nba' ? players.filter(isTwoWayPlayer).length : 0;
+  const standardCount = sport === 'nba' ? players.length - twoWayCount : players.length;
   const teamPayroll = payroll(players);
   const limit = financeLimit(sport, team, league);
   const errors = [];
-  if (players.length > rosterLimit) errors.push('roster_limit');
+  if (sport === 'nba') {
+    if (standardCount > rosterLimit) errors.push('standard_roster_limit');
+    if (twoWayCount > twoWayLimit) errors.push('two_way_limit');
+  } else if (players.length > rosterLimit) {
+    errors.push('roster_limit');
+  }
   if (sport !== 'nba') {
     if (!Number.isFinite(limit) || limit < 0) errors.push('invalid_limit');
     else if (teamPayroll > limit) errors.push('financial_limit');
@@ -57,9 +78,22 @@ function serverRosterCompliance(sportInput, team, league, rosterLimitOverride) {
     valid: errors.length === 0,
     errors,
     rosterCount: players.length,
+    standardCount,
     rosterLimit,
+    twoWayCount,
+    twoWayLimit,
     payroll: teamPayroll,
     financeLimit: limit,
+  };
+}
+
+function newSeasonTeamResetPayload() {
+  return {
+    fatigue: 0,
+    fatigueSequence: 0,
+    minorInjuryCount: 0,
+    severeInjuryCount: 0,
+    injuries: [],
   };
 }
 
@@ -114,12 +148,27 @@ function autoCutTeamRoster(
   return {
     kept: players,
     cut,
+    teamUpdates: newSeasonTeamResetPayload(),
     compliance: serverRosterCompliance(
       sportInput,
       { ...team, players },
       league,
       rosterLimitOverride,
     ),
+  };
+}
+
+function archivePlayerSeasonStats(player, seasonYear) {
+  const season = player && player.seasonStats && typeof player.seasonStats === 'object'
+    ? player.seasonStats
+    : null;
+  if (!season || Object.keys(season).length === 0) return player && player.statHistory ? player.statHistory : {};
+  return {
+    ...(player.statHistory || {}),
+    [String(seasonYear)]: {
+      ...season,
+      awards: Array.isArray(season.awards) ? [...season.awards] : season.awards,
+    },
   };
 }
 
@@ -142,22 +191,188 @@ function advancePlayerForNewSeason(player, nextYear) {
     contractYears,
     contractExpired: Number.isFinite(contractYears) && contractYears === 0,
     retired,
+    statHistory: archivePlayerSeasonStats(player, nextYear - 1),
+    seasonStats: {},
   };
+}
+
+const NBA_SKILL_KEYS = [
+  'shooting',
+  'playmaking',
+  'defense',
+  'rebounding',
+  'athleticism',
+  'basketballIq',
+  'consistency',
+  'chemistry',
+];
+
+function hash(value) {
+  let h = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    h ^= value.charCodeAt(index);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function gradeFromHiddenValue(value) {
+  const rating = clamp(Number.isFinite(value) ? value : 0, 0, 99);
+  if (rating >= 97) return 'A+';
+  if (rating >= 90) return 'A';
+  if (rating >= 85) return 'A-';
+  if (rating >= 80) return 'B+';
+  if (rating >= 75) return 'B';
+  if (rating >= 70) return 'B-';
+  if (rating >= 68) return 'C+';
+  if (rating >= 60) return 'C';
+  if (rating >= 55) return 'C-';
+  if (rating >= 50) return 'D';
+  return 'F';
+}
+
+function buildNbaGrades(hidden) {
+  return NBA_SKILL_KEYS.reduce((grades, key) => {
+    grades[key] = gradeFromHiddenValue(Number(hidden[key] || 0));
+    return grades;
+  }, {});
+}
+
+function nbaAgeCurve(age) {
+  if (age <= 23) return 3;
+  if (age <= 26) return 2;
+  if (age <= 29) return 1;
+  if (age <= 32) return 0;
+  if (age <= 34) return -2;
+  return -4;
+}
+
+function nbaRoleBonus(minutes) {
+  if (minutes >= 2400) return 2;
+  if (minutes >= 1600) return 1;
+  if (minutes < 700) return -1;
+  return 0;
+}
+
+function nbaProductionBonus(key, season) {
+  if (key === 'shooting' && Number(season.points || season.pts || 0) >= 900) return 1;
+  if (key === 'playmaking' && Number(season.assists || season.ast || 0) >= 250) return 1;
+  if (key === 'rebounding' && Number(season.rebounds || season.reb || 0) >= 300) return 1;
+  if (key === 'basketballIq' && Number(season.minutes || season.min || 0) >= 1800) return 1;
+  return 0;
+}
+
+function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
+  const advanced = advancePlayerForNewSeason(player, nextYear);
+  if (!player || !player.hidden || typeof player.hidden !== 'object') return advanced;
+  const season = player.seasonStats || player.stats || {};
+  const completedSeasonYear = nextYear - 1;
+  const hidden = { ...player.hidden };
+  const age = Number(hidden.age || player.age || 19);
+  const base = nbaAgeCurve(age) + nbaRoleBonus(Number(season.minutes || season.min || 0));
+  const awardBonus = Array.isArray(season.awards) && season.awards.length > 0 ? 1 : 0;
+  const injuryPenalty = Math.min(3, Math.floor(Number(season.injuryGamesMissed || season.gamesMissed || 0) / 10));
+  const deltas = {};
+
+  NBA_SKILL_KEYS.forEach((key) => {
+    const current = Number(hidden[key] || 60);
+    const variance = (hash(`${seed}:${playerId(player)}:${key}`) % 5) - 2;
+    let delta = base + awardBonus + nbaProductionBonus(key, season) - injuryPenalty + variance;
+    if (age >= 33 && (key === 'athleticism' || key === 'defense')) {
+      delta = Math.min(delta, -1);
+    }
+    delta = clamp(delta, -8, 8);
+    hidden[key] = clamp(Math.round(current + delta), 25, 99);
+    deltas[key] = hidden[key] - current;
+  });
+
+  hidden.age = age + 1;
+  hidden.seasonsPlayed = Number(hidden.seasonsPlayed || 0) + 1;
+
+  return {
+    ...advanced,
+    hidden,
+    grades: buildNbaGrades(hidden),
+    visible: {
+      ...(player.visible || {}),
+      grades: buildNbaGrades(hidden),
+    },
+    progression: {
+      ...(player.progression || {}),
+      seasonDelta: deltas,
+      progressedSeason: completedSeasonYear,
+    },
+    statHistory: archivePlayerSeasonStats(player, completedSeasonYear),
+    seasonStats: {},
+  };
+}
+
+function seasonLabel(sport, year) {
+  return sport === 'nba' ? `${year}-${String(year + 1).slice(-2)}` : String(year);
+}
+
+function nextSalaryCap(currentSalaryCap, growthRate = 0.05) {
+  return Math.round(Number(currentSalaryCap || 0) * (1 + growthRate));
+}
+
+function projectCapHistory({ currentYear, currentSalaryCap, existingHistory = [], growthRate = 0.05 }) {
+  const salaryCap = nextSalaryCap(currentSalaryCap, growthRate);
+  return [
+    ...existingHistory,
+    {
+      seasonYear: currentYear + 1,
+      salaryCap,
+      minimumSalary: Math.round(salaryCap * 0.01),
+      rookieScaleBase: Math.round(salaryCap * 0.05),
+    },
+  ];
+}
+
+function archiveSeasonAwards(awardHistory, seasonAwards) {
+  const history = { ...(awardHistory || {}) };
+  Object.entries(seasonAwards || {}).forEach(([key, records]) => {
+    const nextRecords = Array.isArray(records) ? records : records ? [records] : [];
+    if (nextRecords.length === 0) return;
+    const existing = history[key];
+    history[key] = [
+      ...(Array.isArray(existing) ? existing : existing ? [existing] : []),
+      ...nextRecords,
+    ];
+  });
+  return history;
 }
 
 function buildNextSeasonLeague(league, stageStartedAt) {
   const sport = normalizeSport(league.sport);
-  if (sport === 'nba') {
-    throw new NewSeasonError('failed-precondition', 'NBA season advancement uses the NBA season engine.');
-  }
   const currentYear = Number.isInteger(league.currentYear)
     ? league.currentYear
     : league.offseason && league.offseason.seasonYear;
   const nextYear = currentYear + 1;
+  const capHistory = sport === 'nba'
+    ? projectCapHistory({
+      currentYear,
+      currentSalaryCap: Number(league.salaryCap || 0),
+      existingHistory: Array.isArray(league.capHistory) ? league.capHistory : [],
+      growthRate: Number.isFinite(league.capGrowthRate) ? league.capGrowthRate : 0.05,
+    })
+    : league.capHistory;
+  const latestCap = Array.isArray(capHistory) ? capHistory[capHistory.length - 1] : null;
+  const awardHistory = archiveSeasonAwards(league.awardHistory, league.seasonAwards);
   return {
     ...league,
     currentYear: nextYear,
-    currentSeason: String(nextYear),
+    currentSeason: seasonLabel(sport, nextYear),
+    salaryCap: sport === 'nba' && latestCap ? latestCap.salaryCap : league.salaryCap,
+    capHistory,
+    scheduleLocked: sport === 'nba' ? false : league.scheduleLocked,
+    scheduleId: sport === 'nba' ? null : league.scheduleId,
+    awardHistory,
+    seasonAwards: {},
+    awardsFinalizedSeason: null,
     offseason: {
       ...(league.offseason || {}),
       stage: 'regular_season',
@@ -273,9 +488,6 @@ function createStartNextSeasonHandler({ getFirestore, serverTimestamp, HttpsErro
         if (offseason.stage !== 'ready_for_season' || offseason.version !== data.expectedVersion) {
           throw new NewSeasonError('aborted', 'The offseason stage changed.');
         }
-        if (sport === 'nba') {
-          throw new NewSeasonError('failed-precondition', 'NBA season advancement uses the NBA season engine.');
-        }
         const completed = new Set((offseason.completedTeamIds || []).map(String));
         const unresolved = teamsSnap.docs
           .filter(doc => (doc.data() || {}).gmId && !completed.has(doc.id))
@@ -296,6 +508,7 @@ function createStartNextSeasonHandler({ getFirestore, serverTimestamp, HttpsErro
             ? {
               kept: team.players || [],
               cut: [],
+              teamUpdates: newSeasonTeamResetPayload(),
               compliance: serverRosterCompliance(sport, team, league),
             }
             : autoCutTeamRoster(
@@ -313,13 +526,20 @@ function createStartNextSeasonHandler({ getFirestore, serverTimestamp, HttpsErro
           }
           releasedPlayers.push(...result.cut);
           const advancedPlayers = result.kept
-            .map(player => advancePlayerForNewSeason(player, nextYear));
+            .map(player => (
+              sport === 'nba'
+                ? advanceNbaPlayerForNewSeason(player, nextYear, `${leagueId}:${nextYear}`)
+                : advancePlayerForNewSeason(player, nextYear)
+            ));
           releasedPlayers.push(...advancedPlayers.filter(player => (
             player.contractExpired && !player.retired
           )));
           const advanced = advancedPlayers
             .filter(player => !player.retired && !player.contractExpired);
-          tx.update(teamDoc.ref, { players: advanced });
+          tx.update(teamDoc.ref, {
+            players: advanced,
+            ...(result.teamUpdates || {}),
+          });
         }
         if (releasedPlayers.length > 0) {
           tx.set(freeAgentsRef, {
@@ -333,6 +553,13 @@ function createStartNextSeasonHandler({ getFirestore, serverTimestamp, HttpsErro
         tx.update(leagueRef, {
           currentYear: nextLeague.currentYear,
           currentSeason: nextLeague.currentSeason,
+          salaryCap: nextLeague.salaryCap,
+          capHistory: nextLeague.capHistory,
+          scheduleLocked: nextLeague.scheduleLocked,
+          scheduleId: nextLeague.scheduleId,
+          awardHistory: nextLeague.awardHistory,
+          seasonAwards: nextLeague.seasonAwards,
+          awardsFinalizedSeason: nextLeague.awardsFinalizedSeason,
           offseason: nextLeague.offseason,
         });
         return {
@@ -349,10 +576,14 @@ function createStartNextSeasonHandler({ getFirestore, serverTimestamp, HttpsErro
 
 module.exports = {
   NewSeasonError,
+  advanceNbaPlayerForNewSeason,
   advancePlayerForNewSeason,
   autoCutTeamRoster,
   buildNextSeasonLeague,
   createCutRosterPlayerHandler,
   createStartNextSeasonHandler,
+  nextSalaryCap,
+  newSeasonTeamResetPayload,
+  projectCapHistory,
   serverRosterCompliance,
 };

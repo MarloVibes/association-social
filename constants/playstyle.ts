@@ -52,7 +52,61 @@ function threeFloor(eraKey?: string): number {
   return ERA_3P_AVG[eraKey] + THREE_MARGIN;
 }
 
+function normalizedManualTier(player: any): Playstyle | null {
+  const raw = String(
+    player?.tierOverride
+    || player?.manualTier
+    || player?.franchiseTier
+    || player?.playerLabel
+    || '',
+  ).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (raw === 'LEGEND') return { label: 'LEGEND', color: '#ff00ff' };
+  if (raw === 'SUPERSTAR') return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (raw === 'STAR') return { label: 'STAR', color: '#FFA500' };
+  return null;
+}
+
+function accoladeText(accolade: string): string {
+  return String(accolade || '').toLowerCase();
+}
+
+function accoladeCount(accolades: string[], matcher: (text: string) => boolean): number {
+  return accolades.filter(item => matcher(accoladeText(item))).length;
+}
+
+function isMvp(text: string): boolean {
+  return text.includes('mvp') && !text.includes('all-star') && !text.includes('all star');
+}
+
+function isFinalsMvp(text: string): boolean {
+  return text.includes('finals') && text.includes('mvp');
+}
+
+function isAllNbaFirst(text: string): boolean {
+  return text.includes('all-nba 1') || text.includes('all nba 1') || text.includes('all-nba first') || text.includes('all nba first');
+}
+
+function isAllNbaSecondOrThird(text: string): boolean {
+  return text.includes('all-nba 2') || text.includes('all nba 2') || text.includes('all-nba second') || text.includes('all nba second')
+    || text.includes('all-nba 3') || text.includes('all nba 3') || text.includes('all-nba third') || text.includes('all nba third');
+}
+
+function isAllStar(text: string): boolean {
+  return text.includes('all-star') || text.includes('all star');
+}
+
+function isDpoy(text: string): boolean {
+  return text.includes('defensive player of the year') || text.includes('dpoy');
+}
+
+function isChampionship(text: string): boolean {
+  return text.includes('champion') || text.includes('championship') || text.includes('nba title');
+}
+
 export function getPlaystyle(player: any, eraKey?: string): Playstyle {
+  const manualTier = normalizedManualTier(player);
+  if (manualTier) return manualTier;
+
   const f = paceFactor(eraKey);
   // pace-adjust counting stats; leave shooting rates alone
   const ppg = (parseFloat(player?.ppg) || 0) * f;
@@ -65,7 +119,6 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   const t3 = threeFloor(eraKey);
   const isShooter = fg3 >= t3 && fg3 <= THREE_NOISE_CAP;
 
-  // Hall of Fame / Jersey retirement / Anniversary teams = LEGEND
   const accolades = player?.accolades || [];
   const isLegend = accolades.some((a: string) => {
     const t = a.toLowerCase();
@@ -74,12 +127,13 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   });
   if (isLegend) return { label: 'LEGEND', color: '#ff00ff' };
 
-  // All-Star selection (career accolade) guarantees STAR or higher.
-  // bref writes both "All-Star" and "All Star"; exclude All-NBA/All-Defensive/All-Rookie.
-  const isAllStar = accolades.some((a: string) => {
-    const t = a.toLowerCase();
-    return t.includes('all-star') || t.includes('all star');
-  });
+  const mvpCount = accoladeCount(accolades, text => isMvp(text));
+  const finalsMvpCount = accoladeCount(accolades, text => isFinalsMvp(text));
+  const championshipCount = accoladeCount(accolades, text => isChampionship(text));
+  const allLeagueCount = accoladeCount(accolades, text => isAllStar(text) || text.includes('all-nba') || text.includes('all nba'));
+  if (mvpCount >= 2 || finalsMvpCount >= 2 || championshipCount >= 3 || allLeagueCount >= 8) {
+    return { label: 'LEGEND', color: '#ff00ff' };
+  }
 
   // Long career + strong scoring proxy (career ppg, era-neutral)
   const retiredYear = player?.retirement_year;
@@ -87,8 +141,19 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   const seasons = retiredYear && birthYear ? retiredYear - birthYear - 18 : 0;
   if (seasons >= 15 && (parseFloat(player?.ppg) || 0) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
 
+  if (
+    mvpCount >= 1
+    || finalsMvpCount >= 1
+    || accoladeCount(accolades, text => isAllNbaFirst(text)) > 0
+  ) {
+    return { label: 'SUPERSTAR', color: '#FFD700' };
+  }
   if (ppg >= 25) return { label: 'SUPERSTAR', color: '#FFD700' };
-  if (isAllStar) return { label: 'STAR', color: '#FFA500' }; // All-Star floor
+  if (
+    accoladeCount(accolades, text => isAllStar(text) || isAllNbaSecondOrThird(text) || isDpoy(text)) > 0
+  ) {
+    return { label: 'STAR', color: '#FFA500' };
+  }
   if (ppg >= 20) return { label: 'STAR', color: '#FFA500' };
   if (apg >= 7) return { label: 'PLAYMAKER', color: '#00ccff' };
   if (rpg >= 10) return { label: 'REBOUNDER', color: '#aa44ff' };

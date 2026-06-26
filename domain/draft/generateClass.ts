@@ -1,4 +1,5 @@
 import { createSeededRandom, randomInt, randomPick } from './random';
+import { buildVisibleIdentity, type HiddenIdentityValues } from '@/domain/nba/identity';
 
 export const NFL_DRAFT_POSITIONS = Object.freeze([
   'QB', 'HB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT',
@@ -8,6 +9,8 @@ export const NFL_DRAFT_POSITIONS = Object.freeze([
 export const MLB_DRAFT_POSITIONS = Object.freeze([
   'SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF',
 ]);
+
+export const NBA_DRAFT_POSITIONS = Object.freeze(['PG', 'SG', 'SF', 'PF', 'C']);
 
 const FIRST_NAMES = Object.freeze([
   'Aiden', 'Andre', 'Caleb', 'Cameron', 'Darius', 'Devin', 'Elias', 'Evan',
@@ -49,6 +52,14 @@ const MLB_ARCHETYPES: Record<string, readonly string[]> = {
   RF: ['Power Bat', 'Strong Arm Outfielder', 'Run Producer'],
 };
 
+const NBA_ARCHETYPES: Record<string, readonly string[]> = {
+  PG: ['Floor General', 'Pick-and-Roll Creator', 'Two-Way Guard'],
+  SG: ['Shot Creator', 'Sharpshooter', 'Slashing Guard'],
+  SF: ['Two-Way Wing', 'Point Forward', 'Three-and-D Wing'],
+  PF: ['Stretch Four', 'Interior Finisher', 'Switch Defender'],
+  C: ['Rim Protector', 'Post Anchor', 'Vertical Lob Threat'],
+};
+
 type GenerateDraftClassInput = {
   sport: string;
   teams: number;
@@ -57,6 +68,7 @@ type GenerateDraftClassInput = {
 
 export type NflDraftProspect = ReturnType<typeof nflProspect>;
 export type MlbDraftProspect = ReturnType<typeof mlbProspect>;
+export type NbaDraftProspect = ReturnType<typeof nbaProspect>;
 
 function positionArchetype(
   position: string,
@@ -160,6 +172,49 @@ function mlbProspect(random: () => number, index: number, seed: string, teams = 
   };
 }
 
+function hiddenSkill(random: () => number, projectedRound: number, floor = 50): number {
+  return rating(random, projectedRound, floor);
+}
+
+function nbaProspect(random: () => number, index: number, seed: string, teams = 30) {
+  const position = randomPick(random, NBA_DRAFT_POSITIONS);
+  const projectedRound = Math.min(2, Math.floor(index / teams) + 1);
+  const profile = identity(random, index, seed);
+  const archetype = randomPick(random, NBA_ARCHETYPES[position] || ['Balanced Prospect']);
+  const age = randomInt(random, 18, 23);
+  const hidden: HiddenIdentityValues = {
+    shooting: hiddenSkill(random, projectedRound, 48),
+    playmaking: hiddenSkill(random, projectedRound, 48),
+    defense: hiddenSkill(random, projectedRound, 48),
+    rebounding: hiddenSkill(random, projectedRound, position === 'C' || position === 'PF' ? 52 : 42),
+    athleticism: hiddenSkill(random, projectedRound, 50),
+    basketballIq: hiddenSkill(random, projectedRound, 46),
+    consistency: hiddenSkill(random, projectedRound, 44),
+    chemistry: hiddenSkill(random, projectedRound, 50),
+    age,
+    seasonsPlayed: 0,
+  };
+  const visible = buildVisibleIdentity(hidden);
+  return {
+    ...profile,
+    player_id: profile.id,
+    sport: 'nba' as const,
+    position,
+    age,
+    archetype,
+    projectedRound,
+    hidden,
+    visible,
+    grades: visible.grades,
+    playerLabel: visible.reputation.toUpperCase(),
+    developmentTrait: visible.developmentTrait,
+    summary: `${profile.name} is a ${archetype.toLowerCase()} ${position} prospect with visible skill grades and hidden simulation values.`,
+  };
+}
+
+export function generateDraftClass(
+  input: GenerateDraftClassInput & { sport: 'nba' },
+): NbaDraftProspect[];
 export function generateDraftClass(
   input: GenerateDraftClassInput & { sport: 'madden' | 'nfl' },
 ): NflDraftProspect[];
@@ -175,13 +230,15 @@ export function generateDraftClass(input: GenerateDraftClassInput) {
   }
   if (!input.seed) throw new Error('seed is required');
   const sport = input.sport === 'nfl' ? 'madden' : input.sport;
-  if (sport !== 'madden' && sport !== 'mlb') {
-    throw new Error('Draft class generation supports only Madden/NFL and MLB');
+  if (sport !== 'nba' && sport !== 'madden' && sport !== 'mlb') {
+    throw new Error('Draft class generation supports only NBA, Madden/NFL, and MLB');
   }
-  const rounds = sport === 'madden' ? 7 : 5;
+  const rounds = sport === 'nba' ? 2 : sport === 'madden' ? 7 : 5;
   const random = createSeededRandom(`${sport}:${input.seed}`);
   return Array.from({ length: input.teams * rounds }, (_, index) => (
-    sport === 'madden'
+    sport === 'nba'
+      ? nbaProspect(random, index, input.seed, input.teams)
+      : sport === 'madden'
       ? nflProspect(random, index, input.seed, input.teams)
       : mlbProspect(random, index, input.seed, input.teams)
   ));

@@ -49,8 +49,10 @@ describe('NBA player identity', () => {
   });
 
   it('normalizes reputation inputs deterministically', () => {
-    expect(reputationFromInputs({ accolades: { mvp: 1 }, seasonsPlayed: 9 })).toBe('Legend');
-    expect(reputationFromInputs({ accolades: { all_nba_1st: 1 }, seasonsPlayed: 4 })).toBe('Star');
+    expect(reputationFromInputs({ accolades: { mvp: 2 }, seasonsPlayed: 9 })).toBe('Legend');
+    expect(reputationFromInputs({ accolades: { mvp: 1 }, seasonsPlayed: 4 })).toBe('Superstar');
+    expect(reputationFromInputs({ accolades: { all_nba_1st: 1 }, seasonsPlayed: 4 })).toBe('Superstar');
+    expect(reputationFromInputs({ accolades: { all_star: 1 }, seasonsPlayed: 4 })).toBe('Star');
     expect(reputationFromInputs({ accolades: {}, seasonsPlayed: 1 })).toBe('Prospect');
   });
 });

@@ -201,7 +201,7 @@ export default function SearchUsersScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading && search.length >= 2 ? (
-            <Text style={styles.emptyText}>No GMs found for '{search}'</Text>
+            <Text style={styles.emptyText}>{`No GMs found for '${search}'`}</Text>
           ) : null
         }
       />

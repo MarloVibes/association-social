@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebas
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
-import { buildCpuRotation, validateRotation, type RotationSlot } from '@/domain/nba/rotation';
+import { buildCpuRotation, rotationValidationMessages, validateRotation, type RotationSlot } from '@/domain/nba/rotation';
 
 type Player = {
   player_id?: string;
@@ -74,6 +74,12 @@ export default function RotationScreen() {
     [team?.players],
   );
   const validation = useMemo(() => validateRotation(rotation), [rotation]);
+  const validationMessages = useMemo(() => rotationValidationMessages(validation), [validation]);
+
+  const autoBuildRotation = () => {
+    if (!team) return;
+    setRotation(buildCpuRotation(team.players || []));
+  };
 
   const updateMinutes = (playerIdValue: string, delta: number) => {
     setRotation(current => current.map(slot => (
@@ -92,7 +98,7 @@ export default function RotationScreen() {
   const save = async () => {
     if (!leagueId || !team) return;
     if (!validation.valid) {
-      Alert.alert('Rotation needs work', validation.errors.join(', '));
+      Alert.alert('Rotation needs work', validationMessages.join('\n'));
       return;
     }
     setSaving(true);
@@ -139,8 +145,12 @@ export default function RotationScreen() {
               <View style={styles.summary}>
                 <Text style={styles.summaryText}>{validation.totalMinutes}/240 minutes</Text>
                 <Text style={[styles.summaryStatus, { color: validation.valid ? '#00e58b' : '#f4b942' }]}>
-                  {validation.valid ? 'Legal rotation' : validation.errors.join(' / ')}
+                  {validationMessages.join(' / ')}
                 </Text>
+                <TouchableOpacity onPress={autoBuildRotation} style={styles.autoButton}>
+                  <Ionicons color="#00e58b" name="sparkles" size={15} />
+                  <Text style={styles.autoText}>Auto Rotation</Text>
+                </TouchableOpacity>
               </View>
             )}
           </>
@@ -196,6 +206,8 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
   summaryText: { color: '#fff', fontSize: 17, fontWeight: '900' },
   summaryStatus: { fontSize: 12, fontWeight: '800', marginTop: 4 },
+  autoButton: { marginTop: 12, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#08160f' },
+  autoText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
   rankBadge: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d1d1d' },
   rankText: { color: '#888', fontWeight: '900' },

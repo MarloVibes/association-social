@@ -15,7 +15,7 @@
 1. **Foundation and MLB/NFL cleanup:** testing, central sport rules, correct league creation/settings, sport-aware players, trades, and chat.
 2. **Shared offseason engine:** contracts, CPU decisions, editable draft classes, live drafts, roster cuts, and MLB/NFL season advancement.
 3. **NBA season engine:** Player Identity Model, rotations/coaching, schedules, requests, simulation, full box scores, standings, fatigue, injuries, and playoffs.
-4. **NBA future offseason:** progression, free agency, cap growth, future drafts, 15+3 roster rules, expansion, and mini-game result contract.
+4. **NBA future offseason:** progression, free agency, cap growth, future drafts, 15+3 roster rules, expansion, and player upgrade points.
 
 ## File Structure
 
@@ -1252,42 +1252,42 @@ git add domain/nba functions/franchise/expansion.js app/screens/offseason/expans
 git commit -m "feat: add optional NBA expansion"
 ```
 
-### Task 22: Publish the Mini-Game Result Contract
+### Task 22: Add Player Upgrade Points
 
 **Files:**
-- Create: `domain/nba/gameResult.ts`
-- Create: `functions/franchise/submitMiniGameResult.js`
-- Create: `docs/MINI_GAME_RESULT_CONTRACT.md`
-- Test: `tests/domain/gameResult.test.ts`
-- Test: `tests/functions/miniGameResult.test.ts`
+- Create: `domain/nba/upgradePoints.ts`
+- Create: `functions/franchise/playerUpgrades.js`
+- Create: `app/screens/season/player-upgrades.tsx`
+- Test: `tests/domain/upgradePoints.test.ts`
+- Test: `tests/functions/playerUpgrades.test.ts`
 
-- [ ] **Step 1: Write failing result validation tests**
+- [ ] **Step 1: Write failing upgrade balance tests**
 
-Test game identity, participating teams, eligible players, 240 minutes, player/team total agreement, final score, submission ownership, and unused completion marker.
+Test award point grants, lottery boost grants, one-grade-per-point movement, Star/Superstar/Legend seasonal limits, and the Superstar/Legend-only `A+` to `S` upgrade.
 
 - [ ] **Step 2: Verify RED**
 
-Run: `npx vitest run tests/domain/gameResult.test.ts`
+Run: `npx vitest run tests/domain/upgradePoints.test.ts`
 
-- [ ] **Step 3: Implement normalized result schema**
+- [ ] **Step 3: Implement grade-step upgrades**
 
-Export `validateNormalizedGameResult` and the exact TypeScript shape consumed by `finalizeGame`.
+Use `F -> D -> C- -> C -> C+ -> B- -> B -> B+ -> A- -> A -> A+ -> S`. `S` is allowed only for Superstar and Legend players. Star, Superstar, and Legend players can receive one upgrade per season; lower labels can receive multiple upgrades.
 
-- [ ] **Step 4: Implement callable submission**
+- [ ] **Step 4: Implement award and lottery point grants**
 
-`submitMiniGameResult` authenticates the assigned participant, validates the result, records source `mini_game`, and invokes the same finalization service as simulation.
+Championships, runner-up finishes, MVP-level awards, and other accolades grant team upgrade points. Bottom-five teams in each conference receive lottery boost points.
 
-- [ ] **Step 5: Document the contract**
+- [ ] **Step 5: Implement upgrade spending**
 
-Document inputs, result JSON, deterministic seed, errors, ownership, retry semantics, and the prohibition against direct standings writes.
+Commissioners and eligible GMs can spend available team upgrade points in a controlled offseason/player-development window.
 
 - [ ] **Step 6: Verify and commit**
 
 ```bash
-npx vitest run tests/domain/gameResult.test.ts
-firebase emulators:exec --only firestore,functions "npm run test:functions -- miniGameResult"
-git add domain/nba/gameResult.ts functions/franchise/submitMiniGameResult.js docs/MINI_GAME_RESULT_CONTRACT.md tests
-git commit -m "feat: define mini-game result integration"
+npx vitest run tests/domain/upgradePoints.test.ts
+firebase emulators:exec --only firestore,functions "npm run test:functions -- playerUpgrades"
+git add domain/nba/upgradePoints.ts functions/franchise/playerUpgrades.js app/screens/season/player-upgrades.tsx tests
+git commit -m "feat: add NBA player upgrade points"
 ```
 
 ### Task 23: Complete Navigation, Notifications, and Production Verification

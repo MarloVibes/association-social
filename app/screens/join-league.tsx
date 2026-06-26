@@ -377,7 +377,7 @@ export default function JoinLeagueScreen() {
               ) : alreadyWaitlisted.has(selectedLeague.id) ? (
                 <View style={styles.pendingCard}>
                   <Text style={styles.pendingIcon}>📋</Text>
-                  <Text style={styles.pendingText}>You're on the waitlist</Text>
+                  <Text style={styles.pendingText}>{"You're on the waitlist"}</Text>
                 </View>
               ) : alreadyRequested.has(selectedLeague.id) ? (
                 <View style={styles.pendingCard}>

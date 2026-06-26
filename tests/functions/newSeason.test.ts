@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   advancePlayerForNewSeason,
+  advanceNbaPlayerForNewSeason,
   autoCutTeamRoster,
   buildNextSeasonLeague,
   serverRosterCompliance,
@@ -19,6 +20,27 @@ describe('new season orchestration', () => {
       players: [{ id: 'a', salary: 151 }],
       budget: 150,
     }, { teamBudget: 150 }).errors).toContain('financial_limit');
+  });
+
+  it('enforces NBA standard and two-way roster slots separately', () => {
+    expect(serverRosterCompliance('nba', {
+      players: [
+        ...Array.from({ length: 15 }, (_, index) => ({ id: `s${index}`, contractType: 'standard' })),
+        ...Array.from({ length: 3 }, (_, index) => ({ id: `tw${index}`, contractType: 'two_way' })),
+      ],
+    }, {}).valid).toBe(true);
+    expect(serverRosterCompliance('nba', {
+      players: [
+        ...Array.from({ length: 16 }, (_, index) => ({ id: `s${index}`, contractType: 'standard' })),
+        ...Array.from({ length: 3 }, (_, index) => ({ id: `tw${index}`, contractType: 'two_way' })),
+      ],
+    }, {}).errors).toContain('standard_roster_limit');
+    expect(serverRosterCompliance('nba', {
+      players: [
+        ...Array.from({ length: 15 }, (_, index) => ({ id: `s${index}`, contractType: 'standard' })),
+        ...Array.from({ length: 4 }, (_, index) => ({ id: `tw${index}`, contractType: 'twoWay' })),
+      ],
+    }, {}).errors).toContain('two_way_limit');
   });
 
   it('auto-cuts the lowest-value CPU surplus', () => {
@@ -69,6 +91,19 @@ describe('new season orchestration', () => {
       age: 38,
       retirement_year: 2028,
     }, 2028).retired).toBe(true);
+    expect(advancePlayerForNewSeason({
+      id: 'wr',
+      age: 25,
+      contractYears: 2,
+      statHistory: { 2026: { receptions: 80 } },
+      seasonStats: { receptions: 94, yards: 1250, touchdowns: 11 },
+    }, 2028)).toMatchObject({
+      statHistory: {
+        2026: { receptions: 80 },
+        2027: { receptions: 94, yards: 1250, touchdowns: 11 },
+      },
+      seasonStats: {},
+    });
   });
 
   it('increments numeric MLB/NFL seasons without NBA era logic', () => {
@@ -93,6 +128,145 @@ describe('new season orchestration', () => {
         contractRoundsComplete: false,
         stageStartedAt: 'now',
       },
+    });
+  });
+
+  it('advances NBA leagues into the next era season without stopping at 2025', () => {
+    expect(buildNextSeasonLeague({
+      sport: 'nba',
+      currentYear: 2025,
+      currentSeason: '2025-26',
+      scheduleLocked: true,
+      scheduleId: '2025',
+      salaryCap: 154_647_000,
+      capHistory: [],
+      offseason: {
+        stage: 'ready_for_season',
+        seasonYear: 2025,
+        version: 4,
+      },
+    }, 'now')).toMatchObject({
+      currentYear: 2026,
+      currentSeason: '2026-27',
+      scheduleLocked: false,
+      scheduleId: null,
+      salaryCap: 162_379_350,
+      capHistory: [{
+        seasonYear: 2026,
+        salaryCap: 162_379_350,
+        minimumSalary: 1_623_794,
+        rookieScaleBase: 8_118_968,
+      }],
+      offseason: {
+        stage: 'regular_season',
+        seasonYear: 2026,
+        version: 5,
+        draftStatus: 'none',
+        contractRoundsComplete: false,
+        stageStartedAt: 'now',
+      },
+    });
+  });
+
+  it('archives finalized season awards before advancing the league year', () => {
+    const next = buildNextSeasonLeague({
+      sport: 'nba',
+      currentYear: 2026,
+      currentSeason: '2026-27',
+      salaryCap: 160_000_000,
+      awardHistory: {
+        mvp: [{ season: 2025, winnerName: 'Old MVP', teamAbbr: 'BOS' }],
+      },
+      seasonAwards: {
+        mvp: [{ season: 2026, winnerName: 'Chris Paul', teamAbbr: 'NOH', note: 'MVP' }],
+        defensive_player: [{ season: 2026, winnerName: 'Defensive Stopper', teamAbbr: 'CHI', note: 'DPOY' }],
+      },
+      awardsFinalizedSeason: 2026,
+      offseason: {
+        stage: 'ready_for_season',
+        seasonYear: 2026,
+        version: 2,
+      },
+    }, 'now');
+
+    expect(next.awardHistory).toMatchObject({
+      mvp: [
+        { season: 2025, winnerName: 'Old MVP', teamAbbr: 'BOS' },
+        { season: 2026, winnerName: 'Chris Paul', teamAbbr: 'NOH', note: 'MVP' },
+      ],
+      defensive_player: [
+        { season: 2026, winnerName: 'Defensive Stopper', teamAbbr: 'CHI', note: 'DPOY' },
+      ],
+    });
+    expect(next.seasonAwards).toEqual({});
+    expect(next.awardsFinalizedSeason).toBeNull();
+  });
+
+  it('progresses NBA player identity while advancing age and contract', () => {
+    const player = advanceNbaPlayerForNewSeason({
+      id: 'p1',
+      age: 22,
+      contractYears: 3,
+      statHistory: {
+        2024: { points: 800 },
+      },
+      hidden: {
+        shooting: 72,
+        playmaking: 70,
+        defense: 68,
+        rebounding: 64,
+        athleticism: 76,
+        basketballIq: 69,
+        consistency: 74,
+        chemistry: 70,
+        age: 22,
+        seasonsPlayed: 1,
+      },
+      seasonStats: {
+        minutes: 1800,
+        points: 980,
+        assists: 280,
+        rebounds: 310,
+        awards: ['MVP'],
+      },
+    }, 2026, 'season-seed');
+
+    expect(player.age).toBe(23);
+    expect(player.contractYears).toBe(2);
+    expect(player.hidden.age).toBe(23);
+    expect(player.hidden.seasonsPlayed).toBe(2);
+    expect(player.grades.shooting).toBeTruthy();
+    expect(player.progression.seasonDelta.shooting).toBeTypeOf('number');
+    expect(player.statHistory).toMatchObject({
+      2024: { points: 800 },
+      2025: {
+        minutes: 1800,
+        points: 980,
+        assists: 280,
+        rebounds: 310,
+        awards: ['MVP'],
+      },
+    });
+    expect(player.seasonStats).toEqual({});
+  });
+
+  it('resets team season condition when advancing rosters', () => {
+    const result = autoCutTeamRoster('nba', {
+      id: 'NOH',
+      fatigue: 12,
+      fatigueSequence: 82,
+      minorInjuryCount: 4,
+      severeInjuryCount: 1,
+      injuries: [{ id: 'old-injury' }],
+      players: Array.from({ length: 10 }, (_, index) => ({ id: `p${index}`, contractType: 'standard' })),
+    }, {}, 15);
+
+    expect(result.teamUpdates).toMatchObject({
+      fatigue: 0,
+      fatigueSequence: 0,
+      minorInjuryCount: 0,
+      severeInjuryCount: 0,
+      injuries: [],
     });
   });
 });

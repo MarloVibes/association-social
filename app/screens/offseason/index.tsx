@@ -148,8 +148,10 @@ export default function OffseasonScreen() {
       ? '/screens/offseason/free-agency'
       : offseason?.stage === 'draft_class_review'
         ? '/screens/offseason/draft-class'
-        : offseason?.stage === 'live_draft'
-          ? '/screens/offseason/live-draft'
+      : offseason?.stage === 'live_draft'
+        ? '/screens/offseason/live-draft'
+        : offseason?.stage === 'expansion'
+          ? '/screens/offseason/expansion'
           : offseason?.stage === 'roster_cuts'
             ? '/screens/offseason/roster-cuts'
           : null;

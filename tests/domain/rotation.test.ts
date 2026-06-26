@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCpuRotation, validateRotation } from '@/domain/nba/rotation';
+import { buildCpuRotation, rotationValidationMessages, validateRotation } from '@/domain/nba/rotation';
 
 describe('NBA rotations', () => {
   it('requires exactly 240 active minutes', () => {
@@ -49,5 +49,16 @@ describe('NBA rotations', () => {
     expect(fallback.filter(slot => slot.starter).map(slot => slot.playerId)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
     expect(fallback.filter(slot => slot.closing).map(slot => slot.playerId)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
     expect(fallback.filter(slot => slot.status === 'active')).toHaveLength(10);
+  });
+
+  it('converts validation codes into readable messages', () => {
+    const validation = validateRotation([{ playerId: 'a', minutes: 48 }]);
+
+    expect(rotationValidationMessages(validation)).toEqual([
+      'Active minutes must add up to 240.',
+    ]);
+    expect(rotationValidationMessages(validateRotation(Array.from({ length: 10 }, (_, i) => ({ playerId: String(i), minutes: 24 }))))).toEqual([
+      'Legal rotation',
+    ]);
   });
 });

@@ -8,6 +8,7 @@ const {
   authorizeAutoPick,
   buildDraftOrder,
   createDraftSession,
+  draftRoundsForSport,
   buildDraftFranchises,
   validateManualDraftPick,
 } = require('../../functions/franchise/liveDraft.js');
@@ -49,6 +50,40 @@ describe('live draft domain', () => {
     expect(buildDraftFranchises('mlb', [])).toHaveLength(30);
   });
 
+  it('materializes NBA draft franchises and keeps expansion teams in the order', () => {
+    const nba = buildDraftFranchises('nba', [
+      {
+        id: 'league_hornets',
+        teamId: 'NOH',
+        abbreviation: 'NOH',
+        gmId: 'gm-noh',
+        name: 'New Orleans Hornets',
+      },
+      {
+        id: 'league_vegas',
+        teamId: 'LV',
+        abbreviation: 'LV',
+        gmId: 'gm-lv',
+        name: 'Las Vegas Neon',
+      },
+    ], [
+      { player_id: 'noh-player', team: 'NOH' },
+      { player_id: 'lv-player', team: 'LV' },
+    ]);
+
+    expect(nba.length).toBeGreaterThanOrEqual(30);
+    expect(nba.find((team: any) => team.teamId === 'NOH')).toMatchObject({
+      id: 'league_hornets',
+      gmId: 'gm-noh',
+      virtual: false,
+    });
+    expect(nba.find((team: any) => team.teamId === 'LV')).toMatchObject({
+      id: 'league_vegas',
+      gmId: 'gm-lv',
+      virtual: false,
+    });
+  });
+
   it('rejects picks when the league is not in the active live draft stage', () => {
     expect(() => assertLeagueDraftIsLive({
       offseason: { stage: 'live_draft', draftStatus: 'live', seasonYear: 2027 },
@@ -59,6 +94,9 @@ describe('live draft domain', () => {
   });
 
   it('builds a deterministic team order and initializes the first deadline', () => {
+    expect(draftRoundsForSport('nba')).toBe(2);
+    expect(draftRoundsForSport('madden')).toBe(7);
+    expect(draftRoundsForSport('mlb')).toBe(5);
     expect(buildDraftOrder(teams, ['b', 'a'])).toEqual(['b', 'a']);
     expect(createDraftSession({
       seasonYear: 2027,

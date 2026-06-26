@@ -9,6 +9,8 @@ import { auth, db, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
 import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
+import { suppressDeletedLeagueAlert } from '@/utils/deletedLeagueAlert';
+import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
 
 const PRIVACY_OPTIONS = [
   { value: 'public', label: 'Public', desc: 'Anyone can find and join your league' },
@@ -151,11 +153,21 @@ export default function LeagueSettingsScreen() {
     setSaving(true);
     try {
       const createSchedule = httpsCallable(functions, 'generateNbaSchedule');
-      const result = await createSchedule({
-        leagueId,
-        gamesPerTeam: Number(scheduleGamesPerTeam),
-      });
-      const data = result.data as any;
+      let data: any;
+      try {
+        const result = await createSchedule({
+          leagueId,
+          gamesPerTeam: Number(scheduleGamesPerTeam),
+        });
+        data = result.data as any;
+      } catch (error: any) {
+        if (!isMissingCallable(error)) throw error;
+        data = await createNbaScheduleLocally({
+          leagueId,
+          gamesPerTeam: Number(scheduleGamesPerTeam),
+          createdBy: user?.uid,
+        });
+      }
       Alert.alert('Schedule created', `${data.games || 0} games locked for this season.`);
       await loadData();
     } catch (error: any) {
@@ -273,6 +285,7 @@ export default function LeagueSettingsScreen() {
           setSaving(true);
           try {
             const deleteLeague = httpsCallable(functions, 'deleteLeague');
+            suppressDeletedLeagueAlert(leagueId);
             await deleteLeague({ leagueId });
             Alert.alert('Deleted', 'The league has been deleted.');
             router.replace('/(tabs)/dashboard');
@@ -402,7 +415,7 @@ export default function LeagueSettingsScreen() {
                 placeholder='2'
                 placeholderTextColor='#555'
               />
-              <Text style={styles.helper}>Days GMs have to vote before a trade auto-resolves (1-14). The two GMs in the trade don't vote.</Text>
+              <Text style={styles.helper}>{"Days GMs have to vote before a trade auto-resolves (1-14). The two GMs in the trade don't vote."}</Text>
             </>
           )}
 

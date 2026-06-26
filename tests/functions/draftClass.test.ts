@@ -1,10 +1,11 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
   applyDraftClassMutation,
   assertDraftClassEditable,
+  createMutateDraftClassHandler,
   draftClassDocumentId,
   generateServerDraftClass,
   normalizeProspectForSport,
@@ -21,6 +22,17 @@ const league = {
     version: 4,
   },
 };
+
+class FakeHttpsError extends Error {
+  code: string;
+  details: unknown;
+
+  constructor(code: string, message: string, details?: unknown) {
+    super(message);
+    this.code = code;
+    this.details = details;
+  }
+}
 
 describe('draft class orchestration', () => {
   it('uses a stable season-scoped document id', () => {
@@ -104,8 +116,10 @@ describe('draft class orchestration', () => {
   });
 
   it('regenerates deterministic sport-sized server classes', () => {
+    const nba = generateServerDraftClass('nba', 30, 'seed');
     const nfl = generateServerDraftClass('madden', 32, 'seed');
     const mlb = generateServerDraftClass('mlb', 30, 'seed');
+    expect(nba).toHaveLength(60);
     expect(nfl).toHaveLength(224);
     expect(mlb).toHaveLength(150);
     expect(generateServerDraftClass('mlb', 3, 'seed')).toEqual(
@@ -126,6 +140,68 @@ describe('draft class orchestration', () => {
       && prospect.potential >= 55
       && prospect.potential <= 99
     ))).toBe(true);
+  });
+
+  it('generates NBA server prospects with hidden identity and visible grades', () => {
+    const [prospect] = generateServerDraftClass('nba', 30, 'server-nba');
+
+    expect(prospect.sport).toBe('nba');
+    expect(['PG', 'SG', 'SF', 'PF', 'C']).toContain(prospect.position);
+    expect(prospect.hidden).toBeTruthy();
+    expect(prospect.visible.grades.shooting).toBeTruthy();
+    expect(prospect.overall).toBeUndefined();
+  });
+
+  it('regenerates server classes using the live league team count', async () => {
+    const classWrites: any[] = [];
+    const classRef = { kind: 'draft-class' };
+    const teamsRef = { kind: 'teams-query' };
+    const leagueRef = {
+      collection: (name: string) => ({
+        doc: () => classRef,
+        kind: name === 'teams' ? teamsRef.kind : name,
+      }),
+    };
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) {
+          return {
+            exists: true,
+            data: () => ({
+              sport: 'nba',
+              commissionerId: 'comm',
+              offseason: { stage: 'draft_class_review', seasonYear: 2028, version: 4 },
+            }),
+          };
+        }
+        if (ref.kind === 'teams-query') {
+          return {
+            docs: Array.from({ length: 32 }, (_, index) => ({ id: `T${index}`, data: () => ({}) })),
+          };
+        }
+        return {
+          exists: false,
+          data: () => ({}),
+        };
+      }),
+      set: vi.fn((_ref, data) => classWrites.push(data)),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createMutateDraftClassHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'now',
+      HttpsError: FakeHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', action: 'regenerate', expectedVersion: 4, seed: 'x' },
+    });
+
+    expect(classWrites[0].players).toHaveLength(64);
   });
 
   it('normalizes commissioner-created prospects to the selected sport', () => {

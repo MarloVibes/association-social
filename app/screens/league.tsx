@@ -11,6 +11,7 @@ import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import { setLastLeagueId } from '@/utils/lastLeague';
+import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
 
 
 
@@ -130,14 +131,15 @@ export default function LeagueScreen() {
     // If the league is deleted while we're viewing it, return to the main menu.
     const unsubLeague = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
       if (!snap.exists()) {
-        Alert.alert('League deleted', 'This league has been deleted by the commissioner.');
+        if (!isDeletedLeagueAlertSuppressed(leagueId)) {
+          Alert.alert('League deleted', 'This league has been deleted by the commissioner.');
+        }
         router.replace('/(tabs)/dashboard');
       }
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
     return () => { unsubscribe(); unsubLeague(); };
   }, [leagueId]);
-
 
   const handleLeaveLeague = async () => {
     if (!user) return;
@@ -370,6 +372,88 @@ export default function LeagueScreen() {
           </TouchableOpacity>
         )}
 
+        {isNBASport && (
+          <View style={[styles.seasonHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
+            <View style={styles.seasonHubHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.seasonHubTitle, { color: titleColor }]}>Season Hub</Text>
+                <Text style={styles.seasonHubSub}>Calendar, standings, playoffs, awards, scouting, rotations, and coaching</Text>
+              </View>
+              <Text style={[styles.seasonHubChevron, { color: titleColor }]}>NBA</Text>
+            </View>
+            <View style={styles.seasonHubGrid}>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>📅</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Calendar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/season/standings', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>🏆</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Standings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/season/playoffs', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>🥇</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Playoffs</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/season/awards', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>💍</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Awards</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => {
+                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before spending upgrade points.'); return; }
+                  router.push({ pathname: '/screens/season/player-upgrades', params: { leagueId } });
+                }}
+              >
+                <Text style={styles.seasonHubButtonIcon}>⬆️</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Upgrades</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => {
+                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before setting rotations.'); return; }
+                  router.push({ pathname: '/screens/season/rotation', params: { leagueId } });
+                }}
+              >
+                <Text style={styles.seasonHubButtonIcon}>⛹️</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Rotation</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => {
+                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before scouting.'); return; }
+                  router.push({ pathname: '/screens/season/scouting', params: { leagueId } });
+                }}
+              >
+                <Text style={styles.seasonHubButtonIcon}>🔎</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Scouting</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => {
+                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before saving coaching presets.'); return; }
+                  router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } });
+                }}
+              >
+                <Text style={styles.seasonHubButtonIcon}>📋</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Coaching</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* League Activity Carousel */}
         <View style={styles.activityCarouselHeader}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
@@ -472,42 +556,6 @@ export default function LeagueScreen() {
         >
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>🔁 Propose Trade</Text>
         </TouchableOpacity>
-
-        {isNBASport && (
-          <View style={[styles.seasonHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
-            <View style={styles.seasonHubHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.seasonHubTitle, { color: titleColor }]}>Season Hub</Text>
-                <Text style={styles.seasonHubSub}>Calendar, rotations, coaching, and matchup prep</Text>
-              </View>
-              <Text style={[styles.seasonHubChevron, { color: titleColor }]}>NBA</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-              onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
-            >
-              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Season Calendar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-              onPress={() => {
-                if (!myTeam) { Alert.alert('No team yet', 'Claim a team before setting rotations.'); return; }
-                router.push({ pathname: '/screens/season/rotation', params: { leagueId } });
-              }}
-            >
-              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Manage Rotation</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88', marginBottom: 0 }]}
-              onPress={() => {
-                if (!myTeam) { Alert.alert('No team yet', 'Claim a team before saving coaching presets.'); return; }
-                router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } });
-              }}
-            >
-              <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Coaching Presets</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Commissioner Controls */}
         {isCommissioner && (
@@ -698,13 +746,15 @@ const styles = StyleSheet.create({
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
-  seasonHub: { borderRadius: 16, padding: 16, borderWidth: 2, marginBottom: 16 },
-  seasonHubHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  seasonHubTitle: { fontSize: 18, fontWeight: '900' },
-  seasonHubSub: { color: '#777', fontSize: 12, marginTop: 2 },
+  seasonHub: { borderRadius: 14, padding: 12, borderWidth: 1, marginBottom: 18 },
+  seasonHubHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  seasonHubTitle: { fontSize: 16, fontWeight: '900' },
+  seasonHubSub: { color: '#777', fontSize: 11, marginTop: 2 },
   seasonHubChevron: { fontSize: 11, fontWeight: '900' },
-  seasonHubButton: { borderRadius: 10, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 8, backgroundColor: '#11111188' },
-  seasonHubButtonText: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  seasonHubGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  seasonHubButton: { width: '48%', minHeight: 62, borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 6, backgroundColor: '#11111188', alignItems: 'center', justifyContent: 'center' },
+  seasonHubButtonIcon: { fontSize: 18, marginBottom: 4 },
+  seasonHubButtonText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
   tpModal: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 50 },
   tpHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   tpCancel: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },

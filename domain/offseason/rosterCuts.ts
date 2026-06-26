@@ -1,5 +1,7 @@
 export type RosterComplianceError =
   | 'roster_limit'
+  | 'standard_roster_limit'
+  | 'two_way_limit'
   | 'financial_limit'
   | 'invalid_limit';
 
@@ -15,6 +17,7 @@ type RosterPlayer = {
 
 type ComplianceInput = {
   standard: number;
+  twoWay?: number;
   payroll: number;
   limit?: number;
 };
@@ -37,8 +40,14 @@ export function rosterCompliance(
 ) {
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
   const rosterLimit = sport === 'madden' ? 53 : sport === 'mlb' ? 40 : 15;
+  const twoWayLimit = sport === 'nba' ? 3 : 0;
   const errors: RosterComplianceError[] = [];
-  if (input.standard > rosterLimit) errors.push('roster_limit');
+  if (sport === 'nba') {
+    if (input.standard > rosterLimit) errors.push('standard_roster_limit');
+    if (Number(input.twoWay || 0) > twoWayLimit) errors.push('two_way_limit');
+  } else if (input.standard > rosterLimit) {
+    errors.push('roster_limit');
+  }
   if (sport !== 'nba') {
     if (!Number.isFinite(input.limit) || Number(input.limit) < 0) {
       errors.push('invalid_limit');
@@ -51,6 +60,8 @@ export function rosterCompliance(
     errors,
     rosterCount: input.standard,
     rosterLimit,
+    twoWayCount: Number(input.twoWay || 0),
+    twoWayLimit,
     payroll: input.payroll,
     financeLimit: input.limit,
   };

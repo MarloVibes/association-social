@@ -29,6 +29,16 @@ export type CpuRotationPlayer = {
 
 const CPU_MINUTES = Object.freeze([36, 34, 32, 30, 28, 24, 20, 16, 12, 8]);
 
+const ERROR_MESSAGES: Record<string, string> = {
+  player_required: 'Every rotation slot needs a player.',
+  duplicate_player: 'A player is listed more than once.',
+  invalid_minutes: 'Minutes must be between 0 and 48.',
+  inactive_minutes: 'Resting or inactive players cannot have minutes.',
+  minutes_total: 'Active minutes must add up to 240.',
+  starters_required: 'Choose exactly 5 starters.',
+  closing_lineup_required: 'Choose exactly 5 active closing players.',
+};
+
 function playerKey(player: CpuRotationPlayer): string {
   return String(player.playerId || player.id || player.bref_id || player.full_name || '');
 }
@@ -83,6 +93,11 @@ export function validateRotation(rotation: RotationSlot[]): RotationValidation {
     totalMinutes,
     activeCount: activeSlots.length,
   };
+}
+
+export function rotationValidationMessages(validation: RotationValidation): string[] {
+  if (validation.valid) return ['Legal rotation'];
+  return validation.errors.map(error => ERROR_MESSAGES[error] || error);
 }
 
 export function buildCpuRotation(players: CpuRotationPlayer[]): RotationSlot[] {
