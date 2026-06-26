@@ -318,6 +318,15 @@ describe('source safety regressions', () => {
     expect(league).toContain('isDeletedLeagueAlertSuppressed(leagueId)');
   });
 
+  it('lets commissioners tune the live draft timer from league settings', () => {
+    const settings = source('app/screens/league-settings.tsx');
+
+    expect(settings).toContain('draftTimerSeconds');
+    expect(settings).toContain('Draft Timer (seconds)');
+    expect(settings).toContain('draftTimer < 30 || draftTimer > 600');
+    expect(settings).toContain("'offseason.draftTimerSeconds': draftTimer");
+  });
+
   it('lets commissioners apply award and lottery upgrade points from the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
     const functionsIndex = source('functions/index.js');

@@ -56,6 +56,7 @@ export default function LeagueSettingsScreen() {
   const [photoUrl, setPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
+  const [draftTimerSeconds, setDraftTimerSeconds] = useState('120');
 
   useEffect(() => { loadData(); }, [leagueId]);
 
@@ -101,6 +102,7 @@ export default function LeagueSettingsScreen() {
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
       setScheduleGamesPerTeam(String(data.gamesPerTeam || 29));
+      setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
   };
@@ -221,9 +223,15 @@ export default function LeagueSettingsScreen() {
     const currentMembers = league?.members?.length || 1;
     if (isNaN(mm) || mm < 1 || mm > teamLimit) { Alert.alert('Invalid', 'Max GMs must be between 1 and ' + teamLimit + '.'); return; }
     if (mm < currentMembers) { Alert.alert('Too low', 'This league already has ' + currentMembers + ' GMs, so the max can\'t be set below that. Remove members first if you want a smaller cap.'); return; }
+    const draftTimer = parseInt(draftTimerSeconds, 10);
+    if (isNaN(draftTimer) || draftTimer < 30 || draftTimer > 600) {
+      Alert.alert('Invalid', 'Draft timer must be between 30 and 600 seconds.');
+      return;
+    }
     const financePatch = financeMode === 'team_budget'
       ? { teamBudget: capNum, salaryCap: capNum }
       : { salaryCap: capNum };
+    const offseasonTimerPatch = league?.offseason ? { 'offseason.draftTimerSeconds': draftTimer } : {};
     await saveField({
       name: name.trim(),
       description: description.trim(),
@@ -232,6 +240,8 @@ export default function LeagueSettingsScreen() {
       tradeApprovalMode,
       maxPlayersPerTrade: max,
       maxMembers: mm,
+      draftTimerSeconds: draftTimer,
+      ...offseasonTimerPatch,
       ...financePatch,
       ...(financeMode === 'nba_cap' ? { tradeApronTolerance: tolNum } : {}),
       votePassThreshold,
@@ -429,6 +439,17 @@ export default function LeagueSettingsScreen() {
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>How many GMs can be in this league (1-{teamLimit}). Once full, new applicants join a waitlist.</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Draft Timer (seconds)</Text>
+          <TextInput
+            style={styles.input}
+            value={draftTimerSeconds}
+            onChangeText={setDraftTimerSeconds}
+            keyboardType='number-pad'
+            placeholder={String(sportRules.defaultDraftTimerSeconds)}
+            placeholderTextColor='#555'
+          />
+          <Text style={styles.helper}>How long each team has to make a live draft pick (30-600 seconds).</Text>
         </View>
 
         {/* League finances */}
