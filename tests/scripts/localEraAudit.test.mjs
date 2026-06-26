@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildLocalEraAuditReport,
+  buildLocalEraAuditPlayers,
+  parseCsv,
+  parseEraRosters,
+} from '../../scripts/lib/local-era-audit.mjs';
+
+describe('local NBA era audit data builder', () => {
+  it('parses quoted CSV fields', () => {
+    expect(parseCsv('id,name\n1,"Smith, Jr."\n')).toEqual([
+      ['id', 'name'],
+      ['1', 'Smith, Jr.'],
+    ]);
+  });
+
+  it('enriches seeded era players with local profile and salary evidence', () => {
+    const rosterSource = `
+      const ERA_LEBRON = {
+        era: 'lebron',
+        season: '2010-11',
+        teams: [
+          { id: 'chi_2011', abbreviation: 'CHI', full_name: 'Chicago Bulls', city: 'Chicago', name: 'Bulls',
+            players: [
+              p('l_chi_2', 'Luol', 'Deng', 'SF', '9', 'CHI'),
+            ]
+          },
+        ]
+      };
+    `;
+    const playersCsv = [
+      'index,_id,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,denglu01,2.3,15.4,14.8,6.1,74.0,Luol Deng,SF',
+    ].join('\n');
+    const salariesCsv = [
+      'player_id,salary,season,season_end,team',
+      'denglu01,11345000,2010-11,2011,CHI',
+    ].join('\n');
+
+    const rosters = parseEraRosters(rosterSource);
+    const players = buildLocalEraAuditPlayers({
+      era: 'lebron',
+      seasonStartYear: 2010,
+      rosters,
+      playersCsv,
+      salariesCsv,
+    });
+
+    expect(players).toEqual([
+      expect.objectContaining({
+        full_name: 'Luol Deng',
+        team: 'CHI',
+        position: 'SF',
+        salary: 11345000,
+        career_WS: 74,
+        career_PER: 15.4,
+        ppg: 14.8,
+        rpg: 6.1,
+        apg: 2.3,
+      }),
+    ]);
+  });
+
+  it('builds a readable markdown audit report from local evidence', () => {
+    const report = buildLocalEraAuditReport('lebron', [
+      {
+        full_name: 'Luol Deng',
+        team: 'CHI',
+        position: 'SF',
+        salary: 11345000,
+        career_WS: 74,
+        career_PER: 15.4,
+        ppg: 14.8,
+        rpg: 6.1,
+        apg: 2.3,
+      },
+      {
+        full_name: 'Luol Deng',
+        team: 'CLE',
+        position: 'SF',
+        salary: 11345000,
+        career_WS: 74,
+        career_PER: 15.4,
+        ppg: 14.8,
+        rpg: 6.1,
+        apg: 2.3,
+      },
+      {
+        full_name: 'Missing Match',
+        team: 'CLE',
+        position: 'SF',
+        matchedProfile: false,
+      },
+    ]);
+
+    expect(report).toContain('# Local NBA Era Grade Audit');
+    expect(report).toContain('Luol Deng');
+    expect(report).toContain('11345000');
+    expect(report).toContain('74');
+    expect(report).toContain('Duplicate Player Warnings');
+    expect(report).toContain('Luol Deng: CHI, CLE');
+    expect(report).toContain('No Local Profile Match Warnings');
+    expect(report).toContain('Missing Match: CLE');
+  });
+});
