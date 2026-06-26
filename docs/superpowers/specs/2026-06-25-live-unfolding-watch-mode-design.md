@@ -45,6 +45,23 @@ The live screen shows:
 
 There are no GM buttons during live watch. The only actions are viewer actions such as pause animation, jump to latest, view box score, or leave the screen.
 
+### Overtime
+
+Games can go to overtime when regulation ends tied. Overtime is more likely when teams are closely matched, but any game can reach overtime if the event timeline naturally lands tied after four quarters.
+
+Overtime rules:
+
+- Regulation has four quarters.
+- Each overtime period is five minutes.
+- The sim adds overtime periods until one team leads at the end of a period.
+- The live watch screen labels overtime as `OT`, `2OT`, `3OT`, and so on.
+- Quarter scoring includes overtime columns when needed.
+- Box scores and player minutes include overtime production.
+- Fatigue impact is higher for overtime games.
+- Overtime games receive special story and momentum callouts.
+
+The simulator must never break a regulation tie by silently adding points. If regulation ends tied, it should create overtime timeline events.
+
 ### Final Result
 
 When the timeline completes, the app opens the same final result experience:
@@ -91,7 +108,7 @@ Scheduled games gain a live simulation state:
 Each timeline event contains:
 
 - Stable event ID
-- Quarter
+- Period, including quarters and overtime periods
 - Game clock
 - Home score
 - Away score
@@ -152,6 +169,8 @@ Domain tests:
 - Timeline generation is deterministic for a seed.
 - Timeline final score matches the box score.
 - Quarter scoring in the timeline matches stored quarter totals.
+- Regulation ties create overtime instead of forced score nudges.
+- Overtime periods continue until one team leads.
 - Events are sorted by quarter and clock.
 - No timeline event mutates after generation.
 - Arena theme resolves from the home team and falls back safely.
@@ -183,5 +202,6 @@ App/source tests:
 - A GM can start or enter a simulated game and watch the score unfold live.
 - A GM can ignore the phone during the simulation without losing any strategic advantage.
 - The home arena visually matches the home team's color scheme.
-- The final score, quarter scores, and box score match the revealed timeline.
+- The final score, quarter/overtime scores, and box score match the revealed timeline.
+- Close games can reach overtime, and overtime is visible in the watch screen and final result.
 - The same game can be reopened later as a deterministic replay.
