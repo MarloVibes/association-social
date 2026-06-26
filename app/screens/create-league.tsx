@@ -124,6 +124,9 @@ export default function CreateLeagueScreen() {
       const currentSeason = sport === 'nba' && historicalNbaYear !== null
         ? seasonLabel(sport, historicalNbaYear)
         : defaults.currentSeason;
+      const initialFinanceLimit = sport === 'nba'
+        ? getEraCap(finalEra)
+        : defaults.defaultFinanceLimit;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
@@ -150,7 +153,8 @@ export default function CreateLeagueScreen() {
         draftRounds: defaults.draftRounds,
         draftTimerSeconds: defaults.draftTimerSeconds,
         financeMode: defaults.financeMode,
-        salaryCap: getEraCap(finalEra),
+        salaryCap: initialFinanceLimit,
+        ...(sport === 'mlb' ? { teamBudget: initialFinanceLimit } : {}),
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],

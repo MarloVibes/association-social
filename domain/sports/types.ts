@@ -10,5 +10,6 @@ export interface SportRules {
   readonly draftRounds: number;
   readonly initialSeasonYear: number;
   readonly financeMode: FinanceMode;
+  readonly defaultFinanceLimit: number;
   readonly defaultDraftTimerSeconds: number;
 }

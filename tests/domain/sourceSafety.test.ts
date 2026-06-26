@@ -128,6 +128,14 @@ describe('source safety regressions', () => {
     expect(createLeague).toContain("gamesPerTeam: sport === 'nba'");
   });
 
+  it('uses sport finance defaults when creating non-NBA leagues', () => {
+    const createLeague = source('app/screens/create-league.tsx');
+
+    expect(createLeague).toContain('initialFinanceLimit');
+    expect(createLeague).toContain('defaults.defaultFinanceLimit');
+    expect(createLeague).toContain("...(sport === 'mlb' ? { teamBudget: initialFinanceLimit } : {})");
+  });
+
   it('lets standings switch between regular season and NBA Cup tables', () => {
     const standings = source('app/screens/season/standings.tsx');
 

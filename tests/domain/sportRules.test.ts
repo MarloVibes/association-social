@@ -11,6 +11,7 @@ describe('getSportRules', () => {
       draftRounds: 2,
       initialSeasonYear: 2025,
       financeMode: 'nba_cap',
+      defaultFinanceLimit: 154_647_000,
       defaultDraftTimerSeconds: 120,
     });
   });
@@ -24,6 +25,7 @@ describe('getSportRules', () => {
       draftRounds: 7,
       initialSeasonYear: 2025,
       financeMode: 'hard_cap',
+      defaultFinanceLimit: 279_200_000,
       defaultDraftTimerSeconds: 120,
     });
   });
@@ -37,6 +39,7 @@ describe('getSportRules', () => {
       draftRounds: 5,
       initialSeasonYear: 2026,
       financeMode: 'team_budget',
+      defaultFinanceLimit: 244_000_000,
       defaultDraftTimerSeconds: 120,
     });
   });

@@ -9,6 +9,7 @@ const SPORT_RULES: Readonly<Record<SportKey, SportRules>> = Object.freeze({
     draftRounds: 2,
     initialSeasonYear: 2025,
     financeMode: 'nba_cap',
+    defaultFinanceLimit: 154_647_000,
     defaultDraftTimerSeconds: 120,
   }),
   madden: Object.freeze({
@@ -19,6 +20,7 @@ const SPORT_RULES: Readonly<Record<SportKey, SportRules>> = Object.freeze({
     draftRounds: 7,
     initialSeasonYear: 2025,
     financeMode: 'hard_cap',
+    defaultFinanceLimit: 279_200_000,
     defaultDraftTimerSeconds: 120,
   }),
   mlb: Object.freeze({
@@ -29,6 +31,7 @@ const SPORT_RULES: Readonly<Record<SportKey, SportRules>> = Object.freeze({
     draftRounds: 5,
     initialSeasonYear: 2026,
     financeMode: 'team_budget',
+    defaultFinanceLimit: 244_000_000,
     defaultDraftTimerSeconds: 120,
   }),
 });
@@ -77,5 +80,6 @@ export function buildLeagueDefaults(sportInput?: string | null) {
     draftRounds: rules.draftRounds,
     draftTimerSeconds: rules.defaultDraftTimerSeconds,
     financeMode: rules.financeMode,
+    defaultFinanceLimit: rules.defaultFinanceLimit,
   };
 }

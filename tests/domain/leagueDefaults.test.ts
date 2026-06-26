@@ -13,6 +13,7 @@ describe('buildLeagueDefaults', () => {
       draftRounds: 7,
       draftTimerSeconds: 120,
       financeMode: 'hard_cap',
+      defaultFinanceLimit: 279_200_000,
     });
   });
 
@@ -26,6 +27,7 @@ describe('buildLeagueDefaults', () => {
       draftRounds: 5,
       draftTimerSeconds: 120,
       financeMode: 'team_budget',
+      defaultFinanceLimit: 244_000_000,
     });
   });
 
@@ -39,6 +41,7 @@ describe('buildLeagueDefaults', () => {
       draftRounds: 2,
       draftTimerSeconds: 120,
       financeMode: 'nba_cap',
+      defaultFinanceLimit: 154_647_000,
     });
   });
 
