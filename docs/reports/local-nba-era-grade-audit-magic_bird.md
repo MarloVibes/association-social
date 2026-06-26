@@ -19,6 +19,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Bob Lanier | MIL | Center | high | 0 | 117.1 | 21.7 | 20.1/10.1/3.1 | career win shares, above-average PER, scoring load, rebounding value |
 | Bob McAdoo | LAL | Center and Power Forward | high | 0 | 89.1 | 20.7 | 22.1/9.4/2.3 | career win shares, above-average PER, scoring load, rebounding value |
 | Brad Davis | DAL | Point Guard | high | 0 | 53.6 | 14.7 | 8.2/1.8/4.9 | career win shares, above-average PER |
+| Brian Winters | MIL | Shooting Guard | high | 0 | 38.6 | 15.2 | 16.2/2.6/4.1 | above-average PER, scoring load |
 | Buck Williams | NJN | Power Forward | high | 0 | 120.1 | 15.3 | 12.8/10/1.3 | career win shares, above-average PER, rebounding value |
 | Byron Scott | LAL | Point Guard and Shooting Guard | high | 0 | 75.2 | 15.5 | 14.1/2.8/2.5 | career win shares, above-average PER, scoring load |
 | Calvin Natt | POR | Power Forward and Small Forward | high | 0 | 57.2 | 17.9 | 17.2/6.8/2.2 | career win shares, above-average PER, scoring load, rebounding value |
@@ -33,10 +34,9 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | David Greenwood | CHI | Power Forward | high | 0 | 46.4 | 13.6 | 10.2/7.9/2 | rebounding value |
 | David Thompson | SEA | Shooting Guard and Small Forward | high | 0 | 63.3 | 19.9 | 22.7/4.1/3.3 | career win shares, above-average PER, scoring load |
 | Dennis Johnson | BOS | Point Guard and Shooting Guard | high | 0 | 82.6 | 14.6 | 14.1/3.9/5 | career win shares, above-average PER, scoring load, creator value |
-| Dennis Johnson | PHX | Point Guard and Shooting Guard | high | 0 | 82.6 | 14.6 | 14.1/3.9/5 | career win shares, above-average PER, scoring load, creator value |
 | Derek Harper | DAL | Shooting Guard and Point Guard | high | 0 | 86.8 | 16 | 13.3/2.4/5.5 | career win shares, above-average PER, creator value |
 | Dominique Wilkins | ATL | Small Forward | high | 0 | 117.5 | 21.6 | 24.8/6.7/2.5 | career win shares, above-average PER, scoring load, rebounding value |
-| Eddie Johnson | ATL | Shooting Guard and Small Forward | high | 0 | 65.6 | 15.9 | 16/4/2.1 | career win shares, above-average PER, scoring load |
+| Eddie Johnson | ATL | Shooting Guard | high | 0 | 41 | 16 | 15.1/2.3/5.1 | above-average PER, scoring load, creator value |
 | Eddie Johnson | SAC | Shooting Guard and Small Forward | high | 0 | 65.6 | 15.9 | 16/4/2.1 | career win shares, above-average PER, scoring load |
 | Elvin Hayes | HOU | Center and Power Forward | high | 0 | 120.8 | 17.7 | 21/12.5/1.8 | career win shares, above-average PER, scoring load, rebounding value |
 | Fat Lever | DEN | Point Guard and Shooting Guard | high | 0 | 61.2 | 17.8 | 13.9/6/6.2 | career win shares, above-average PER, rebounding value, creator value |
@@ -66,6 +66,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Mark Aguirre | DAL | Small Forward | high | 0 | 67.8 | 19 | 20/5/3.1 | career win shares, above-average PER, scoring load |
 | Marques Johnson | MIL | Small Forward and Shooting Guard | high | 0 | 79.8 | 20.1 | 20.1/7/3.6 | career win shares, above-average PER, scoring load, rebounding value |
 | Maurice Cheeks | PHI | Point Guard | high | 0 | 103.5 | 16.5 | 11.1/2.8/6.7 | career win shares, above-average PER, creator value |
+| Maurice Lucas | PHX | Center and Power Forward | high | 0 | 69 | 16.2 | 14.6/9.1/2.4 | career win shares, above-average PER, scoring load, rebounding value |
 | Michael Brooks | LAC | Small Forward | high | 0 | 16.5 | 15.2 | 12.8/6.3/2.6 | above-average PER, rebounding value |
 | Michael Cooper | LAL | Shooting Guard | high | 0 | 52.5 | 12.8 | 8.9/3.2/4.2 | career win shares |
 | Micheal Ray Richardson | NJN | Point Guard and Shooting Guard | high | 0 | 35.2 | 16.9 | 14.8/5.5/7 | above-average PER, scoring load, creator value |
@@ -81,7 +82,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Purvis Short | GSW | Power Forward and Small Forward and Shooting Guard | high | 0 | 51.1 | 16.9 | 17.3/4.3/2.5 | career win shares, above-average PER, scoring load |
 | Ralph Sampson | HOU | Power Forward and Center | high | 0 | 20.1 | 16 | 15.4/8.8/2.3 | above-average PER, scoring load, rebounding value |
 | Ray Williams | NYK | Shooting Guard and Point Guard | high | 0 | 37.1 | 17.3 | 15.5/3.6/5.8 | above-average PER, scoring load, creator value |
-| Reggie Theus | CHI | Shooting Guard and Point Guard | high | 0 | 66.9 | 16.6 | 18.5/3.3/6.3 | career win shares, above-average PER, scoring load, creator value |
 | Reggie Theus | SAC | Shooting Guard and Point Guard | high | 0 | 66.9 | 16.6 | 18.5/3.3/6.3 | career win shares, above-average PER, scoring load, creator value |
 | Rick Mahorn | WAS | Power Forward and Center | high | 0 | 51.7 | 11.6 | 6.9/6.2/1 | career win shares, rebounding value |
 | Ricky Sobers | WAS | Shooting Guard and Point Guard | high | 0 | 32 | 13.9 | 13.3/2.6/4.3 | - |
@@ -92,7 +92,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Sidney Moncrief | MIL | Point Guard and Shooting Guard | high | 0 | 90.3 | 18.7 | 15.6/4.7/3.6 | career win shares, above-average PER, scoring load |
 | Sleepy Floyd | GSW | Shooting Guard and Point Guard | high | 0 | 50.6 | 15.5 | 12.8/2.6/5.4 | career win shares, above-average PER, creator value |
 | Terry Cummings | LAC | Power Forward and Small Forward | high | 0 | 91.1 | 18.3 | 16.4/7.3/1.9 | career win shares, above-average PER, scoring load, rebounding value |
-| Terry Cummings | MIL | Power Forward and Small Forward | high | 0 | 91.1 | 18.3 | 16.4/7.3/1.9 | career win shares, above-average PER, scoring load, rebounding value |
 | Tom Chambers | SEA | Power Forward | high | 0 | 79 | 16.5 | 18.1/6.1/2.1 | career win shares, above-average PER, scoring load, rebounding value |
 | Tree Rollins | ATL | Center | high | 0 | 63.9 | 13.6 | 5.4/5.8/0.6 | career win shares |
 | Truck Robinson | NYK | Power Forward | high | 0 | 52.7 | 14.9 | 15.5/9.4/1.7 | career win shares, above-average PER, scoring load, rebounding value |
@@ -100,6 +99,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Walter Davis | PHX | Small Forward and Shooting Guard | high | 0 | 76.9 | 19.1 | 18.9/3/3.8 | career win shares, above-average PER, scoring load |
 | World B. Free | CLE | Point Guard and Shooting Guard | high | 0 | 67.7 | 18.8 | 20.3/2.7/3.7 | career win shares, above-average PER, scoring load |
 | Allen Leavell | HOU | Point Guard and Shooting Guard | medium | 0 | 29.9 | 14.7 | 9.5/1.7/4.8 | above-average PER |
+| Craig Hodges | LAC | Point Guard and Shooting Guard | medium | 0 | 27.2 | 11.8 | 8.5/1.3/2.5 | - |
 | Darnell Valentine | POR | Shooting Guard and Point Guard | medium | 0 | 22.1 | 14 | 8.7/2.1/5 | above-average PER, creator value |
 | Dave Corzine | CHI | Center | medium | 0 | 37.3 | 13.6 | 8.5/5.9/1.7 | - |
 | Don Collins | WAS | Small Forward and Shooting Guard | medium | 0 | 10.5 | 14.5 | 9.8/2.8/1.8 | above-average PER |
@@ -109,7 +109,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | John Long | DET | Shooting Guard | medium | 0 | 32 | 14.2 | 13.6/2.8/1.9 | above-average PER |
 | Johnny Davis | ATL | Point Guard and Shooting Guard | medium | 0 | 38.5 | 14.3 | 12.9/2/4.5 | above-average PER |
 | Johnny Moore | SAS | Point Guard | medium | 0 | 30.1 | 16.7 | 9.4/3/7.4 | above-average PER, creator value |
-| Junior Bridgeman | LAC | Shooting Guard and Small Forward | medium | 0 | 45 | 15.6 | 13.6/3.5/2.4 | above-average PER |
 | Junior Bridgeman | MIL | Shooting Guard and Small Forward | medium | 0 | 45 | 15.6 | 13.6/3.5/2.4 | above-average PER |
 | Kent Benson | DET | Center | medium | 0 | 33.6 | 14.2 | 9.1/5.7/1.8 | above-average PER |
 | Kyle Macy | PHX | Point Guard | medium | 0 | 36 | 14 | 9.5/2.2/4 | above-average PER |
@@ -137,6 +136,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Bobby Jones | PHI | Small Forward | normal | 0 | 1.1 | 9.7 | 3.2/1.6/0.5 | - |
 | Clint Richardson | IND | Shooting Guard | normal | 0 | 16.6 | 11.1 | 7/2.4/2.5 | - |
 | Darwin Cook | NJN | Point Guard and Shooting Guard | normal | 0 | 22.9 | 13.8 | 9.5/2.1/3.7 | - |
+| Ennis Whatley | CHI | Point Guard | normal | 0 | 9.6 | 13 | 5.6/1.8/4.6 | - |
 | Frank Johnson | WAS | Point Guard | normal | 0 | 17.2 | 12.7 | 8.3/1.7/4.2 | - |
 | Jerry Sichting | IND | Point Guard | normal | 0 | 21.2 | 11.7 | 6.9/1.4/3.3 | - |
 | John Bagley | CLE | Point Guard | normal | 0 | 16.6 | 13 | 8.7/2.6/6 | creator value |
@@ -144,11 +144,3 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Pat Cummings | DAL | Power Forward and Center | normal | 0 | 22.6 | 13.3 | 9.6/5.6/1.2 | - |
 | Rob Williams | DEN | Point Guard | normal | 0 | 2.1 | 12.2 | 8.6/2.2/5.4 | creator value |
 | Stewart Granger | CLE | Point Guard | normal | 0 | -0.1 | 8.4 | 4/1/2.2 | - |
-
-## Duplicate Player Warnings
-
-- Dennis Johnson: BOS, PHX
-- Eddie Johnson: ATL, SAC
-- Junior Bridgeman: LAC, MIL
-- Reggie Theus: CHI, SAC
-- Terry Cummings: LAC, MIL

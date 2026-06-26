@@ -218,6 +218,31 @@ describe('local NBA era audit data builder', () => {
     expect(shortTeams).toEqual([]);
   });
 
+  it('keeps the real Magic/Bird era seed roster free of true duplicate players', () => {
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const playersCsv = readFileSync('players.csv', 'utf8');
+    const salariesCsv = readFileSync('salaries_1985to2018.csv', 'utf8');
+    const players = buildLocalEraAuditPlayers({
+      era: 'magic_bird',
+      seasonStartYear: 1983,
+      rosters: parseEraRosters(source),
+      playersCsv,
+      salariesCsv,
+    });
+    const teamsByPlayer = new Map();
+    for (const player of players) {
+      const key = player.matchedProfileId || normalizeName(player.full_name);
+      const value = teamsByPlayer.get(key) || { name: player.full_name, teams: new Set() };
+      value.teams.add(player.team);
+      teamsByPlayer.set(key, value);
+    }
+    const duplicates = [...teamsByPlayer.values()]
+      .filter(value => value.teams.size > 1)
+      .map(value => `${value.name}: ${[...value.teams].sort().join(', ')}`);
+
+    expect(duplicates).toEqual([]);
+  });
+
   it('builds a readable markdown audit report from local evidence', () => {
     const report = buildLocalEraAuditReport('lebron', [
       {

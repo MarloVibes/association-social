@@ -54,9 +54,18 @@ const PROFILE_NAME_ALIASES = {
   [normalizeName('David Greenwood')]: normalizeName('Dave Greenwood'),
 };
 
+const TEAM_PROFILE_ID_ALIASES = {
+  [`${normalizeName('Eddie Johnson')}|ATL`]: 'johnsed02',
+  [`${normalizeName('Eddie Johnson')}|SAC`]: 'johnsed03',
+};
+
 function profileKeyForName(name) {
   const normalized = normalizeName(name);
   return PROFILE_NAME_ALIASES[normalized] || normalized;
+}
+
+function profileIdForPlayer(name, team) {
+  return TEAM_PROFILE_ID_ALIASES[`${normalizeName(name)}|${String(team || '').toUpperCase()}`];
 }
 
 function column(headers, ...names) {
@@ -125,6 +134,7 @@ function buildProfileIndex(playersCsv) {
   const winSharesIndex = column(headers, 'career_ws', 'winshares', 'win_shares');
   const perIndex = column(headers, 'career_per', 'per');
   const byName = {};
+  const byId = {};
   const idToName = {};
   for (const row of rows.slice(1)) {
     const name = row[nameIndex];
@@ -140,9 +150,10 @@ function buildProfileIndex(playersCsv) {
       career_PER: numberFrom(row[perIndex]),
     };
     byName[normalizeName(name)] = profile;
+    if (profile.player_id) byId[profile.player_id] = profile;
     if (profile.player_id) idToName[profile.player_id] = name;
   }
-  return { byName, idToName };
+  return { byName, byId, idToName };
 }
 
 function buildSalaryIndex(salariesCsv, idToName) {
@@ -166,16 +177,17 @@ function buildSalaryIndex(salariesCsv, idToName) {
 }
 
 export function buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playersCsv, salariesCsv }) {
-  const { byName, idToName } = buildProfileIndex(playersCsv);
+  const { byName, byId, idToName } = buildProfileIndex(playersCsv);
   const salaries = buildSalaryIndex(salariesCsv, idToName);
   const teams = rosters[era] || [];
   const players = [];
   for (const team of teams) {
     for (const player of team.players || []) {
+      const aliasProfileId = profileIdForPlayer(player.full_name, player.team || team.abbreviation);
       const key = profileKeyForName(player.full_name);
-      const profile = byName[key] || {};
+      const profile = (aliasProfileId && byId[aliasProfileId]) || byName[key] || {};
       const salaryByYear = salaries[key] || {};
-      const matchedProfile = Boolean(byName[key]);
+      const matchedProfile = Boolean(profile.player_id);
       players.push({
         ...player,
         ...profile,
@@ -185,6 +197,7 @@ export function buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playe
         salary: salaryByYear[String(seasonStartYear)] || 0,
         salaryByYear,
         matchedProfile,
+        matchedProfileId: profile.player_id,
         matchedSalary: Boolean(salaryByYear[String(seasonStartYear)]),
       });
     }
@@ -219,13 +232,14 @@ export function buildLocalEraAuditReport(era, players) {
   const teamsByPlayer = new Map();
   for (const player of players) {
     const name = String(player.full_name || 'Unknown Player');
-    const teams = teamsByPlayer.get(name) || new Set();
-    teams.add(String(player.team || '-'));
-    teamsByPlayer.set(name, teams);
+    const key = player.matchedProfileId || name;
+    const value = teamsByPlayer.get(key) || { name, teams: new Set() };
+    value.teams.add(String(player.team || '-'));
+    teamsByPlayer.set(key, value);
   }
-  const duplicateWarnings = [...teamsByPlayer.entries()]
-    .filter(([, teams]) => teams.size > 1)
-    .map(([name, teams]) => `${name}: ${[...teams].sort().join(', ')}`)
+  const duplicateWarnings = [...teamsByPlayer.values()]
+    .filter(value => value.teams.size > 1)
+    .map(value => `${value.name}: ${[...value.teams].sort().join(', ')}`)
     .sort((left, right) => left.localeCompare(right));
   const missingProfileWarnings = players
     .filter(player => player.matchedProfile === false)

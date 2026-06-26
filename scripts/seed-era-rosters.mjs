@@ -72,7 +72,7 @@ const ERA_MAGIC_BIRD = {
         p('h_chi_1', 'Orlando', 'Woolridge', 'SF', '42', 'CHI'),
         p('h_chi_2', 'Quintin', 'Dailey', 'SG', '22', 'CHI'),
         p('h_chi_3', 'Dave', 'Corzine', 'C', '54', 'CHI'),
-        p('h_chi_4', 'Reggie', 'Theus', 'PG', '11', 'CHI'),
+        p('h_chi_4', 'Ennis', 'Whatley', 'PG', '11', 'CHI'),
         p('h_chi_5', 'David', 'Greenwood', 'PF', '32', 'CHI'),
         p('h_chi_6', 'Rod', 'Higgins', 'F', '44', 'CHI'),
       ]
@@ -169,7 +169,7 @@ const ERA_MAGIC_BIRD = {
         p('h_lac_2', 'Norm', 'Nixon', 'PG', '10', 'LAC'),
         p('h_lac_3', 'Freeman', 'Williams', 'SG', '31', 'LAC'),
         p('h_lac_4', 'Bill', 'Walton', 'C', '5', 'LAC'),
-        p('h_lac_5', 'Junior', 'Bridgeman', 'SF', '2', 'LAC'),
+        p('h_lac_5', 'Craig', 'Hodges', 'SG', '14', 'LAC'),
         p('h_lac_6', 'Michael', 'Brooks', 'F', '44', 'LAC'),
       ]
     },
@@ -193,7 +193,7 @@ const ERA_MAGIC_BIRD = {
         p('h_mil_2', 'Marques', 'Johnson', 'SF', '8', 'MIL'),
         p('h_mil_3', 'Junior', 'Bridgeman', 'SG', '2', 'MIL'),
         p('h_mil_4', 'Sidney', 'Moncrief', 'SG', '4', 'MIL'),
-        p('h_mil_5', 'Terry', 'Cummings', 'PF', '35', 'MIL'),
+        p('h_mil_5', 'Brian', 'Winters', 'SG', '32', 'MIL'),
         p('h_mil_6', 'Paul', 'Pressey', 'G', '13', 'MIL'),
       ]
     },
@@ -228,7 +228,7 @@ const ERA_MAGIC_BIRD = {
         p('h_phx_1', 'Larry', 'Nance', 'PF', '22', 'PHX'),
         p('h_phx_2', 'Walter', 'Davis', 'SG', '6', 'PHX'),
         p('h_phx_3', 'Alvan', 'Adams', 'C', '19', 'PHX'),
-        p('h_phx_4', 'Dennis', 'Johnson', 'PG', '3', 'PHX'),
+        p('h_phx_4', 'Maurice', 'Lucas', 'PF', '20', 'PHX'),
         p('h_phx_5', 'James', 'Edwards', 'C', '53', 'PHX'),
         p('h_phx_6', 'Kyle', 'Macy', 'G', '23', 'PHX'),
       ]
