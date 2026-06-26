@@ -427,9 +427,24 @@ describe('source safety regressions', () => {
     const playerCard = source('components/PlayerCard.tsx');
 
     expect(playerCard).toContain('statHistory');
-    expect(playerCard).toContain('Franchise Seasons');
+    expect(playerCard).toContain('seasonStats');
+    expect(playerCard).toContain('Franchise Mobile Stats');
     expect(playerCard).toContain('franchiseSeasons');
     expect(playerCard).toContain('player?.accolades');
+  });
+
+  it('shows expanded scouting cards with compare and original stat tabs', () => {
+    const playerCard = source('components/PlayerCard.tsx');
+
+    expect(playerCard).toContain("from '@/domain/nba/scoutingGrades'");
+    expect(playerCard).toContain('Scouting Grades');
+    expect(playerCard).toContain('Franchise Mobile Stats');
+    expect(playerCard).toContain('Original NBA Stats');
+    expect(playerCard).toContain('Compare');
+    expect(playerCard).toContain('compareCandidates');
+    expect(playerCard).toContain('getScoutingGradeSections');
+    expect(playerCard).toContain('compareScoutingGrades');
+    expect(playerCard).toContain('getCompareRowModel');
   });
 
   it('does not present the franchise game as a mini game on the dashboard', () => {

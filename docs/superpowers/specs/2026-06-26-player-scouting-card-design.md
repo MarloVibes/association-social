@@ -109,6 +109,10 @@ Search sources:
 
 The comparison result should show two compact player cards and a side-by-side grade matchup. Winning grades should be visually highlighted so the GM can quickly see where each player is better.
 
+Each comparison row should use one shared ability label in the center rather than repeating the label for both players. Example:
+
+`Curry  B+  Passing  S  Paul`
+
 The compare view should also support comparing current Franchise Mobile stats against original NBA stats for the same player.
 
 ## Original NBA Stats
