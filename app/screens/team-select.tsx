@@ -357,6 +357,7 @@ export default function TeamSelectScreen() {
         console.warn('Failed to add league to user profile', e);
       }
       if (shouldGenerateSchedule) {
+        let scheduleCreationFailed = false;
         try {
           const createSchedule = httpsCallable(functions, 'generateNbaSchedule');
           await createSchedule({
@@ -372,11 +373,19 @@ export default function TeamSelectScreen() {
                 createdBy: user.uid,
               });
             } catch (fallbackError) {
+              scheduleCreationFailed = true;
               console.warn('Failed to create NBA schedule locally after team claim', fallbackError);
             }
           } else {
+            scheduleCreationFailed = true;
             console.warn('Failed to create NBA schedule after team claim', e);
           }
+        }
+        if (scheduleCreationFailed) {
+          Alert.alert(
+            'Team claimed',
+            'The team was claimed, but the schedule did not lock. Open League Settings > NBA Schedule to create and lock it.'
+          );
         }
       }
       router.dismissAll();

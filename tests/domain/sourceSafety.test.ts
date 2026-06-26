@@ -142,10 +142,13 @@ describe('source safety regressions', () => {
 
   it('puts NBA schedule setup in the league creation flow', () => {
     const createLeague = source('app/screens/create-league.tsx');
+    const teamSelect = source('app/screens/team-select.tsx');
 
     expect(createLeague).toContain('scheduleGamesPerTeam');
     expect(createLeague).toContain('NBA Schedule');
     expect(createLeague).toContain("gamesPerTeam: sport === 'nba'");
+    expect(teamSelect).toContain('scheduleCreationFailed');
+    expect(teamSelect).toContain('The team was claimed, but the schedule did not lock');
   });
 
   it('uses sport finance defaults when creating non-NBA leagues', () => {
