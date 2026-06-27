@@ -34,6 +34,11 @@ type LeagueData = {
   expansionEnabled?: boolean;
   expansionProposal?: { enabled?: boolean };
   offseason?: OffseasonState;
+  draftLottery?: {
+    complete?: boolean;
+    picks?: { pick: number; teamId: string; abbreviation?: string; name?: string; source?: string }[];
+    drawnPicks?: { pick: number; teamId: string; abbreviation?: string; name?: string }[];
+  };
 };
 
 type TeamData = {
@@ -80,6 +85,7 @@ export default function OffseasonScreen() {
   const [teams, setTeams] = useState<TeamData[]>([]);
   const [loading, setLoading] = useState(true);
   const [advancing, setAdvancing] = useState(false);
+  const [runningLottery, setRunningLottery] = useState(false);
 
   useEffect(() => {
     if (!leagueId) {
@@ -229,6 +235,31 @@ export default function OffseasonScreen() {
     }
   };
 
+  const runDraftLottery = () => {
+    if (!leagueId || !offseason || offseason.stage !== 'lottery_and_draft_order' || !isCommissioner) return;
+    Alert.alert(
+      'Run draft lottery?',
+      'This locks the lottery order for the upcoming draft.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Run Lottery',
+          onPress: async () => {
+            setRunningLottery(true);
+            try {
+              const callable = httpsCallable(functions, 'runDraftLottery');
+              await callable({ leagueId, expectedVersion: offseason.version });
+            } catch (error: any) {
+              Alert.alert('Lottery failed', error.message || 'Please try again.');
+            } finally {
+              setRunningLottery(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (loading || !league || !offseason) {
     return (
       <View style={styles.loading}>
@@ -311,6 +342,45 @@ export default function OffseasonScreen() {
               <Text style={styles.openStageText}>Open {getOffseasonStageLabel(offseason.stage)}</Text>
               <Ionicons color="#00e58b" name="arrow-forward" size={18} />
             </TouchableOpacity>
+          </View>
+        )}
+
+        {offseason.stage === 'lottery_and_draft_order' && (
+          <View style={styles.actionSection}>
+            <Text style={styles.sectionHeading}>Draft lottery</Text>
+            {league.draftLottery?.complete ? (
+              <>
+                <Text style={styles.bodyText}>Lottery order is locked for the upcoming draft.</Text>
+                {(league.draftLottery.picks || []).slice(0, 8).map(pick => (
+                  <View key={`${pick.pick}:${pick.teamId}`} style={styles.teamRow}>
+                    <Text style={styles.lotteryPick}>{pick.pick}</Text>
+                    <Text style={styles.teamName}>{pick.name || pick.abbreviation || pick.teamId}</Text>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={styles.bodyText}>
+                  Run the weighted lottery before this stage can advance.
+                </Text>
+                {isCommissioner && (
+                  <TouchableOpacity
+                    disabled={runningLottery}
+                    onPress={runDraftLottery}
+                    style={styles.openStageButton}
+                  >
+                    {runningLottery ? (
+                      <ActivityIndicator color="#00e58b" />
+                    ) : (
+                      <>
+                        <Text style={styles.openStageText}>Run Draft Lottery</Text>
+                        <Ionicons color="#00e58b" name="shuffle" size={18} />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
         )}
 
@@ -498,6 +568,7 @@ const styles = StyleSheet.create({
   statusReady: { color: '#b8c2bb', fontSize: 14 },
   teamRow: { flexDirection: 'row', alignItems: 'center', minHeight: 34, gap: 10 },
   teamDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#f4b942' },
+  lotteryPick: { width: 24, color: '#00e58b', fontSize: 13, fontWeight: '900', textAlign: 'center' },
   teamName: { color: '#d9ddda', fontSize: 14 },
   commissionerSection: {
     paddingHorizontal: 24,

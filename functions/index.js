@@ -35,9 +35,13 @@ const {
   createPublishDraftClassHandler,
 } = require('./franchise/draftClass');
 const {
+  createRunDraftLotteryHandler,
+} = require('./franchise/draftLottery');
+const {
   createAutoPickHandler,
   createDraftPickHandler,
   createInitializeLiveDraftHandler,
+  createSaveDraftBoardHandler,
 } = require('./franchise/liveDraft');
 const {
   createCutRosterPlayerHandler,
@@ -364,6 +368,13 @@ exports.publishDraftClass = onCall(createPublishDraftClassHandler({
   HttpsError,
 }));
 
+exports.runDraftLottery = onCall(createRunDraftLotteryHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+  FieldValue,
+}));
+
 exports.initializeLiveDraft = onCall(createInitializeLiveDraftHandler({
   getFirestore,
   now: () => Date.now(),
@@ -379,6 +390,12 @@ exports.makeDraftPick = onCall(createDraftPickHandler({
 exports.autoPickDraftSelection = onCall(createAutoPickHandler({
   getFirestore,
   now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.saveDraftBoard = onCall(createSaveDraftBoardHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
 }));
 

@@ -13,7 +13,7 @@ describe('offseason view model', () => {
       stage: 'season_end',
       seasonYear: 2026,
       version: 0,
-      draftTimerSeconds: 120,
+      draftTimerSeconds: 80,
     });
     expect(buildInitialOffseasonState({
       sport: 'madden',

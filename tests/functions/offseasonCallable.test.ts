@@ -190,6 +190,39 @@ describe('offseason callable helpers', () => {
     }).stage).toBe('draft_class_review');
   });
 
+  it('requires NBA draft lottery completion before leaving lottery stage', () => {
+    const league = {
+      sport: 'nba',
+      commissionerId: 'comm',
+      offseason: {
+        stage: 'lottery_and_draft_order',
+        seasonYear: 2032,
+        completedTeamIds: [],
+        draftStatus: 'none',
+        version: 2,
+      },
+    };
+    expect(() => transitionForCallable({
+      uid: 'comm',
+      league,
+      teams: [],
+      expectedStage: 'lottery_and_draft_order',
+      expectedVersion: 2,
+      stageStartedAt: 'now',
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(transitionForCallable({
+      uid: 'comm',
+      league: {
+        ...league,
+        offseason: { ...league.offseason, lotteryComplete: true },
+      },
+      teams: [],
+      expectedStage: 'lottery_and_draft_order',
+      expectedVersion: 2,
+      stageStartedAt: 'now',
+    }).stage).toBe('player_progression');
+  });
+
   it('requires a published draft class before entering the live draft', () => {
     const league = {
       sport: 'mlb',

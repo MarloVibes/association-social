@@ -25,6 +25,7 @@ const NBA_TEAM_IDS = [
   'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NOP', 'NYK',
   'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS',
 ];
+const DEFAULT_DRAFT_PICK_SECONDS = 80;
 
 function prospectId(prospect) {
   return String(prospect && (prospect.id || prospect.player_id) || '');
@@ -338,6 +339,17 @@ function chooseServerAutoPick(prospects, selectedIds, needs) {
   })[0];
 }
 
+function chooseBoardAutoPick({ prospects, selectedIds, draftBoard, needs }) {
+  const selected = new Set((selectedIds || []).map(String));
+  const byId = new Map((prospects || []).map(prospect => [prospectId(prospect), prospect]));
+  for (const boardId of draftBoard || []) {
+    const id = String(boardId || '');
+    const prospect = byId.get(id);
+    if (prospect && !selected.has(id)) return prospect;
+  }
+  return chooseServerAutoPick(prospects, selectedIds, needs);
+}
+
 function normalizedNeeds(team) {
   if (team && team.needs && !Array.isArray(team.needs)) return team.needs;
   return Object.fromEntries((team && team.needs || []).map(position => [position, 1]));
@@ -364,6 +376,55 @@ function toHttpsError(error, HttpsError) {
     return new HttpsError(error.code, error.message, error.details);
   }
   return error;
+}
+
+function cleanDraftBoard(values) {
+  const seen = new Set();
+  return (values || [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value) => {
+      if (seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    })
+    .slice(0, 100);
+}
+
+function createSaveDraftBoardHandler({ getFirestore, serverTimestamp, HttpsError }) {
+  return async function saveDraftBoard(request) {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+    const data = request.data || {};
+    const leagueId = typeof data.leagueId === 'string' ? data.leagueId.trim() : '';
+    const draftBoard = cleanDraftBoard(data.prospectIds);
+    if (!leagueId || !Array.isArray(data.prospectIds)) {
+      throw new HttpsError('invalid-argument', 'Provide leagueId and prospectIds.');
+    }
+    const db = getFirestore();
+    const leagueRef = db.collection('leagues').doc(leagueId);
+    try {
+      return await db.runTransaction(async tx => {
+        const [leagueSnap, teamsSnap] = await Promise.all([
+          tx.get(leagueRef),
+          tx.get(leagueRef.collection('teams')),
+        ]);
+        if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+        const teamDoc = teamsSnap.docs.find(doc => (doc.data() || {}).gmId === uid);
+        if (!teamDoc) {
+          throw new LiveDraftError('permission-denied', 'Only a GM with a team can save a draft board.');
+        }
+        tx.update(teamDoc.ref, {
+          draftBoard,
+          preDraftList: draftBoard,
+          draftBoardUpdatedAt: serverTimestamp(),
+        });
+        return { draftBoard };
+      });
+    } catch (error) {
+      throw toHttpsError(error, HttpsError);
+    }
+  };
 }
 
 function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
@@ -411,7 +472,7 @@ function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
         sport,
         teamOrder,
         rounds: draftRoundsForSport(sport),
-        timerSeconds: offseason.draftTimerSeconds || league.draftTimerSeconds || 120,
+        timerSeconds: DEFAULT_DRAFT_PICK_SECONDS,
         now: now(),
       });
       for (const team of draftTeams) {
@@ -490,8 +551,8 @@ function createDraftPickHandler({ getFirestore, now, HttpsError }) {
           selectionType: 'manual',
           now: timestamp,
           timerSeconds: session.deadlineMillis == null
-            ? 120
-            : offseason.draftTimerSeconds || 120,
+            ? DEFAULT_DRAFT_PICK_SECONDS
+            : DEFAULT_DRAFT_PICK_SECONDS,
         });
         tx.update(teamRef, {
           players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
@@ -562,11 +623,12 @@ function createAutoPickHandler({ getFirestore, now, HttpsError }) {
         })) {
           throw new LiveDraftError('failed-precondition', 'The current draft clock has not expired.');
         }
-        const prospect = chooseServerAutoPick(
-          (classSnap.data() || {}).players || [],
-          session.selectedIds,
-          normalizedNeeds(team),
-        );
+        const prospect = chooseBoardAutoPick({
+          prospects: (classSnap.data() || {}).players || [],
+          selectedIds: session.selectedIds,
+          draftBoard: team.draftBoard || team.preDraftList || [],
+          needs: normalizedNeeds(team),
+        });
         const next = applyDraftPick({
           session,
           teamId: team.id,
@@ -574,7 +636,7 @@ function createAutoPickHandler({ getFirestore, now, HttpsError }) {
           selectedBy: isCommissioner(uid, league) ? uid : 'system',
           selectionType: 'auto',
           now: timestamp,
-          timerSeconds: offseason.draftTimerSeconds || 120,
+          timerSeconds: DEFAULT_DRAFT_PICK_SECONDS,
         });
         tx.update(teamRef, {
           players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
@@ -599,11 +661,15 @@ module.exports = {
   buildDraftedPlayer,
   buildDraftFranchises,
   buildDraftOrder,
+  chooseBoardAutoPick,
   chooseServerAutoPick,
   createAutoPickHandler,
   createDraftPickHandler,
   createDraftSession,
+  DEFAULT_DRAFT_PICK_SECONDS,
   draftRoundsForSport,
   createInitializeLiveDraftHandler,
+  createSaveDraftBoardHandler,
+  cleanDraftBoard,
   validateManualDraftPick,
 };

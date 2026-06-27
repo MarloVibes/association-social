@@ -11,7 +11,7 @@ describe('buildLeagueDefaults', () => {
       rosterLimit: 53,
       twoWayLimit: 0,
       draftRounds: 7,
-      draftTimerSeconds: 120,
+      draftTimerSeconds: 80,
       financeMode: 'hard_cap',
       defaultFinanceLimit: 279_200_000,
     });
@@ -25,7 +25,7 @@ describe('buildLeagueDefaults', () => {
       rosterLimit: 40,
       twoWayLimit: 0,
       draftRounds: 5,
-      draftTimerSeconds: 120,
+      draftTimerSeconds: 80,
       financeMode: 'team_budget',
       defaultFinanceLimit: 244_000_000,
     });
@@ -39,7 +39,7 @@ describe('buildLeagueDefaults', () => {
       rosterLimit: 15,
       twoWayLimit: 3,
       draftRounds: 2,
-      draftTimerSeconds: 120,
+      draftTimerSeconds: 80,
       financeMode: 'nba_cap',
       defaultFinanceLimit: 154_647_000,
     });

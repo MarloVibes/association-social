@@ -12,7 +12,7 @@ describe('getSportRules', () => {
       initialSeasonYear: 2025,
       financeMode: 'nba_cap',
       defaultFinanceLimit: 154_647_000,
-      defaultDraftTimerSeconds: 120,
+      defaultDraftTimerSeconds: 80,
     });
   });
 
@@ -26,7 +26,7 @@ describe('getSportRules', () => {
       initialSeasonYear: 2025,
       financeMode: 'hard_cap',
       defaultFinanceLimit: 279_200_000,
-      defaultDraftTimerSeconds: 120,
+      defaultDraftTimerSeconds: 80,
     });
   });
 
@@ -40,7 +40,7 @@ describe('getSportRules', () => {
       initialSeasonYear: 2026,
       financeMode: 'team_budget',
       defaultFinanceLimit: 244_000_000,
-      defaultDraftTimerSeconds: 120,
+      defaultDraftTimerSeconds: 80,
     });
   });
 

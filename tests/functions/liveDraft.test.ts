@@ -8,11 +8,25 @@ const {
   authorizeAutoPick,
   buildDraftedPlayer,
   buildDraftOrder,
+  chooseBoardAutoPick,
+  createSaveDraftBoardHandler,
   createDraftSession,
   draftRoundsForSport,
   buildDraftFranchises,
+  DEFAULT_DRAFT_PICK_SECONDS,
   validateManualDraftPick,
 } = require('../../functions/franchise/liveDraft.js');
+
+class FakeHttpsError extends Error {
+  code: string;
+  details: unknown;
+
+  constructor(code: string, message: string, details?: unknown) {
+    super(message);
+    this.code = code;
+    this.details = details;
+  }
+}
 
 const teams = [
   { id: 'a', gmId: 'gm-a', needs: { QB: 1 } },
@@ -95,6 +109,7 @@ describe('live draft domain', () => {
   });
 
   it('builds a deterministic team order and initializes the first deadline', () => {
+    expect(DEFAULT_DRAFT_PICK_SECONDS).toBe(80);
     expect(draftRoundsForSport('nba')).toBe(2);
     expect(draftRoundsForSport('madden')).toBe(7);
     expect(draftRoundsForSport('mlb')).toBe(5);
@@ -120,6 +135,21 @@ describe('live draft domain', () => {
       picks: [],
       version: 0,
     });
+  });
+
+  it('uses the pre-draft board before fallback auto-pick logic', () => {
+    expect(chooseBoardAutoPick({
+      prospects,
+      selectedIds: ['p2'],
+      draftBoard: ['missing', 'p2', 'p4', 'p1'],
+      needs: { QB: 1 },
+    })).toMatchObject({ id: 'p4' });
+    expect(chooseBoardAutoPick({
+      prospects,
+      selectedIds: ['p2', 'p4'],
+      draftBoard: ['p2', 'p4'],
+      needs: { QB: 1 },
+    })).toMatchObject({ id: 'p1' });
   });
 
   it('allows only the current GM, current version, available player, and live clock', () => {
@@ -291,5 +321,47 @@ describe('live draft domain', () => {
       session: live,
       now: 2_000,
     })).toBe(false);
+  });
+
+  it('lets a GM save an ordered pre-draft board on their team', async () => {
+    const teamRef = { kind: 'team' };
+    const teamsQuery = { kind: 'teams-query' };
+    const leagueRef = {
+      collection: (name: string) => (name === 'teams' ? teamsQuery : { kind: name }),
+    };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({ members: ['gm-a'], commissionerId: 'comm' }),
+    };
+    const teamsSnap = {
+      docs: [
+        { id: 'a', ref: teamRef, data: () => ({ gmId: 'gm-a' }) },
+        { id: 'b', ref: { kind: 'other' }, data: () => ({ gmId: 'gm-b' }) },
+      ],
+    };
+    const updates: any[] = [];
+    const tx = {
+      get: async (ref: any) => (ref === leagueRef ? leagueSnap : teamsSnap),
+      update: (_ref: any, patch: any) => updates.push(patch),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: async (callback: any) => callback(tx),
+    };
+    const handler = createSaveDraftBoardHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'now',
+      HttpsError: FakeHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'gm-a' },
+      data: { leagueId: 'league-1', prospectIds: ['p1', 'p2', 'p1', '', 'p3'] },
+    })).resolves.toEqual({ draftBoard: ['p1', 'p2', 'p3'] });
+    expect(updates).toEqual([{
+      draftBoard: ['p1', 'p2', 'p3'],
+      preDraftList: ['p1', 'p2', 'p3'],
+      draftBoardUpdatedAt: 'now',
+    }]);
   });
 });

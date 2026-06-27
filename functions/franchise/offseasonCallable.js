@@ -72,6 +72,16 @@ function usesNbaOffseasonSequence(sport) {
   return sport !== 'mlb' && sport !== 'madden' && sport !== 'nfl';
 }
 
+function hasLotteryComplete(offseason) {
+  return Boolean(
+    offseason
+    && (
+      offseason.lotteryComplete === true
+      || (offseason.draftLottery && offseason.draftLottery.complete === true)
+    )
+  );
+}
+
 function normalizeAbbr(value) {
   return String(value || '').trim().toUpperCase();
 }
@@ -149,6 +159,16 @@ function transitionForCallable(input) {
     liveDraftComplete,
     pendingContractOfferCount,
   } = input;
+  if (
+    usesNbaOffseasonSequence(league && league.sport)
+    && expectedStage === 'lottery_and_draft_order'
+    && !hasLotteryComplete(league.offseason)
+  ) {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Run the draft lottery before advancing.',
+    );
+  }
   if (
     (expectedStage === 're_signing' || expectedStage === 'free_agency')
     && (
@@ -370,6 +390,7 @@ module.exports = {
   createAdvanceOffseasonHandler,
   initializeOffseason,
   hasPlayoffChampion,
+  hasLotteryComplete,
   toHttpsError,
   transitionForCallable,
   validateExpansionProposalForCallable,
