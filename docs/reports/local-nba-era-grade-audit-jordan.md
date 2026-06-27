@@ -106,6 +106,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Alonzo Mourning | CHA | Power Forward and Center | high | 0 | 89.7 | 21.2 | 17.1/8.5/1.1 | career win shares, above-average PER, scoring load, rebounding value |
 | Clarence Weatherspoon | PHI | Small Forward and Power Forward | high | 0 | 58.4 | 15.6 | 11.5/7.5/1.5 | career win shares, above-average PER, rebounding value |
 | Roy Tarpley | DAL | Power Forward and Center | high | 0 | 19.8 | 18.4 | 12.6/10/1 | above-average PER, rebounding value |
+| Shaquille O'Neal | ORL | Center | high | 0 | 181.7 | 26.4 | 23.7/10.9/2.5 | career win shares, above-average PER, scoring load, rebounding value |
 | Pervis Ellison | WAS | Power Forward and Center | medium | 2300000 | 21.8 | 15.2 | 9.5/6.7/1.5 | above-average PER, rebounding value |
 | Jon Koncak | ATL | Center | medium | 2000000 | 29.2 | 9.8 | 4.5/4.9/1 | - |
 | Dennis Scott | ORL | Small Forward and Shooting Guard | medium | 1980000 | 33.4 | 13.4 | 12.9/2.8/2.1 | - |

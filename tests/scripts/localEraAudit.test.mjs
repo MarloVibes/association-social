@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   buildLocalEraAuditReport,
@@ -351,6 +352,60 @@ describe('local NBA era audit data builder', () => {
     }
 
     expect(repeated).toEqual([]);
+  });
+
+  it('keeps every local NBA era seed audit-clean in one pass', () => {
+    const startYears = {
+      magic_bird: 1983,
+      jordan: 1991,
+      kobe: 2002,
+      lebron: 2010,
+      steph: 2016,
+    };
+    const source = readFileSync('scripts/seed-era-rosters.mjs', 'utf8');
+    const playersCsv = readFileSync('players.csv', 'utf8');
+    const salariesCsv = readFileSync('salaries_1985to2018.csv', 'utf8');
+    const rosters = parseEraRosters(source);
+    const warnings = [];
+
+    for (const [era, seasonStartYear] of Object.entries(startYears)) {
+      const players = buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playersCsv, salariesCsv });
+      const teamsByPlayer = new Map();
+      for (const team of rosters[era] || []) {
+        if ((team.players || []).length !== 6) warnings.push(`${era} ${team.abbreviation}: ${team.players.length} players`);
+        const seenOnTeam = new Set();
+        for (const player of team.players || []) {
+          const localKey = normalizeName(player.full_name);
+          if (seenOnTeam.has(localKey)) warnings.push(`${era} ${team.abbreviation}: repeated ${player.full_name}`);
+          seenOnTeam.add(localKey);
+        }
+      }
+      for (const player of players) {
+        if (player.matchedProfile === false) warnings.push(`${era} ${player.team}: no profile for ${player.full_name}`);
+        const key = player.matchedProfileId || normalizeName(player.full_name);
+        const value = teamsByPlayer.get(key) || { name: player.full_name, teams: new Set() };
+        value.teams.add(player.team);
+        teamsByPlayer.set(key, value);
+      }
+      for (const value of teamsByPlayer.values()) {
+        if (value.teams.size > 1) warnings.push(`${era} ${value.name}: ${[...value.teams].sort().join(', ')}`);
+      }
+    }
+
+    expect(warnings).toEqual([]);
+  });
+
+  it('regenerates every local NBA era audit report from one command', () => {
+    const output = execFileSync(process.execPath, ['scripts/audit-local-nba-era-grades.mjs', 'all'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    });
+
+    expect(output).toContain('local-nba-era-grade-audit-magic_bird.md');
+    expect(output).toContain('local-nba-era-grade-audit-jordan.md');
+    expect(output).toContain('local-nba-era-grade-audit-kobe.md');
+    expect(output).toContain('local-nba-era-grade-audit-lebron.md');
+    expect(output).toContain('local-nba-era-grade-audit-steph.md');
   });
 
   it('builds a readable markdown audit report from local evidence', () => {

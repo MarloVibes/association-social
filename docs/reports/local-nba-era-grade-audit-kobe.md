@@ -7,6 +7,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Player | Team | Pos | Priority | Salary | Career WS | Career PER | Career P/R/A | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Kevin Garnett | MIN | Small Forward and Center and Power Forward | high | 25200000 | 191.4 | 22.7 | 17.8/10/3.7 | core salary, career win shares, above-average PER, scoring load, rebounding value |
+| Shaquille O'Neal | LAL | Center | high | 23571429 | 181.7 | 26.4 | 23.7/10.9/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Scottie Pippen | POR | Small Forward | high | 19727524 | 125.1 | 18.6 | 16.1/6.4/5.2 | core salary, career win shares, above-average PER, scoring load, rebounding value, creator value |
 | Karl Malone | LAL | Power Forward | high | 19250000 | 234.6 | 23.9 | 25/10.1/3.6 | core salary, career win shares, above-average PER, scoring load, rebounding value |
 | Rasheed Wallace | DET | Center and Power Forward | high | 16200000 | 105.1 | 17 | 14.4/6.7/1.8 | core salary, career win shares, above-average PER, scoring load, rebounding value |
@@ -54,6 +55,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | John Stockton | UTA | Point Guard | high | 7875000 | 207.7 | 21.8 | 13.1/2.7/10.5 | career win shares, above-average PER, creator value |
 | Jamal Mashburn | NOK | Small Forward | high | 7750000 | 43.7 | 15.7 | 19.1/5.4/4 | above-average PER, scoring load |
 | P.J. Brown | NOK | Center and Power Forward | high | 7044800 | 89.8 | 14.1 | 9.1/7.7/1.5 | career win shares, above-average PER, rebounding value |
+| Jermaine O'Neal | IND | Power Forward and Center | high | 6900000 | 66 | 17.9 | 13.2/7.2/1.4 | career win shares, above-average PER, rebounding value |
 | Erick Dampier | GSW | Center | high | 6858500 | 52.7 | 14.3 | 7.4/7.1/0.8 | career win shares, above-average PER, rebounding value |
 | Marcus Camby | DEN | Center and Power Forward | high | 6750000 | 81.6 | 17.8 | 9.5/9.8/1.9 | career win shares, above-average PER, rebounding value |
 | Jerry Stackhouse | WAS | Shooting Guard and Small Forward | high | 6375000 | 52.4 | 16.5 | 16.9/3.2/3.3 | career win shares, above-average PER, scoring load |
@@ -97,6 +99,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Amare Stoudemire | PHX | Center and Power Forward | high | 1767120 | 92.5 | 21.8 | 18.9/7.8/1.2 | career win shares, above-average PER, scoring load, rebounding value |
 | Joe Johnson | PHX | Shooting Guard and Small Forward | high | 1729560 | 82.8 | 15.4 | 16/4/3.9 | career win shares, above-average PER, scoring load |
 | James Posey | MEM | Power Forward and Shooting Guard and Small Forward | high | 1723606 | 51.6 | 12.4 | 8.6/4.7/1.6 | career win shares |
+| Caron Butler | MIA | Small Forward and Shooting Guard | high | 1678800 | 50.9 | 15 | 14.1/5/2.3 | career win shares, above-average PER, scoring load |
 | Richard Jefferson | NJN | Small Forward | high | 1482840 | 83 | 14.4 | 12.6/4/2 | career win shares, above-average PER |
 | Manu Ginobili | SAS | Shooting Guard | high | 1325000 | 106.4 | 20.2 | 13.3/3.5/3.8 | career win shares, above-average PER |
 | Zach Randolph | POR | Power Forward and Center | high | 1095720 | 81.1 | 19.3 | 16.6/9.1/1.8 | career win shares, above-average PER, scoring load, rebounding value |

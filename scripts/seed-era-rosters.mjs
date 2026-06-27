@@ -740,7 +740,7 @@ const ERA_KOBE = {
     { id: 'mia_2003', abbreviation: 'MIA', full_name: 'Miami Heat', city: 'Miami', name: 'Heat',
       players: [
         p('k_mia_1', 'Dwyane', 'Wade', 'SG', '3', 'MIA'),
-        p('k_mia_2', 'Shaquille', "O'Neal", 'C', '32', 'MIA'),
+        p('k_mia_2', 'Caron', 'Butler', 'SF', '4', 'MIA'),
         p('k_mia_3', 'Lamar', 'Odom', 'SF', '7', 'MIA'),
         p('k_mia_4', 'Damon', 'Jones', 'PG', '11', 'MIA'),
         p('k_mia_5', 'Udonis', 'Haslem', 'PF', '40', 'MIA'),

@@ -100,10 +100,10 @@ export function parseEraRosters(source) {
       let playerMatch;
       while ((playerMatch = playerRegex.exec(playersSource))) {
         const args = [];
-        const argRegex = /'((?:\\'|[^'])*)'/g;
+        const argRegex = /'((?:\\'|[^'])*)'|"((?:\\"|[^"])*)"/g;
         let argMatch;
         while ((argMatch = argRegex.exec(playerMatch[1]))) {
-          args.push(argMatch[1].replace(/\\'/g, "'"));
+          args.push((argMatch[1] ?? argMatch[2]).replace(/\\'/g, "'").replace(/\\"/g, '"'));
         }
         if (args.length < 6) continue;
         const [player_id, first_name, last_name, position, jersey_number, team] = args;
