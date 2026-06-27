@@ -27,6 +27,13 @@ const fixture = {
 };
 
 describe('NBA game simulation', () => {
+  it('refuses to simulate without real players for both teams', () => {
+    expect(() => simulateGame({
+      home: { teamId: 'BOS', players: [] },
+      away: fixture.away,
+    }, 'missing-roster')).toThrow('Cannot simulate');
+  });
+
   it('returns a stable legal full box score', () => {
     const first = simulateGame(fixture, 'game-seed');
     const second = simulateGame(fixture, 'game-seed');
@@ -120,5 +127,14 @@ describe('NBA game simulation', () => {
     expect(home.get('Pure Shooter')!.threePointersAttempted).toBeGreaterThan(home.get('Paint Driver')!.threePointersAttempted);
     expect(home.get('Lockdown Wing')!.steals + home.get('Lockdown Wing')!.blocks).toBeGreaterThanOrEqual(2);
     expect(result.home.points).toBeGreaterThan(result.away.points - 8);
+  });
+
+  it('keeps raw era ids out of generated game stories', () => {
+    const result = simulateGame({
+      home: { ...fixture.home, teamId: 'SAS_2011' },
+      away: { ...fixture.away, teamId: 'CHI' },
+    }, 'era-story-seed');
+
+    expect(result.story).not.toContain('_2011');
   });
 });

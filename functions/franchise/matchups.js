@@ -150,17 +150,18 @@ function simPlayerValue(player) {
 
 function simPlayersForTeam(team, teamId) {
   const source = Array.isArray(team && team.players) ? team.players : [];
-  const displayTeamId = displayScheduleAbbr(teamId) || 'CPU';
-  const players = source.length > 0
-    ? source
-    : Array.from({ length: 8 }, (_, index) => ({
-      player_id: `${teamId || 'cpu'}-${index}`,
-      full_name: `${displayTeamId} Player ${index + 1}`,
-      hidden: { shooting: 60, playmaking: 60, defense: 60, basketballIq: 60 },
-    }));
-  return [...players]
+  return [...source]
     .sort((left, right) => simPlayerValue(right) - simPlayerValue(left) || playerKey(left).localeCompare(playerKey(right)))
     .slice(0, 10);
+}
+
+function assertSimulationRoster(team, teamId) {
+  if (!team || !Array.isArray(team.players) || team.players.length < 5) {
+    throw new MatchupError(
+      'failed-precondition',
+      `Cannot simulate ${displayScheduleAbbr(teamId) || 'this team'} until its roster is linked to real players.`,
+    );
+  }
 }
 
 function normalizeSimulationMinutes(players) {
@@ -413,6 +414,8 @@ function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
 }
 
 function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
+  assertSimulationRoster(homeTeam, game.homeTeamId);
+  assertSimulationRoster(awayTeam, game.awayTeamId);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const homeStrength = teamSimulationStrength(homeTeam, game.homeTeamId);
   const awayStrength = teamSimulationStrength(awayTeam, game.awayTeamId);

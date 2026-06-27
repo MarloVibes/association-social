@@ -350,7 +350,16 @@ function quarters(homePoints: number, awayPoints: number, seed: string) {
   return [0, 1, 2, 3].map(index => ({ quarter: index + 1, home: home[index], away: away[index] }));
 }
 
+function cleanTeamLabel(teamId: string) {
+  const match = String(teamId || '').toUpperCase().match(/^([A-Z]{2,3})_\d{4}$/);
+  return match ? match[1] : teamId;
+}
+
 export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
+  if (input.home.players.length < 5 || input.away.players.length < 5) {
+    throw new Error('Cannot simulate an NBA game without real players for both teams.');
+  }
+
   let homePoints = teamTargetPoints(input.home, input.away, seed, 3);
   let awayPoints = teamTargetPoints(input.away, input.home, seed);
   if (homePoints === awayPoints) {
@@ -365,6 +374,6 @@ export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
     away,
     quarters: quarters(home.points, away.points, seed),
     winnerTeamId,
-    story: `${winnerTeamId} controlled the decisive stretches behind balanced rotation production.`,
+    story: `${cleanTeamLabel(winnerTeamId)} controlled the decisive stretches behind balanced rotation production.`,
   };
 }

@@ -256,14 +256,11 @@ describe('source safety regressions', () => {
       liveMode.indexOf('const startedAt = replayStartMs > 0'),
     );
     expect(matchup).toContain("const responseData = response.data as any;");
-    expect(matchup).toContain("await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/live-mode'");
     expect(matchup).toContain("responseData?.status === 'final' && responseData?.liveTimeline");
     expect(matchup).toContain("name === 'requestMatchup'");
-    expect(matchup).toContain('buildLiveTimeline');
-    expect(matchup).toContain('simulationEndsAtMs: nowMs + liveTimeline.revealDurationMs');
-    expect(matchup).toContain('liveTimeline,');
-    expect(matchup).toContain('liveMode,');
-    expect(matchup).toContain('arenaTheme,');
+    expect(matchup).not.toContain('simulateGameLocally');
+    expect(matchup).not.toContain('homePlayers: [{ playerId:');
+    expect(matchup).not.toContain('buildLiveTimeline');
     expect(calendar).toContain('const resultRevealed = isLiveResultRevealed(item, nowMs);');
     expect(calendar).toContain("const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;");
     expect(calendar).not.toContain('replayStartedAtMs: String(Date.now())');
@@ -278,6 +275,16 @@ describe('source safety regressions', () => {
     expect(result).toContain("httpsCallable(functions, 'resetScheduledGame')");
     expect(result).toContain('Reset Game');
     expect(result).toContain('Only commissioners can reset completed games');
+  });
+
+  it('keeps raw schedule ids out of playoff winner labels', () => {
+    const playoffs = source('app/screens/season/playoffs.tsx');
+
+    expect(playoffs).toContain('displayScheduleAbbr');
+    expect(playoffs).toContain('teamLabel(item.winnerTeamId');
+    expect(playoffs).not.toContain('Winner: {item.winnerTeamId}');
+    expect(playoffs).not.toContain('{item.homeTeamId} wins');
+    expect(playoffs).not.toContain('{item.awayTeamId} wins');
   });
 
   it('labels overtime periods on the result screen', () => {

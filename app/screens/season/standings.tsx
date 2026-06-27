@@ -134,7 +134,7 @@ export default function StandingsScreen() {
             </View>
             <View style={styles.summary}>
               <Text style={styles.summaryText}>{selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
-              <Text style={styles.summaryMeta}>{completedGames} finals recorded · Sorted by win percentage, wins, then point differential</Text>
+              <Text style={styles.summaryMeta}>{completedGames} final games recorded · Sorted by win percentage, wins, then point differential</Text>
             </View>
             <View style={styles.segment}>
               <TouchableOpacity

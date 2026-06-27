@@ -7,6 +7,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
+import { displayScheduleAbbr } from '@/domain/nba/scheduleView';
 import { buildNbaStandings } from '@/domain/nba/standings';
 
 type Team = {
@@ -30,7 +31,11 @@ type ScheduleDoc = {
 };
 
 function formatSeries(series: PlayoffSeries) {
-  return `${series.homeSeed}. ${series.homeTeamName || series.homeTeamId} vs ${series.awaySeed}. ${series.awayTeamName || series.awayTeamId}`;
+  return `${series.homeSeed}. ${series.homeTeamName || displayScheduleAbbr(series.homeTeamId)} vs ${series.awaySeed}. ${series.awayTeamName || displayScheduleAbbr(series.awayTeamId)}`;
+}
+
+function teamLabel(teamId: string, teamName?: string | null) {
+  return teamName || displayScheduleAbbr(teamId);
 }
 
 export default function PlayoffsScreen() {
@@ -214,7 +219,7 @@ export default function PlayoffsScreen() {
                   <SportTeamLogo sport="nba" abbr={item.homeTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
                 </View>
                 <Text style={styles.seed}>{item.homeSeed}</Text>
-                <Text style={styles.teamName} numberOfLines={1}>{item.homeTeamName || item.homeTeamId}</Text>
+                <Text style={styles.teamName} numberOfLines={1}>{teamLabel(item.homeTeamId, item.homeTeamName)}</Text>
               </View>
               <Text style={styles.vs}>VS</Text>
               <View style={styles.teamSide}>
@@ -222,12 +227,12 @@ export default function PlayoffsScreen() {
                   <SportTeamLogo sport="nba" abbr={item.awayTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
                 </View>
                 <Text style={styles.seed}>{item.awaySeed}</Text>
-                <Text style={styles.teamName} numberOfLines={1}>{item.awayTeamName || item.awayTeamId}</Text>
+                <Text style={styles.teamName} numberOfLines={1}>{teamLabel(item.awayTeamId, item.awayTeamName)}</Text>
               </View>
             </View>
             <Text style={styles.seriesMeta}>{formatSeries(item)} · Best of {bracket?.bestOf || 7}</Text>
             {item.winnerTeamId ? (
-              <Text style={styles.winnerText}>Winner: {item.winnerTeamId}</Text>
+              <Text style={styles.winnerText}>Winner: {teamLabel(item.winnerTeamId, item.winnerTeamId === item.homeTeamId ? item.homeTeamName : item.awayTeamName)}</Text>
             ) : isLeagueAdmin ? (
               <View style={styles.winnerActions}>
                 <TouchableOpacity
@@ -235,14 +240,14 @@ export default function PlayoffsScreen() {
                   onPress={() => markSeriesWinner(item.id, item.homeTeamId)}
                   style={[styles.winnerButton, advancingSeries === item.id && styles.disabled]}
                 >
-                  <Text style={styles.winnerButtonText}>{item.homeTeamId} wins</Text>
+                  <Text style={styles.winnerButtonText}>{displayScheduleAbbr(item.homeTeamId)} wins</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   disabled={advancingSeries === item.id}
                   onPress={() => markSeriesWinner(item.id, item.awayTeamId)}
                   style={[styles.winnerButton, advancingSeries === item.id && styles.disabled]}
                 >
-                  <Text style={styles.winnerButtonText}>{item.awayTeamId} wins</Text>
+                  <Text style={styles.winnerButtonText}>{displayScheduleAbbr(item.awayTeamId)} wins</Text>
                 </TouchableOpacity>
               </View>
             ) : null}

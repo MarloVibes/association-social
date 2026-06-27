@@ -44,6 +44,24 @@ function seedRequestedGame(overrides: Record<string, unknown> = {}) {
   return { ...game, gameId: game.id };
 }
 
+function seedRoster(prefix: string, skill = 78) {
+  return {
+    players: Array.from({ length: 8 }, (_, index) => ({
+      player_id: `${prefix}-${index}`,
+      full_name: `${prefix} Player ${index + 1}`,
+      position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+      minutes: index < 5 ? 30 : 18,
+      hidden: {
+        shooting: skill,
+        playmaking: skill - 2,
+        defense: skill - 4,
+        rebounding: index === 4 ? skill + 8 : skill - 8,
+        basketballIq: skill,
+      },
+    })),
+  };
+}
+
 describe('matchup request state helpers', () => {
   it('expires an unaccepted request after one hour', () => {
     const request = seedRequestedGame({ requestedAtMs: 0 });
@@ -70,7 +88,13 @@ describe('matchup request state helpers', () => {
 
   it('permits immediate simulation by either participating GM', () => {
     const game = seedAvailableGame();
-    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000, homeTeam: {}, awayTeam: {} });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: seedRoster('Home', 82),
+      awayTeam: seedRoster('Away', 72),
+    });
 
     expect(result).toMatchObject({
       status: 'final',
@@ -79,6 +103,21 @@ describe('matchup request state helpers', () => {
     });
     expect(result.homeScore).not.toBe(result.awayScore);
     expect([game.homeTeamId, game.awayTeamId]).toContain(result.winnerTeamId);
+  });
+
+  it('refuses to simulate when a team roster cannot be resolved', () => {
+    const game = seedAvailableGame();
+
+    expect(() => simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {},
+      awayTeam: seedRoster('Away', 72),
+    })).toThrow(expect.objectContaining({
+      code: 'failed-precondition',
+      message: expect.stringContaining('roster'),
+    }));
   });
 
   it('stores live mode replay metadata for simulated games', () => {
@@ -148,7 +187,13 @@ describe('matchup request state helpers', () => {
       awayGmId: null,
       awayTeamId: 'cpu-away',
     });
-    const result = simulateScheduledGame({ game, uid: game.homeGmId, nowMs: 5_000, homeTeam: {}, awayTeam: {} });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: seedRoster('Home', 82),
+      awayTeam: seedRoster('CPU', 74),
+    });
 
     expect(result.status).toBe('final');
     expect(result.quarters).toHaveLength(4);
@@ -174,23 +219,20 @@ describe('matchup request state helpers', () => {
     });
   });
 
-  it('uses clean era abbreviations for fallback CPU box score players', () => {
+  it('does not invent fallback CPU box score players when era pool data is missing', () => {
     const game = seedAvailableGame({
       homeTeamId: 'SAS_2011',
       awayTeamId: 'CHI',
       awayGmId: null,
     });
-    const result = simulateScheduledGame({
+
+    expect(() => simulateScheduledGame({
       game,
       uid: game.homeGmId,
       nowMs: 5_000,
       homeTeam: {},
-      awayTeam: {},
-    });
-
-    expect(result.boxScore.home.players[0].name).toMatch(/^SAS Player \d+$/);
-    expect(result.story).toContain('SAS');
-    expect(result.story).not.toContain('SAS_2011');
+      awayTeam: seedRoster('Chicago', 77),
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
   it('uses roster hidden values and stores a box score for simulated games', () => {
@@ -233,7 +275,7 @@ describe('matchup request state helpers', () => {
       starter: true,
     });
     expect(result.quarters).toHaveLength(4);
-    expect(result.story).toContain(game.homeTeamId);
+    expect(result.story).not.toContain('_2011');
   });
 
   it('uses grade-based player profiles without inflating assists and rebounds', () => {
