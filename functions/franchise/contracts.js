@@ -2,6 +2,7 @@
 
 const { serverRosterCompliance } = require('./newSeason');
 const { buildDraftFranchises } = require('./liveDraft');
+const { reconcileTeamRotation } = require('../domain/rotationSync');
 
 const CONTRACT_STAGES = new Set(['re_signing', 'free_agency']);
 const CONTRACT_ROLES = new Set(['franchise', 'starter', 'rotation', 'depth']);
@@ -168,14 +169,16 @@ function applyContract(team, offer, stage) {
   };
   if (stage === 're_signing') {
     const target = offer.playerId;
+    const nextPlayers = players.map(player => (
+      playerKey(player) === target ? signedPlayer : player
+    ));
     return {
       ...team,
-      players: players.map(player => (
-        playerKey(player) === target ? signedPlayer : player
-      )),
+      ...reconcileTeamRotation(team, nextPlayers),
     };
   }
-  return { ...team, players: [...players, signedPlayer] };
+  const nextPlayers = [...players, signedPlayer];
+  return { ...team, ...reconcileTeamRotation(team, nextPlayers) };
 }
 
 function resolveContractRound({
@@ -683,7 +686,9 @@ function createResolveContractRoundHandler({
           const { virtual, ...storedTeam } = team;
           tx.set(teamsQuery.doc(team.id), storedTeam);
         } else if (changedTeamIds.has(String(team.id))) {
-          tx.update(teamsQuery.doc(team.id), { players: team.players || [] });
+          const update = { players: team.players || [] };
+          if (Array.isArray(team.rotation)) update.rotation = team.rotation;
+          tx.update(teamsQuery.doc(team.id), update);
         }
       }
       for (const offerResult of result.offerResults) {

@@ -1,5 +1,7 @@
 'use strict';
 
+const { reconcileTeamRotation } = require('./rotationSync');
+
 function playerKey(player) {
   return String(player.player_id || player.id || player.bref_id || player.full_name || '');
 }
@@ -129,11 +131,11 @@ function swapAssets({ teamA, teamB, offerA, offerB, pickOfferA, pickOfferB }) {
 
   return {
     teamA: {
-      players: (teamA.players || []).filter((asset) => !playerKeysA.has(playerKey(asset))).concat(playersB),
+      ...reconcileTeamRotation(teamA, (teamA.players || []).filter((asset) => !playerKeysA.has(playerKey(asset))).concat(playersB)),
       picks: (teamA.picks || []).filter((asset) => !pickKeysA.has(pickKey(asset))).concat(picksB),
     },
     teamB: {
-      players: (teamB.players || []).filter((asset) => !playerKeysB.has(playerKey(asset))).concat(playersA),
+      ...reconcileTeamRotation(teamB, (teamB.players || []).filter((asset) => !playerKeysB.has(playerKey(asset))).concat(playersA)),
       picks: (teamB.picks || []).filter((asset) => !pickKeysB.has(pickKey(asset))).concat(picksA),
     },
   };

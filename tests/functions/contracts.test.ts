@@ -202,7 +202,14 @@ describe('contract orchestration', () => {
       stage: 'free_agency',
       teams: [
         { id: 'a', players: [{ salary: 50 }] },
-        { id: 'b', players: [{ salary: 50 }] },
+        {
+          id: 'b',
+          players: [{ player_id: 'incumbent-b', salary: 50 }],
+          rotation: [
+            { playerId: 'incumbent-b', minutes: 32 },
+            { playerId: 'ghost-player', minutes: 16 },
+          ],
+        },
       ],
       offers: [
         {
@@ -257,6 +264,9 @@ describe('contract orchestration', () => {
         }),
       ]),
     );
+    expect(result.teams.find((team: any) => team.id === 'b').rotation).toEqual([
+      { playerId: 'incumbent-b', minutes: 32 },
+    ]);
 
     const repeated = resolveContractRound({
       ...input,

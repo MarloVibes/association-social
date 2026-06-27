@@ -130,10 +130,15 @@ describe('finalizeTrade domain', () => {
     const teamA = {
       players: [{ player_id: 'a' }, { player_id: 'stay-a' }],
       picks: [{ id: 'pick-a' }],
+      rotation: [
+        { playerId: 'a', minutes: 34 },
+        { playerId: 'stay-a', minutes: 28 },
+      ],
     };
     const teamB = {
       players: [{ player_id: 'b' }],
       picks: [{ id: 'pick-b' }],
+      rotation: [{ playerId: 'b', minutes: 30 }],
     };
 
     expect(swapAssets({
@@ -147,10 +152,12 @@ describe('finalizeTrade domain', () => {
       teamA: {
         players: [{ player_id: 'stay-a' }, { player_id: 'b' }],
         picks: [{ id: 'pick-b' }],
+        rotation: [{ playerId: 'stay-a', minutes: 28 }],
       },
       teamB: {
         players: [{ player_id: 'a' }],
         picks: [{ id: 'pick-a' }],
+        rotation: [],
       },
     });
   });
