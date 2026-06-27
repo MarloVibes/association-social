@@ -23,12 +23,18 @@ describe('offseason view model', () => {
       seasonYear: 2031,
       draftTimerSeconds: 90,
     });
+    expect(buildInitialOffseasonState({ sport: 'nba', currentYear: 2032 })).toMatchObject({
+      stage: 'awards_recap',
+      seasonYear: 2032,
+      stageDurationSeconds: 600,
+    });
   });
 
   it('uses readable stage labels and identifies stages that require team action', () => {
     expect(getOffseasonStageLabel('draft_class_review')).toBe('Draft Class Review');
+    expect(getOffseasonStageLabel('awards_recap')).toBe('Awards Recap');
     expect(isOffseasonTeamActionStage('re_signing')).toBe(true);
-    expect(isOffseasonTeamActionStage('season_end')).toBe(false);
+    expect(isOffseasonTeamActionStage('awards_recap')).toBe(false);
   });
 
   it('lists only claimed teams that have not completed the current action', () => {

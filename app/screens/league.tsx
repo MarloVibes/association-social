@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
@@ -216,6 +217,37 @@ export default function LeagueScreen() {
         coCommissioners: JSON.stringify(league.coCommissioners || []),
       },
     });
+  };
+
+  const openOffseasonManagement = () => {
+    if (!isCommissioner || !isNBASport || league?.offseason) {
+      router.push({ pathname: '/screens/offseason', params: { leagueId } });
+      return;
+    }
+    Alert.alert(
+      'Start offseason?',
+      'Once offseason starts, each stage lasts 10 minutes, league pages move forward, and there is no going back.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start Offseason',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const advance = httpsCallable(functions, 'advanceOffseasonStage');
+              await advance({
+                leagueId,
+                expectedStage: 'awards_recap',
+                expectedVersion: 0,
+              });
+              router.push({ pathname: '/screens/offseason', params: { leagueId } });
+            } catch (error: any) {
+              Alert.alert('Unable to start offseason', error.message || 'Please try again.');
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -459,6 +491,13 @@ export default function LeagueScreen() {
                 <Text style={styles.seasonHubButtonIcon}>📋</Text>
                 <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Coaching</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/offseason/draft-class', params: { leagueId } })}
+              >
+                <Text style={styles.seasonHubButtonIcon}>🧾</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Draft Class</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -580,10 +619,15 @@ export default function LeagueScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.advanceSeasonBtn, { backgroundColor: '#2a1a00', borderColor: '#ffaa00', marginTop: 12 }]}
-              onPress={() => router.push({ pathname: '/screens/offseason', params: { leagueId } })}
+              onPress={openOffseasonManagement}
             >
               <Text style={[styles.advanceSeasonBtnText, { color: '#ffaa00' }]}>Offseason Management</Text>
             </TouchableOpacity>
+            {isNBASport && !league?.offseason ? (
+              <Text style={styles.offseasonWarning}>
+                Warning: starting offseason opens timed 10-minute stages and cannot be rolled back.
+              </Text>
+            ) : null}
           </View>
         )}
 
@@ -702,6 +746,7 @@ const styles = StyleSheet.create({
   inviteBtnText: { fontSize: 15, fontWeight: '700' },
   advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
+  offseasonWarning: { color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 8, textAlign: 'center' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
   seasonHub: { borderRadius: 14, padding: 12, borderWidth: 1, marginBottom: 18 },

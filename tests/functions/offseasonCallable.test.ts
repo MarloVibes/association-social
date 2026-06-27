@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   createAdvanceOffseasonHandler,
+  hasPlayoffChampion,
   initializeOffseason,
   transitionForCallable,
   validateAdvanceInput,
@@ -63,9 +64,14 @@ describe('offseason callable helpers', () => {
     });
     expect(initializeOffseason(
       { sport: 'nba', currentYear: 2030 },
-      'season_end',
+      'awards_recap',
       0,
-    )).toEqual(expect.objectContaining({ seasonYear: 2030, draftTimerSeconds: 120 }));
+    )).toEqual(expect.objectContaining({
+      stage: 'awards_recap',
+      seasonYear: 2030,
+      draftTimerSeconds: 120,
+      stageDurationSeconds: 600,
+    }));
     expect(() => initializeOffseason({}, 're_signing', 0)).toThrow(expect.objectContaining({
       code: 'aborted',
     }));
@@ -106,6 +112,34 @@ describe('offseason callable helpers', () => {
       expectedVersion: 1,
       stageStartedAt: 'now',
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+  });
+
+  it('accepts the irreversible warning timestamp when NBA timed offseason starts', () => {
+    const started = initializeOffseason(
+      { sport: 'nba', currentYear: 2031 },
+      'awards_recap',
+      0,
+      'accepted-warning',
+      'deadline',
+    );
+    expect(started).toEqual(expect.objectContaining({
+      stage: 'awards_recap',
+      stageDurationSeconds: 600,
+      warningAcceptedAt: 'accepted-warning',
+      stageEndsAt: 'deadline',
+    }));
+  });
+
+  it('detects a crowned playoff champion before NBA offseason starts', () => {
+    expect(hasPlayoffChampion({ playoffs: { rounds: [] } })).toBe(false);
+    expect(hasPlayoffChampion({
+      playoffs: {
+        rounds: [{
+          name: 'final',
+          series: [{ winnerTeamId: 'CHI' }],
+        }],
+      },
+    })).toBe(true);
   });
 
   it('requires all contract rounds and pending offers to resolve before advancing', () => {
@@ -263,7 +297,7 @@ describe('offseason callable helpers', () => {
       expectedStage: 'expansion',
       expectedVersion: 7,
       stageStartedAt: 'now',
-    }).stage).toBe('roster_cuts');
+    }).stage).toBe('free_agency');
   });
 
   it('routes ready-for-season advancement through the sport-aware season callable', () => {
@@ -333,6 +367,98 @@ describe('offseason callable helpers', () => {
     expect(operations).toEqual(['read-league', 'read-teams', 'write']);
   });
 
+  it('starts NBA offseason at awards recap only after a champion is crowned', async () => {
+    const leagueRef = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({ kind: name, id }),
+        kind: name,
+      }),
+    };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({ sport: 'nba', commissionerId: 'comm', currentYear: 2031 }),
+    };
+    const teamsSnap = { docs: [] };
+    const scheduleSnap = {
+      exists: true,
+      data: () => ({
+        playoffs: {
+          rounds: [{ name: 'final', series: [{ winnerTeamId: 'CHI' }] }],
+        },
+      }),
+    };
+    const writes: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) return leagueSnap;
+        if (ref.kind === 'teams') return teamsSnap;
+        return scheduleSnap;
+      }),
+      update: vi.fn((_ref, update) => writes.push(update)),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createAdvanceOffseasonHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      HttpsError: FakeHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', expectedStage: 'awards_recap', expectedVersion: 0 },
+    })).resolves.toEqual({
+      offseason: expect.objectContaining({
+        stage: 'awards_recap',
+        stageDurationSeconds: 600,
+        warningAcceptedAt: 'server-time',
+      }),
+    });
+    expect(writes[0].offseason.stage).toBe('awards_recap');
+  });
+
+  it('blocks NBA offseason start before the playoff champion is crowned', async () => {
+    const leagueRef = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({ kind: name, id }),
+        kind: name,
+      }),
+    };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({ sport: 'nba', commissionerId: 'comm', currentYear: 2031 }),
+    };
+    const teamsSnap = { docs: [] };
+    const scheduleSnap = {
+      exists: true,
+      data: () => ({ playoffs: { rounds: [{ name: 'final', series: [{ winnerTeamId: null }] }] } }),
+    };
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) return leagueSnap;
+        if (ref.kind === 'teams') return teamsSnap;
+        return scheduleSnap;
+      }),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createAdvanceOffseasonHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      HttpsError: FakeHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', expectedStage: 'awards_recap', expectedVersion: 0 },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
   it('writes expansion teams before advancing out of expansion', async () => {
     const teamsCollection = {
       kind: 'teams-query',
@@ -370,7 +496,7 @@ describe('offseason callable helpers', () => {
       get: vi.fn(async (ref) => (ref === leagueRef ? leagueSnap : teamsSnap)),
       set: vi.fn((ref, data) => writes.push({ ref, data })),
       update: vi.fn((_ref, update) => {
-        expect(update.offseason.stage).toBe('roster_cuts');
+        expect(update.offseason.stage).toBe('free_agency');
       }),
     };
     const db = {

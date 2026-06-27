@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
@@ -49,6 +50,7 @@ export default function PlayoffsScreen() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [startingOffseason, setStartingOffseason] = useState(false);
   const [advancingSeries, setAdvancingSeries] = useState('');
   const [format, setFormat] = useState<PlayoffFormat>('short_8');
 
@@ -106,6 +108,13 @@ export default function PlayoffsScreen() {
   const series = useMemo(() => (
     bracket?.rounds.flatMap(round => round.series.map(item => ({ ...item, roundLabel: round.label }))) || []
   ), [bracket?.rounds]);
+  const finalSeries = useMemo(() => (
+    bracket?.rounds
+      .flatMap(round => round.series)
+      .find(item => item.round === 'final') || null
+  ), [bracket?.rounds]);
+  const championTeamId = finalSeries?.winnerTeamId || null;
+  const offseasonStarted = Boolean(league?.offseason && league.offseason.stage !== 'regular_season');
 
   const startPlayoffs = async () => {
     if (!leagueId || !league || !schedule) return;
@@ -173,6 +182,37 @@ export default function PlayoffsScreen() {
   const openGame = (game: NbaScheduleGame) => {
     const destination = game.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
     router.push({ pathname: destination as any, params: { leagueId, gameId: game.id, competition: 'playoffs' } });
+  };
+
+  const startOffseason = () => {
+    if (!leagueId || !championTeamId || offseasonStarted || startingOffseason) return;
+    Alert.alert(
+      'Advance to offseason?',
+      'Once offseason starts, each stage lasts 10 minutes, league pages move forward, and there is no going back.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start Offseason',
+          style: 'destructive',
+          onPress: async () => {
+            setStartingOffseason(true);
+            try {
+              const advance = httpsCallable(functions, 'advanceOffseasonStage');
+              await advance({
+                leagueId,
+                expectedStage: 'awards_recap',
+                expectedVersion: 0,
+              });
+              router.push({ pathname: '/screens/offseason', params: { leagueId } });
+            } catch (error: any) {
+              Alert.alert('Offseason not started', error.message || 'Please try again.');
+            } finally {
+              setStartingOffseason(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
@@ -269,6 +309,29 @@ export default function PlayoffsScreen() {
                 {syncing ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>Sync Completed Games</Text>}
               </TouchableOpacity>
             ) : null}
+            {bracket && championTeamId && isLeagueAdmin ? (
+              <View style={styles.offseasonCard}>
+                <Text style={styles.offseasonTitle}>
+                  Champion: {teamLabel(championTeamId, finalSeries?.homeTeamId === championTeamId ? finalSeries?.homeTeamName : finalSeries?.awayTeamName)}
+                </Text>
+                <Text style={styles.offseasonWarning}>
+                  Starting offseason opens 10-minute stages for awards, lottery, progression, contracts, draft, free agency, and ready period. There is no going back.
+                </Text>
+                <TouchableOpacity
+                  disabled={startingOffseason || offseasonStarted}
+                  onPress={startOffseason}
+                  style={[styles.startButton, (startingOffseason || offseasonStarted) && styles.disabled]}
+                >
+                  {startingOffseason ? (
+                    <ActivityIndicator color="#06130c" />
+                  ) : (
+                    <Text style={styles.startText}>
+                      {offseasonStarted ? 'Offseason Started' : 'Advance to Offseason'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </>
         )}
         renderItem={({ item }) => (
@@ -358,6 +421,9 @@ const styles = StyleSheet.create({
   syncButton: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   startText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   disabled: { opacity: 0.5 },
+  offseasonCard: { backgroundColor: '#171006', borderRadius: 8, borderWidth: 1, borderColor: '#ffaa00', padding: 12, marginBottom: 14, gap: 10 },
+  offseasonTitle: { color: '#ffffff', fontSize: 15, fontWeight: '900' },
+  offseasonWarning: { color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17 },
   seriesCard: { backgroundColor: '#111', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 10 },
   roundLabel: { color: '#888', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 10 },
   matchupRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

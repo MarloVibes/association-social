@@ -57,6 +57,21 @@ function callableMessage(error: any): string {
   return error?.message || 'The offseason could not be advanced.';
 }
 
+function dateFromFirestore(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+  return null;
+}
+
+function formatStageDeadline(offseason: OffseasonState): string {
+  const deadline = dateFromFirestore(offseason.stageEndsAt);
+  if (!offseason.stageDurationSeconds && !deadline) return 'Commissioner-controlled stage';
+  if (!deadline) return `${Math.round((offseason.stageDurationSeconds || 600) / 60)} minute stage`;
+  return `10 minute stage · Ends ${deadline.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
+
 export default function OffseasonScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -142,7 +157,9 @@ export default function OffseasonScreen() {
     && !isRegularSeason
     && unresolvedTeams.length === 0
     && contractRoundsReady;
-  const stageRoute = offseason?.stage === 're_signing'
+  const stageRoute = offseason?.stage === 'awards_recap'
+    ? '/screens/season/awards'
+    : offseason?.stage === 're_signing'
     ? '/screens/offseason/re-signing'
     : offseason?.stage === 'free_agency'
       ? '/screens/offseason/free-agency'
@@ -244,6 +261,14 @@ export default function OffseasonScreen() {
           <Text style={styles.stageMeta}>
             {offseason.seasonYear} season · Version {offseason.version}
           </Text>
+          {offseason.stageDurationSeconds ? (
+            <View style={styles.warningCard}>
+              <Ionicons color="#ffaa00" name="warning-outline" size={18} />
+              <Text style={styles.warningText}>
+                {formatStageDeadline(offseason)}. Stages are timed and cannot be rolled back after the league starts offseason.
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.progress}>
@@ -417,6 +442,18 @@ const styles = StyleSheet.create({
   sectionLabel: { color: '#00e58b', fontSize: 11, fontWeight: '800' },
   stageTitle: { color: '#ffffff', fontSize: 30, fontWeight: '800', marginTop: 7 },
   stageMeta: { color: '#7d857f', fontSize: 13, marginTop: 6 },
+  warningCard: {
+    marginTop: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffaa00',
+    backgroundColor: '#171006',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  warningText: { flex: 1, color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17 },
   progress: { paddingHorizontal: 24, paddingVertical: 24 },
   progressRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 12 },
   progressMarker: {

@@ -171,6 +171,14 @@ function defaultDraftTeamCount(sportInput) {
   return 30;
 }
 
+function draftReviewSeasonYear(league) {
+  const offseasonYear = league && league.offseason && league.offseason.seasonYear;
+  if (Number.isInteger(offseasonYear)) return offseasonYear;
+  const currentYear = league && league.currentYear;
+  if (league && league.sport === 'nba' && Number.isInteger(currentYear)) return currentYear + 1;
+  return null;
+}
+
 function isCommissioner(uid, league) {
   return Boolean(
     uid
@@ -190,6 +198,18 @@ function assertDraftClassEditable({
 }) {
   if (!isCommissioner(uid, league)) {
     throw new DraftClassError('permission-denied', 'Only a commissioner can edit the draft class.');
+  }
+  const preOffseasonNbaReview = Boolean(
+    league
+    && league.sport === 'nba'
+    && !league.offseason
+    && expectedVersion === 0
+  );
+  if (preOffseasonNbaReview) {
+    if (draftClass && draftClass.published === true) {
+      throw new DraftClassError('failed-precondition', 'The published draft class is locked.');
+    }
+    return;
   }
   const offseason = league.offseason || {};
   if (
@@ -409,7 +429,7 @@ function createMutateDraftClassHandler({ getFirestore, serverTimestamp, HttpsErr
         const leagueSnap = await tx.get(leagueRef);
         if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
         const league = leagueSnap.data() || {};
-        const seasonYear = league.offseason && league.offseason.seasonYear;
+        const seasonYear = draftReviewSeasonYear(league);
         const classRef = leagueRef.collection('draft_classes').doc(draftClassDocumentId(seasonYear));
         const classSnap = await tx.get(classRef);
         const draftClass = classSnap.exists
@@ -470,8 +490,9 @@ function createPublishDraftClassHandler({ getFirestore, serverTimestamp, HttpsEr
         const leagueSnap = await tx.get(leagueRef);
         if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
         const league = leagueSnap.data() || {};
+        const seasonYear = draftReviewSeasonYear(league);
         const classRef = leagueRef.collection('draft_classes')
-          .doc(draftClassDocumentId(league.offseason && league.offseason.seasonYear));
+          .doc(draftClassDocumentId(seasonYear));
         const classSnap = await tx.get(classRef);
         if (!classSnap.exists) throw new HttpsError('failed-precondition', 'Generate a draft class first.');
         const draftClass = classSnap.data() || {};
@@ -482,10 +503,12 @@ function createPublishDraftClassHandler({ getFirestore, serverTimestamp, HttpsEr
         const timestamp = serverTimestamp();
         const published = publishDraftClassState(draftClass, timestamp);
         tx.set(classRef, published);
-        tx.update(leagueRef, {
-          'offseason.draftStatus': 'published',
-          'offseason.draftClassVersion': published.version,
-        });
+        if (league.offseason) {
+          tx.update(leagueRef, {
+            'offseason.draftStatus': 'published',
+            'offseason.draftClassVersion': published.version,
+          });
+        }
         return { draftClass: published };
       });
     } catch (error) {
@@ -501,6 +524,7 @@ module.exports = {
   createMutateDraftClassHandler,
   createPublishDraftClassHandler,
   draftClassDocumentId,
+  draftReviewSeasonYear,
   generateServerDraftClass,
   normalizeProspectForSport,
   publishDraftClassState,

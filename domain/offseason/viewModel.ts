@@ -18,11 +18,11 @@ const TEAM_ACTION_STAGES = new Set<OffseasonStage>([
   'team_options',
   're_signing',
   'free_agency',
-  'roster_cuts',
   'ready_for_season',
 ]);
 
 const STAGE_LABELS: Record<OffseasonStage, string> = {
+  awards_recap: 'Awards Recap',
   season_end: 'Season Complete',
   lottery_and_draft_order: 'Lottery & Draft Order',
   player_progression: 'Player Progression',
@@ -39,8 +39,9 @@ const STAGE_LABELS: Record<OffseasonStage, string> = {
 
 export function buildInitialOffseasonState(league: LeagueSeed): OffseasonState {
   const rules = getSportRules(league.sport || 'nba');
+  const isNba = !['mlb', 'madden', 'nfl'].includes(String(league.sport || 'nba'));
   return {
-    stage: 'season_end',
+    stage: isNba ? 'awards_recap' : 'season_end',
     seasonYear: typeof league.currentYear === 'number'
       ? league.currentYear
       : rules.initialSeasonYear,
@@ -50,6 +51,7 @@ export function buildInitialOffseasonState(league: LeagueSeed): OffseasonState {
       ? league.draftTimerSeconds
       : rules.defaultDraftTimerSeconds,
     draftStatus: 'none',
+    ...(isNba ? { stageDurationSeconds: 600 } : {}),
     version: 0,
   };
 }

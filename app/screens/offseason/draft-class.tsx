@@ -16,12 +16,13 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
-import { MLB_DRAFT_POSITIONS, NFL_DRAFT_POSITIONS } from '@/domain/draft/generateClass';
+import { MLB_DRAFT_POSITIONS, NBA_DRAFT_POSITIONS, NFL_DRAFT_POSITIONS } from '@/domain/draft/generateClass';
 import type { OffseasonState } from '@/domain/offseason/types';
 
 type League = {
   name?: string;
   sport?: string;
+  currentYear?: number;
   commissionerId?: string;
   coCommissioners?: string[];
   offseason?: OffseasonState;
@@ -72,7 +73,8 @@ export default function DraftClassScreen() {
     });
   }, [leagueId, router]);
 
-  const seasonYear = league?.offseason?.seasonYear;
+  const seasonYear = league?.offseason?.seasonYear
+    || (league?.sport === 'nba' && typeof league?.currentYear === 'number' ? league.currentYear + 1 : undefined);
   useEffect(() => {
     if (!leagueId || !seasonYear) return;
     return onSnapshot(
@@ -89,9 +91,17 @@ export default function DraftClassScreen() {
     ),
   );
   const editable = isCommissioner
-    && league?.offseason?.stage === 'draft_class_review'
+    && (
+      league?.offseason?.stage === 'draft_class_review'
+      || (league?.sport === 'nba' && !league?.offseason)
+    )
     && draftClass?.published !== true;
-  const positions = league?.sport === 'mlb' ? MLB_DRAFT_POSITIONS : NFL_DRAFT_POSITIONS;
+  const expectedVersion = league?.offseason?.version ?? 0;
+  const positions = league?.sport === 'nba'
+    ? NBA_DRAFT_POSITIONS
+    : league?.sport === 'mlb'
+      ? MLB_DRAFT_POSITIONS
+      : NFL_DRAFT_POSITIONS;
   const players = useMemo(
     () => [...(draftClass?.players || [])].sort((left, right) => (
       left.projectedRound - right.projectedRound
@@ -101,13 +111,13 @@ export default function DraftClassScreen() {
   );
 
   const mutate = async (data: Record<string, unknown>) => {
-    if (!leagueId || !league?.offseason) return;
+    if (!leagueId || !league) return;
     setWorking(true);
     try {
       const callable = httpsCallable(functions, 'mutateDraftClass');
       await callable({
         leagueId,
-        expectedVersion: league.offseason.version,
+        expectedVersion,
         ...data,
       });
     } catch (error: any) {
@@ -152,7 +162,7 @@ export default function DraftClassScreen() {
 
   const saveProspect = async () => {
     const projectedRound = Number(round);
-    const maxRound = league?.sport === 'mlb' ? 5 : 7;
+    const maxRound = league?.sport === 'nba' ? 2 : league?.sport === 'mlb' ? 5 : 7;
     if (!name.trim() || !positions.includes(position as never)) {
       Alert.alert('Invalid prospect', 'Enter a name and valid position.');
       return;
@@ -172,7 +182,7 @@ export default function DraftClassScreen() {
           name: name.trim(),
           position,
           projectedRound,
-          age: league?.sport === 'mlb' ? 21 : 22,
+          age: league?.sport === 'nba' ? 19 : league?.sport === 'mlb' ? 21 : 22,
           archetype: 'Custom Prospect',
           summary: `${name.trim()} is a commissioner-created ${position} prospect.`,
         },
@@ -205,7 +215,7 @@ export default function DraftClassScreen() {
   };
 
   const publish = () => {
-    if (!leagueId || !league?.offseason) return;
+    if (!leagueId || !league) return;
     Alert.alert(
       'Publish draft class?',
       'Publishing locks every prospect and prepares this class for the live draft.',
@@ -219,7 +229,7 @@ export default function DraftClassScreen() {
               const callable = httpsCallable(functions, 'publishDraftClass');
               await callable({
                 leagueId,
-                expectedVersion: league.offseason?.version,
+                expectedVersion,
               });
             } catch (error: any) {
               Alert.alert('Publish failed', error.message || 'Please try again.');
@@ -258,7 +268,7 @@ export default function DraftClassScreen() {
           <View>
             <Text style={styles.summaryTitle}>{players.length} prospects</Text>
             <Text style={styles.summaryMeta}>
-              {draftClass?.published ? 'Published and locked' : 'Commissioner review'}
+              {draftClass?.published ? 'Published and locked' : league?.offseason ? 'Commissioner review' : 'Pre-offseason review'}
             </Text>
           </View>
           {draftClass?.published && <Ionicons color="#00e58b" name="lock-closed" size={21} />}

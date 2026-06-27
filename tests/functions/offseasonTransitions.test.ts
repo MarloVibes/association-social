@@ -91,6 +91,7 @@ describe('offseason transitions', () => {
       completedTeamIds: [],
       stageStartedAt: 'now',
       draftStatus: 'review',
+      stageEndsAt: undefined,
     }));
 
     const live = transitionOffseasonState({
@@ -140,7 +141,7 @@ describe('offseason transitions', () => {
   });
 
   it('gates NBA expansion on an enabled proposal', () => {
-    expect(nextOffseasonStage('nba', 'live_draft', false)).toBe('roster_cuts');
+    expect(nextOffseasonStage('nba', 'live_draft', false)).toBe('free_agency');
     expect(nextOffseasonStage('nba', 'live_draft', true)).toBe('expansion');
 
     const next = transitionOffseasonState({
@@ -157,6 +158,41 @@ describe('offseason transitions', () => {
     });
     expect(next.stage).toBe('expansion');
     expect(next.draftStatus).toBe('complete');
+  });
+
+  it('uses timed NBA stages starting with awards recap', () => {
+    expect(getOffseasonStageSequence('nba', false)).toEqual([
+      'awards_recap',
+      'lottery_and_draft_order',
+      'player_progression',
+      'team_options',
+      're_signing',
+      'live_draft',
+      'free_agency',
+      'ready_for_season',
+      'regular_season',
+    ]);
+    const next = transitionOffseasonState({
+      uid: 'comm',
+      league: league({
+        sport: 'nba',
+        offseason: state({
+          stage: 'awards_recap',
+          stageDurationSeconds: 600,
+        }),
+      }),
+      teams: [],
+      expectedStage: 'awards_recap',
+      expectedVersion: 0,
+      stageStartedAt: 'now',
+      stageEndsAt: 'ten-minutes',
+    });
+    expect(next).toEqual(expect.objectContaining({
+      stage: 'lottery_and_draft_order',
+      stageDurationSeconds: 600,
+      stageStartedAt: 'now',
+      stageEndsAt: 'ten-minutes',
+    }));
   });
 
   it('lets one call win and rejects a stale second call', () => {

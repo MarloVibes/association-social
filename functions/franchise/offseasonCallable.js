@@ -9,6 +9,7 @@ const {
 } = require('./expansion');
 
 const OFFSEASON_STAGES = new Set([
+  'awards_recap',
   'season_end',
   'lottery_and_draft_order',
   'player_progression',
@@ -67,6 +68,10 @@ function defaultSeasonYear(sport) {
   return sport === 'mlb' ? 2026 : 2025;
 }
 
+function usesNbaOffseasonSequence(sport) {
+  return sport !== 'mlb' && sport !== 'madden' && sport !== 'nfl';
+}
+
 function normalizeAbbr(value) {
   return String(value || '').trim().toUpperCase();
 }
@@ -92,8 +97,22 @@ function validateExpansionProposalForCallable({ league, teams }) {
   return { valid: errors.length === 0, errors };
 }
 
-function initializeOffseason(league, expectedStage, expectedVersion) {
-  if (expectedStage !== 'season_end' || expectedVersion !== 0) {
+function hasPlayoffChampion(schedule) {
+  const rounds = schedule && schedule.playoffs && Array.isArray(schedule.playoffs.rounds)
+    ? schedule.playoffs.rounds
+    : [];
+  return rounds.some(round => (
+    round
+    && round.name === 'final'
+    && Array.isArray(round.series)
+    && round.series.some(series => series && String(series.winnerTeamId || '').trim())
+  ));
+}
+
+function initializeOffseason(league, expectedStage, expectedVersion, warningAcceptedAt = null, stageEndsAt = null) {
+  const isNba = usesNbaOffseasonSequence(league && league.sport);
+  const openingStage = isNba ? 'awards_recap' : 'season_end';
+  if (expectedStage !== openingStage || expectedVersion !== 0) {
     throw new OffseasonTransitionError(
       'aborted',
       'The offseason stage changed before this request completed.',
@@ -102,8 +121,8 @@ function initializeOffseason(league, expectedStage, expectedVersion) {
   }
   const currentYear = league && league.currentYear;
   const draftTimerSeconds = league && league.draftTimerSeconds;
-  return {
-    stage: 'season_end',
+  const state = {
+    stage: openingStage,
     seasonYear: typeof currentYear === 'number' && Number.isFinite(currentYear)
       ? currentYear
       : defaultSeasonYear(league && league.sport),
@@ -113,8 +132,12 @@ function initializeOffseason(league, expectedStage, expectedVersion) {
       ? draftTimerSeconds
       : 120,
     draftStatus: 'none',
+    ...(isNba ? { stageDurationSeconds: 600 } : {}),
     version: 0,
   };
+  if (stageEndsAt != null) state.stageEndsAt = stageEndsAt;
+  if (warningAcceptedAt != null) state.warningAcceptedAt = warningAcceptedAt;
+  return state;
 }
 
 function transitionForCallable(input) {
@@ -146,6 +169,16 @@ function transitionForCallable(input) {
       || league.offseason.draftStatus !== 'published'
       || draftClassPublished !== true
     )
+  ) {
+    throw new OffseasonTransitionError(
+      'failed-precondition',
+      'Publish the draft class before starting the live draft.',
+    );
+  }
+  if (
+    usesNbaOffseasonSequence(league && league.sport)
+    && expectedStage === 're_signing'
+    && draftClassPublished !== true
   ) {
     throw new OffseasonTransitionError(
       'failed-precondition',
@@ -233,6 +266,26 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
         }
 
         const storedLeague = leagueSnap.data() || {};
+        const isStoredNba = usesNbaOffseasonSequence(storedLeague && storedLeague.sport);
+        if (!storedLeague.offseason && isStoredNba) {
+          const scheduleId = storedLeague.scheduleId || String(storedLeague.currentYear || defaultSeasonYear(storedLeague.sport));
+          const scheduleSnap = await tx.get(leagueRef.collection('schedules').doc(scheduleId));
+          if (!scheduleSnap.exists || !hasPlayoffChampion(scheduleSnap.data() || {})) {
+            throw new OffseasonTransitionError(
+              'failed-precondition',
+              'The playoff champion must be crowned before offseason can start.',
+            );
+          }
+          const offseason = initializeOffseason(
+            storedLeague,
+            input.expectedStage,
+            input.expectedVersion,
+            serverTimestamp(),
+            new Date(Date.now() + 600000),
+          );
+          tx.update(leagueRef, { offseason });
+          return { offseason };
+        }
         const league = storedLeague.offseason
           ? storedLeague
           : {
@@ -264,7 +317,13 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
               && offer.version === input.expectedVersion
             )).length;
         }
-        if (input.expectedStage === 'draft_class_review') {
+        if (
+          input.expectedStage === 'draft_class_review'
+          || (
+            usesNbaOffseasonSequence(league && league.sport)
+            && input.expectedStage === 're_signing'
+          )
+        ) {
           const draftClassRef = leagueRef
             .collection('draft_classes')
             .doc(String(league.offseason.seasonYear));
@@ -290,6 +349,9 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           liveDraftComplete,
           pendingContractOfferCount,
           stageStartedAt: serverTimestamp(),
+          stageEndsAt: usesNbaOffseasonSequence(league && league.sport)
+            ? new Date(Date.now() + 600000)
+            : null,
         });
         expansionTeamDocs.forEach(team => tx.set(teamsQuery.doc(team.id), team.data));
         tx.update(leagueRef, { offseason });
@@ -307,6 +369,7 @@ module.exports = {
   TEAM_ACTION_STAGES,
   createAdvanceOffseasonHandler,
   initializeOffseason,
+  hasPlayoffChampion,
   toHttpsError,
   transitionForCallable,
   validateExpansionProposalForCallable,

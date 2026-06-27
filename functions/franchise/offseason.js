@@ -1,16 +1,14 @@
 'use strict';
 
 const NBA_STAGES = Object.freeze([
-  'season_end',
+  'awards_recap',
   'lottery_and_draft_order',
   'player_progression',
   'team_options',
   're_signing',
-  'free_agency',
-  'draft_class_review',
   'live_draft',
   'expansion',
-  'roster_cuts',
+  'free_agency',
   'ready_for_season',
   'regular_season',
 ]);
@@ -50,7 +48,7 @@ function getOffseasonStageSequence(sport, expansionEnabled = false) {
 
 function nextOffseasonStage(sport, currentStage, expansionEnabled = false) {
   if (currentStage === 'regular_season') return 'regular_season';
-  if (currentStage === 'expansion' && !expansionEnabled) return 'roster_cuts';
+  if (currentStage === 'expansion' && !expansionEnabled) return 'free_agency';
   const stages = getOffseasonStageSequence(sport, expansionEnabled);
   const currentIndex = stages.indexOf(currentStage);
   return stages[currentIndex + 1] || currentStage;
@@ -85,7 +83,7 @@ function nextDraftStatus(currentState, nextStage) {
   if (nextStage === 'live_draft') return 'live';
   if (
     currentState.stage === 'live_draft'
-    || nextStage === 'roster_cuts'
+    || nextStage === 'free_agency'
     || nextStage === 'ready_for_season'
     || nextStage === 'regular_season'
   ) {
@@ -101,6 +99,7 @@ function transitionOffseasonState({
   expectedStage,
   expectedVersion,
   stageStartedAt,
+  stageEndsAt,
 }) {
   if (!authorizeOffseasonAdvance(uid, league)) {
     throw new OffseasonTransitionError(
@@ -139,6 +138,7 @@ function transitionOffseasonState({
     ...current,
     stage: nextStage,
     stageStartedAt,
+    stageEndsAt,
     completedTeamIds: [],
     draftStatus: nextDraftStatus(current, nextStage),
     version: current.version + 1,

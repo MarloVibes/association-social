@@ -1,16 +1,14 @@
 import type { OffseasonStage } from './types';
 
 const NBA_STAGES: readonly OffseasonStage[] = Object.freeze([
-  'season_end',
+  'awards_recap',
   'lottery_and_draft_order',
   'player_progression',
   'team_options',
   're_signing',
-  'free_agency',
-  'draft_class_review',
   'live_draft',
   'expansion',
-  'roster_cuts',
+  'free_agency',
   'ready_for_season',
   'regular_season',
 ]);
@@ -53,7 +51,7 @@ export function nextOffseasonStage(
   }
 
   if (currentStage === 'expansion' && !expansionEnabled) {
-    return 'roster_cuts';
+    return 'free_agency';
   }
 
   const stages = getOffseasonStageSequence(sport, expansionEnabled);

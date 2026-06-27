@@ -64,6 +64,12 @@ describe('draft class orchestration', () => {
       expectedVersion: 4,
       draftClass: { published: true },
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+    expect(() => assertDraftClassEditable({
+      uid: 'comm',
+      league: { sport: 'nba', commissionerId: 'comm', currentYear: 2031 },
+      expectedVersion: 0,
+      draftClass: { published: false },
+    })).not.toThrow();
   });
 
   it('adds, edits, removes, and regenerates prospects without duplicate ids', () => {
@@ -202,6 +208,63 @@ describe('draft class orchestration', () => {
     });
 
     expect(classWrites[0].players).toHaveLength(64);
+  });
+
+  it('regenerates a pre-offseason NBA draft class for the upcoming year', async () => {
+    const classRefs: any[] = [];
+    const classWrites: any[] = [];
+    const teamsRef = { kind: 'teams-query' };
+    const leagueRef = {
+      collection: (name: string) => ({
+        doc: (id: string) => {
+          if (name === 'draft_classes') classRefs.push(id);
+          return { kind: name, id };
+        },
+        kind: name === 'teams' ? teamsRef.kind : name,
+      }),
+    };
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) {
+          return {
+            exists: true,
+            data: () => ({
+              sport: 'nba',
+              commissionerId: 'comm',
+              currentYear: 2031,
+            }),
+          };
+        }
+        if (ref.kind === 'teams-query') {
+          return {
+            docs: Array.from({ length: 30 }, (_, index) => ({ id: `T${index}`, data: () => ({}) })),
+          };
+        }
+        return { exists: false, data: () => ({}) };
+      }),
+      set: vi.fn((_ref, data) => classWrites.push(data)),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createMutateDraftClassHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'now',
+      HttpsError: FakeHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', action: 'regenerate', expectedVersion: 0, seed: 'pre' },
+    });
+
+    expect(classRefs).toContain('2032');
+    expect(classWrites[0]).toMatchObject({
+      seasonYear: 2032,
+      sport: 'nba',
+      published: false,
+    });
   });
 
   it('normalizes commissioner-created prospects to the selected sport', () => {

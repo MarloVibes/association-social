@@ -1,4 +1,5 @@
 export type OffseasonStage =
+  | 'awards_recap'
   | 'season_end'
   | 'lottery_and_draft_order'
   | 'player_progression'
@@ -26,6 +27,9 @@ export type OffseasonState = {
   completedTeamIds: string[];
   draftTimerSeconds: number;
   draftStatus: DraftStatus;
+  stageDurationSeconds?: number;
+  stageEndsAt?: unknown;
+  warningAcceptedAt?: unknown;
   contractRoundsComplete?: boolean;
   version: number;
 };
