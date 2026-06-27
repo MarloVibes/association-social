@@ -4,6 +4,7 @@ export type NbaScheduleGame = {
   id: string;
   week: number;
   sequence: number;
+  stage?: 'regular' | 'playoffs' | string;
   homeTeamId: string;
   awayTeamId: string;
   homeGmId?: string | null;
