@@ -1727,6 +1727,7 @@ module.exports = {
   PREPARATION_WINDOW_MS,
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
+  applyCoachingToTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   createAcceptMatchupHandler,
   createExpireMatchupRequestHandler,

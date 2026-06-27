@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
+  applyCoachingToTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   expireMatchupRequest,
   finalScoreGame,
@@ -637,6 +638,39 @@ describe('matchup request state helpers', () => {
       closeShot: 88,
     });
     expect(blakeLikeFinisher.hidden.dunking).toBe(93);
+  });
+
+  it('applies selected coaching presets to the roster used by simulation', () => {
+    const roster = {
+      players: [
+        {
+          player_id: 'athletic-finisher',
+          full_name: 'Athletic Finisher',
+          position: 'PF',
+          hidden: {
+            dunking: 92,
+            athleticism: 90,
+            closeShot: 84,
+            shooting: 76,
+          },
+        },
+      ],
+    };
+
+    const coached = applyCoachingToTeamForSimulation(roster, ['lob_city', 'lob_city']);
+
+    expect(coached.players[0].hidden).toMatchObject({
+      dunking: 94,
+      athleticism: 92,
+      closeShot: 85,
+      shooting: 77,
+    });
+    expect(roster.players[0].hidden).toMatchObject({
+      dunking: 92,
+      athleticism: 90,
+      closeShot: 84,
+      shooting: 76,
+    });
   });
 
   it('builds rollback payloads when commissioners reset finalized games', () => {
