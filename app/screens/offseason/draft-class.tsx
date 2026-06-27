@@ -47,6 +47,8 @@ type DraftClass = {
   version?: number;
 };
 
+const FIRST_DYNAMIC_NBA_DRAFT_YEAR = 2026;
+
 export default function DraftClassScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -90,10 +92,16 @@ export default function DraftClassScreen() {
       || (league?.coCommissioners || []).includes(uid)
     ),
   );
+  const historicalNbaPreOffseason = Boolean(
+    league?.sport === 'nba'
+    && !league?.offseason
+    && typeof league?.currentYear === 'number'
+    && league.currentYear < FIRST_DYNAMIC_NBA_DRAFT_YEAR
+  );
   const editable = isCommissioner
     && (
       league?.offseason?.stage === 'draft_class_review'
-      || (league?.sport === 'nba' && !league?.offseason)
+      || (league?.sport === 'nba' && !league?.offseason && !historicalNbaPreOffseason)
     )
     && draftClass?.published !== true;
   const expectedVersion = league?.offseason?.version ?? 0;
@@ -268,7 +276,11 @@ export default function DraftClassScreen() {
           <View>
             <Text style={styles.summaryTitle}>{players.length} prospects</Text>
             <Text style={styles.summaryMeta}>
-              {draftClass?.published ? 'Published and locked' : league?.offseason ? 'Commissioner review' : 'Pre-offseason review'}
+              {draftClass?.published
+                ? 'Published and locked'
+                : historicalNbaPreOffseason
+                  ? 'Historical class locked'
+                  : league?.offseason ? 'Commissioner review' : 'Pre-offseason review'}
             </Text>
           </View>
           {draftClass?.published && <Ionicons color="#00e58b" name="lock-closed" size={21} />}

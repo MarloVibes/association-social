@@ -15,6 +15,7 @@ const SERVER_NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
 const SERVER_NFL_POSITIONS = ['QB', 'HB', 'WR', 'TE', 'LT', 'EDGE', 'DT', 'MLB', 'CB', 'FS', 'SS'];
 const SERVER_MLB_POSITIONS = ['SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
 const NBA_IDENTITY_KEYS = ['shooting', 'playmaking', 'defense', 'rebounding', 'athleticism', 'basketballIq', 'consistency', 'chemistry'];
+const FIRST_DYNAMIC_NBA_DRAFT_YEAR = 2026;
 
 function seededRandom(seed) {
   let state = 2166136261;
@@ -179,6 +180,16 @@ function draftReviewSeasonYear(league) {
   return null;
 }
 
+function isHistoricalNbaPreOffseasonReview(league) {
+  return Boolean(
+    league
+    && league.sport === 'nba'
+    && !league.offseason
+    && Number.isInteger(league.currentYear)
+    && league.currentYear < FIRST_DYNAMIC_NBA_DRAFT_YEAR
+  );
+}
+
 function isCommissioner(uid, league) {
   return Boolean(
     uid
@@ -206,6 +217,9 @@ function assertDraftClassEditable({
     && expectedVersion === 0
   );
   if (preOffseasonNbaReview) {
+    if (isHistoricalNbaPreOffseasonReview(league)) {
+      throw new DraftClassError('failed-precondition', 'Historical NBA draft classes are locked to their era source.');
+    }
     if (draftClass && draftClass.published === true) {
       throw new DraftClassError('failed-precondition', 'The published draft class is locked.');
     }

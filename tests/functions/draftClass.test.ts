@@ -70,6 +70,12 @@ describe('draft class orchestration', () => {
       expectedVersion: 0,
       draftClass: { published: false },
     })).not.toThrow();
+    expect(() => assertDraftClassEditable({
+      uid: 'comm',
+      league: { sport: 'nba', commissionerId: 'comm', currentYear: 2011, era: '2011' },
+      expectedVersion: 0,
+      draftClass: { published: false },
+    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
   it('adds, edits, removes, and regenerates prospects without duplicate ids', () => {
