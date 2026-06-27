@@ -55,7 +55,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?:
 
 export default function TradeChannelScreen() {
   const { leagueId, channelId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
-  const [activeTab, setActiveTab] = useState<'block' | 'available'>('block');
+  const [activeTab, setActiveTab] = useState<'block' | 'available' | 'propose'>('block');
   const [myTeam, setMyTeam] = useState<any>(null);
   const [sport, setSport] = useState<string>('nba');
   const [myTeamId, setMyTeamId] = useState('');
@@ -192,6 +192,9 @@ export default function TradeChannelScreen() {
     const tb = t.tradeBlock || [];
     return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({ ...p, teamName: t.name, teamId: t.id, gmId: t.gmId }));
   });
+  const claimedTradeTeams = allTeams
+    .filter((t: any) => t.gmId && t.gmId !== user?.uid)
+    .sort((a: any, b: any) => (a.name || a.abbreviation || '').localeCompare(b.name || b.abbreviation || ''));
 
   if (loading) return <View style={styles.container}><ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 100 }} /></View>;
 
@@ -289,6 +292,9 @@ export default function TradeChannelScreen() {
         <TouchableOpacity style={[styles.tab, activeTab === 'available' && styles.tabActive]} onPress={() => setActiveTab('available')}>
           <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>ON THE BLOCK ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'propose' && styles.tabActive]} onPress={() => setActiveTab('propose')}>
+          <Text style={[styles.tabText, activeTab === 'propose' && styles.tabTextActive]}>PROPOSE</Text>
+        </TouchableOpacity>
       </View>
 
       {activeTab === 'block' ? (
@@ -343,7 +349,7 @@ export default function TradeChannelScreen() {
             </View>
           </View>
         </ScrollView>
-      ) : (
+      ) : activeTab === 'available' ? (
         <>
         {/* Filter Controls */}
         <View style={styles.sortRow}>
@@ -422,6 +428,45 @@ export default function TradeChannelScreen() {
           )}
         </ScrollView>
         </>
+      ) : (
+        <ScrollView contentContainerStyle={styles.proposeContent}>
+          {!myTeam ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🏆</Text>
+              <Text style={styles.emptyText}>Claim a team before proposing trades</Text>
+            </View>
+          ) : claimedTradeTeams.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🤝</Text>
+              <Text style={styles.emptyText}>No other managers have claimed a team yet</Text>
+            </View>
+          ) : (
+            claimedTradeTeams.map((team: any) => (
+              <TouchableOpacity
+                key={team.id}
+                style={styles.proposeTeamCard}
+                onPress={() => router.push({
+                  pathname: '/screens/trade-room',
+                  params: {
+                    leagueId,
+                    otherUid: team.gmId,
+                    otherTeamId: team.id,
+                    otherTeamName: team.name || team.abbreviation || '',
+                  },
+                })}
+              >
+                <View style={styles.proposeTeamAvatar}>
+                  <Text style={styles.proposeTeamAvatarText}>{(team.abbreviation || team.name || '?').slice(0, 3).toUpperCase()}</Text>
+                </View>
+                <View style={styles.proposeTeamInfo}>
+                  <Text style={styles.proposeTeamName}>{team.name || team.abbreviation || 'Team'}</Text>
+                  <Text style={styles.proposeTeamMeta}>{(team.players || []).length} players · Start trade room</Text>
+                </View>
+                <Text style={styles.proposeTeamChevron}>›</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       )}
 
       {/* Roster Picker Modal for Trade Block / Untouchables */}
@@ -629,6 +674,7 @@ const styles = StyleSheet.create({
   untouchableSlot: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
   targetSlot: { borderColor: '#4444ff', backgroundColor: '#0a0a1a' },
   availableContent: { padding: 16, paddingBottom: 100 },
+  proposeContent: { padding: 16, paddingBottom: 100 },
   listingCard: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#222' },
   listingTeam: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
   listingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -637,6 +683,13 @@ const styles = StyleSheet.create({
   proposeBtnText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   dmBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', alignItems: 'center' },
   dmBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
+  proposeTeamCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#222', gap: 12 },
+  proposeTeamAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#00ff8755', alignItems: 'center', justifyContent: 'center' },
+  proposeTeamAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  proposeTeamInfo: { flex: 1 },
+  proposeTeamName: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  proposeTeamMeta: { color: '#666', fontSize: 12, marginTop: 3, fontWeight: '700' },
+  proposeTeamChevron: { color: '#555', fontSize: 24, fontWeight: '700' },
   emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptySubtext: { color: '#333', fontSize: 12, textAlign: 'center' },
   teamTradeCard: { backgroundColor: '#111', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#1e1e1e' },
