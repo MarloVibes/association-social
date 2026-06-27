@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  derivePlayerContractPreferences,
+  expectedAnnualSalary,
   scoreContractOffer,
   validateContractOfferFinance,
 } from '../../domain/offseason/contracts';
@@ -40,6 +42,103 @@ describe('contract offer scoring', () => {
 
     expect(new Set(scores).size).toBeGreaterThan(1);
     expect(Math.max(...scores) - Math.min(...scores)).toBeLessThanOrEqual(4);
+  });
+
+  it('derives NBA player preferences from salary, longevity, age, and team movement history', () => {
+    const loyalVeteran = derivePlayerContractPreferences({
+      player: {
+        player_id: 'veteran',
+        age: 34,
+        salary: 16_000_000,
+        contractYears: 4,
+        team: 'SAS',
+        teamHistory: ['SAS', 'SAS', 'SAS', 'SAS'],
+        playoffAppearances: 9,
+      },
+      eraSalaryBaseline: { median: 8_000_000, p75: 14_000_000, p90: 22_000_000 },
+    });
+    const journeymanScorer = derivePlayerContractPreferences({
+      player: {
+        player_id: 'scorer',
+        age: 27,
+        salary: 7_000_000,
+        contractYears: 1,
+        teamHistory: ['NYK', 'DEN', 'DAL', 'PHX'],
+        label: 'Starter',
+      },
+      eraSalaryBaseline: { median: 8_000_000, p75: 14_000_000, p90: 22_000_000 },
+    });
+
+    expect(loyalVeteran.loyalty).toBeGreaterThan(journeymanScorer.loyalty);
+    expect(loyalVeteran.winning).toBeGreaterThan(journeymanScorer.winning);
+    expect(journeymanScorer.money).toBeGreaterThan(loyalVeteran.money);
+    expect(journeymanScorer.role).toBeGreaterThan(loyalVeteran.role);
+  });
+
+  it('uses era salary baselines to estimate asking price from existing contracts', () => {
+    const rose2011 = expectedAnnualSalary({
+      player: {
+        player_id: 'rose-2011',
+        age: 22,
+        salary: 5_546_160,
+        label: 'Superstar',
+        overall: 92,
+      },
+      role: 'franchise',
+      eraSalaryBaseline: { median: 3_500_000, p75: 7_500_000, p90: 14_000_000 },
+    });
+    const sameSalaryModern = expectedAnnualSalary({
+      player: {
+        player_id: 'modern-role-player',
+        age: 29,
+        salary: 5_546_160,
+        label: 'Role Player',
+        overall: 74,
+      },
+      role: 'rotation',
+      eraSalaryBaseline: { median: 9_000_000, p75: 18_000_000, p90: 36_000_000 },
+    });
+
+    expect(rose2011).toBeGreaterThan(sameSalaryModern);
+    expect(rose2011).toBeGreaterThan(5_546_160);
+  });
+
+  it('lets player preferences change which NBA offer wins', () => {
+    const moneyFirst = scoreContractOffer({
+      ...baseOffer,
+      salary: 24_000_000,
+      years: 2,
+      contender: 0.35,
+      role: 'starter',
+      playerPreferences: { money: 0.55, loyalty: 0.05, winning: 0.1, role: 0.2, market: 0.05, security: 0.05 },
+    });
+    const winningOffer = scoreContractOffer({
+      ...baseOffer,
+      salary: 18_000_000,
+      years: 2,
+      contender: 0.95,
+      role: 'starter',
+      playerPreferences: { money: 0.55, loyalty: 0.05, winning: 0.1, role: 0.2, market: 0.05, security: 0.05 },
+    });
+    const ringChaserMoney = scoreContractOffer({
+      ...baseOffer,
+      salary: 24_000_000,
+      years: 2,
+      contender: 0.35,
+      role: 'starter',
+      playerPreferences: { money: 0.15, loyalty: 0.1, winning: 0.45, role: 0.1, market: 0.05, security: 0.15 },
+    });
+    const ringChaserWinner = scoreContractOffer({
+      ...baseOffer,
+      salary: 18_000_000,
+      years: 2,
+      contender: 0.95,
+      role: 'starter',
+      playerPreferences: { money: 0.15, loyalty: 0.1, winning: 0.45, role: 0.1, market: 0.05, security: 0.15 },
+    });
+
+    expect(moneyFirst).toBeGreaterThan(winningOffer);
+    expect(ringChaserWinner).toBeGreaterThan(ringChaserMoney);
   });
 });
 

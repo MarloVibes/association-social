@@ -336,12 +336,14 @@ exports.submitContractOffer = onCall(createSubmitContractOfferHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
+  FieldValue,
 }));
 
 exports.resolveFreeAgencyRound = onCall(createResolveContractRoundHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
+  FieldValue,
 }));
 
 exports.completeOffseasonTeamAction = onCall(createCompleteOffseasonActionHandler({

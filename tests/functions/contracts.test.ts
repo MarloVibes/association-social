@@ -261,6 +261,25 @@ describe('contract orchestration', () => {
           player_id: 'player-1',
           salary: 40,
           contractYears: 3,
+          contract: expect.objectContaining({
+            teamId: 'b',
+            salary: 40,
+            years: 3,
+            role: 'starter',
+            signedSeason: 2027,
+            stage: 'free_agency',
+            status: 'active',
+          }),
+          contractHistory: [
+            expect.objectContaining({
+              teamId: 'b',
+              salary: 40,
+              years: 3,
+              role: 'starter',
+              signedSeason: 2027,
+              stage: 'free_agency',
+            }),
+          ],
         }),
       ]),
     );
@@ -329,6 +348,69 @@ describe('contract orchestration', () => {
     });
   });
 
+  it('uses inferred NBA preferences from player contract history when resolving offers', () => {
+    const ringChasingVeteran = {
+      player_id: 'vet-1',
+      full_name: 'Veteran Winner',
+      position: 'SF',
+      age: 35,
+      salary: 18_000_000,
+      contractYears: 4,
+      team: 'SAS',
+      teamHistory: ['SAS', 'SAS', 'SAS', 'SAS'],
+      playoffAppearances: 12,
+      label: 'Star',
+      overall: 86,
+    };
+    const result = resolveContractRound({
+      sport: 'nba',
+      league: {},
+      seasonYear: 2027,
+      stage: 'free_agency',
+      teams: [
+        { id: 'lottery', players: [{ salary: 4_000_000 }], contender: 0.2, reputation: 0.4, needs: ['SF'] },
+        { id: 'contender', players: [{ salary: 16_000_000 }], contender: 0.95, reputation: 0.9, needs: ['SF'] },
+      ],
+      offers: [
+        {
+          id: 'lottery-offer',
+          teamId: 'lottery',
+          playerId: 'vet-1',
+          player: ringChasingVeteran,
+          salary: 24_000_000,
+          years: 2,
+          role: 'starter',
+          contender: 0.2,
+          need: 1,
+          loyalty: 0.3,
+          reputation: 0.4,
+          seed: 'lottery',
+        },
+        {
+          id: 'contender-offer',
+          teamId: 'contender',
+          playerId: 'vet-1',
+          player: ringChasingVeteran,
+          salary: 19_000_000,
+          years: 3,
+          role: 'starter',
+          contender: 0.95,
+          need: 1,
+          loyalty: 0.7,
+          reputation: 0.9,
+          seed: 'contender',
+        },
+      ],
+      resolvedPlayerIds: [],
+    });
+
+    expect(result.resolutions[0]).toMatchObject({
+      playerId: 'vet-1',
+      winnerTeamId: 'contender',
+      winningOfferId: 'contender-offer',
+    });
+  });
+
   it('does not resolve a player who is already rostered elsewhere', () => {
     const result = resolveContractRound({
       sport: 'madden',
@@ -388,6 +470,7 @@ describe('contract orchestration', () => {
             data: () => ({
               sport: 'madden',
               salaryCap: 200,
+              commissionerId: 'commish',
               offseason: { stage: 'free_agency', seasonYear: 2027, version: 3 },
             }),
           };
@@ -416,6 +499,9 @@ describe('contract orchestration', () => {
       getFirestore: () => db,
       serverTimestamp: () => 'now',
       HttpsError: FakeHttpsError,
+      FieldValue: {
+        arrayUnion: (value: any) => ({ arrayUnion: value }),
+      },
     });
 
     await handler({
@@ -436,6 +522,15 @@ describe('contract orchestration', () => {
     expect(tx.set).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ player: authoritative }),
+    );
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        notifications: expect.objectContaining({
+          arrayUnion: expect.objectContaining({ type: 'contract_offer_submitted' }),
+        }),
+      }),
+      { merge: true },
     );
   });
 });

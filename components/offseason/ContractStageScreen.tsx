@@ -16,7 +16,14 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
-import type { ContractRole } from '@/domain/offseason/contracts';
+import {
+  derivePlayerContractPreferences,
+  expectedAnnualSalary,
+  scoreContractOffer,
+  type ContractRole,
+  type EraSalaryBaseline,
+  type PlayerContractPreferences,
+} from '@/domain/offseason/contracts';
 import type { OffseasonState } from '@/domain/offseason/types';
 
 type Stage = 're_signing' | 'free_agency';
@@ -34,6 +41,18 @@ type Player = {
   age?: number;
   salary?: number;
   contractYears?: number;
+  contract?: {
+    salary?: number;
+    years?: number;
+    role?: string;
+  };
+  label?: string;
+  tier?: string;
+  overall?: number;
+  team?: string;
+  teamHistory?: string[];
+  playoffAppearances?: number;
+  loyalty?: number;
 };
 
 type Team = {
@@ -41,6 +60,8 @@ type Team = {
   name?: string;
   gmId?: string;
   players?: Player[];
+  contender?: number;
+  reputation?: number;
 };
 
 type League = {
@@ -49,6 +70,30 @@ type League = {
   coCommissioners?: string[];
   offseason?: OffseasonState;
 };
+
+type ContractOffer = {
+  id: string;
+  teamId?: string;
+  playerId?: string;
+  player?: Player;
+  salary?: number;
+  years?: number;
+  role?: ContractRole;
+  stage?: Stage;
+  status?: string;
+  preferenceScore?: number;
+};
+
+type ContractResolution = {
+  id: string;
+  playerId?: string;
+  winnerTeamId?: string;
+  winningOfferId?: string;
+  stage?: Stage;
+  preferenceScore?: number;
+};
+
+type Tab = 'available' | 'offers' | 'decisions';
 
 const ROLES: { value: ContractRole; label: string }[] = [
   { value: 'franchise', label: 'Franchise' },
@@ -71,6 +116,45 @@ function formatMoney(value?: number): string {
   return `$${Math.round(Number(value) / 1000)}K`;
 }
 
+function salaryBaseline(players: Player[]): EraSalaryBaseline {
+  const salaries = players
+    .map(player => Number(player.salary || player.contract?.salary))
+    .filter(value => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (salaries.length === 0) return { median: 8_000_000, p75: 14_000_000, p90: 24_000_000 };
+  const at = (percentile: number) => salaries[Math.min(salaries.length - 1, Math.max(0, Math.floor((salaries.length - 1) * percentile)))];
+  return { median: at(0.5), p75: at(0.75), p90: at(0.9) };
+}
+
+function preferenceBadges(preferences: PlayerContractPreferences): string[] {
+  const labels: Record<keyof PlayerContractPreferences, string> = {
+    money: 'Money',
+    loyalty: 'Loyalty',
+    winning: 'Winning',
+    role: 'Role',
+    market: 'Market',
+    security: 'Security',
+  };
+  return (Object.entries(preferences) as Array<[keyof PlayerContractPreferences, number]>)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([key]) => labels[key]);
+}
+
+function offerStatusLabel(status?: string): string {
+  if (status === 'accepted') return 'Accepted';
+  if (status === 'rejected') return 'Declined';
+  if (status === 'invalid') return 'Invalid';
+  return 'Pending';
+}
+
+function offerStrengthLabel(score: number): string {
+  if (score >= 76) return 'Strong';
+  if (score >= 62) return 'Competitive';
+  if (score >= 48) return 'Long Shot';
+  return 'Weak';
+}
+
 export default function ContractStageScreen({ stage }: Props) {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -80,6 +164,9 @@ export default function ContractStageScreen({ stage }: Props) {
   const [freeAgents, setFreeAgents] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Player | null>(null);
+  const [tab, setTab] = useState<Tab>('available');
+  const [offers, setOffers] = useState<ContractOffer[]>([]);
+  const [resolutions, setResolutions] = useState<ContractResolution[]>([]);
   const [salary, setSalary] = useState('');
   const [years, setYears] = useState('1');
   const [role, setRole] = useState<ContractRole>('starter');
@@ -111,9 +198,19 @@ export default function ContractStageScreen({ stage }: Props) {
         })
         .catch(error => Alert.alert('Unable to load free agents', error.message));
     }
+    const unsubscribeOffers = onSnapshot(
+      collection(db, 'leagues', leagueId, 'contract_offers'),
+      snapshot => setOffers(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as ContractOffer))),
+    );
+    const unsubscribeResolutions = onSnapshot(
+      collection(db, 'leagues', leagueId, 'contract_resolutions'),
+      snapshot => setResolutions(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as ContractResolution))),
+    );
     return () => {
       unsubscribeLeague();
       unsubscribeTeams();
+      unsubscribeOffers();
+      unsubscribeResolutions();
     };
   }, [leagueId, router, stage]);
 
@@ -127,6 +224,23 @@ export default function ContractStageScreen({ stage }: Props) {
       player.contractYears == null || player.contractYears <= 1
     ))
     : freeAgents.filter(player => !rosteredIds.has(playerId(player)));
+  const allVisiblePlayers = useMemo(
+    () => [...teams.flatMap(team => team.players || []), ...freeAgents],
+    [freeAgents, teams],
+  );
+  const eraBaseline = useMemo(() => salaryBaseline(allVisiblePlayers), [allVisiblePlayers]);
+  const myOffers = useMemo(
+    () => offers.filter(offer => offer.stage === stage && offer.teamId === myTeam?.id),
+    [myTeam?.id, offers, stage],
+  );
+  const stageResolutions = useMemo(
+    () => resolutions.filter(resolution => !resolution.stage || resolution.stage === stage),
+    [resolutions, stage],
+  );
+  const offerByPlayer = useMemo(
+    () => new Map(myOffers.map(offer => [String(offer.playerId), offer])),
+    [myOffers],
+  );
   const offseason = league?.offseason;
   const stageIsCurrent = offseason?.stage === stage;
   const isCommissioner = Boolean(
@@ -142,10 +256,30 @@ export default function ContractStageScreen({ stage }: Props) {
 
   const openOffer = (player: Player) => {
     setSelected(player);
-    setSalary(String(player.salary || ''));
+    setSalary(String(player.salary || player.contract?.salary || expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline })));
     setYears(String(Math.max(1, player.contractYears || 1)));
     setRole('starter');
   };
+
+  const selectedPreferences = selected
+    ? derivePlayerContractPreferences({ player: selected, eraSalaryBaseline: eraBaseline })
+    : null;
+  const selectedAsk = selected
+    ? expectedAnnualSalary({ player: selected, role, eraSalaryBaseline: eraBaseline })
+    : 0;
+  const previewScore = selected && selectedPreferences
+    ? scoreContractOffer({
+      salary: Number(salary.replace(/[$,\s]/g, '')),
+      years: Number(years),
+      role,
+      contender: Number(myTeam?.contender || 0.5),
+      need: 0.7,
+      loyalty: Number(selected?.loyalty || 0.5),
+      reputation: Number(myTeam?.reputation || 0.5),
+      playerPreferences: selectedPreferences,
+      seed: `${playerId(selected)}:${myTeam?.id || ''}:${stage}`,
+    })
+    : 0;
 
   const submitOffer = async () => {
     if (!leagueId || !myTeam || !selected || !offseason) return;
@@ -245,34 +379,118 @@ export default function ContractStageScreen({ stage }: Props) {
 
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>
-            {stage === 're_signing' ? 'Eligible players' : 'Available players'}
+            {stage === 're_signing' ? 'Contract Decisions' : 'Free Agency Hub'}
           </Text>
           <Text style={styles.summaryText}>
-            {myTeam ? `${myTeam.name || 'Your team'} · ${candidates.length} options` : 'Claim a team to submit offers.'}
+            {myTeam
+              ? `${myTeam.name || 'Your team'} · ${candidates.length} available · ${myOffers.length} offers · ${stageResolutions.length} decisions`
+              : 'Claim a team to submit offers.'}
           </Text>
+          <View style={styles.metricRow}>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{candidates.length}</Text>
+              <Text style={styles.metricLabel}>Available</Text>
+            </View>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{myOffers.length}</Text>
+              <Text style={styles.metricLabel}>My Offers</Text>
+            </View>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{stageResolutions.length}</Text>
+              <Text style={styles.metricLabel}>Decisions</Text>
+            </View>
+          </View>
         </View>
 
-        {candidates.length === 0 ? (
-          <Text style={styles.empty}>No eligible players are available right now.</Text>
-        ) : candidates.map(player => (
-          <TouchableOpacity
-            disabled={!myTeam || !stageIsCurrent || myTeamComplete}
-            key={playerId(player)}
-            onPress={() => openOffer(player)}
-            style={styles.playerRow}
-          >
-            <View style={styles.position}>
-              <Text style={styles.positionText}>{player.position || '?'}</Text>
-            </View>
-            <View style={styles.playerCopy}>
-              <Text style={styles.playerName}>{playerName(player)}</Text>
+        <View style={styles.tabs}>
+          {([
+            ['available', 'Available'],
+            ['offers', 'My Offers'],
+            ['decisions', 'Decisions'],
+          ] as Array<[Tab, string]>).map(([value, label]) => (
+            <TouchableOpacity
+              key={value}
+              onPress={() => setTab(value)}
+              style={[styles.tab, tab === value && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, tab === value && styles.tabTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {tab === 'available' && (
+          candidates.length === 0 ? (
+            <Text style={styles.empty}>No eligible players are available right now.</Text>
+          ) : candidates.map(player => {
+            const id = playerId(player);
+            const preferences = derivePlayerContractPreferences({ player, eraSalaryBaseline: eraBaseline });
+            const badges = preferenceBadges(preferences);
+            const ask = expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline });
+            const existingOffer = offerByPlayer.get(id);
+            return (
+              <TouchableOpacity
+                disabled={!myTeam || !stageIsCurrent || myTeamComplete}
+                key={id}
+                onPress={() => openOffer(player)}
+                style={styles.playerCard}
+              >
+                <View style={styles.cardTop}>
+                  <View style={styles.position}>
+                    <Text style={styles.positionText}>{player.position || '?'}</Text>
+                  </View>
+                  <View style={styles.playerCopy}>
+                    <Text style={styles.playerName}>{playerName(player)}</Text>
+                    <Text style={styles.playerMeta}>
+                      {[player.age ? `Age ${player.age}` : null, formatMoney(player.salary || player.contract?.salary), player.contractYears ? `${player.contractYears} yrs` : null].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  <View style={styles.askBox}>
+                    <Text style={styles.askLabel}>Ask</Text>
+                    <Text style={styles.askValue}>{formatMoney(ask)}</Text>
+                  </View>
+                </View>
+                <View style={styles.badgeRow}>
+                  {badges.map(badge => <Text key={badge} style={styles.badge}>{badge}</Text>)}
+                  {existingOffer && <Text style={styles.offerBadge}>{offerStatusLabel(existingOffer.status)}</Text>}
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+
+        {tab === 'offers' && (
+          myOffers.length === 0 ? (
+            <Text style={styles.empty}>No offers submitted yet.</Text>
+          ) : myOffers.map(offer => (
+            <View key={offer.id} style={styles.offerCard}>
+              <View style={styles.offerCardTop}>
+                <Text style={styles.playerName}>{offer.player ? playerName(offer.player) : offer.playerId}</Text>
+                <Text style={styles.offerStatus}>{offerStatusLabel(offer.status)}</Text>
+              </View>
               <Text style={styles.playerMeta}>
-                {[player.age ? `Age ${player.age}` : null, formatMoney(player.salary)].filter(Boolean).join(' · ')}
+                {[formatMoney(offer.salary), offer.years ? `${offer.years} years` : null, offer.role].filter(Boolean).join(' · ')}
               </Text>
             </View>
-            <Ionicons color="#69706b" name="chevron-forward" size={20} />
-          </TouchableOpacity>
-        ))}
+          ))
+        )}
+
+        {tab === 'decisions' && (
+          stageResolutions.length === 0 ? (
+            <Text style={styles.empty}>No player decisions have been resolved yet.</Text>
+          ) : stageResolutions.map(resolution => {
+            const offer = offers.find(item => item.id === resolution.winningOfferId);
+            const winner = teams.find(item => item.id === resolution.winnerTeamId);
+            return (
+              <View key={resolution.id} style={styles.offerCard}>
+                <View style={styles.offerCardTop}>
+                  <Text style={styles.playerName}>{offer?.player ? playerName(offer.player) : resolution.playerId}</Text>
+                  <Text style={styles.offerStatus}>Signed</Text>
+                </View>
+                <Text style={styles.playerMeta}>{winner?.name || resolution.winnerTeamId || 'Team'} won the decision.</Text>
+              </View>
+            );
+          })
+        )}
 
         {myTeam && stageIsCurrent && (
           <TouchableOpacity
@@ -316,6 +534,16 @@ export default function ContractStageScreen({ stage }: Props) {
           </View>
           <ScrollView contentContainerStyle={styles.modalContent}>
             <Text style={styles.offerPlayer}>{selected ? playerName(selected) : ''}</Text>
+            {selectedPreferences && (
+              <View style={styles.modalSummary}>
+                <Text style={styles.modalSummaryTitle}>Player Priorities</Text>
+                <View style={styles.badgeRow}>
+                  {preferenceBadges(selectedPreferences).map(badge => <Text key={badge} style={styles.badge}>{badge}</Text>)}
+                </View>
+                <Text style={styles.playerMeta}>Estimated ask around {formatMoney(selectedAsk)} based on this era and current contract.</Text>
+                <Text style={styles.strengthText}>Offer preview: {offerStrengthLabel(previewScore)}</Text>
+              </View>
+            )}
             <Text style={styles.inputLabel}>Annual salary</Text>
             <TextInput
               keyboardType="number-pad"
@@ -387,7 +615,26 @@ const styles = StyleSheet.create({
   summary: { paddingHorizontal: 22, paddingVertical: 22, borderBottomWidth: 1, borderBottomColor: '#1d211e' },
   summaryTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800' },
   summaryText: { color: '#7d857f', fontSize: 13, marginTop: 5 },
+  metricRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  metric: { flex: 1, minHeight: 58, borderRadius: 8, backgroundColor: '#111611', borderWidth: 1, borderColor: '#202a23', alignItems: 'center', justifyContent: 'center' },
+  metricValue: { color: '#00e58b', fontSize: 18, fontWeight: '900' },
+  metricLabel: { color: '#737b75', fontSize: 10, fontWeight: '800', marginTop: 2, textTransform: 'uppercase' },
+  tabs: { marginHorizontal: 20, marginTop: 14, marginBottom: 8, minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: '#242825', backgroundColor: '#0d100e', flexDirection: 'row', padding: 4 },
+  tab: { flex: 1, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  tabActive: { backgroundColor: '#123320', borderWidth: 1, borderColor: '#00e58b88' },
+  tabText: { color: '#747c76', fontSize: 12, fontWeight: '900' },
+  tabTextActive: { color: '#00e58b' },
   empty: { color: '#777f79', fontSize: 14, padding: 24, textAlign: 'center' },
+  playerCard: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#202720',
+    backgroundColor: '#101310',
+    padding: 13,
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   playerRow: {
     minHeight: 72,
     paddingHorizontal: 20,
@@ -409,6 +656,15 @@ const styles = StyleSheet.create({
   playerCopy: { flex: 1 },
   playerName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   playerMeta: { color: '#69706b', fontSize: 12, marginTop: 3 },
+  askBox: { alignItems: 'flex-end', justifyContent: 'center', minWidth: 74 },
+  askLabel: { color: '#747c76', fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
+  askValue: { color: '#ffffff', fontSize: 12, fontWeight: '900', marginTop: 3 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  badge: { color: '#00e58b', backgroundColor: '#092317', borderWidth: 1, borderColor: '#00e58b44', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '900' },
+  offerBadge: { color: '#f4b942', backgroundColor: '#241b0b', borderWidth: 1, borderColor: '#f4b94255', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '900' },
+  offerCard: { marginHorizontal: 20, marginTop: 10, borderRadius: 8, borderWidth: 1, borderColor: '#202720', backgroundColor: '#101310', padding: 14 },
+  offerCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  offerStatus: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
   completeButton: {
     marginHorizontal: 20,
     marginTop: 24,
@@ -450,6 +706,9 @@ const styles = StyleSheet.create({
   submit: { color: '#00e58b', fontSize: 15, fontWeight: '800' },
   modalContent: { padding: 22 },
   offerPlayer: { color: '#ffffff', fontSize: 26, fontWeight: '800', marginBottom: 28 },
+  modalSummary: { borderRadius: 8, borderWidth: 1, borderColor: '#202720', backgroundColor: '#101310', padding: 12, marginBottom: 8 },
+  modalSummaryTitle: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  strengthText: { color: '#00e58b', fontSize: 13, fontWeight: '900', marginTop: 10 },
   inputLabel: { color: '#a6ada8', fontSize: 12, fontWeight: '700', marginBottom: 8, marginTop: 16 },
   input: {
     minHeight: 50,

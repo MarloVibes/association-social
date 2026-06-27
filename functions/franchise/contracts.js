@@ -53,23 +53,90 @@ function seededUnit(seed) {
   return (hash >>> 0) / 4294967295;
 }
 
+function clampUnit(value) {
+  if (!Number.isFinite(Number(value))) return 0;
+  return Math.max(0, Math.min(1, Number(value)));
+}
+
+function normalizeWeights(weights) {
+  const entries = Object.entries(weights || {});
+  const total = entries.reduce((sum, [, value]) => sum + Math.max(0, Number(value) || 0), 0) || 1;
+  return entries.reduce((result, [key, value]) => {
+    result[key] = Math.round((Math.max(0, Number(value) || 0) / total) * 1000) / 1000;
+    return result;
+  }, {});
+}
+
+function deriveEraSalaryBaseline(players) {
+  const salaries = (players || [])
+    .map(player => Number(player && player.salary))
+    .filter(value => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (salaries.length === 0) return { median: 8000000, p75: 14000000, p90: 24000000 };
+  const at = percentile => salaries[Math.min(salaries.length - 1, Math.max(0, Math.floor((salaries.length - 1) * percentile)))];
+  return {
+    median: at(0.5),
+    p75: at(0.75),
+    p90: at(0.9),
+  };
+}
+
+function derivePlayerContractPreferences({ player = {}, eraSalaryBaseline }) {
+  const age = Number.isFinite(player.age) ? Number(player.age) : 27;
+  const salary = Number.isFinite(player.salary) && player.salary > 0 ? Number(player.salary) : 0;
+  const baseline = eraSalaryBaseline || { median: 8000000, p75: 14000000, p90: 24000000 };
+  const history = Array.isArray(player.teamHistory) ? player.teamHistory.filter(Boolean) : [];
+  const uniqueTeams = new Set(history.map(String));
+  const currentTeam = String(player.team || history.at(-1) || '');
+  const seasonsWithCurrent = currentTeam
+    ? history.filter(team => String(team) === currentTeam).length
+    : history.length > 0 && uniqueTeams.size === 1 ? history.length : 0;
+  const movementRate = history.length > 1 ? Math.min(1, Math.max(0, (uniqueTeams.size - 1) / history.length)) : 0;
+  const salaryPercentile = salary >= baseline.p90 ? 0.95 : salary >= baseline.p75 ? 0.78 : salary >= baseline.median ? 0.55 : 0.32;
+  const tier = String(player.label || player.tier || '').toLowerCase();
+  const star = tier.includes('star') || tier.includes('legend') || tier.includes('super') || Number(player.overall || 0) >= 86;
+  const veteran = age >= 32;
+  const young = age <= 24;
+  return normalizeWeights({
+    money: 0.25 + movementRate * 0.18 + (1 - salaryPercentile) * 0.16 + (star ? 0.06 : 0),
+    loyalty: 0.1 + Math.min(0.26, seasonsWithCurrent * 0.055) + Math.max(0, salaryPercentile - 0.55) * 0.08 - movementRate * 0.12,
+    winning: 0.12 + (veteran ? 0.22 : 0) + Math.min(0.16, Number(player.playoffAppearances || 0) * 0.015),
+    role: 0.15 + (young ? 0.16 : 0) + movementRate * 0.08 + (star ? 0.06 : 0),
+    market: 0.07 + (star ? 0.08 : 0),
+    security: 0.14 + (veteran ? 0.08 : 0) + (Number(player.contractYears || 0) >= 3 ? 0.05 : 0),
+  });
+}
+
 function scoreContractOffer(offer) {
-  const roleScore = {
+  const roleScoreRaw = {
     franchise: 18,
     starter: 12,
     rotation: 7,
     depth: 3,
   }[offer.role] || 0;
   const salary = Number.isFinite(offer.salary) ? Math.max(0, offer.salary) : 0;
-  const salaryScore = Math.log1p(salary) / Math.log1p(50000000) * 40;
-  const yearsScore = Math.min(Math.max(0, Number(offer.years) || 0), 7) * 2;
-  const contextScore = (
-    Math.max(0, Math.min(1, Number(offer.contender) || 0)) * 8
-    + Math.max(0, Math.min(1, Number(offer.need) || 0)) * 10
-    + Math.max(0, Math.min(1, Number(offer.loyalty) || 0)) * 7
-    + Math.max(0, Math.min(1, Number(offer.reputation) || 0)) * 6
+  const preferences = normalizeWeights(offer.playerPreferences || {
+    money: 0.36,
+    loyalty: 0.1,
+    winning: 0.16,
+    role: 0.18,
+    market: 0.08,
+    security: 0.12,
+  });
+  const salaryScore = Math.sqrt(Math.min(1, salary / 35000000)) * 100;
+  const yearsScore = Math.min(Math.max(0, Number(offer.years) || 0), 7) / 7 * 100;
+  const roleScore = roleScoreRaw / 18 * 100;
+  const roleFitScore = ((clampUnit(offer.need) * 0.6) + (roleScore / 100 * 0.4)) * 100;
+  const score = (
+    salaryScore * preferences.money
+    + clampUnit(offer.loyalty) * 100 * preferences.loyalty
+    + clampUnit(offer.contender) * 100 * preferences.winning
+    + roleFitScore * preferences.role
+    + clampUnit(offer.market ?? offer.reputation) * 100 * preferences.market
+    + yearsScore * preferences.security
+    + clampUnit(offer.reputation) * 6
+    + seededUnit(offer.seed) * 4 - 2
   );
-  const score = salaryScore + yearsScore + roleScore + contextScore + seededUnit(offer.seed) * 4 - 2;
   return Math.round(score * 1000) / 1000;
 }
 
@@ -160,12 +227,30 @@ function validateContractOffer({ uid, league, team, offer }) {
 
 function applyContract(team, offer, stage) {
   const players = Array.isArray(team.players) ? team.players : [];
+  const contract = {
+    teamId: String(offer.teamId),
+    salary: offer.salary,
+    years: offer.years,
+    role: offer.role,
+    signedSeason: offer.seasonYear,
+    stage,
+    status: 'active',
+  };
+  const contractHistoryEntry = {
+    ...contract,
+    signedAt: offer.resolvedAt || offer.seed || `${offer.seasonYear}:${stage}:${offer.teamId}:${offer.playerId}`,
+  };
   const signedPlayer = {
     ...offer.player,
     salary: offer.salary,
     contractYears: offer.years,
     contractRole: offer.role,
     signedSeason: offer.seasonYear,
+    contract,
+    contractHistory: [
+      ...(Array.isArray(offer.player && offer.player.contractHistory) ? offer.player.contractHistory : []),
+      contractHistoryEntry,
+    ],
   };
   if (stage === 're_signing') {
     const target = offer.playerId;
@@ -192,6 +277,11 @@ function resolveContractRound({
 }) {
   const sport = normalizeSport(sportInput);
   const resolved = new Set((resolvedPlayerIds || []).map(String));
+  const allPlayers = [
+    ...(teams || []).flatMap(team => team.players || []),
+    ...(offers || []).map(offer => offer.player).filter(Boolean),
+  ];
+  const eraSalaryBaseline = deriveEraSalaryBaseline(allPlayers);
   const projectedTeams = new Map((teams || []).map(team => [String(team.id), {
     ...team,
     players: [...(team.players || [])],
@@ -237,6 +327,10 @@ function resolveContractRound({
     }
     const ranked = playerOffers.map(offer => {
       const team = projectedTeams.get(String(offer.teamId));
+      const playerPreferences = offer.playerPreferences || derivePlayerContractPreferences({
+        player: offer.player || {},
+        eraSalaryBaseline,
+      });
       const fit = team
         ? offerFit({
           sport,
@@ -250,10 +344,10 @@ function resolveContractRound({
         })
         : { valid: false, reason: 'team_not_found' };
       return {
-        offer,
+        offer: { ...offer, playerPreferences },
         team,
         fit,
-        score: fit.valid ? scoreContractOffer(offer) : -Infinity,
+        score: fit.valid ? scoreContractOffer({ ...offer, playerPreferences }) : -Infinity,
       };
     }).sort((left, right) => (
       right.score - left.score || String(left.offer.id).localeCompare(String(right.offer.id))
@@ -352,6 +446,19 @@ function selectOfferBatch(offers, maxOffers = MAX_OFFERS_PER_ROUND) {
     selected.push(...group);
   }
   return selected;
+}
+
+function notificationPayload(id, type, leagueId, message, extra = {}) {
+  return {
+    id,
+    type,
+    leagueId,
+    message,
+    createdAt: extra.createdAt,
+    stage: extra.stage || '',
+    playerId: extra.playerId || '',
+    teamId: extra.teamId || '',
+  };
 }
 
 function buildCpuContractOffers({
@@ -461,6 +568,7 @@ function createSubmitContractOfferHandler({
   getFirestore,
   serverTimestamp,
   HttpsError,
+  FieldValue,
 }) {
   return async function submitContractOffer(request) {
     const uid = request.auth && request.auth.uid;
@@ -578,6 +686,22 @@ function createSubmitContractOfferHandler({
         'offseason.contractRoundsComplete': false,
       });
       tx.set(offerRef, storedOffer);
+      if (FieldValue && league.commissionerId && league.commissionerId !== uid) {
+        tx.set(db.collection('users').doc(league.commissionerId), {
+          notifications: FieldValue.arrayUnion(notificationPayload(
+            `contract-offer:${offerId}`,
+            'contract_offer_submitted',
+            leagueId,
+            `${team.name || 'A team'} offered ${authoritativePlayer.full_name || authoritativePlayer.name || 'a player'} a ${years}-year contract.`,
+            {
+              createdAt: new Date().toISOString(),
+              stage: expectedStage,
+              playerId,
+              teamId,
+            },
+          )),
+        }, { merge: true });
+      }
       return { offer: storedOffer };
     });
   };
@@ -587,6 +711,7 @@ function createResolveContractRoundHandler({
   getFirestore,
   serverTimestamp,
   HttpsError,
+  FieldValue,
 }) {
   return async function resolveFreeAgencyRound(request) {
     const uid = request.auth && request.auth.uid;
@@ -716,7 +841,47 @@ function createResolveContractRoundHandler({
       }
       tx.update(leagueRef, {
         'offseason.contractRoundsComplete': offers.length >= allOffers.length,
+        'offseason.lastContractResolutionAt': serverTimestamp(),
+        'offseason.lastContractResolvedCount': result.resolutions.length,
       });
+      if (FieldValue) {
+        const offerById = new Map(allOffers.map(offer => [offer.id, offer]));
+        for (const offerResult of result.offerResults) {
+          const offer = offerById.get(offerResult.id);
+          const team = storedTeams.find(item => String(item.id) === String(offerResult.teamId));
+          if (!offer || !team || !team.gmId || offer.source === 'cpu') continue;
+          const accepted = offerResult.status === 'accepted';
+          tx.set(db.collection('users').doc(team.gmId), {
+            notifications: FieldValue.arrayUnion(notificationPayload(
+              `contract-decision:${leagueId}:${offerResult.id}:${offerResult.status}`,
+              accepted ? 'contract_offer_accepted' : 'contract_offer_rejected',
+              leagueId,
+              `${offer.player?.full_name || offer.player?.name || 'A player'} ${accepted ? 'accepted' : 'declined'} your ${offer.years}-year offer.`,
+              {
+                createdAt: new Date().toISOString(),
+                stage: expectedStage,
+                playerId: offerResult.playerId,
+                teamId: offerResult.teamId,
+              },
+            )),
+          }, { merge: true });
+        }
+        const memberIds = Array.from(new Set([league.commissionerId, ...(league.coCommissioners || []), ...(league.members || [])].filter(Boolean)));
+        memberIds.forEach(memberId => {
+          tx.set(db.collection('users').doc(memberId), {
+            notifications: FieldValue.arrayUnion(notificationPayload(
+              `contract-round:${leagueId}:${expectedStage}:${expectedVersion}:${result.resolutions.length}`,
+              'contract_round_resolved',
+              leagueId,
+              `${expectedStage === 're_signing' ? 'Re-signing' : 'Free agency'} round resolved: ${result.resolutions.length} player decision${result.resolutions.length === 1 ? '' : 's'}.`,
+              {
+                createdAt: new Date().toISOString(),
+                stage: expectedStage,
+              },
+            )),
+          }, { merge: true });
+        });
+      }
       return {
         resolvedCount: result.resolutions.length,
         resolutions: result.resolutions,
