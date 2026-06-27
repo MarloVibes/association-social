@@ -12,6 +12,7 @@ import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import { setLastLeagueId } from '@/utils/lastLeague';
 import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
+import { playerJerseyDisplay } from '@/domain/sports/playerDisplay';
 
 
 
@@ -348,7 +349,9 @@ export default function LeagueScreen() {
                   <View key={p.player_id} style={styles.myTeamPlayerRow}>
                     <Text style={[styles.myTeamPlayerPos, { color: teamText }]}>{p.position}</Text>
                     <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
-                    <Text style={styles.myTeamPlayerJersey}>#{p.jersey_number}</Text>
+                    {playerJerseyDisplay(p) ? (
+                      <Text style={styles.myTeamPlayerJersey}>{playerJerseyDisplay(p)}</Text>
+                    ) : null}
                   </View>
                 ))}
                 {myTeam.players.length > 3 && (
