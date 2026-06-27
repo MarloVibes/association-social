@@ -300,7 +300,7 @@ describe('source safety regressions', () => {
     const seasonLayout = source('app/screens/season/_layout.tsx');
 
     expect(league).toContain('/screens/season/playoffs');
-    expect(league).toContain('Playoffs');
+    expect(league).toContain('Playoff Picture');
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/playoffs');
     expect(seasonLayout).toContain('playoffs');
