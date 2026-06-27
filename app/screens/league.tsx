@@ -401,7 +401,7 @@ export default function LeagueScreen() {
                 onPress={() => router.push({ pathname: '/screens/season/playoffs', params: { leagueId } })}
               >
                 <Text style={styles.seasonHubButtonIcon}>🥇</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Playoffs</Text>
+                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Playoff Picture</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
@@ -460,6 +460,44 @@ export default function LeagueScreen() {
             </View>
           </View>
         )}
+
+        <View style={[styles.tradeCenterHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
+          <View style={styles.tradeCenterHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.tradeCenterTitle, { color: titleColor }]}>Trade Center</Text>
+              <Text style={styles.tradeCenterSub}>Propose deals, browse the trade block, and manage CPU requests</Text>
+            </View>
+            <Text style={[styles.tradeCenterBadge, { color: titleColor }]}>GM</Text>
+          </View>
+          <View style={styles.tradeCenterGrid}>
+            <TouchableOpacity
+              style={[styles.tradeCenterButton, { borderColor: teamTheme.borderColor + '88' }]}
+              onPress={() => {
+                if (!myTeam) { Alert.alert('No team yet', 'Claim a team in this league before proposing a trade.'); return; }
+                setTradePickerOpen(true);
+              }}
+            >
+              <Text style={styles.tradeCenterButtonIcon}>🔁</Text>
+              <Text style={[styles.tradeCenterButtonText, { color: titleColor }]}>Propose Trade</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tradeCenterButton, { borderColor: teamTheme.borderColor + '88' }]}
+              onPress={() => router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } })}
+            >
+              <Text style={styles.tradeCenterButtonIcon}>📣</Text>
+              <Text style={[styles.tradeCenterButtonText, { color: titleColor }]}>Trade Block</Text>
+            </TouchableOpacity>
+            {isCommissioner ? (
+              <TouchableOpacity
+                style={[styles.tradeCenterButton, { borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId } })}
+              >
+                <Text style={styles.tradeCenterButtonIcon}>🤖</Text>
+                <Text style={[styles.tradeCenterButtonText, { color: titleColor }]}>CPU Requests</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         {/* League Activity Carousel */}
         <View style={styles.activityCarouselHeader}>
@@ -554,16 +592,6 @@ export default function LeagueScreen() {
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
-          onPress={() => {
-            if (!myTeam) { Alert.alert('No team yet', 'Claim a team in this league before proposing a trade.'); return; }
-            setTradePickerOpen(true);
-          }}
-        >
-          <Text style={[styles.rostersBtnText, { color: titleColor }]}>🔁 Propose Trade</Text>
-        </TouchableOpacity>
-
         {/* Commissioner Controls */}
         {isCommissioner && (
           <View style={styles.commSection}>
@@ -573,12 +601,6 @@ export default function LeagueScreen() {
               onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
             >
               <Text style={[styles.inviteBtnText, { color: teamText }]}>📨 Send League Invite</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
-              onPress={() => router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId } })}
-            >
-              <Text style={[styles.inviteBtnText, { color: teamText }]}>🤖 CPU Trade Requests</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.inviteBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
@@ -762,6 +784,15 @@ const styles = StyleSheet.create({
   seasonHubButton: { width: '48%', minHeight: 62, borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 6, backgroundColor: '#11111188', alignItems: 'center', justifyContent: 'center' },
   seasonHubButtonIcon: { fontSize: 18, marginBottom: 4 },
   seasonHubButtonText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  tradeCenterHub: { borderRadius: 14, padding: 12, borderWidth: 1, marginBottom: 18 },
+  tradeCenterHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  tradeCenterTitle: { fontSize: 16, fontWeight: '900' },
+  tradeCenterSub: { color: '#777', fontSize: 11, marginTop: 2 },
+  tradeCenterBadge: { fontSize: 11, fontWeight: '900' },
+  tradeCenterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tradeCenterButton: { width: '48%', minHeight: 62, borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 6, backgroundColor: '#11111188', alignItems: 'center', justifyContent: 'center' },
+  tradeCenterButtonIcon: { fontSize: 18, marginBottom: 4 },
+  tradeCenterButtonText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
   tpModal: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 50 },
   tpHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   tpCancel: { color: '#ff6666', fontSize: 15, fontWeight: '700', width: 60 },
