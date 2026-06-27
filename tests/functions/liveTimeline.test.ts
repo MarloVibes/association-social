@@ -51,6 +51,16 @@ const supportedEventTypes = [
   'final_buzzer',
 ];
 
+function undefinedPaths(value: unknown, path = 'timeline'): string[] {
+  if (value === undefined) return [path];
+  if (!value || typeof value !== 'object') return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => undefinedPaths(item, `${path}.${index}`));
+  }
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, item]) => undefinedPaths(item, `${path}.${key}`));
+}
+
 describe('function live timeline mirror', () => {
   it('builds a deterministic overtime timeline that ends at the final score', () => {
     const first = buildLiveTimeline(baseInput);
@@ -77,6 +87,7 @@ describe('function live timeline mirror', () => {
     expect(first.revealDurationMs).toBe(Math.round(((48 * 60 + 5 * 60) / 3) * 1000));
     expect(first.events.length).toBeGreaterThan(20);
     expect(first.events.every((event: { eventType: string }) => supportedEventTypes.includes(event.eventType))).toBe(true);
+    expect(undefinedPaths(first)).toEqual([]);
     expect(first.events.some((event: { text: string }) => event.text.includes('Steal:'))).toBe(true);
     expect(first.events.some((event: { text: string }) => event.text.includes('blocks'))).toBe(true);
     expect(first.events.find((event: { period: number }) => event.period === 5)).toMatchObject({ periodLabel: 'OT' });

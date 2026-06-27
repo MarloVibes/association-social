@@ -405,7 +405,7 @@ function eventFrom({
   y,
 }) {
   const primaryDelta = statDeltas && player ? (statDeltas.find(delta => delta.playerId === player.playerId) || {}).stats : undefined;
-  return {
+  return withoutUndefined({
     id: eventType === 'final_buzzer' ? `${input.gameId}-final` : `${input.gameId}-${period.period}-${elapsedIndex}`,
     period: period.period,
     periodLabel: period.label,
@@ -425,7 +425,17 @@ function eventFrom({
     points,
     statDelta: primaryDelta,
     statDeltas,
-  };
+  });
+}
+
+function withoutUndefined(value) {
+  if (Array.isArray(value)) return value.map(withoutUndefined);
+  if (!value || typeof value !== 'object') return value;
+  return Object.entries(value).reduce((acc, [key, item]) => {
+    if (item === undefined) return acc;
+    acc[key] = withoutUndefined(item);
+    return acc;
+  }, {});
 }
 
 function scoringChunks(total) {
