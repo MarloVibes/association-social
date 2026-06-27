@@ -121,6 +121,24 @@ Each attribute is calculated from several public indicators. Examples:
 
 No single statistic should fully determine a rating. The model should blend volume, efficiency, role, age, and era context.
 
+## Upgrade Categories
+
+Every flexible attribute must be assigned to a GM-upgrade category. If an attribute does not naturally fit an existing category, the model must create a new neutral category instead of leaving it disconnected from the upgrade system.
+
+Initial categories:
+
+- Finishing: closeShot, dunking
+- Shooting: midRange, threePoint, freeThrow, shotIq
+- Playmaking: passing, ballHandle, offenseIq
+- Defense: perimeterDefense, postDefense, blocking, steals, defenseIq, helpDefense
+- Rebounding: rebounding
+- Athleticism: speed, acceleration, strength, stamina
+- Post: postOffense
+- Intangibles: clutch
+- Development: potential
+
+GM upgrade points can target category grades or direct attributes. Category upgrades should resolve to the attributes assigned to that category, and direct attribute upgrades should still update the owning category grade. The implementation must include a coverage test proving every attribute in the model maps to one category.
+
 ## Grade Gate
 
 Visible grades must always come from internal numeric attributes. A manual review can request a rerun or change source facts, but cannot bypass the numeric gate.
