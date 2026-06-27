@@ -19,9 +19,11 @@ export type RotationValidation = {
 
 export type CpuRotationPlayer = {
   playerId?: string;
+  player_id?: string;
   id?: string;
   bref_id?: string;
   full_name?: string;
+  name?: string;
   value?: number;
   rating?: number;
   overall?: number;
@@ -40,7 +42,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 function playerKey(player: CpuRotationPlayer): string {
-  return String(player.playerId || player.id || player.bref_id || player.full_name || '');
+  return String(player.playerId || player.player_id || player.id || player.bref_id || player.full_name || player.name || '');
 }
 
 function playerValue(player: CpuRotationPlayer): number {

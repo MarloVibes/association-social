@@ -69,6 +69,10 @@ const {
   createRunExpansionDraftHandler,
   createSubmitExpansionProtectionHandler,
 } = require('./franchise/expansion');
+const {
+  createSaveTeamCoachingPresetHandler,
+  createSaveTeamRotationHandler,
+} = require('./franchise/teamSettings');
 
 initializeApp();
 
@@ -464,6 +468,18 @@ exports.runExpansionDraft = onCall(createRunExpansionDraftHandler({
 
 exports.manageTeamInjury = onCall(createManageTeamInjuryHandler({
   getFirestore,
+  HttpsError,
+}));
+
+exports.saveTeamRotation = onCall(createSaveTeamRotationHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  HttpsError,
+}));
+
+exports.saveTeamCoachingPreset = onCall(createSaveTeamCoachingPresetHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
 }));
 

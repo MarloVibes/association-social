@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { COACHING_PRESETS, coachingPresetInfoText, validateCoachingPreset, type CoachingModifiers, type CoachingPreset, type DefensiveStyle, type OffensiveStyle } from '@/domain/nba/coaching';
 
 type Team = {
@@ -130,11 +131,7 @@ export default function CoachingPresetsScreen() {
     }
     setSavingId(preset.id);
     try {
-      await updateDoc(doc(db, 'leagues', leagueId, 'teams', team.id), {
-        coachingPresets: [...presets.filter(item => item.id !== preset.id), preset],
-        defaultCoachingPresetId: preset.id,
-        coachingUpdatedAt: serverTimestamp(),
-      });
+      await httpsCallable(functions, 'saveTeamCoachingPreset')({ leagueId, preset });
       Alert.alert('Saved', `${preset.name} is now your default coaching preset.`);
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');

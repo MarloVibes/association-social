@@ -1563,15 +1563,24 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       const games = gamesForCompetition(schedule, competition);
       const gameIndex = games.findIndex(game => game.id === gameId);
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
+      const game = games[gameIndex];
+      const [homeTeam, awayTeam] = await Promise.all([
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
+      ]);
       let nextGame;
       try {
-        nextGame = mutate({ game: games[gameIndex], uid, nowMs: now() });
+        nextGame = mutate({ game, uid, nowMs: now() });
       } catch (error) {
         throw mapError(error, HttpsError);
       }
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
       tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
+      const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
+      const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
+      if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, homePayload);
+      if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, awayPayload);
       return nextGame;
     });
   };

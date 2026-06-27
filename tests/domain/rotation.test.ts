@@ -51,6 +51,19 @@ describe('NBA rotations', () => {
     expect(fallback.filter(slot => slot.status === 'active')).toHaveLength(10);
   });
 
+  it('preserves canonical roster player_id values when auto-building rotations', () => {
+    const players = Array.from({ length: 10 }, (_, i) => ({
+      player_id: `vault-player-${i}`,
+      id: `doc-player-${i}`,
+      full_name: `Vault Player ${i + 1}`,
+      value: 90 - i,
+    }));
+
+    const fallback = buildCpuRotation(players);
+
+    expect(fallback.map(slot => slot.playerId)).toEqual(players.map(player => player.player_id));
+  });
+
   it('converts validation codes into readable messages', () => {
     const validation = validateRotation([{ playerId: 'a', minutes: 48 }]);
 

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import { buildCpuRotation, rotationValidationMessages, validateRotation, type RotationSlot } from '@/domain/nba/rotation';
 
 type Player = {
@@ -92,11 +93,7 @@ export default function RotationScreen() {
     setSaving(true);
     try {
       setRotation(nextRotation);
-      await updateDoc(doc(db, 'leagues', leagueId, 'teams', team.id), {
-        rotation: nextRotation,
-        rotationUpdatedAt: serverTimestamp(),
-        rotationAutoAppliedAt: serverTimestamp(),
-      });
+      await httpsCallable(functions, 'saveTeamRotation')({ leagueId, rotation: nextRotation });
       Alert.alert('Auto Applied', 'Minutes, starters, bench order, and closing lineup were saved.');
     } catch (error: any) {
       Alert.alert('Auto apply failed', error.message || 'Please try again.');
@@ -127,10 +124,7 @@ export default function RotationScreen() {
     }
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'leagues', leagueId, 'teams', team.id), {
-        rotation,
-        rotationUpdatedAt: serverTimestamp(),
-      });
+      await httpsCallable(functions, 'saveTeamRotation')({ leagueId, rotation });
       Alert.alert('Saved', 'Rotation saved for this team.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');

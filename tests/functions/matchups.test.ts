@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
@@ -7,6 +7,7 @@ const {
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
+  createResetScheduledGameHandler,
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
@@ -726,6 +727,92 @@ describe('matchup request state helpers', () => {
       turnovers: 0,
       plusMinus: -8,
     });
+  });
+
+  it('rolls team player stats back when the reset callable clears a final game', async () => {
+    const finalGame = seedAvailableGame({
+      status: 'final',
+      homeScore: 100,
+      awayScore: 91,
+      winnerTeamId: 'home',
+      fatigue: {
+        home: { before: 2, after: 5, sequence: 3 },
+        away: { before: 1, after: 4, sequence: 2 },
+      },
+      boxScore: {
+        home: { players: [{ playerId: 'home-1', minutes: 34, points: 20, rebounds: 5, assists: 4, steals: 1, blocks: 0, turnovers: 2 }] },
+        away: { players: [{ playerId: 'away-1', minutes: 31, points: 15, rebounds: 6, assists: 2, steals: 0, blocks: 1, turnovers: 3 }] },
+      },
+    });
+    const schedule = { games: [finalGame] };
+    const leagueRef = { collection: vi.fn() };
+    const scheduleRef = {};
+    const homeRef = {};
+    const awayRef = {};
+    const tx = {
+      get: vi.fn(async ref => {
+        if (ref === leagueRef) return { exists: true, data: () => ({ commissionerId: 'commissioner', scheduleId: '2026' }) };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === homeRef) return {
+          exists: true,
+          id: 'home',
+          data: () => ({
+            players: [{ player_id: 'home-1', seasonStats: { games: 2, minutes: 50, points: 30, rebounds: 8, assists: 5, steals: 1, turnovers: 2 } }],
+            fatigue: 5,
+            fatigueSequence: 3,
+          }),
+        };
+        if (ref === awayRef) return {
+          exists: true,
+          id: 'away',
+          data: () => ({
+            players: [{ player_id: 'away-1', seasonStats: { games: 2, minutes: 45, points: 25, rebounds: 9, assists: 4, blocks: 1, turnovers: 3 } }],
+            fatigue: 4,
+            fatigueSequence: 2,
+          }),
+        };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+    };
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'home' ? homeRef : awayRef)) };
+      return { doc: vi.fn() };
+    });
+    const db = {
+      collection: vi.fn(() => ({ doc: vi.fn(() => leagueRef) })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createResetScheduledGameHandler({
+      getFirestore: () => db,
+      now: () => 7_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const result = await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', gameId: finalGame.id },
+    });
+
+    expect(result).toMatchObject({ status: 'scheduled', resetByUid: 'commissioner' });
+    expect(tx.update).toHaveBeenCalledWith(scheduleRef, { games: [expect.objectContaining({ status: 'scheduled' })] });
+    expect(tx.update).toHaveBeenCalledWith(homeRef, expect.objectContaining({
+      fatigue: 2,
+      players: [expect.objectContaining({ seasonStats: expect.objectContaining({ games: 1, points: 10 }) })],
+    }));
+    expect(tx.update).toHaveBeenCalledWith(awayRef, expect.objectContaining({
+      fatigue: 1,
+      players: [expect.objectContaining({ seasonStats: expect.objectContaining({ games: 1, points: 10 }) })],
+    }));
   });
 
   it('selects and updates NBA Cup games separately from regular season games', () => {
