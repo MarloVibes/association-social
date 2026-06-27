@@ -32,6 +32,22 @@ const TEAM_ACTION_STAGES = new Set([
   'ready_for_season',
 ]);
 
+const STAGE_LABELS = Object.freeze({
+  awards_recap: 'Awards Recap',
+  season_end: 'Season End',
+  lottery_and_draft_order: 'Lottery & Draft Order',
+  player_progression: 'Player Progression',
+  team_options: 'Team Options',
+  re_signing: 'Re-Signing',
+  free_agency: 'Free Agency',
+  draft_class_review: 'Draft Class Review',
+  live_draft: 'Live Draft',
+  expansion: 'Expansion',
+  roster_cuts: 'Roster Cuts',
+  ready_for_season: 'Ready for Season',
+  regular_season: 'Regular Season',
+});
+
 class OffseasonCallableError extends Error {
   constructor(code, message, details) {
     super(message);
@@ -80,6 +96,43 @@ function hasLotteryComplete(offseason) {
       || (offseason.draftLottery && offseason.draftLottery.complete === true)
     )
   );
+}
+
+function dateMillis(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isOffseasonStageDue(offseason, nowMillis) {
+  if (!offseason || !offseason.stageDurationSeconds) return false;
+  const deadline = dateMillis(offseason.stageEndsAt);
+  return deadline != null && deadline <= nowMillis;
+}
+
+function stageLabel(stage) {
+  return STAGE_LABELS[stage] || String(stage || 'Offseason');
+}
+
+function buildOffseasonStageNotification({
+  leagueId,
+  leagueName,
+  offseason,
+  createdAt = new Date().toISOString(),
+}) {
+  return {
+    type: 'offseason_stage',
+    leagueId,
+    stage: offseason && offseason.stage,
+    seasonYear: offseason && offseason.seasonYear,
+    version: offseason && offseason.version,
+    message: `${leagueName || 'League'} moved to ${stageLabel(offseason && offseason.stage)}.`,
+    createdAt,
+    read: false,
+  };
 }
 
 function normalizeAbbr(value) {
@@ -259,7 +312,7 @@ function toHttpsError(error, HttpsError) {
   return error;
 }
 
-function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsError }) {
+function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsError, FieldValue }) {
   return async function advanceOffseasonStage(request) {
     const uid = request.auth && request.auth.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
@@ -276,7 +329,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
     const teamsQuery = leagueRef.collection('teams');
 
     try {
-      return await db.runTransaction(async (tx) => {
+      const result = await db.runTransaction(async (tx) => {
         const [leagueSnap, teamsSnap] = await Promise.all([
           tx.get(leagueRef),
           tx.get(teamsQuery),
@@ -377,9 +430,160 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
         tx.update(leagueRef, { offseason });
         return { offseason };
       });
+      if (FieldValue && result && result.offseason && result.offseason.stage !== 'regular_season') {
+        const leagueSnap = await leagueRef.get();
+        if (leagueSnap.exists) {
+          await notifyOffseasonMembers({
+            db,
+            leagueId: input.leagueId,
+            league: leagueSnap.data() || {},
+            offseason: result.offseason,
+            FieldValue,
+          });
+        }
+      }
+      return result;
     } catch (error) {
       throw toHttpsError(error, HttpsError);
     }
+  };
+}
+
+function userNotificationRef(db, uid) {
+  return db.collection('users').doc(uid);
+}
+
+async function notifyOffseasonMembers({ db, leagueId, league, offseason, FieldValue }) {
+  const memberIds = Array.isArray(league && league.members) ? league.members.filter(Boolean) : [];
+  if (memberIds.length === 0) return 0;
+  const notification = buildOffseasonStageNotification({
+    leagueId,
+    leagueName: league.name,
+    offseason,
+  });
+  const batch = db.batch();
+  memberIds.forEach((memberId) => {
+    batch.set(userNotificationRef(db, memberId), {
+      notifications: FieldValue.arrayUnion({
+        ...notification,
+        id: `offseason-stage:${leagueId}:${offseason.version}:${memberId}`,
+      }),
+    }, { merge: true });
+  });
+  await batch.commit();
+  return memberIds.length;
+}
+
+function createAdvanceDueOffseasonsHandler({
+  getFirestore,
+  serverTimestamp,
+  now,
+  FieldValue,
+}) {
+  return async function advanceDueOffseasons() {
+    const db = getFirestore();
+    const nowMillis = now();
+    const dueSnap = await db.collection('leagues')
+      .where('offseason.stageEndsAt', '<=', new Date(nowMillis))
+      .limit(25)
+      .get();
+    let advanced = 0;
+    let skipped = 0;
+    let notified = 0;
+    for (const leagueDoc of dueSnap.docs) {
+      let transitionResult = null;
+      try {
+        transitionResult = await db.runTransaction(async (tx) => {
+          const leagueRef = leagueDoc.ref;
+          const [leagueSnap, teamsSnap] = await Promise.all([
+            tx.get(leagueRef),
+            tx.get(leagueRef.collection('teams')),
+          ]);
+          if (!leagueSnap.exists) return { advanced: false, reason: 'missing' };
+          const league = leagueSnap.data() || {};
+          if (
+            league.paused === true
+            || league.archived === true
+            || league.status === 'archived'
+            || !league.offseason
+            || !isOffseasonStageDue(league.offseason, nowMillis)
+            || league.offseason.stage === 'regular_season'
+            || league.offseason.stage === 'ready_for_season'
+          ) {
+            return { advanced: false, reason: 'not_due' };
+          }
+          const teams = teamsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+          let draftClassPublished;
+          let liveDraftComplete;
+          let pendingContractOfferCount;
+          const expectedStage = league.offseason.stage;
+          const expectedVersion = league.offseason.version;
+          if (expectedStage === 're_signing' || expectedStage === 'free_agency') {
+            const offersSnap = await tx.get(leagueRef.collection('contract_offers'));
+            pendingContractOfferCount = offersSnap.docs
+              .map(doc => doc.data() || {})
+              .filter(offer => (
+                offer.status === 'pending'
+                && offer.stage === expectedStage
+                && offer.version === expectedVersion
+              )).length;
+          }
+          if (
+            expectedStage === 'draft_class_review'
+            || (
+              usesNbaOffseasonSequence(league && league.sport)
+              && expectedStage === 're_signing'
+            )
+          ) {
+            const draftClassSnap = await tx.get(leagueRef
+              .collection('draft_classes')
+              .doc(String(league.offseason.seasonYear)));
+            draftClassPublished = draftClassSnap.exists
+              && (draftClassSnap.data() || {}).published === true;
+          }
+          if (expectedStage === 'live_draft') {
+            const sessionSnap = await tx.get(leagueRef
+              .collection('draft_sessions')
+              .doc(String(league.offseason.seasonYear)));
+            liveDraftComplete = sessionSnap.exists
+              && (sessionSnap.data() || {}).status === 'complete';
+          }
+          const offseason = transitionForCallable({
+            uid: league.commissionerId,
+            league,
+            teams,
+            expectedStage,
+            expectedVersion,
+            draftClassPublished,
+            liveDraftComplete,
+            pendingContractOfferCount,
+            stageStartedAt: serverTimestamp(),
+            stageEndsAt: usesNbaOffseasonSequence(league && league.sport)
+              ? new Date(nowMillis + 600000)
+              : null,
+          });
+          tx.update(leagueRef, { offseason });
+          return { advanced: true, leagueId: leagueDoc.id, league, offseason };
+        });
+      } catch (error) {
+        skipped += 1;
+        console.warn('Skipped due offseason advance', leagueDoc.id, error && error.message);
+        continue;
+      }
+      if (transitionResult && transitionResult.advanced) {
+        advanced += 1;
+        notified += await notifyOffseasonMembers({
+          db,
+          leagueId: transitionResult.leagueId,
+          league: transitionResult.league,
+          offseason: transitionResult.offseason,
+          FieldValue,
+        });
+      } else {
+        skipped += 1;
+      }
+    }
+    return { advanced, skipped, notified };
   };
 }
 
@@ -387,8 +591,11 @@ module.exports = {
   OFFSEASON_STAGES,
   OffseasonCallableError,
   TEAM_ACTION_STAGES,
+  buildOffseasonStageNotification,
   createAdvanceOffseasonHandler,
+  createAdvanceDueOffseasonsHandler,
   initializeOffseason,
+  isOffseasonStageDue,
   hasPlayoffChampion,
   hasLotteryComplete,
   toHttpsError,

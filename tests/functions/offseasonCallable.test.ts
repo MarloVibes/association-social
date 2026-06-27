@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
+  buildOffseasonStageNotification,
   createAdvanceOffseasonHandler,
+  isOffseasonStageDue,
   hasPlayoffChampion,
   initializeOffseason,
   transitionForCallable,
@@ -22,6 +24,32 @@ class FakeHttpsError extends Error {
 }
 
 describe('offseason callable helpers', () => {
+  it('recognizes due timed stages and builds member notification payloads', () => {
+    expect(isOffseasonStageDue({
+      stage: 'awards_recap',
+      stageEndsAt: new Date('2026-06-27T20:00:00.000Z'),
+      stageDurationSeconds: 600,
+    }, Date.parse('2026-06-27T20:00:01.000Z'))).toBe(true);
+    expect(isOffseasonStageDue({
+      stage: 'awards_recap',
+      stageEndsAt: new Date('2026-06-27T20:00:00.000Z'),
+      stageDurationSeconds: 600,
+    }, Date.parse('2026-06-27T19:59:59.000Z'))).toBe(false);
+
+    expect(buildOffseasonStageNotification({
+      leagueId: 'league-1',
+      leagueName: 'NBA Test',
+      offseason: { stage: 'lottery_and_draft_order', seasonYear: 2031, version: 2 },
+    })).toMatchObject({
+      type: 'offseason_stage',
+      leagueId: 'league-1',
+      stage: 'lottery_and_draft_order',
+      seasonYear: 2031,
+      message: 'NBA Test moved to Lottery & Draft Order.',
+      read: false,
+    });
+  });
+
   it('strictly validates callable input', () => {
     expect(validateAdvanceInput({
       leagueId: ' league-1 ',

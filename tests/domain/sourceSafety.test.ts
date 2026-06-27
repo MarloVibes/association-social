@@ -132,9 +132,11 @@ describe('source safety regressions', () => {
   it('sends franchise push payload fields and titles from functions', () => {
     const functionsIndex = source('functions/index.js');
 
+    expect(functionsIndex).toContain("require('firebase-functions/v2/scheduler')");
     expect(functionsIndex).toContain("case 'game_ready'");
     expect(functionsIndex).toContain("case 'draft_started'");
     expect(functionsIndex).toContain("case 'season_awards'");
+    expect(functionsIndex).toContain('exports.advanceDueOffseasons');
     expect(functionsIndex).toContain('gameId: n.gameId || n.scheduleGameId || n.matchupId ||');
     expect(functionsIndex).toContain("competition: n.competition || n.scheduleCompetition || 'regular'");
   });

@@ -1,5 +1,6 @@
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -24,6 +25,7 @@ const {
 } = require('./domain/tradeAuthorization');
 const {
   createAdvanceOffseasonHandler,
+  createAdvanceDueOffseasonsHandler,
 } = require('./franchise/offseasonCallable');
 const {
   createCompleteOffseasonActionHandler,
@@ -334,6 +336,14 @@ exports.advanceOffseasonStage = onCall(createAdvanceOffseasonHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
+  FieldValue,
+}));
+
+exports.advanceDueOffseasons = onSchedule('every 1 minutes', createAdvanceDueOffseasonsHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  now: () => Date.now(),
+  FieldValue,
 }));
 
 exports.submitContractOffer = onCall(createSubmitContractOfferHandler({
