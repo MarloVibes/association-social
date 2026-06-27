@@ -530,4 +530,53 @@ describe('source safety regressions', () => {
     expect(rosterCuts).toContain('gradeFromHiddenValue');
     expect(rosterCuts).toContain('Grade ');
   });
+
+  it('uses neutral franchise labels for public sport modes', () => {
+    const createLeague = source('app/screens/create-league.tsx');
+    const dashboard = source('app/(tabs)/dashboard.tsx');
+    const profileSetup = source('app/(tabs)/profile-setup.tsx');
+    const profile = source('app/screens/profile.tsx');
+
+    for (const file of [createLeague, dashboard, profileSetup, profile]) {
+      expect(file).toContain('NBA Franchise');
+      expect(file).toContain('NFL Franchise');
+      expect(file).toContain('MLB Franchise');
+    }
+  });
+
+  it('keeps prohibited commercial-game branding out of app source and docs', () => {
+    const banned = [
+      ['N', 'BA', ' ', '2', 'K'].join(''),
+      ['2', 'K', ' ', 'ratings'].join(''),
+      ['2', 'K', ' ', 'badges'].join(''),
+      ['official', ' ', '2', 'K', ' ', 'attributes'].join(''),
+      ['2', 'K', ' ', 'tendencies'].join(''),
+      ['N', 'BA', ' ', '2', 'K', ' ', 'database'].join(''),
+      ['Ta', 'ke-', 'Two'].join(''),
+      ['Vis', 'ual', ' ', 'Con', 'cepts'].join(''),
+      ['Mad', 'den', ' ', 'NFL'].join(''),
+      ['MLB', ' ', 'The', ' ', 'Show'].join(''),
+      ['WWE', ' ', '2', 'K'].join(''),
+      ['EA', ' ', 'FC', ' ', '(', 'FI', 'FA', ')'].join(''),
+    ].map(term => term.toLowerCase());
+    const paths = [
+      'app/(tabs)/dashboard.tsx',
+      'app/(tabs)/profile-setup.tsx',
+      'app/screens/create-league.tsx',
+      'app/screens/profile.tsx',
+      'constants/baseballArchetypes.ts',
+      'constants/eraCaps.ts',
+      'constants/mlbTeams.ts',
+      'docs/superpowers/specs/2026-06-22-mlb-nfl-sport-logic-design.md',
+    ];
+
+    const offenders = paths.flatMap(path => {
+      const text = source(path).toLowerCase();
+      return banned
+        .filter(term => text.includes(term))
+        .map(term => `${path}:${term}`);
+    });
+
+    expect(offenders).toEqual([]);
+  });
 });

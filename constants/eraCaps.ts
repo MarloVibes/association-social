@@ -1,7 +1,7 @@
 // Per-era NBA salary caps, anchored to each era's representative season.
-// These mirror how NBA 2K's MyNBA Eras scales the cap economy per era, so
-// salaries and trade-matching stay proportional within the era you're playing.
-// Figures are the real league salary cap for the era's anchor season (approx).
+// Salaries and trade matching stay proportional within the historical season
+// environment. Figures are the real league salary cap for the era's anchor
+// season, rounded for simulation use.
 export const ERA_CAPS: Record<string, number> = {
   magic_bird: 3_600_000,    // 1984-85
   jordan: 12_500_000,       // 1991-92

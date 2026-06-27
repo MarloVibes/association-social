@@ -13,9 +13,9 @@ import { usePresence } from '@/hooks/usePresence';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 
 const SPORT_LABELS: Record<string, string> = {
-  nba: 'NBA 2K',
-  madden: 'Madden NFL',
-  mlb: 'MLB The Show',
+  nba: 'NBA Franchise',
+  madden: 'NFL Franchise',
+  mlb: 'MLB Franchise',
 };
 
 const SPORT_EMOJI: Record<string, string> = {

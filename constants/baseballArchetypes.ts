@@ -1,4 +1,4 @@
-// Baseball (MLB The Show) archetype engine — the playstyle.ts equivalent for MLB.
+// Baseball archetype engine, parallel to the shared playstyle model.
 // Returns the same { label, color } shape. Uses stats when present; otherwise
 // falls back to a position role. Pitchers branch first, then hitters by stat,
 // then position role.

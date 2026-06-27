@@ -25,9 +25,10 @@ export default function ProfileSetupScreen() {
   const genders = ['Male', 'Female', 'Other'];
   const consoles = ['PS5', 'Xbox', 'PC'];
   const sports = [
-    'NBA 2K', 'Madden NFL', 'MLB The Show', 'EA FC (FIFA)',
-    'NHL', 'UFC', 'WWE 2K', 'F1', 'College Football',
-    'Rocket League', 'Tony Hawk', 'Golf PGA Tour',
+    'NBA Franchise', 'NFL Franchise', 'MLB Franchise',
+    'Soccer Franchise', 'Hockey Franchise', 'Combat Sports',
+    'Motorsports Franchise', 'College Football',
+    'Rocket League', 'Skateboarding', 'Golf Franchise',
   ];
 
   const handleSave = async () => {

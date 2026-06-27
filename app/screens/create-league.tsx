@@ -74,9 +74,9 @@ export default function CreateLeagueScreen() {
   const [loading, setLoading] = useState(false);
 
   const sports = [
-    { label: 'NBA 2K', value: 'nba', emoji: '🏀' },
-    { label: 'Madden NFL', value: 'madden', emoji: '🏈' },
-    { label: 'MLB The Show', value: 'mlb', emoji: '⚾' },
+    { label: 'NBA Franchise', value: 'nba', emoji: '🏀' },
+    { label: 'NFL Franchise', value: 'madden', emoji: '🏈' },
+    { label: 'MLB Franchise', value: 'mlb', emoji: '⚾' },
   ];
 
   // NBA has 4 steps: Name+Sport -> Era -> Team Mode -> Review

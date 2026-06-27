@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Remove inherited NBA behavior from Madden NFL and MLB The Show leagues, then add game-style, sport-specific offseason systems. NBA behavior remains unchanged.
+Remove inherited NBA behavior from NFL Franchise and MLB Franchise leagues, then add sport-specific offseason systems. NBA behavior remains unchanged.
 
 The implementation must make the league document's `sport` field the source of truth. Navigation parameters may assist initial rendering, but they must never override the stored league sport.
 
@@ -10,9 +10,9 @@ The implementation must make the league document's `sport` field the source of t
 
 | Sport key | Product label | Teams | Active roster limit | Financial model |
 | --- | --- | ---: | ---: | --- |
-| `nba` | NBA 2K | 30 | Existing behavior | Existing NBA cap and matching rules |
-| `madden` | Madden NFL | 32 | 53 | Hard salary cap |
-| `mlb` | MLB The Show | 30 | 40 | Team budget, no league-wide hard cap |
+| `nba` | NBA Franchise | 30 | Existing behavior | Existing NBA cap and matching rules |
+| `madden` | NFL Franchise | 32 | 53 | Hard cap + positional roster rules |
+| `mlb` | MLB Franchise | 30 | 40 | Team budget + roster construction rules |
 
 New leagues default `maxMembers` to the number of teams for their sport. Commissioners may lower the membership limit, but may not raise it above the sport's team count or below the current membership.
 
@@ -40,7 +40,7 @@ Firestore stores league-specific settings and mutable offseason state. Pure calc
 
 ## League Creation
 
-### Madden NFL
+### NFL Franchise
 
 - Initial season year: `2025`
 - Initial season label: `2025`
@@ -51,7 +51,7 @@ Firestore stores league-specific settings and mutable offseason state. Pure calc
 - Trade matching: cap-room and post-trade cap compliance, not NBA salary matching
 - Default draft timer: `120` seconds
 
-### MLB The Show
+### MLB Franchise
 
 - Initial season year: `2026`
 - Initial season label: `2026`
@@ -229,7 +229,7 @@ When entering `draft_class_review`, the app generates a fictional class from spo
 ### NFL Class
 
 - Seven rounds for 32 teams
-- Position distribution weighted toward realistic Madden franchise classes
+- Position distribution weighted toward realistic pro football franchise classes
 - Prospect data includes position, age, height, weight, archetype, projected round, ratings, development trait, and scouting summary
 
 ### MLB Class
