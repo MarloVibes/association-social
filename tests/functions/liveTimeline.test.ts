@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   buildLiveTimeline,
   currentTimelineEvent,
+  livePlayerStatsAt,
   periodLabel,
 } = require('../../functions/franchise/liveTimeline.js');
 const {
@@ -26,17 +27,22 @@ const baseInput = {
     { quarter: 5, home: 11, away: 8 },
   ],
   homePlayers: [
-    { playerId: 'lal-1', name: 'Home Star', points: 34 },
-    { playerId: 'lal-2', name: 'Home Wing', points: 21 },
+    { playerId: 'lal-1', name: 'Home Star', points: 34, rebounds: 8, assists: 6, steals: 2, blocks: 1, turnovers: 3, fouls: 2 },
+    { playerId: 'lal-2', name: 'Home Wing', points: 21, rebounds: 5, assists: 2, steals: 1, blocks: 0, turnovers: 1, fouls: 3 },
+    { playerId: 'lal-3', name: 'Home Bench', points: 57, rebounds: 4, assists: 3, steals: 0, blocks: 1, turnovers: 2, fouls: 2 },
   ],
   awayPlayers: [
-    { playerId: 'bos-1', name: 'Away Star', points: 31 },
-    { playerId: 'bos-2', name: 'Away Guard', points: 19 },
+    { playerId: 'bos-1', name: 'Away Star', points: 31, rebounds: 7, assists: 5, steals: 1, blocks: 2, turnovers: 4, fouls: 2 },
+    { playerId: 'bos-2', name: 'Away Guard', points: 19, rebounds: 3, assists: 7, steals: 2, blocks: 0, turnovers: 2, fouls: 1 },
+    { playerId: 'bos-3', name: 'Away Bench', points: 59, rebounds: 6, assists: 4, steals: 1, blocks: 0, turnovers: 1, fouls: 3 },
   ],
 };
 
 const supportedEventTypes = [
   'score',
+  'assist',
+  'steal',
+  'block',
   'turnover',
   'rebound',
   'foul',
@@ -71,6 +77,8 @@ describe('function live timeline mirror', () => {
     expect(first.revealDurationMs).toBe(first.events.at(-1)?.elapsedMs);
     expect(first.events.length).toBeGreaterThan(20);
     expect(first.events.every((event: { eventType: string }) => supportedEventTypes.includes(event.eventType))).toBe(true);
+    expect(first.events.some((event: { eventType: string }) => event.eventType === 'steal')).toBe(true);
+    expect(first.events.some((event: { eventType: string }) => event.eventType === 'block')).toBe(true);
     expect(first.events.find((event: { period: number }) => event.period === 5)).toMatchObject({ periodLabel: 'OT' });
     expect(first.events.at(-1)).toMatchObject({
       id: 'nba-live-ot-1-final',
@@ -86,6 +94,21 @@ describe('function live timeline mirror', () => {
       y: 50,
       momentum: 3,
       tags: ['final'],
+    });
+  });
+
+  it('calculates live player stats from revealed function timeline events', () => {
+    const timeline = buildLiveTimeline(baseInput);
+    const leaders = livePlayerStatsAt(timeline, timeline.revealDurationMs);
+
+    expect(leaders.find((player: { playerId: string }) => player.playerId === 'lal-1')).toMatchObject({
+      name: 'Home Star',
+      teamId: 'LAL',
+      points: 34,
+      rebounds: 8,
+      assists: 6,
+      steals: 2,
+      blocks: 1,
     });
   });
 

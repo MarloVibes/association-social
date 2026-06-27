@@ -376,6 +376,12 @@ function timelinePlayers(teamBoxScore) {
     playerId: player.playerId,
     name: player.name,
     points: player.points,
+    rebounds: player.rebounds,
+    assists: player.assists,
+    steals: player.steals,
+    blocks: player.blocks,
+    turnovers: player.turnovers,
+    fouls: player.fouls,
   }));
 }
 

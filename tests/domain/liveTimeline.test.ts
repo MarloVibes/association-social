@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildLiveTimeline,
   currentTimelineEvent,
+  livePlayerStatsAt,
   periodLabel,
   type LiveTimelineEvent,
   type LiveTimelineInput,
@@ -9,6 +10,9 @@ import {
 
 const supportedEventTypes: LiveTimelineEvent['eventType'][] = [
   'score',
+  'assist',
+  'steal',
+  'block',
   'turnover',
   'rebound',
   'foul',
@@ -32,12 +36,14 @@ const baseInput: LiveTimelineInput = {
     { quarter: 4, home: 29, away: 27 },
   ],
   homePlayers: [
-    { playerId: 'h1', name: 'Home Star', points: 34 },
-    { playerId: 'h2', name: 'Home Wing', points: 21 },
+    { playerId: 'h1', name: 'Home Star', points: 34, rebounds: 8, assists: 6, steals: 2, blocks: 1, turnovers: 3, fouls: 2 },
+    { playerId: 'h2', name: 'Home Wing', points: 21, rebounds: 5, assists: 2, steals: 1, blocks: 0, turnovers: 1, fouls: 3 },
+    { playerId: 'h3', name: 'Home Bench', points: 49, rebounds: 4, assists: 3, steals: 0, blocks: 1, turnovers: 2, fouls: 2 },
   ],
   awayPlayers: [
-    { playerId: 'a1', name: 'Away Star', points: 31 },
-    { playerId: 'a2', name: 'Away Guard', points: 19 },
+    { playerId: 'a1', name: 'Away Star', points: 31, rebounds: 7, assists: 5, steals: 1, blocks: 2, turnovers: 4, fouls: 2 },
+    { playerId: 'a2', name: 'Away Guard', points: 19, rebounds: 3, assists: 7, steals: 2, blocks: 0, turnovers: 2, fouls: 1 },
+    { playerId: 'a3', name: 'Away Bench', points: 51, rebounds: 6, assists: 4, steals: 1, blocks: 0, turnovers: 1, fouls: 3 },
   ],
 };
 
@@ -88,6 +94,40 @@ describe('Live Mode timeline', () => {
     expect(scoreEvent).not.toHaveProperty('teamId');
     expect(scoreEvent?.tags).toContain('score');
     expect(timeline.events.every(event => supportedEventTypes.includes(event.eventType))).toBe(true);
+  });
+
+  it('adds non-scoring play actions and live player stat deltas', () => {
+    const timeline = buildLiveTimeline(baseInput);
+    const types = new Set(timeline.events.map(event => event.eventType));
+
+    expect(types.has('steal')).toBe(true);
+    expect(types.has('block')).toBe(true);
+    expect(types.has('rebound')).toBe(true);
+    expect(types.has('turnover')).toBe(true);
+    expect(types.has('foul')).toBe(true);
+
+    const steal = timeline.events.find(event => event.eventType === 'steal');
+    expect(steal).toMatchObject({
+      playerName: expect.any(String),
+      statDelta: { steals: 1 },
+      text: expect.stringContaining('steals'),
+    });
+  });
+
+  it('calculates live player stat leaders from revealed events', () => {
+    const timeline = buildLiveTimeline(baseInput);
+    const leaders = livePlayerStatsAt(timeline, timeline.revealDurationMs);
+
+    expect(leaders.find(player => player.playerId === 'h1')).toMatchObject({
+      name: 'Home Star',
+      teamId: 'LAL',
+      points: 34,
+      rebounds: 8,
+      assists: 6,
+      steals: 2,
+      blocks: 1,
+    });
+    expect(leaders[0].points).toBeGreaterThanOrEqual(leaders[1].points);
   });
 
   it('keeps events sorted by period and descending game clock', () => {

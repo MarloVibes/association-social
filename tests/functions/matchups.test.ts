@@ -124,6 +124,9 @@ describe('matchup request state helpers', () => {
       })),
     );
     expect(result.liveTimeline.events.length).toBeGreaterThan(0);
+    expect(result.liveTimeline.events.some((event: { eventType: string }) => event.eventType === 'rebound')).toBe(true);
+    expect(result.liveTimeline.events.some((event: { eventType: string }) => event.eventType === 'foul')).toBe(true);
+    expect(result.liveTimeline.events.some((event: { statDelta?: { rebounds?: number } }) => event.statDelta?.rebounds === 1)).toBe(true);
     expect(result.liveTimeline.events.at(-1)).toMatchObject({
       eventType: 'final_buzzer',
       homeScore: result.homeScore,

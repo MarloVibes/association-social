@@ -8,7 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
 import { buildLiveCourtState } from '@/domain/nba/liveCourt';
-import { currentTimelineEvent, type LiveTimeline, type LiveTimelineEvent } from '@/domain/nba/liveTimeline';
+import { currentTimelineEvent, livePlayerStatsAt, type LiveTimeline, type LiveTimelineEvent } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
@@ -169,6 +169,9 @@ export default function LiveModeScreen() {
   const visibleEvents = useMemo(() => (
     liveTimeline?.events.filter(event => event.elapsedMs <= elapsedMs).slice(-8).reverse() || []
   ), [elapsedMs, liveTimeline?.events]);
+  const livePlayerStats = useMemo(() => (
+    liveTimeline ? livePlayerStatsAt(liveTimeline, elapsedMs).slice(0, 6) : []
+  ), [elapsedMs, liveTimeline]);
   const displayedPeriods = liveTimeline?.periods?.length
     ? liveTimeline.periods
     : (game?.quarters || []).map(quarter => ({
@@ -333,6 +336,25 @@ export default function LiveModeScreen() {
               )}
             </View>
 
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Live Player Stats</Text>
+              {livePlayerStats.length > 0 ? livePlayerStats.map(player => (
+                <View key={player.playerId} style={styles.statRow}>
+                  <View style={styles.statNameBlock}>
+                    <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
+                    <Text style={styles.statTeam}>{displayScheduleAbbr(player.teamId)}</Text>
+                  </View>
+                  <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
+                  <Text style={styles.statValue}>{player.rebounds} REB</Text>
+                  <Text style={styles.statValue}>{player.assists} AST</Text>
+                  <Text style={styles.statValue}>{player.steals} STL</Text>
+                  <Text style={styles.statValue}>{player.blocks} BLK</Text>
+                </View>
+              )) : (
+                <Text style={styles.emptySmall}>Stats will update as plays appear.</Text>
+              )}
+            </View>
+
             {resultVisible ? (
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: resultCompetition } })}
@@ -402,6 +424,11 @@ const styles = StyleSheet.create({
   feedMeta: { color: '#777', fontSize: 10, fontWeight: '900' },
   feedText: { color: '#ddd', fontSize: 12, fontWeight: '800', marginTop: 2 },
   feedScore: { color: '#fff', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  statRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingVertical: 8 },
+  statNameBlock: { flex: 1, minWidth: 0 },
+  statName: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  statTeam: { color: '#777', fontSize: 10, fontWeight: '900', marginTop: 2 },
+  statValue: { color: '#cfcfcf', fontSize: 11, fontWeight: '900', minWidth: 42, textAlign: 'right', fontVariant: ['tabular-nums'] },
   resultButton: { minHeight: 46, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   resultButtonText: { color: '#050505', fontSize: 13, fontWeight: '900' },
   lockedResult: { minHeight: 46, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#262626', backgroundColor: '#101010' },

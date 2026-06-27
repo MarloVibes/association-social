@@ -233,6 +233,8 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('liveTimeline');
     expect(liveMode).toContain('arenaTheme');
     expect(liveMode).toContain('currentTimelineEvent');
+    expect(liveMode).toContain('livePlayerStatsAt');
+    expect(liveMode).toContain('Live Player Stats');
     expect(liveMode).not.toContain('httpsCallable(functions');
     expect(liveMode).not.toContain('Push Tempo');
     expect(liveMode).not.toContain('Trap Star');
