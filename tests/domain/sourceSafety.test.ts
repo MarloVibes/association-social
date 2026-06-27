@@ -173,6 +173,16 @@ describe('source safety regressions', () => {
     expect(liveDraft).toContain("league?.mode === 'draft' ? 'Fantasy Draft' :");
   });
 
+  it('shows the NBA draft lottery as a weighted reveal instead of a plain list', () => {
+    const offseason = source('app/screens/offseason/index.tsx');
+
+    expect(offseason).toContain('lotterySpin');
+    expect(offseason).toContain('lotteryWheel');
+    expect(offseason).toContain('Flattened anti-tank odds');
+    expect(offseason).toContain('Top-four draw');
+    expect(offseason).toContain('Full draft order');
+  });
+
   it('uses sport finance defaults when creating non-NBA leagues', () => {
     const createLeague = source('app/screens/create-league.tsx');
 

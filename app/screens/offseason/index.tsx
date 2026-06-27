@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,7 @@ type LeagueData = {
   offseason?: OffseasonState;
   draftLottery?: {
     complete?: boolean;
+    candidates?: { pick: number; teamId: string; abbreviation?: string; name?: string; odds?: number }[];
     picks?: { pick: number; teamId: string; abbreviation?: string; name?: string; source?: string }[];
     drawnPicks?: { pick: number; teamId: string; abbreviation?: string; name?: string }[];
   };
@@ -86,6 +88,7 @@ export default function OffseasonScreen() {
   const [loading, setLoading] = useState(true);
   const [advancing, setAdvancing] = useState(false);
   const [runningLottery, setRunningLottery] = useState(false);
+  const lotterySpin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!leagueId) {
@@ -158,6 +161,26 @@ export default function OffseasonScreen() {
   const myTeamComplete = Boolean(
     myTeam && offseason?.completedTeamIds?.includes(myTeam.id),
   );
+  const lotteryCandidates = useMemo(
+    () => (league?.draftLottery?.candidates || []).slice(0, 8),
+    [league?.draftLottery?.candidates],
+  );
+  const lotteryWheelTeams = lotteryCandidates.length > 0
+    ? lotteryCandidates
+    : teams.slice(0, 8).map((team, index) => ({
+      pick: index + 1,
+      teamId: team.id,
+      abbreviation: team.abbreviation,
+      name: team.name,
+    }));
+  const lotterySpinStyle = {
+    transform: [{
+      rotate: lotterySpin.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+      }),
+    }],
+  };
   const canAdvance = isCommissioner
     && !advancing
     && !isRegularSeason
@@ -260,6 +283,23 @@ export default function OffseasonScreen() {
     );
   };
 
+  useEffect(() => {
+    if (!runningLottery) {
+      lotterySpin.stopAnimation();
+      lotterySpin.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(lotterySpin, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [lotterySpin, runningLottery]);
+
   if (loading || !league || !offseason) {
     return (
       <View style={styles.loading}>
@@ -351,10 +391,23 @@ export default function OffseasonScreen() {
             {league.draftLottery?.complete ? (
               <>
                 <Text style={styles.bodyText}>Lottery order is locked for the upcoming draft.</Text>
-                {(league.draftLottery.picks || []).slice(0, 8).map(pick => (
+                <Text style={styles.lotterySubheading}>Top-four draw</Text>
+                {(league.draftLottery.drawnPicks || []).map(pick => (
+                  <View key={`drawn:${pick.pick}:${pick.teamId}`} style={styles.lotteryRevealRow}>
+                    <View style={styles.lotteryRevealPick}>
+                      <Text style={styles.lotteryRevealPickText}>{pick.pick}</Text>
+                    </View>
+                    <Text style={styles.teamName}>{pick.name || pick.abbreviation || pick.teamId}</Text>
+                  </View>
+                ))}
+                <Text style={styles.lotterySubheading}>Full draft order</Text>
+                {(league.draftLottery.picks || []).slice(0, 14).map(pick => (
                   <View key={`${pick.pick}:${pick.teamId}`} style={styles.teamRow}>
                     <Text style={styles.lotteryPick}>{pick.pick}</Text>
                     <Text style={styles.teamName}>{pick.name || pick.abbreviation || pick.teamId}</Text>
+                    <Text style={styles.lotterySource}>
+                      {pick.source === 'lottery_draw' ? 'drawn' : 'standings'}
+                    </Text>
                   </View>
                 ))}
               </>
@@ -363,6 +416,26 @@ export default function OffseasonScreen() {
                 <Text style={styles.bodyText}>
                   Run the weighted lottery before this stage can advance.
                 </Text>
+                <View style={styles.lotteryInfoCard}>
+                  <Text style={styles.lotteryInfoTitle}>Flattened anti-tank odds</Text>
+                  <Text style={styles.lotteryInfoText}>
+                    The bottom three teams share the best odds, then chances step down across the lottery field.
+                  </Text>
+                </View>
+                <View style={styles.lotteryWheelWrap}>
+                  <Animated.View style={[styles.lotteryWheel, lotterySpinStyle]}>
+                    {lotteryWheelTeams.map((team, index) => (
+                      <View key={`${team.teamId}:${index}`} style={styles.lotteryWheelSlot}>
+                        <Text style={styles.lotteryWheelText} numberOfLines={1}>
+                          {team.abbreviation || team.name || team.teamId}
+                        </Text>
+                      </View>
+                    ))}
+                  </Animated.View>
+                  <View style={styles.lotteryWheelCenter}>
+                    <Text style={styles.lotteryWheelCenterText}>LOTTERY</Text>
+                  </View>
+                </View>
                 {isCommissioner && (
                   <TouchableOpacity
                     disabled={runningLottery}
@@ -569,6 +642,78 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: 'row', alignItems: 'center', minHeight: 34, gap: 10 },
   teamDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#f4b942' },
   lotteryPick: { width: 24, color: '#00e58b', fontSize: 13, fontWeight: '900', textAlign: 'center' },
+  lotterySubheading: { color: '#f4b942', fontSize: 12, fontWeight: '900', marginTop: 12, marginBottom: 8, textTransform: 'uppercase' },
+  lotteryInfoCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3f3320',
+    backgroundColor: '#171207',
+    padding: 12,
+    marginBottom: 14,
+  },
+  lotteryInfoTitle: { color: '#f4b942', fontSize: 13, fontWeight: '900', marginBottom: 4 },
+  lotteryInfoText: { color: '#b2a17a', fontSize: 12, lineHeight: 17 },
+  lotteryWheelWrap: { alignItems: 'center', justifyContent: 'center', marginVertical: 14 },
+  lotteryWheel: {
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    borderWidth: 2,
+    borderColor: '#f4b942',
+    backgroundColor: '#131810',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 18,
+    gap: 6,
+  },
+  lotteryWheelSlot: {
+    width: 68,
+    minHeight: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#314233',
+    backgroundColor: '#0b1b11',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  lotteryWheelText: { color: '#dce7df', fontSize: 11, fontWeight: '900' },
+  lotteryWheelCenter: {
+    position: 'absolute',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 2,
+    borderColor: '#00e58b',
+    backgroundColor: '#07130d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lotteryWheelCenterText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  lotteryRevealRow: {
+    minHeight: 42,
+    borderRadius: 7,
+    backgroundColor: '#101511',
+    borderWidth: 1,
+    borderColor: '#243b2c',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    marginBottom: 7,
+  },
+  lotteryRevealPick: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00e58b',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lotteryRevealPickText: { color: '#06120c', fontSize: 12, fontWeight: '900' },
+  lotterySource: { marginLeft: 'auto', color: '#69706b', fontSize: 11, fontWeight: '800' },
   teamName: { color: '#d9ddda', fontSize: 14 },
   commissionerSection: {
     paddingHorizontal: 24,
