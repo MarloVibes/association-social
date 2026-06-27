@@ -170,7 +170,7 @@ export default function LiveModeScreen() {
     liveTimeline?.events.filter(event => event.elapsedMs <= elapsedMs).slice(-8).reverse() || []
   ), [elapsedMs, liveTimeline?.events]);
   const livePlayerStats = useMemo(() => (
-    liveTimeline ? livePlayerStatsAt(liveTimeline, elapsedMs).slice(0, 6) : []
+    liveTimeline ? livePlayerStatsAt(liveTimeline, elapsedMs) : []
   ), [elapsedMs, liveTimeline]);
   const displayedPeriods = liveTimeline?.periods?.length
     ? liveTimeline.periods
@@ -186,8 +186,8 @@ export default function LiveModeScreen() {
     primaryColor: homeTeam?.primaryColor,
     secondaryColor: homeTeam?.secondaryColor,
   });
-  const homeScore = currentEvent?.homeScore ?? game?.homeScore ?? liveTimeline?.homeScore ?? 0;
-  const awayScore = currentEvent?.awayScore ?? game?.awayScore ?? liveTimeline?.awayScore ?? 0;
+  const homeScore = currentEvent?.homeScore ?? 0;
+  const awayScore = currentEvent?.awayScore ?? 0;
   const competitionLabel = isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'Season';
   const momentumText = currentEvent
     ? currentEvent.momentum === 0
@@ -198,6 +198,10 @@ export default function LiveModeScreen() {
     : 'Opening tip';
   const resultCompetition = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const resultVisible = isLiveResultRevealed(game, nowMs);
+  const liveStatsByTeam = useMemo(() => ({
+    away: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.awayTeamId || '')).slice(0, 8),
+    home: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.homeTeamId || '')).slice(0, 8),
+  }), [game?.awayTeamId, game?.homeTeamId, livePlayerStats]);
   const scoreboardBackground = translucentColor(arenaTheme.primary, '22', 'rgba(255,255,255,0.06)');
   const courtBackground = translucentColor(arenaTheme.primary, '33', 'rgba(255,255,255,0.08)');
   const crowdGlowBackground = translucentColor(arenaTheme.crowdGlow, '44', 'rgba(255,255,255,0.12)');
@@ -254,7 +258,7 @@ export default function LiveModeScreen() {
               </View>
               <View style={styles.scoreCenter}>
                 <Text style={[styles.clock, { color: arenaTheme.text }]}>{clockText(currentEvent)}</Text>
-                <Text style={styles.period}>{currentEvent?.periodLabel || displayedPeriods[0]?.label || 'Q1'}</Text>
+                <Text style={styles.period}>{currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || displayedPeriods[0]?.label || 'Q1'}</Text>
               </View>
               <View style={styles.teamBlock}>
                 <View style={[styles.logoDisc, { borderColor: arenaTheme.secondary }]}>
@@ -307,18 +311,19 @@ export default function LiveModeScreen() {
               </View>
             </View>
 
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Period Scoring</Text>
-              <View style={styles.periodGrid}>
-                {displayedPeriods.map(period => (
-                  <View key={period.period} style={styles.periodCell}>
-                    <Text style={styles.periodLabel}>{period.label}</Text>
-                    <Text style={styles.periodScore}>{awayLabel} {period.away}</Text>
-                    <Text style={styles.periodScore}>{homeLabel} {period.home}</Text>
-                  </View>
-                ))}
+            {resultVisible ? (
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Quarter Scores</Text>
+                <View style={styles.periodList}>
+                  {displayedPeriods.map(period => (
+                    <Text key={period.period} style={styles.periodLine}>
+                      {period.label}: {awayAbbr} {period.away} - {homeAbbr} {period.home}
+                    </Text>
+                  ))}
+                  <Text style={styles.finalLine}>Final: {awayAbbr} {game.awayScore ?? awayScore} - {homeAbbr} {game.homeScore ?? homeScore}</Text>
+                </View>
               </View>
-            </View>
+            ) : null}
 
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Event Feed</Text>
@@ -338,19 +343,28 @@ export default function LiveModeScreen() {
 
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Live Player Stats</Text>
-              {livePlayerStats.length > 0 ? livePlayerStats.map(player => (
-                <View key={player.playerId} style={styles.statRow}>
-                  <View style={styles.statNameBlock}>
-                    <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
-                    <Text style={styles.statTeam}>{displayScheduleAbbr(player.teamId)}</Text>
+              {livePlayerStats.length > 0 ? (
+                ([
+                  { key: 'away', label: awayLabel, players: liveStatsByTeam.away },
+                  { key: 'home', label: homeLabel, players: liveStatsByTeam.home },
+                ] as const).map(group => (
+                  <View key={group.key} style={styles.statTeamGroup}>
+                    <Text style={styles.statGroupTitle}>{group.label}</Text>
+                    {group.players.map(player => (
+                      <View key={player.playerId} style={styles.statRow}>
+                        <View style={styles.statNameBlock}>
+                          <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
+                        </View>
+                        <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
+                        <Text style={styles.statValue}>{player.rebounds} REB</Text>
+                        <Text style={styles.statValue}>{player.assists} AST</Text>
+                        <Text style={styles.statValue}>{player.steals} STL</Text>
+                        <Text style={styles.statValue}>{player.blocks} BLK</Text>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
-                  <Text style={styles.statValue}>{player.rebounds} REB</Text>
-                  <Text style={styles.statValue}>{player.assists} AST</Text>
-                  <Text style={styles.statValue}>{player.steals} STL</Text>
-                  <Text style={styles.statValue}>{player.blocks} BLK</Text>
-                </View>
-              )) : (
+                ))
+              ) : (
                 <Text style={styles.emptySmall}>Stats will update as plays appear.</Text>
               )}
             </View>
@@ -418,12 +432,17 @@ const styles = StyleSheet.create({
   periodCell: { width: '23%', minWidth: 72, borderRadius: 7, borderWidth: 1, borderColor: '#262626', backgroundColor: '#080808', padding: 9, gap: 3 },
   periodLabel: { color: '#777', fontSize: 10, fontWeight: '900' },
   periodScore: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  periodList: { gap: 7 },
+  periodLine: { color: '#ddd', fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  finalLine: { color: '#fff', fontSize: 14, fontWeight: '900', fontVariant: ['tabular-nums'], marginTop: 3 },
   feedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#1b1b1b' },
   feedDot: { width: 8, height: 8, borderRadius: 4 },
   feedCopy: { flex: 1, minWidth: 0 },
   feedMeta: { color: '#777', fontSize: 10, fontWeight: '900' },
   feedText: { color: '#ddd', fontSize: 12, fontWeight: '800', marginTop: 2 },
   feedScore: { color: '#fff', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  statTeamGroup: { gap: 2 },
+  statGroupTitle: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 2 },
   statRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingVertical: 8 },
   statNameBlock: { flex: 1, minWidth: 0 },
   statName: { color: '#fff', fontSize: 12, fontWeight: '900' },

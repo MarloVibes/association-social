@@ -3,6 +3,7 @@ import {
   buildScoutingGrades,
   compareScoutingGrades,
   getCompareRowModel,
+  getPotentialScoutingSummary,
   getScoutingGradeSections,
   gradeColors,
   gradeRank,
@@ -155,5 +156,42 @@ describe('NBA scouting grades', () => {
     expect(benchShooter.impact).toBe('B-');
     expect(benchShooter.overall).toBe('C+');
     expect(benchShooter.tradeValue).toBe('C+');
+  });
+
+  it('keeps potential labels separate from role labels', () => {
+    const primeSuperstar = buildScoutingGrades({
+      age: 25,
+      hidden: {
+        shooting: 94,
+        playmaking: 96,
+        defense: 84,
+        athleticism: 97,
+        basketballIq: 94,
+        potential: 65,
+        developmentRate: 88,
+        workEthic: 90,
+      },
+      visibleIdentity: { reputation: 'Superstar' },
+      seasonStats: { games: 70, minutes: 2500, points: 1800, assists: 560, rebounds: 320 },
+    });
+
+    expect(gradeRank(primeSuperstar.potential)).toBeGreaterThanOrEqual(gradeRank('B+'));
+
+    const veteranSummary = getPotentialScoutingSummary({
+      age: 35,
+      hidden: {
+        shooting: 95,
+        playmaking: 94,
+        defense: 82,
+        athleticism: 86,
+        basketballIq: 98,
+        potential: 68,
+      },
+      visibleIdentity: { reputation: 'Superstar' },
+    });
+
+    expect(veteranSummary.label).toBe('Near Peak');
+    expect(veteranSummary.label).not.toBe('Contributor');
+    expect(veteranSummary.description).toContain('already close to his ceiling');
   });
 });

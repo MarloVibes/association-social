@@ -10,12 +10,11 @@ import {
 
 const supportedEventTypes: LiveTimelineEvent['eventType'][] = [
   'score',
-  'assist',
-  'steal',
   'block',
+  'miss',
   'turnover',
-  'rebound',
   'foul',
+  'timeout',
   'run',
   'momentum',
   'period_end',
@@ -55,6 +54,7 @@ describe('Live Mode timeline', () => {
     expect(first).toEqual(second);
     expect(first).toMatchObject({ version: 1, revealDurationMs: expect.any(Number) });
     expect(first.revealDurationMs).toBe(first.events.at(-1)?.elapsedMs);
+    expect(first.revealDurationMs).toBe(16 * 60 * 1000);
     expect(first.events.length).toBeGreaterThan(20);
     expect(first.events[0]).toMatchObject({ period: 1, homeScore: expect.any(Number), awayScore: expect.any(Number) });
     expect(first.events.at(-1)).toMatchObject({
@@ -100,17 +100,41 @@ describe('Live Mode timeline', () => {
     const timeline = buildLiveTimeline(baseInput);
     const types = new Set(timeline.events.map(event => event.eventType));
 
-    expect(types.has('steal')).toBe(true);
-    expect(types.has('block')).toBe(true);
-    expect(types.has('rebound')).toBe(true);
     expect(types.has('turnover')).toBe(true);
+    expect(types.has('block')).toBe(true);
+    expect(types.has('miss')).toBe(true);
     expect(types.has('foul')).toBe(true);
 
-    const steal = timeline.events.find(event => event.eventType === 'steal');
+    const steal = timeline.events.find(event => event.text.includes('Steal:'));
     expect(steal).toMatchObject({
       playerName: expect.any(String),
-      statDelta: { steals: 1 },
-      text: expect.stringContaining('steals'),
+      text: expect.stringContaining('Steal:'),
+    });
+    expect(steal?.statDeltas?.some(delta => delta.stats.steals === 1)).toBe(true);
+  });
+
+  it('builds possession-based events instead of standalone stat noise', () => {
+    const timeline = buildLiveTimeline(baseInput);
+    const visible = timeline.events.filter(event => event.eventType !== 'final_buzzer' && event.eventType !== 'period_end');
+
+    expect(visible.some(event => event.text.includes('Assist:'))).toBe(true);
+    expect(visible.some(event => event.text.includes('Rebound:'))).toBe(true);
+    expect(visible.some(event => event.text.includes('Steal:'))).toBe(true);
+    expect(visible.every(event => !['assist', 'rebound', 'steal'].includes(String(event.eventType)))).toBe(true);
+
+    visible.forEach((event) => {
+      if (event.statDelta?.assists) {
+        expect(event.statDelta.points).toBeGreaterThan(0);
+        expect(event.text).toContain('made');
+      }
+      if (event.statDelta?.rebounds) {
+        expect(event.text).toMatch(/missed|free throw/i);
+      }
+      const merged = Object.assign({}, ...(event.statDeltas || []).map(delta => delta.stats));
+      if (merged.steals) {
+        expect(merged.turnovers).toBe(1);
+        expect(event.text).toContain('turnover');
+      }
     });
   });
 
@@ -162,6 +186,7 @@ describe('Live Mode timeline', () => {
     expect(timeline.events.some(event => event.period === 5)).toBe(true);
     expect(timeline.periods.at(-1)).toMatchObject({ period: 5, label: 'OT', home: 11, away: 8 });
     expect(timeline.events.at(-1)).toMatchObject({ homeScore: 112, awayScore: 109 });
+    expect(timeline.revealDurationMs).toBe(Math.round(((48 * 60 + 5 * 60) / 3) * 1000));
   });
 
   it('finds the visible event from elapsed reveal time', () => {

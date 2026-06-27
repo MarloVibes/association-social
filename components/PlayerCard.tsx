@@ -8,9 +8,11 @@ import {
   buildScoutingGrades,
   compareScoutingGrades,
   getCompareRowModel,
+  getPotentialScoutingSummary,
   getScoutingGradeSections,
   gradeColors,
 } from '@/domain/nba/scoutingGrades';
+import { basketballSeasonAverageItems } from '@/domain/nba/seasonStats';
 
 type Props = {
   player: any;
@@ -187,14 +189,7 @@ function franchiseSeasonStats(stats: any, sport: string): { label: string; value
   }
   return [
     ...common,
-    { label: 'MIN', value: firstStat(stats, ['minutes', 'min']) },
-    { label: 'PTS', value: firstStat(stats, ['points', 'pts']) },
-    { label: 'REB', value: firstStat(stats, ['rebounds', 'reb']) },
-    { label: 'AST', value: firstStat(stats, ['assists', 'ast']) },
-    { label: 'STL', value: firstStat(stats, ['steals', 'stl']) },
-    { label: 'BLK', value: firstStat(stats, ['blocks', 'blk']) },
-    { label: 'FG%', value: firstStat(stats, ['fgPct', 'fg_pct', 'fieldGoalPct']) },
-    { label: '3P%', value: firstStat(stats, ['threePct', 'fg3_pct', 'threePointPct']) },
+    ...basketballSeasonAverageItems(stats),
   ].filter(stat => stat.value !== null);
 }
 
@@ -371,6 +366,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
   const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, profile) : null;
   const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, profile) : [];
+  const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, profile) : null;
   const playerGrades = isNBAPlayer ? buildScoutingGrades(player, profile) : null;
   const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer) : null;
   const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
@@ -476,16 +472,22 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                       {[
                         { label: 'Overall Talent', value: evaluationLayers.overallTalent },
                         { label: 'Current Form', value: evaluationLayers.currentForm },
-                        { label: 'Potential', value: evaluationLayers.potential },
+                        { label: 'Potential', value: { grade: playerGrades?.potential || evaluationLayers.potential.grade } },
                       ].map(item => {
                         const colors = gradeColors(item.value.grade);
                         return (
                           <View key={item.label} style={[styles.evaluationChip, { borderColor: colors.borderColor, backgroundColor: colors.backgroundColor }]}>
                             <Text style={styles.evaluationLabel}>{item.label}</Text>
-                            <Text style={[styles.evaluationGrade, { color: colors.textColor }]}>{item.value.grade} <Text style={styles.evaluationTier}>{item.value.tier}</Text></Text>
+                            <Text style={[styles.evaluationGrade, { color: colors.textColor }]}>{item.value.grade}</Text>
                           </View>
                         );
                       })}
+                      {potentialSummary ? (
+                        <View style={styles.potentialSummary}>
+                          <Text style={styles.potentialSummaryLabel}>{potentialSummary.label}</Text>
+                          <Text style={styles.potentialSummaryText}>{potentialSummary.description}</Text>
+                        </View>
+                      ) : null}
                       <View style={styles.evaluationStateRow}>
                         <Text style={styles.evaluationState}>Confidence: {evaluationLayers.confidence.state}</Text>
                         <Text style={styles.evaluationState}>Chemistry: {evaluationLayers.chemistry.state}</Text>
@@ -892,6 +894,9 @@ const styles = StyleSheet.create({
   evaluationLabel: { color: '#9a9a9a', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 3 },
   evaluationGrade: { fontSize: 16, fontWeight: '900' },
   evaluationTier: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
+  potentialSummary: { borderWidth: 1, borderColor: '#242424', backgroundColor: '#0b0b0b', borderRadius: 8, padding: 10 },
+  potentialSummaryLabel: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  potentialSummaryText: { color: '#aaa', fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 4 },
   evaluationStateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   evaluationState: { color: '#cfcfcf', fontSize: 10, fontWeight: '800', backgroundColor: '#171717', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#262626' },
   gradeSection: { marginBottom: 14 },

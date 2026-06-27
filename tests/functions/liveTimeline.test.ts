@@ -40,12 +40,11 @@ const baseInput = {
 
 const supportedEventTypes = [
   'score',
-  'assist',
-  'steal',
   'block',
+  'miss',
   'turnover',
-  'rebound',
   'foul',
+  'timeout',
   'run',
   'momentum',
   'period_end',
@@ -75,10 +74,11 @@ describe('function live timeline mirror', () => {
       ],
     });
     expect(first.revealDurationMs).toBe(first.events.at(-1)?.elapsedMs);
+    expect(first.revealDurationMs).toBe(Math.round(((48 * 60 + 5 * 60) / 3) * 1000));
     expect(first.events.length).toBeGreaterThan(20);
     expect(first.events.every((event: { eventType: string }) => supportedEventTypes.includes(event.eventType))).toBe(true);
-    expect(first.events.some((event: { eventType: string }) => event.eventType === 'steal')).toBe(true);
-    expect(first.events.some((event: { eventType: string }) => event.eventType === 'block')).toBe(true);
+    expect(first.events.some((event: { text: string }) => event.text.includes('Steal:'))).toBe(true);
+    expect(first.events.some((event: { text: string }) => event.text.includes('blocks'))).toBe(true);
     expect(first.events.find((event: { period: number }) => event.period === 5)).toMatchObject({ periodLabel: 'OT' });
     expect(first.events.at(-1)).toMatchObject({
       id: 'nba-live-ot-1-final',
@@ -89,7 +89,7 @@ describe('function live timeline mirror', () => {
       awayScore: 109,
       eventType: 'final_buzzer',
       actingTeamId: 'LAL',
-      text: 'Final: BOS 109, LAL 112',
+      text: 'Final: BOS 109 - LAL 112',
       x: 50,
       y: 50,
       momentum: 3,
@@ -109,6 +109,22 @@ describe('function live timeline mirror', () => {
       assists: 6,
       steals: 2,
       blocks: 1,
+    });
+  });
+
+  it('mirrors possession-based event validation in deployed functions', () => {
+    const timeline = buildLiveTimeline(baseInput);
+    const events = timeline.events.filter((event: { eventType: string }) => event.eventType !== 'final_buzzer' && event.eventType !== 'period_end');
+
+    expect(events.some((event: { text: string }) => event.text.includes('Assist:'))).toBe(true);
+    expect(events.some((event: { text: string }) => event.text.includes('Rebound:'))).toBe(true);
+    expect(events.some((event: { text: string }) => event.text.includes('Steal:'))).toBe(true);
+    expect(events.every((event: { eventType: string }) => !['assist', 'rebound', 'steal'].includes(event.eventType))).toBe(true);
+    events.forEach((event: { statDelta?: Record<string, number>; statDeltas?: { stats: Record<string, number> }[]; text: string }) => {
+      if (event.statDelta?.assists) expect(event.statDelta.points).toBeGreaterThan(0);
+      if (event.statDelta?.rebounds) expect(event.text).toMatch(/missed|free throw/i);
+      const merged = Object.assign({}, ...(event.statDeltas || []).map(delta => delta.stats));
+      if (merged.steals) expect(merged.turnovers).toBe(1);
     });
   });
 

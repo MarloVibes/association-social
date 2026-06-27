@@ -59,6 +59,11 @@ export type CompareGradeRow = {
   winner: 'left' | 'right' | 'tie';
 };
 
+export type PotentialScoutingSummary = {
+  label: 'High Upside' | 'Starter Upside' | 'Star Upside' | 'Near Peak' | 'Declining' | 'Limited Growth';
+  description: string;
+};
+
 const VALID_GRADES = new Set<string>(['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S']);
 const META_GRADE_KEYS = ['role', 'impact', 'overall', 'tradeValue'] as const;
 
@@ -341,6 +346,8 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['speed'], weight: 15 },
         { keys: ['agility', 'vertical'], weight: 10 },
       ]);
+    case 'potential':
+      return potentialRating(player, profile);
     case 'role':
       return roleRating(player, profile);
     case 'impact':
@@ -369,6 +376,32 @@ function overallRating(player: Record<string, any>, profile: Record<string, any>
   const role = roleRating(player, profile);
   const durability = firstNumber(player, profile, ['durability', 'stamina']) ?? 74;
   return impact * 0.62 + role * 0.18 + durability * 0.2;
+}
+
+function potentialRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const overall = overallRating(player, profile);
+  const storedPotential = firstNumber(player, profile, ['potential']);
+  const age = Number(player?.age ?? profile?.age ?? 27);
+  const developmentRate = firstNumber(player, profile, ['developmentRate', 'development']) ?? 74;
+  const workEthic = firstNumber(player, profile, ['workEthic']) ?? 74;
+  const injuryPenalty = Math.min(8, Number(player?.injuryHistory ?? profile?.injuryHistory ?? 0) * 2);
+  const minutesOpportunity = roleRating(player, profile);
+  const trend = firstNumber(player, profile, ['performanceTrend']) ?? 74;
+  const hiddenDevelopment = firstNumber(player, profile, ['hiddenDevelopment', 'developmentRating']) ?? developmentRate;
+  const identityText = `${player?.visibleIdentity?.reputation || player?.identity?.reputation || profile?.visibleIdentity?.reputation || profile?.identity?.reputation || ''}`.toLowerCase();
+  const isStarLevel = identityText.includes('superstar') || identityText.includes('legend') || overall >= 89;
+  const ageCurve = age <= 24 ? 6 : age <= 28 ? 3 : age <= 31 ? 0 : age <= 34 ? -4 : -9;
+  const growthContext = (
+    developmentRate * 0.24
+    + workEthic * 0.22
+    + minutesOpportunity * 0.14
+    + trend * 0.16
+    + hiddenDevelopment * 0.24
+  );
+  const contextPotential = overall * 0.55 + growthContext * 0.35 + ageCurve - injuryPenalty;
+  const storedBlend = storedPotential === null ? contextPotential : Math.max(storedPotential, contextPotential * 0.88);
+  const starFloor = isStarLevel && age <= 30 ? Math.max(storedBlend, overall - 4, 85) : storedBlend;
+  return clamp(starFloor, 40, 99);
 }
 
 function tradeValueRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
@@ -553,5 +586,47 @@ export function getCompareRowModel({
     right: { grade: row.right, name: rightName },
     winner: row.winner,
     accessibilityLabel: `${leftName} ${row.left} ${row.label} ${row.right} ${rightName}`,
+  };
+}
+
+export function getPotentialScoutingSummary(player: Record<string, any>, profile?: Record<string, any> | null): PotentialScoutingSummary {
+  const age = Number(player?.age ?? profile?.age ?? 27);
+  const grades = buildScoutingGrades(player, profile);
+  const potential = gradeRank(grades.potential);
+  const overall = gradeRank(grades.overall);
+
+  if (age >= 34 && potential <= gradeRank('C+')) {
+    return {
+      label: 'Near Peak',
+      description: 'A proven player already close to his ceiling, with growth limited by age and career stage.',
+    };
+  }
+  if (age >= 32 && potential <= gradeRank('B-')) {
+    return {
+      label: 'Declining',
+      description: 'Still useful now, but future growth is limited and regression risk is rising.',
+    };
+  }
+  if (potential >= gradeRank('A-') || (overall >= gradeRank('A-') && age <= 28)) {
+    return {
+      label: 'Star Upside',
+      description: 'Profile supports real star-level growth if minutes, health, and role stay aligned.',
+    };
+  }
+  if (potential >= gradeRank('B')) {
+    return {
+      label: 'Starter Upside',
+      description: 'Enough growth runway to become or remain a reliable starter-level piece.',
+    };
+  }
+  if (age <= 24 && potential >= gradeRank('C+')) {
+    return {
+      label: 'High Upside',
+      description: 'Young enough to outperform the current grade if development breaks right.',
+    };
+  }
+  return {
+    label: 'Limited Growth',
+    description: 'Future growth looks modest unless role, health, or production trend changes.',
   };
 }
