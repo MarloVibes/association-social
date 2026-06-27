@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
+import { buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
 import { displayScheduleAbbr } from '@/domain/nba/scheduleView';
@@ -95,12 +96,28 @@ export default function PlayoffsScreen() {
     teams,
   }), [schedule?.games, schedule?.participants, teams]);
   const bracket = schedule?.playoffs || null;
+  const completion = useMemo(() => regularSeasonCompletion(schedule?.games || []), [schedule?.games]);
+  const picture = useMemo(() => buildPlayoffPicture({
+    standings,
+    format,
+    completion,
+    bracketExists: Boolean(bracket),
+  }), [standings, format, completion, bracket]);
   const series = useMemo(() => (
     bracket?.rounds.flatMap(round => round.series.map(item => ({ ...item, roundLabel: round.label }))) || []
   ), [bracket?.rounds]);
 
   const startPlayoffs = async () => {
     if (!leagueId || !league || !schedule) return;
+    if (!picture.readyToStartPostseason) {
+      Alert.alert(
+        'Season not complete',
+        picture.bracketLocked
+          ? 'The playoff bracket already exists.'
+          : `${picture.completion.remainingGames} regular season game${picture.completion.remainingGames === 1 ? '' : 's'} still need to be finalized.`,
+      );
+      return;
+    }
     setStarting(true);
     try {
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
@@ -178,9 +195,49 @@ export default function PlayoffsScreen() {
               </View>
             </View>
             <View style={styles.summary}>
-              <Text style={styles.summaryText}>{bracket ? `${bracket.bestOf}-game series` : 'Start a bracket'}</Text>
-              <Text style={styles.summaryMeta}>{bracket ? `${bracket.rounds.length} round${bracket.rounds.length === 1 ? '' : 's'} created` : 'Seeded from current regular season standings'}</Text>
+              <Text style={styles.summaryText}>{bracket ? `${bracket.bestOf}-game series` : picture.label}</Text>
+              <Text style={styles.summaryMeta}>
+                {bracket
+                  ? `${bracket.rounds.length} round${bracket.rounds.length === 1 ? '' : 's'} created`
+                  : `${picture.completion.finalGames}/${picture.completion.totalGames} games final · ${picture.completion.remainingGames} remaining`}
+              </Text>
             </View>
+            {!bracket ? (
+              <View style={styles.pictureCard}>
+                <Text style={styles.pictureTitle}>Playoff Field</Text>
+                {picture.playoffSeeds.map(seed => (
+                  <View key={seed.teamId} style={styles.pictureRow}>
+                    <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                    <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                    <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                  </View>
+                ))}
+                {picture.playInSeeds.length > 0 ? (
+                  <>
+                    <Text style={styles.pictureTitle}>Play-In</Text>
+                    {picture.playInSeeds.map(seed => (
+                      <View key={seed.teamId} style={styles.pictureRow}>
+                        <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                        <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                        <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+                {picture.bubble.length > 0 ? (
+                  <>
+                    <Text style={styles.pictureTitle}>Outside Looking In</Text>
+                    {picture.bubble.map(seed => (
+                      <View key={seed.teamId} style={styles.pictureRowMuted}>
+                        <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                        <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                        <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+              </View>
+            ) : null}
             {!bracket && isLeagueAdmin ? (
               <View style={styles.startCard}>
                 <View style={styles.segment}>
@@ -198,8 +255,12 @@ export default function PlayoffsScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <TouchableOpacity disabled={starting} style={[styles.startButton, starting && styles.disabled]} onPress={startPlayoffs}>
-                  {starting ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>Start Playoffs</Text>}
+                <TouchableOpacity
+                  disabled={starting || !picture.readyToStartPostseason}
+                  style={[styles.startButton, (starting || !picture.readyToStartPostseason) && styles.disabled]}
+                  onPress={startPlayoffs}
+                >
+                  {starting ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>{picture.readyToStartPostseason ? 'Start Playoffs' : 'Finish Regular Season'}</Text>}
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -262,7 +323,7 @@ export default function PlayoffsScreen() {
             </View>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>{bracket ? 'No playoff series are available.' : 'No playoff bracket has been started yet.'}</Text>}
+        ListEmptyComponent={bracket ? <Text style={styles.empty}>No playoff series are available.</Text> : null}
       />
     </View>
   );
@@ -280,6 +341,13 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
   summaryText: { color: '#fff', fontSize: 17, fontWeight: '900' },
   summaryMeta: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  pictureCard: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 14 },
+  pictureTitle: { color: '#00e58b', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginTop: 8, marginBottom: 8 },
+  pictureRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#1d1d1d' },
+  pictureRowMuted: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: 0.65, borderBottomWidth: 1, borderBottomColor: '#1d1d1d' },
+  pictureSeed: { width: 24, color: '#888', fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  pictureTeam: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '800' },
+  pictureRecord: { color: '#777', fontSize: 12, fontWeight: '800' },
   startCard: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 14 },
   segment: { flexDirection: 'row', backgroundColor: '#080808', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 4, marginBottom: 12, gap: 4 },
   segmentButton: { flex: 1, minHeight: 38, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
