@@ -58,7 +58,7 @@ describe('NBA scouting grades', () => {
     });
 
     expect(hiddenGrades.threePoint).toBe('S');
-    expect(hiddenGrades.dunking).toBe('F');
+    expect(hiddenGrades.dunking).toBe('D');
     expect(hiddenGrades.defenseIq).toBe('A');
     expect(hiddenGrades.offenseIq).toBe('A');
 
@@ -97,5 +97,63 @@ describe('NBA scouting grades', () => {
     expect(compact.centerLabel).toBe('Passing');
     expect(compact.right).toEqual({ grade: 'S', name: 'Paul' });
     expect(compact.accessibilityLabel).toBe('Curry B+ Passing S Paul');
+  });
+
+  it('uses one weighted numeric source for player cards and comparisons', () => {
+    const rose2011 = {
+      full_name: 'Derrick Rose',
+      position: 'PG',
+      fg3_pct: 0.332,
+      fg3a_per_game: 4.8,
+      hidden: {
+        shooting: 96,
+        threePoint: 78,
+        shotIq: 80,
+        consistency: 76,
+        offenseIq: 90,
+        closeShot: 94,
+        dunking: 90,
+        speed: 98,
+        acceleration: 97,
+        ballHandle: 96,
+        passing: 90,
+      },
+      scoutingGrades: {
+        threePoint: 'A+',
+      },
+    };
+    const cardGrades = buildScoutingGrades(rose2011);
+    const compareGrades = buildScoutingGrades(rose2011);
+
+    expect(cardGrades.threePoint).toBe('B-');
+    expect(compareGrades.threePoint).toBe(cardGrades.threePoint);
+    expect(cardGrades.closeShot).toBe('A');
+    expect(cardGrades.speed).toBe('A+');
+    expect(cardGrades.acceleration).toBe('A+');
+    expect(cardGrades.ballHandle).toBe('A+');
+  });
+
+  it('separates skill, role, impact, overall, and trade value grades', () => {
+    const benchShooter = buildScoutingGrades({
+      hidden: {
+        threePoint: 91,
+        shotIq: 88,
+        consistency: 84,
+        offenseIq: 80,
+        minutes: 14,
+        usage: 12,
+        durability: 72,
+        tradeValue: 74,
+      },
+      minutesPerGame: 14,
+      usagePct: 12,
+      fg3a_per_game: 4,
+    }) as any;
+
+    expect(benchShooter.threePoint).toBe('A-');
+    expect(benchShooter.role).toBe('C');
+    expect(benchShooter.impact).toBe('B-');
+    expect(benchShooter.overall).toBe('C+');
+    expect(benchShooter.tradeValue).toBe('C+');
   });
 });

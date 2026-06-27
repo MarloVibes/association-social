@@ -1,5 +1,5 @@
 import type { NbaGrade } from './identity';
-import { gradeFromScore } from './evaluation';
+import { gradeFromNumeric, gradeRank as rankGrade } from './gradeScale';
 import { abilityGradesFromStats } from './upgradePoints';
 
 export type ScoutingGradeKey =
@@ -25,7 +25,11 @@ export type ScoutingGradeKey =
   | 'rebounding'
   | 'postOffense'
   | 'stamina'
-  | 'potential';
+  | 'potential'
+  | 'role'
+  | 'impact'
+  | 'overall'
+  | 'tradeValue';
 
 export type ScoutingGradeMap = Record<ScoutingGradeKey, NbaGrade>;
 
@@ -55,7 +59,8 @@ export type CompareGradeRow = {
   winner: 'left' | 'right' | 'tie';
 };
 
-const GRADE_ORDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+const VALID_GRADES = new Set<string>(['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S']);
+const META_GRADE_KEYS = ['role', 'impact', 'overall', 'tradeValue'] as const;
 
 export const SCOUTING_GRADE_GROUPS: { title: string; items: { key: ScoutingGradeKey; label: string }[] }[] = [
   {
@@ -109,11 +114,16 @@ export const SCOUTING_GRADE_GROUPS: { title: string; items: { key: ScoutingGrade
 ];
 
 const SCOUTING_KEYS = SCOUTING_GRADE_GROUPS.flatMap(group => group.items.map(item => item.key));
-const VALID_GRADES = new Set<string>(GRADE_ORDER);
+const ALL_GRADE_KEYS: ScoutingGradeKey[] = [...SCOUTING_KEYS, ...META_GRADE_KEYS];
 
 function numberFrom(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function clamp(value: number, min = 0, max = 100) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }
 
 function normalizedGrade(value: unknown): NbaGrade | null {
@@ -124,7 +134,7 @@ function normalizedGrade(value: unknown): NbaGrade | null {
 function gradeFromRating(value: unknown): NbaGrade | null {
   const numeric = numberFrom(value);
   if (numeric === null) return null;
-  return gradeFromScore(numeric);
+  return gradeFromNumeric(numeric);
 }
 
 function firstGrade(...values: unknown[]): NbaGrade | null {
@@ -147,6 +157,226 @@ function sourceObject(player: Record<string, any>, profile: Record<string, any> 
     profile?.visibleIdentity?.[key],
   ];
   return candidates.find(value => value && typeof value === 'object') || {};
+}
+
+function ratingObjects(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  return [
+    sourceObject(player, profile, 'era_adjusted_profiles'),
+    sourceObject(player, profile, 'attribute_model'),
+    sourceObject(player, profile, 'numericAttributes'),
+    sourceObject(player, profile, 'attributes'),
+    sourceObject(player, profile, 'ratings'),
+    sourceObject(player, profile, 'hidden'),
+  ];
+}
+
+function directNumber(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: string) {
+  const values = [
+    ...ratingObjects(player, profile).map(source => source[key]),
+    player?.[key],
+    profile?.[key],
+  ];
+  for (const value of values) {
+    const numeric = numberFrom(value);
+    if (numeric !== null) return clamp(numeric);
+  }
+  return null;
+}
+
+function firstNumber(player: Record<string, any>, profile: Record<string, any> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = directNumber(player, profile, key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function statNumber(player: Record<string, any>, profile: Record<string, any> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = player?.[key] ?? player?.seasonStats?.[key] ?? profile?.[key] ?? profile?.careerStats?.[key];
+    const numeric = numberFrom(value);
+    if (numeric !== null) return numeric;
+  }
+  return null;
+}
+
+function volumeModifier(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
+  if (attempts === null) return null;
+  return clamp(58 + attempts * 6, 50, 96);
+}
+
+function weightedRating(
+  player: Record<string, any>,
+  profile: Record<string, any> | null | undefined,
+  weights: { keys: string[]; weight: number; fallback?: number | null }[],
+) {
+  let total = 0;
+  let weightTotal = 0;
+  for (const item of weights) {
+    const value = firstNumber(player, profile, item.keys) ?? item.fallback ?? null;
+    if (value === null) continue;
+    total += value * item.weight;
+    weightTotal += item.weight;
+  }
+  return weightTotal > 0 ? total / weightTotal : null;
+}
+
+function statRatingForKey(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: ScoutingGradeKey) {
+  const ppg = statNumber(player, profile, ['pointsPerGame', 'ppg', 'points']) ?? 0;
+  const apg = statNumber(player, profile, ['assistsPerGame', 'apg', 'assists']) ?? 0;
+  const rpg = statNumber(player, profile, ['reboundsPerGame', 'rpg', 'rebounds']) ?? 0;
+  const spg = statNumber(player, profile, ['stealsPerGame', 'spg', 'stl', 'steals']) ?? 0;
+  const bpg = statNumber(player, profile, ['blocksPerGame', 'bpg', 'blk', 'blocks']) ?? 0;
+  const fg = statNumber(player, profile, ['fieldGoalPct', 'fg_pct', 'fgp']);
+  const threePct = statNumber(player, profile, ['threePointPct', 'fg3_pct', 'three_pct']);
+  const ft = statNumber(player, profile, ['freeThrowPct', 'ft_pct', 'ftp']);
+  const minutes = statNumber(player, profile, ['minutesPerGame', 'mp_per_game', 'mpg']) ?? 0;
+  const games = statNumber(player, profile, ['games', 'gp']) ?? 0;
+  const pct = (value: number | null) => value === null ? null : value > 1 ? value / 100 : value;
+  if (key === 'threePoint' && threePct !== null) {
+    const pctScore = clamp(48 + pct(threePct)! * 105, 45, 96);
+    const volume = volumeModifier(player, profile) ?? 72;
+    return pctScore * 0.78 + volume * 0.22;
+  }
+  if (key === 'closeShot' && (fg !== null || ppg > 0)) return clamp(58 + ppg * 0.9 + (pct(fg) || 0.45) * 26, 45, 95);
+  if (key === 'freeThrow' && ft !== null) return clamp(42 + pct(ft)! * 60, 45, 98);
+  if (key === 'passing' && apg > 0) return clamp(54 + apg * 4.6, 45, 96);
+  if (key === 'rebounding' && rpg > 0) return clamp(50 + rpg * 3.8, 45, 96);
+  if ((key === 'perimeterDefense' || key === 'defenseIq' || key === 'steals') && (spg > 0 || bpg > 0)) return clamp(58 + spg * 9 + bpg * 5, 45, 94);
+  if ((key === 'blocking' || key === 'postDefense') && bpg > 0) return clamp(54 + bpg * 13 + rpg * 0.8, 45, 96);
+  if (key === 'stamina' && (minutes > 0 || games > 0)) return clamp(55 + minutes * 0.7 + games * 0.1, 45, 96);
+  return null;
+}
+
+function roleRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const minutes = firstNumber(player, profile, ['minutes']) ?? statNumber(player, profile, ['minutesPerGame', 'mp_per_game', 'mpg']) ?? 0;
+  const usage = firstNumber(player, profile, ['usage']) ?? statNumber(player, profile, ['usagePct', 'usage_pct']) ?? 0;
+  const minutesRating = clamp(48 + minutes * 1.25, 45, 96);
+  const usageRating = clamp(50 + usage * 1.35, 45, 96);
+  return minutesRating * 0.6 + usageRating * 0.4;
+}
+
+function numericRatingForKey(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: ScoutingGradeKey): number | null {
+  switch (key) {
+    case 'threePoint':
+      return weightedRating(player, profile, [
+        { keys: ['threePoint', 'threePointShot'], weight: 70 },
+        { keys: ['shotIq'], weight: 10 },
+        { keys: ['consistency', 'shotConsistency'], weight: 10 },
+        { keys: ['offenseIq', 'offensiveAwareness'], weight: 5 },
+        { keys: ['shotVolumeModifier'], weight: 5, fallback: volumeModifier(player, profile) },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'closeShot':
+      return weightedRating(player, profile, [
+        { keys: ['closeShot', 'insideScoring', 'drivingLayup'], weight: 70 },
+        { keys: ['shotIq'], weight: 10 },
+        { keys: ['offenseIq', 'offensiveAwareness'], weight: 10 },
+        { keys: ['hands', 'drawFoul', 'strength'], weight: 10 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'dunking':
+      return weightedRating(player, profile, [
+        { keys: ['dunking', 'drivingDunk', 'standingDunk'], weight: 70 },
+        { keys: ['vertical', 'athleticism'], weight: 10 },
+        { keys: ['speed', 'acceleration'], weight: 10 },
+        { keys: ['strength', 'hands'], weight: 10 },
+      ]);
+    case 'passing':
+      return weightedRating(player, profile, [
+        { keys: ['passing', 'passAccuracy'], weight: 60 },
+        { keys: ['passIq', 'offenseIq'], weight: 20 },
+        { keys: ['passVision', 'basketballIq'], weight: 15 },
+        { keys: ['turnoverControl', 'consistency'], weight: 5 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'ballHandle':
+      return weightedRating(player, profile, [
+        { keys: ['ballHandle', 'handles'], weight: 80 },
+        { keys: ['speedWithBall', 'speed', 'acceleration'], weight: 10 },
+        { keys: ['passing', 'passIq'], weight: 5 },
+        { keys: ['offenseIq'], weight: 5 },
+      ]);
+    case 'perimeterDefense':
+      return weightedRating(player, profile, [
+        { keys: ['perimeterDefense'], weight: 55 },
+        { keys: ['lateralQuickness', 'speed', 'acceleration'], weight: 15 },
+        { keys: ['steals', 'steal'], weight: 15 },
+        { keys: ['defenseIq', 'defensiveIq'], weight: 15 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'postDefense':
+      return weightedRating(player, profile, [
+        { keys: ['postDefense', 'interiorDefense'], weight: 50 },
+        { keys: ['blocking', 'block'], weight: 15 },
+        { keys: ['strength'], weight: 20 },
+        { keys: ['defenseIq'], weight: 15 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'rebounding':
+      return weightedRating(player, profile, [
+        { keys: ['rebounding'], weight: 55 },
+        { keys: ['offensiveRebound'], weight: 12 },
+        { keys: ['defensiveRebound'], weight: 18 },
+        { keys: ['vertical'], weight: 5 },
+        { keys: ['strength'], weight: 10 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'offenseIq':
+      return weightedRating(player, profile, [
+        { keys: ['offenseIq', 'offensiveAwareness'], weight: 55 },
+        { keys: ['shotIq'], weight: 25 },
+        { keys: ['passIq', 'passing'], weight: 20 },
+      ]);
+    case 'defenseIq':
+      return weightedRating(player, profile, [
+        { keys: ['defenseIq', 'defensiveIq'], weight: 60 },
+        { keys: ['helpDefense', 'helpDefenseIq'], weight: 25 },
+        { keys: ['perimeterDefense', 'postDefense'], weight: 15 },
+      ]) ?? statRatingForKey(player, profile, key);
+    case 'speed':
+      return weightedRating(player, profile, [
+        { keys: ['speed'], weight: 70 },
+        { keys: ['acceleration'], weight: 15 },
+        { keys: ['stamina', 'hustle'], weight: 15 },
+      ]);
+    case 'acceleration':
+      return weightedRating(player, profile, [
+        { keys: ['acceleration'], weight: 75 },
+        { keys: ['speed'], weight: 15 },
+        { keys: ['agility', 'vertical'], weight: 10 },
+      ]);
+    case 'role':
+      return roleRating(player, profile);
+    case 'impact':
+      return impactRating(player, profile);
+    case 'overall':
+      return overallRating(player, profile);
+    case 'tradeValue':
+      return firstNumber(player, profile, ['tradeValue']) ?? tradeValueRating(player, profile);
+    default:
+      return firstNumber(player, profile, [key]) ?? statRatingForKey(player, profile, key);
+  }
+}
+
+function impactRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const skillValues = ['threePoint', 'closeShot', 'passing', 'ballHandle', 'perimeterDefense', 'defenseIq', 'speed']
+    .map(key => numericRatingForKey(player, profile, key as ScoutingGradeKey))
+    .filter((value): value is number => value !== null);
+  const bestSkill = skillValues.length > 0 ? Math.max(...skillValues) : 74;
+  const role = roleRating(player, profile);
+  const consistency = firstNumber(player, profile, ['consistency']) ?? 74;
+  return bestSkill * 0.35 + role * 0.45 + consistency * 0.2;
+}
+
+function overallRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const impact = impactRating(player, profile);
+  const role = roleRating(player, profile);
+  const durability = firstNumber(player, profile, ['durability', 'stamina']) ?? 74;
+  return impact * 0.62 + role * 0.18 + durability * 0.2;
+}
+
+function tradeValueRating(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const overall = overallRating(player, profile);
+  const potential = firstNumber(player, profile, ['potential']) ?? overall;
+  const age = Number(player?.age ?? profile?.age ?? 27);
+  const ageBonus = age <= 24 ? 4 : age >= 33 ? -5 : 0;
+  return clamp(overall * 0.72 + potential * 0.28 + ageBonus, 40, 99);
 }
 
 function gradeFromExplicit(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: ScoutingGradeKey) {
@@ -193,6 +423,11 @@ function gradeFromLegacy(player: Record<string, any>, profile: Record<string, an
       return grade('rebounding') || grade('shooting');
     case 'potential':
       return grade('potential');
+    case 'role':
+    case 'impact':
+    case 'overall':
+    case 'tradeValue':
+      return grade(key);
     default:
       return null;
   }
@@ -207,7 +442,7 @@ function gradeFromHidden(player: Record<string, any>, profile: Record<string, an
   switch (key) {
     case 'closeShot': return value('closeShot', 'insideScoring', 'shooting');
     case 'midRange': return value('midRange', 'midRangeShot', 'shooting');
-    case 'threePoint': return value('threePoint', 'threePointShot', 'shooting');
+    case 'threePoint': return value('threePoint', 'threePointShot');
     case 'freeThrow': return value('freeThrow', 'freeThrowShot', 'shooting');
     case 'dunking': return value('dunking', 'athleticism');
     case 'shotIq': return value('shotIq', 'basketballIq', 'consistency');
@@ -228,6 +463,11 @@ function gradeFromHidden(player: Record<string, any>, profile: Record<string, an
     case 'postOffense': return value('postOffense', 'insideScoring', 'closeShot', 'shooting');
     case 'stamina': return value('stamina', 'consistency');
     case 'potential': return value('potential');
+    case 'role':
+    case 'impact':
+    case 'overall':
+    case 'tradeValue':
+      return value(key);
     default: return null;
   }
 }
@@ -243,9 +483,11 @@ function gradeFromStats(player: Record<string, any>, profile: Record<string, any
 }
 
 export function buildScoutingGrades(player: Record<string, any>, profile?: Record<string, any> | null): ScoutingGradeMap {
-  return SCOUTING_KEYS.reduce((grades, key) => {
+  return ALL_GRADE_KEYS.reduce((grades, key) => {
+    const numeric = numericRatingForKey(player, profile, key);
     grades[key] = (
-      gradeFromExplicit(player, profile, key)
+      (numeric !== null ? gradeFromNumeric(numeric) : null)
+      || gradeFromExplicit(player, profile, key)
       || gradeFromHidden(player, profile, key)
       || gradeFromLegacy(player, profile, key)
       || gradeFromStats(player, profile, key)
@@ -256,7 +498,7 @@ export function buildScoutingGrades(player: Record<string, any>, profile?: Recor
 }
 
 export function gradeRank(grade: NbaGrade): number {
-  return Math.max(0, GRADE_ORDER.indexOf(grade));
+  return rankGrade(grade);
 }
 
 export function gradeColors(grade: NbaGrade): GradeColorStyle {

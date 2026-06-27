@@ -531,6 +531,17 @@ describe('source safety regressions', () => {
     expect(rosterCuts).toContain('Grade ');
   });
 
+  it('uses clear Trade Center tab labels', () => {
+    const tradeCenter = source('app/screens/trade-channel.tsx');
+
+    expect(tradeCenter).toContain('MY TEAM');
+    expect(tradeCenter).toContain('BLOCK FEED');
+    expect(tradeCenter).toContain('>TRADE<');
+    expect(tradeCenter).not.toContain('MY TRADE BLOCK');
+    expect(tradeCenter).not.toContain('ON THE BLOCK');
+    expect(tradeCenter).not.toContain('>PROPOSE<');
+  });
+
   it('uses neutral franchise labels for public sport modes', () => {
     const createLeague = source('app/screens/create-league.tsx');
     const dashboard = source('app/(tabs)/dashboard.tsx');

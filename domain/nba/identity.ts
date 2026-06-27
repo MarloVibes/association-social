@@ -1,3 +1,5 @@
+import { gradeFromNumeric } from './gradeScale';
+
 export type NbaGrade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-' | 'F';
 
 export type NbaReputation = 'Prospect' | 'Role Player' | 'Starter' | 'Star' | 'Superstar' | 'Legend';
@@ -77,21 +79,7 @@ function clampValue(value: number): number {
 }
 
 export function gradeFromHiddenValue(value: number): NbaGrade {
-  const rating = clampValue(value);
-  if (rating >= 99) return 'S';
-  if (rating >= 95) return 'A+';
-  if (rating >= 92) return 'A';
-  if (rating >= 89) return 'A-';
-  if (rating >= 86) return 'B+';
-  if (rating >= 83) return 'B';
-  if (rating >= 80) return 'B-';
-  if (rating >= 77) return 'C+';
-  if (rating >= 74) return 'C';
-  if (rating >= 71) return 'C-';
-  if (rating >= 68) return 'D+';
-  if (rating >= 65) return 'D';
-  if (rating >= 60) return 'D-';
-  return 'F';
+  return gradeFromNumeric(value);
 }
 
 function orderedValues(input: HiddenIdentityValues) {

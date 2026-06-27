@@ -1,4 +1,5 @@
 import type { NbaGrade } from './identity';
+import { gradeFromNumeric } from './gradeScale';
 
 export type UpgradePlayerLabel =
   | 'LEGEND'
@@ -110,21 +111,7 @@ function numberFrom(value: unknown): number {
 }
 
 function gradeFromRating(value: number): NbaGrade {
-  const rating = Math.max(0, Math.min(100, Math.round(value)));
-  if (rating >= 99) return 'S';
-  if (rating >= 95) return 'A+';
-  if (rating >= 92) return 'A';
-  if (rating >= 89) return 'A-';
-  if (rating >= 86) return 'B+';
-  if (rating >= 83) return 'B';
-  if (rating >= 80) return 'B-';
-  if (rating >= 77) return 'C+';
-  if (rating >= 74) return 'C';
-  if (rating >= 71) return 'C-';
-  if (rating >= 68) return 'D+';
-  if (rating >= 65) return 'D';
-  if (rating >= 60) return 'D-';
-  return 'F';
+  return gradeFromNumeric(value);
 }
 
 export function abilityGradesFromStats(player: Record<string, unknown>): Record<string, NbaGrade> {

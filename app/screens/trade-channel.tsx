@@ -287,13 +287,13 @@ export default function TradeChannelScreen() {
       {/* Tabs */}
       <View style={styles.tabRow}>
         <TouchableOpacity style={[styles.tab, activeTab === 'block' && styles.tabActive]} onPress={() => setActiveTab('block')}>
-          <Text style={[styles.tabText, activeTab === 'block' && styles.tabTextActive]}>MY TRADE BLOCK</Text>
+          <Text style={[styles.tabText, activeTab === 'block' && styles.tabTextActive]}>MY TEAM</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'available' && styles.tabActive]} onPress={() => setActiveTab('available')}>
-          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>ON THE BLOCK ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
+          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>BLOCK FEED ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'propose' && styles.tabActive]} onPress={() => setActiveTab('propose')}>
-          <Text style={[styles.tabText, activeTab === 'propose' && styles.tabTextActive]}>PROPOSE</Text>
+          <Text style={[styles.tabText, activeTab === 'propose' && styles.tabTextActive]}>TRADE</Text>
         </TouchableOpacity>
       </View>
 

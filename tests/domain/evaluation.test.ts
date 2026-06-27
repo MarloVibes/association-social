@@ -11,10 +11,14 @@ describe('NBA evaluation v2', () => {
     expect(gradeFromScore(100)).toBe('S');
     expect(gradeFromScore(98)).toBe('A+');
     expect(gradeFromScore(91)).toBe('A-');
-    expect(gradeFromScore(88)).toBe('B+');
-    expect(gradeFromScore(79)).toBe('C+');
-    expect(gradeFromScore(70)).toBe('D+');
-    expect(gradeFromScore(64)).toBe('D-');
+    expect(gradeFromScore(85)).toBe('B+');
+    expect(gradeFromScore(84)).toBe('B');
+    expect(gradeFromScore(75)).toBe('B-');
+    expect(gradeFromScore(70)).toBe('C+');
+    expect(gradeFromScore(65)).toBe('C');
+    expect(gradeFromScore(60)).toBe('C-');
+    expect(gradeFromScore(50)).toBe('D');
+    expect(gradeFromScore(49)).toBe('F');
     expect(gradeTier('B+')).toBe('Pro');
   });
 
@@ -32,7 +36,7 @@ describe('NBA evaluation v2', () => {
     });
 
     expect(layers.overallTalent.grade).toBe('B');
-    expect(layers.currentForm.grade).toBe('B');
+    expect(layers.currentForm.grade).toBe('B+');
     expect(layers.potential.grade).toBe('A-');
     expect(layers.potential.tier).toBe('Elite');
     expect((layers as Record<string, unknown>).potentialScore).toBeUndefined();

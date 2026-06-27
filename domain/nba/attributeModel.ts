@@ -1,5 +1,5 @@
 import type { NbaGrade } from './identity';
-import { gradeFromScore } from './evaluation';
+import { gradeFromNumeric } from './gradeScale';
 
 export type PublicStatLine = {
   player_id: string;
@@ -166,7 +166,7 @@ function roundModel(model: AttributeModel): AttributeModel {
 }
 
 export function gradeFromAttribute(value: unknown): NbaGrade {
-  return gradeFromScore(value);
+  return gradeFromNumeric(value);
 }
 
 export function skillGradesFromAttributes(attributes: Partial<AttributeModel>): Partial<Record<keyof AttributeModel, NbaGrade>> {

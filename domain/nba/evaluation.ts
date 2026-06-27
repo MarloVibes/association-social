@@ -1,4 +1,5 @@
 import type { NbaGrade } from './identity';
+import { GRADE_ORDER, gradeFromNumeric } from './gradeScale';
 
 export type GradeTier = 'Legend' | 'Elite' | 'Pro' | 'Contributor' | 'Prospect' | 'Development';
 
@@ -50,7 +51,7 @@ export type SimEvaluationSkills = {
 
 const DEFAULT_SCORE = 74;
 
-export const GRADE_LADDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+export const GRADE_LADDER: NbaGrade[] = GRADE_ORDER;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -103,21 +104,7 @@ function average(values: number[]) {
 }
 
 export function gradeFromScore(score: unknown): NbaGrade {
-  const value = clamp(Math.round(numberFrom(score, 0)), 0, 100);
-  if (value >= 99) return 'S';
-  if (value >= 95) return 'A+';
-  if (value >= 92) return 'A';
-  if (value >= 89) return 'A-';
-  if (value >= 86) return 'B+';
-  if (value >= 83) return 'B';
-  if (value >= 80) return 'B-';
-  if (value >= 77) return 'C+';
-  if (value >= 74) return 'C';
-  if (value >= 71) return 'C-';
-  if (value >= 68) return 'D+';
-  if (value >= 65) return 'D';
-  if (value >= 60) return 'D-';
-  return 'F';
+  return gradeFromNumeric(score);
 }
 
 export function gradeTier(grade: NbaGrade): GradeTier {
