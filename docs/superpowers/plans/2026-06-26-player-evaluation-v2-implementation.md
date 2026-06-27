@@ -8,6 +8,10 @@
 
 **Tech Stack:** Expo React Native, TypeScript domain modules, Vitest, Node scripts, Firestore read-only audit.
 
+## Implementation Status
+
+Evaluation v2 foundation is implemented and verified. The current audit path now keeps numeric ratings hidden while surfacing role-aware letter-grade review targets, including two-way wing recommendations such as Perimeter D, Defense IQ, Stamina, and Offense IQ.
+
 ---
 
 ### Task 1: Evaluation v2 Domain Model

@@ -15,6 +15,22 @@ function numberFrom(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+const GRADE_ORDER = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+const GRADE_LABELS = {
+  perimeterDefense: 'Perimeter D',
+  defenseIq: 'Defense IQ',
+  helpDefense: 'Help Defense',
+  stamina: 'Stamina',
+  offenseIq: 'Offense IQ',
+  midRange: 'Mid Range',
+  rebounding: 'Rebounding',
+  steals: 'Steals',
+};
+
+function gradeRank(grade) {
+  return grade === 'Missing' ? -1 : GRADE_ORDER.indexOf(grade);
+}
+
 function stat(player, keys) {
   for (const key of keys) {
     const value = player?.[key] ?? player?.seasonStats?.[key];
@@ -29,6 +45,11 @@ function hidden(player, key) {
 
 function hasHidden(player, key) {
   return player?.hidden?.[key] !== undefined || player?.[key] !== undefined;
+}
+
+function currentGrade(player, key) {
+  if (!hasHidden(player, key)) return 'Missing';
+  return gradeOnly(hidden(player, key));
 }
 
 function positionIncludes(player, values) {
@@ -95,6 +116,44 @@ function gradeFromScore(score) {
   return 'F Development';
 }
 
+function gradeOnly(score) {
+  return gradeFromScore(score).split(' ')[0];
+}
+
+function suggestedGradeUpdates(player) {
+  const minutes = stat(player, ['minutes', 'mpg', 'min']);
+  const ppg = stat(player, ['ppg', 'points', 'pts']);
+  const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
+  const apg = stat(player, ['apg', 'assists', 'ast']);
+  const spg = stat(player, ['spg', 'steals', 'stl']);
+  const suggestions = [];
+  const add = (key, suggestedGrade, reason) => {
+    const current = currentGrade(player, key);
+    if (gradeRank(current) >= gradeRank(suggestedGrade)) return;
+    suggestions.push({
+      key,
+      label: GRADE_LABELS[key] || key,
+      currentGrade: current,
+      suggestedGrade,
+      reason,
+    });
+  };
+
+  if (wingDefensiveWorkloadSignal(player)) {
+    add('perimeterDefense', 'B+', 'trusted wing-stopper workload');
+    add('defenseIq', 'B', 'defensive assignment value');
+    add('helpDefense', 'B-', 'team-defense connector profile');
+  }
+  if (minutes >= 36) add('stamina', 'A-', 'near-40-minute role');
+  else if (minutes >= 32) add('stamina', 'B+', 'starter workload');
+  if (ppg >= 14 && apg >= 2) add('offenseIq', 'B-', 'secondary offensive engine');
+  if (ppg >= 15) add('midRange', 'B-', 'half-court scoring load');
+  if (rpg >= 5 && isWing(player)) add('rebounding', 'C+', 'plus rebounding wing');
+  if (spg >= 1) add('steals', 'B-', 'active defensive event rate');
+
+  return suggestions;
+}
+
 function auditPlayer(player) {
   const minutes = stat(player, ['minutes', 'mpg', 'min']);
   const ppg = stat(player, ['ppg', 'points', 'pts']);
@@ -143,6 +202,7 @@ function auditPlayer(player) {
     archetype,
     talent: gradeFromScore(talentScore || 74),
     potential: gradeFromScore(hidden(player, 'potential') || talentScore || 74),
+    suggestions: suggestedGradeUpdates(player).map(update => `${update.label} -> ${update.suggestedGrade}`).join('; ') || '-',
     reasons: reasons.join('; ') || '-',
   };
 }
@@ -158,9 +218,9 @@ function buildEraAuditReport(eraKey, players) {
     '',
     'This report is read-only. Review suggested player roles before applying any vault updates.',
     '',
-    '| Player | Team | Pos | Core Role | Priority | Suggested Archetype | Talent | Potential | Reasons |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...rows.map(row => `| ${row.name} | ${row.team} | ${row.position} | ${row.coreRole ? 'Yes' : 'No'} | ${row.priority} | ${row.archetype} | ${row.talent} | ${row.potential} | ${row.reasons} |`),
+    '| Player | Team | Pos | Core Role | Priority | Suggested Archetype | Talent | Potential | Suggested Grade Review | Reasons |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...rows.map(row => `| ${row.name} | ${row.team} | ${row.position} | ${row.coreRole ? 'Yes' : 'No'} | ${row.priority} | ${row.archetype} | ${row.talent} | ${row.potential} | ${row.suggestions} | ${row.reasons} |`),
     '',
   ].join('\n');
 }

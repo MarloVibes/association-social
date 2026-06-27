@@ -1,7 +1,15 @@
-import { buildEvaluationLayers } from './evaluation';
+import type { NbaGrade } from './identity';
+import { buildEvaluationLayers, gradeFromScore } from './evaluation';
 
 export type EraAuditPlayer = Record<string, any>;
 export type EraAuditPriority = 'high' | 'medium' | 'normal';
+export type SuggestedGradeUpdate = {
+  key: string;
+  label: string;
+  currentGrade: NbaGrade | 'Missing';
+  suggestedGrade: NbaGrade;
+  reason: string;
+};
 
 export type EraAuditResult = {
   playerName: string;
@@ -11,6 +19,7 @@ export type EraAuditResult = {
   needsReview: boolean;
   reviewPriority: EraAuditPriority;
   suggestedArchetype: string;
+  suggestedGradeUpdates: SuggestedGradeUpdate[];
   reviewReasons: string[];
   visibleSummary: {
     overallTalent: string;
@@ -22,6 +31,22 @@ export type EraAuditResult = {
 function numberFrom(value: unknown, fallback = 0): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+const GRADE_ORDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+const GRADE_LABELS: Record<string, string> = {
+  perimeterDefense: 'Perimeter D',
+  defenseIq: 'Defense IQ',
+  helpDefense: 'Help Defense',
+  stamina: 'Stamina',
+  offenseIq: 'Offense IQ',
+  midRange: 'Mid Range',
+  rebounding: 'Rebounding',
+  steals: 'Steals',
+};
+
+function gradeRank(grade: NbaGrade | 'Missing') {
+  return grade === 'Missing' ? -1 : GRADE_ORDER.indexOf(grade);
 }
 
 function stat(player: EraAuditPlayer, keys: string[]) {
@@ -38,6 +63,11 @@ function hidden(player: EraAuditPlayer, key: string) {
 
 function hasHidden(player: EraAuditPlayer, key: string) {
   return player?.hidden?.[key] !== undefined || player?.[key] !== undefined;
+}
+
+function currentGrade(player: EraAuditPlayer, key: string): NbaGrade | 'Missing' {
+  if (!hasHidden(player, key)) return 'Missing';
+  return gradeFromScore(hidden(player, key));
 }
 
 function positionIncludes(player: EraAuditPlayer, values: string[]) {
@@ -102,6 +132,40 @@ function archetypeFor(player: EraAuditPlayer) {
   return 'Rotation Player';
 }
 
+function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
+  const minutes = stat(player, ['minutes', 'mpg', 'min']);
+  const ppg = stat(player, ['ppg', 'points', 'pts']);
+  const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
+  const apg = stat(player, ['apg', 'assists', 'ast']);
+  const spg = stat(player, ['spg', 'steals', 'stl']);
+  const suggestions: SuggestedGradeUpdate[] = [];
+  const add = (key: string, suggestedGrade: NbaGrade, reason: string) => {
+    const current = currentGrade(player, key);
+    if (gradeRank(current) >= gradeRank(suggestedGrade)) return;
+    suggestions.push({
+      key,
+      label: GRADE_LABELS[key] || key,
+      currentGrade: current,
+      suggestedGrade,
+      reason,
+    });
+  };
+
+  if (wingDefensiveWorkloadSignal(player)) {
+    add('perimeterDefense', 'B+', 'trusted wing-stopper workload');
+    add('defenseIq', 'B', 'defensive assignment value');
+    add('helpDefense', 'B-', 'team-defense connector profile');
+  }
+  if (minutes >= 36) add('stamina', 'A-', 'near-40-minute role');
+  else if (minutes >= 32) add('stamina', 'B+', 'starter workload');
+  if (ppg >= 14 && apg >= 2) add('offenseIq', 'B-', 'secondary offensive engine');
+  if (ppg >= 15) add('midRange', 'B-', 'half-court scoring load');
+  if (rpg >= 5 && isWing(player)) add('rebounding', 'C+', 'plus rebounding wing');
+  if (spg >= 1) add('steals', 'B-', 'active defensive event rate');
+
+  return suggestions;
+}
+
 export function auditEraPlayer(player: EraAuditPlayer): EraAuditResult {
   const minutes = stat(player, ['minutes', 'mpg', 'min']);
   const ppg = stat(player, ['ppg', 'points', 'pts']);
@@ -145,6 +209,7 @@ export function auditEraPlayer(player: EraAuditPlayer): EraAuditResult {
     needsReview,
     reviewPriority,
     suggestedArchetype: archetypeFor(player),
+    suggestedGradeUpdates: suggestedGradeUpdates(player),
     reviewReasons,
     visibleSummary: {
       overallTalent: `${layers.overallTalent.grade} ${layers.overallTalent.tier}`,
@@ -168,6 +233,7 @@ export function buildEraAuditReport(era: string, players: EraAuditPlayer[]) {
     result.visibleSummary.overallTalent,
     result.visibleSummary.currentForm,
     result.visibleSummary.potential,
+    result.suggestedGradeUpdates.map(update => `${update.label} -> ${update.suggestedGrade}`).join('; ') || '-',
     result.reviewReasons.join('; ') || '-',
   ]);
   return [
@@ -177,8 +243,8 @@ export function buildEraAuditReport(era: string, players: EraAuditPlayer[]) {
     '',
     'This report is read-only. Review suggested player roles before applying any vault updates.',
     '',
-    '| Player | Team | Pos | Core Role | Priority | Suggested Archetype | Talent | Form | Potential | Reasons |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Player | Team | Pos | Core Role | Priority | Suggested Archetype | Talent | Form | Potential | Suggested Grade Review | Reasons |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...rows.map(row => `| ${row.join(' | ')} |`),
     '',
   ].join('\n');
