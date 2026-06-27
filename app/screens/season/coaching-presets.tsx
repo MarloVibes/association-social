@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebas
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
-import { COACHING_PRESETS, validateCoachingPreset, type CoachingModifiers, type CoachingPreset, type DefensiveStyle, type OffensiveStyle } from '@/domain/nba/coaching';
+import { COACHING_PRESETS, coachingPresetInfoText, validateCoachingPreset, type CoachingModifiers, type CoachingPreset, type DefensiveStyle, type OffensiveStyle } from '@/domain/nba/coaching';
 
 type Team = {
   id: string;
@@ -44,6 +44,8 @@ function baseCustomPreset(): CoachingPreset {
   return {
     id: 'custom_gameplan',
     name: 'Custom Gameplan',
+    description: 'Your custom game plan uses the exact offensive, defensive, and modifier settings you tune here.',
+    boostSummary: 'Custom plans apply your modifier sliders. Built-in plans add roster-fit grade boosts on top of their style identity.',
     offense: 'balanced',
     defense: 'drop',
     modifiers: {
@@ -141,6 +143,10 @@ export default function CoachingPresetsScreen() {
     }
   };
 
+  const showPresetInfo = (preset: CoachingPreset) => {
+    Alert.alert(preset.name, coachingPresetInfoText(preset));
+  };
+
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
 
   return (
@@ -227,7 +233,16 @@ export default function CoachingPresetsScreen() {
             <View style={[styles.card, selected && styles.cardSelected]}>
               <View style={styles.cardTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.presetName}>{item.name}</Text>
+                  <View style={styles.presetTitleRow}>
+                    <Text style={styles.presetName}>{item.name}</Text>
+                    <TouchableOpacity
+                      accessibilityLabel={`${item.name} coaching info`}
+                      onPress={() => showPresetInfo(item)}
+                      style={styles.infoButton}
+                    >
+                      <Ionicons color="#00e58b" name="information-circle-outline" size={19} />
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.presetMeta}>{item.offense.replace(/_/g, ' ')} · {item.defense.replace(/_/g, ' ')}</Text>
                 </View>
                 <TouchableOpacity
@@ -283,7 +298,9 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#111', borderRadius: 8, padding: 14, borderWidth: 1, borderColor: '#202020', marginBottom: 12 },
   cardSelected: { borderColor: '#00e58b', backgroundColor: '#0a1d14' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  presetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   presetName: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  infoButton: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#122018' },
   presetMeta: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'capitalize' },
   selectButton: { borderRadius: 8, borderWidth: 1, borderColor: '#333', paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#191919' },
   selectButtonActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },

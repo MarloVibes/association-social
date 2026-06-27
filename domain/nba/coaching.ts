@@ -15,6 +15,8 @@ export type CoachingModifiers = {
 export type CoachingPreset = {
   id: string;
   name: string;
+  description?: string;
+  boostSummary?: string;
   offense: OffensiveStyle;
   defense: DefensiveStyle;
   modifiers: CoachingModifiers;
@@ -64,6 +66,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'balanced',
     name: 'Balanced',
+    description: 'A neutral game plan that keeps the roster close to its natural identity.',
+    boostSummary: 'No major fit boost or penalty. Best when you do not want the coach changing player tendencies.',
     offense: 'balanced',
     defense: 'drop',
     modifiers: { pace: 0, threePointRate: 0, rimPressure: 0, midrangeRate: 0, turnovers: 0, fouls: 0, rebounding: 0, fatigue: 0 },
@@ -72,6 +76,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'pace_and_space',
     name: 'Pace and Space',
+    description: 'Opens the floor, speeds up possessions, and rewards shooting plus guard creation.',
+    boostSummary: 'Boosts 3PT, speed, playmaking, and stamina for shooters or quick creators. Poor fits can lose post offense and stamina.',
     offense: 'pace_and_space',
     defense: 'switch_heavy',
     modifiers: { pace: 8, threePointRate: 10, rimPressure: 3, midrangeRate: -5, turnovers: 2, fouls: 1, rebounding: -2, fatigue: 6 },
@@ -80,6 +86,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'grit_and_grind',
     name: 'Grit and Grind',
+    description: 'Slows the game down and leans into defense, rebounding, contact, and half-court pressure.',
+    boostSummary: 'Boosts defense, defense IQ, rebounding, and strength for physical defenders. Weak defensive fits can lose defense and stamina.',
     offense: 'post_heavy',
     defense: 'protect_paint',
     modifiers: { pace: -7, threePointRate: -4, rimPressure: 6, midrangeRate: 4, turnovers: -2, fouls: 3, rebounding: 8, fatigue: 2 },
@@ -88,6 +96,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'blitz_pressure',
     name: 'Blitz Pressure',
+    description: 'Aggressive guards and wings attack ball handlers, force turnovers, and live with extra fouls.',
+    boostSummary: 'Boosts steals, perimeter defense, speed, and defense IQ for quick defenders. Bad fits can lose defense IQ and stamina.',
     offense: 'pick_and_roll',
     defense: 'pressure',
     modifiers: { pace: 5, threePointRate: 2, rimPressure: 5, midrangeRate: -2, turnovers: 5, fouls: 6, rebounding: -3, fatigue: 7 },
@@ -96,6 +106,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'seven_seconds',
     name: 'Seven Seconds',
+    description: 'A run-first attack built for quick decisions, early shots, and constant transition pressure.',
+    boostSummary: 'Boosts speed, 3PT, playmaking, and stamina for shooters or fast creators. Slow poor fits can lose post offense and stamina.',
     offense: 'pace_and_space',
     defense: 'switch_heavy',
     modifiers: { pace: 10, threePointRate: 7, rimPressure: 5, midrangeRate: -4, turnovers: 4, fouls: 2, rebounding: -3, fatigue: 8 },
@@ -104,6 +116,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'triangle_control',
     name: 'Triangle Control',
+    description: 'A patient read-and-react offense for smart passers, post hubs, and midrange decision makers.',
+    boostSummary: 'Boosts basketball IQ, passing, midrange, and post offense for high-IQ players. Poor fits can lose ball handling.',
     offense: 'balanced',
     defense: 'drop',
     modifiers: { pace: -3, threePointRate: -1, rimPressure: 2, midrangeRate: 7, turnovers: -5, fouls: -1, rebounding: 2, fatigue: -2 },
@@ -112,6 +126,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'lob_city',
     name: 'Lob City',
+    description: 'Pick-and-roll pressure built around vertical spacing, rim running, and highlight finishes.',
+    boostSummary: 'Boosts dunking, athleticism, close shot, and guard playmaking for explosive finishers. Poor fits can lose midrange and stamina.',
     offense: 'pick_and_roll',
     defense: 'drop',
     modifiers: { pace: 6, threePointRate: 1, rimPressure: 10, midrangeRate: -5, turnovers: 2, fouls: 2, rebounding: 3, fatigue: 5 },
@@ -120,6 +136,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'midrange_clinic',
     name: 'Midrange Clinic',
+    description: 'Creates deliberate shot quality for scorers who live in pull-ups, elbows, and late-clock control.',
+    boostSummary: 'Boosts midrange, shot IQ, free throw, clutch, and shooting for polished scorers. Poor fits can lose 3PT rhythm.',
     offense: 'isolation',
     defense: 'drop',
     modifiers: { pace: -4, threePointRate: -6, rimPressure: -1, midrangeRate: 10, turnovers: -3, fouls: -2, rebounding: 0, fatigue: -1 },
@@ -128,6 +146,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'bully_ball',
     name: 'Bully Ball',
+    description: 'A physical style that wins with strength, post touches, paint control, and punishing matchups.',
+    boostSummary: 'Boosts strength, post offense, post defense, rebounding, and defense for strong players. Poor fits can lose speed and stamina.',
     offense: 'post_heavy',
     defense: 'protect_paint',
     modifiers: { pace: -6, threePointRate: -5, rimPressure: 8, midrangeRate: 2, turnovers: -2, fouls: 5, rebounding: 8, fatigue: 4 },
@@ -136,6 +156,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'zone_trap',
     name: 'Zone Trap',
+    description: 'A disruptive zone look that baits passes, crowds lanes, and creates live-ball turnovers.',
+    boostSummary: 'Boosts steals, perimeter defense, speed, and defense IQ for alert defenders. Poor fits can lose defense IQ and stamina.',
     offense: 'balanced',
     defense: 'zone',
     modifiers: { pace: 3, threePointRate: 2, rimPressure: 1, midrangeRate: 1, turnovers: 8, fouls: 1, rebounding: 1, fatigue: 6 },
@@ -144,6 +166,8 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'small_ball_switch',
     name: 'Small Ball Switch',
+    description: 'A spacing-heavy lineup that switches, runs, and turns versatile wings into matchup problems.',
+    boostSummary: 'Boosts speed, perimeter defense, 3PT, and help defense for switchable players. Poor fits can lose rebounding and post defense.',
     offense: 'pace_and_space',
     defense: 'switch_heavy',
     modifiers: { pace: 8, threePointRate: 8, rimPressure: 2, midrangeRate: -3, turnovers: 1, fouls: 3, rebounding: -5, fatigue: 7 },
@@ -152,12 +176,20 @@ export const COACHING_PRESETS: CoachingPreset[] = [
   {
     id: 'twin_towers',
     name: 'Twin Towers',
+    description: 'A size-first setup that protects the paint, owns the glass, and lets bigs decide possessions.',
+    boostSummary: 'Boosts blocking, post defense, rebounding, and strength for true bigs. Poor fits can lose speed and 3PT spacing.',
     offense: 'post_heavy',
     defense: 'protect_paint',
     modifiers: { pace: -8, threePointRate: -7, rimPressure: 6, midrangeRate: 1, turnovers: 1, fouls: 4, rebounding: 10, fatigue: 3 },
     counters: ['drop', 'switch_heavy'],
   },
 ];
+
+export function coachingPresetInfoText(preset: Pick<CoachingPreset, 'name'> & Partial<Pick<CoachingPreset, 'description' | 'boostSummary'>>): string {
+  const description = preset.description || `${preset.name} uses your saved offensive and defensive modifier settings.`;
+  const boostSummary = preset.boostSummary || 'Custom game plans use your modifier tuning, while built-in presets also include roster-fit grade boosts.';
+  return `${description}\n\nBoost fit: ${boostSummary}`;
+}
 
 const GRADE_VALUES: Record<string, number> = {
   S: 99,

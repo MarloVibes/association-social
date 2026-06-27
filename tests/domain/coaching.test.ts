@@ -3,6 +3,7 @@ import {
   COACHING_PRESETS,
   applyCoachingGradeAdjustments,
   buildCoachingSnapshot,
+  coachingPresetInfoText,
   getCoachingGradeAdjustments,
   getCoachingPreset,
   validateCoachingPreset,
@@ -36,6 +37,15 @@ describe('NBA coaching presets', () => {
       'twin_towers',
     ]));
     expect(COACHING_PRESETS.every(preset => validateCoachingPreset(preset).valid)).toBe(true);
+  });
+
+  it('gives commissioners readable info text for every built-in preset', () => {
+    COACHING_PRESETS.forEach((preset) => {
+      expect(preset.description).toBeTruthy();
+      expect(preset.boostSummary).toBeTruthy();
+      expect(coachingPresetInfoText(preset)).toContain(preset.description);
+      expect(coachingPresetInfoText(preset)).toContain(preset.boostSummary);
+    });
   });
 
   it('validates named custom presets and rejects invalid modifier ranges', () => {
