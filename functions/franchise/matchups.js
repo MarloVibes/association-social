@@ -675,7 +675,22 @@ function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
   };
 }
 
-function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
+function adjustScoresForWinner({ homeScore, awayScore, winnerTeamId, game, seed }) {
+  if (!winnerTeamId) return { homeScore, awayScore };
+  if (winnerTeamId !== game.homeTeamId && winnerTeamId !== game.awayTeamId) {
+    throw new MatchupError('invalid-argument', 'Choose one of the matchup teams as the winner.');
+  }
+  const margin = 1 + (hash(`${seed}:chosen-winner-margin`) % 8);
+  if (winnerTeamId === game.homeTeamId && homeScore <= awayScore) {
+    return { homeScore: awayScore + margin, awayScore };
+  }
+  if (winnerTeamId === game.awayTeamId && awayScore <= homeScore) {
+    return { homeScore, awayScore: homeScore + margin };
+  }
+  return { homeScore, awayScore };
+}
+
+function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
   assertSimulationRoster(homeTeam, game.homeTeamId);
   assertSimulationRoster(awayTeam, game.awayTeamId);
   const homePresetIds = coachingPlanPresetIdsForSide(game, 'home');
@@ -688,6 +703,13 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
   let homeScore = 75 + Math.round(homeStrength * 0.55) + 3 + (hash(`${seed}:home-roster`) % 8);
   let awayScore = 75 + Math.round(awayStrength * 0.55) + (hash(`${seed}:away-roster`) % 8);
   if (homeScore === awayScore) homeScore += 1;
+  ({ homeScore, awayScore } = adjustScoresForWinner({
+    homeScore,
+    awayScore,
+    winnerTeamId,
+    game,
+    seed,
+  }));
   const home = buildSimulationTeamBox({
     team: simulatedHomeTeam,
     teamId: game.homeTeamId,
@@ -702,8 +724,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
     seed: `${seed}:away`,
     pointMargin: awayScore - homeScore,
   });
-  const winnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
-  const winnerLabel = displayScheduleAbbr(winnerTeamId);
+  const simulatedWinnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
+  const winnerLabel = displayScheduleAbbr(simulatedWinnerTeamId);
   return {
     homeScore,
     awayScore,
@@ -1031,6 +1053,7 @@ function finalScoreGameResult({
   nowMs,
   homeScore,
   awayScore,
+  winnerTeamId,
   skipParticipantCheck = false,
   homeTeam,
   awayTeam,
@@ -1039,6 +1062,44 @@ function finalScoreGameResult({
     throw new MatchupError('failed-precondition', 'This game cannot be finalized.');
   }
   if (!skipParticipantCheck) assertParticipant(game, uid);
+  if (winnerTeamId && (homeScore == null || awayScore == null)) {
+    const rosterSimulation = simulateRosterGame({
+      game,
+      homeTeam,
+      awayTeam,
+      nowMs,
+      winnerTeamId,
+    });
+    const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}:manual-winner`;
+    const result = finalizeGame({
+      game,
+      uid,
+      nowMs,
+      homeScore: rosterSimulation.homeScore,
+      awayScore: rosterSimulation.awayScore,
+      source: 'manual_winner',
+      teamStates: {
+        [game.homeTeamId]: teamStateForFinalization(homeTeam),
+        [game.awayTeamId]: teamStateForFinalization(awayTeam),
+      },
+    });
+    const winnerGame = {
+      ...result.game,
+      boxScore: rosterSimulation.boxScore,
+      quarters: rosterSimulation.quarters,
+      story: rosterSimulation.story,
+      coachingImpact: rosterSimulation.coachingImpact,
+    };
+    return {
+      ...result,
+      game: gameWithLiveMode({
+        game: winnerGame,
+        nowMs,
+        seed,
+        homeTeam,
+      }),
+    };
+  }
   const normalizedHomeScore = Number(homeScore);
   const normalizedAwayScore = Number(awayScore);
   if (
@@ -1379,8 +1440,8 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
       let nextGame;
       try {
@@ -1490,13 +1551,41 @@ function participantForScheduledTeam(schedule, teamId) {
   )) || null;
 }
 
-async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId }) {
+function teamMatchesScheduledSlot(team, teamId, participant) {
+  const wanted = schedulePoolKeys(teamId, participant);
+  return [
+    team && team.teamId,
+    team && team.abbreviation,
+    team && team.abbr,
+    team && team.id,
+  ].flatMap(scheduleAliases).some(key => wanted.has(normalizeScheduleKey(key)));
+}
+
+async function teamByParticipantGm({ tx, teamsCollection, participant, teamId, gmId: gameGmId }) {
+  const gmId = (participant && participant.gmId) || gameGmId;
+  if (!gmId || !teamsCollection || typeof teamsCollection.where !== 'function') return null;
+  const snap = await tx.get(teamsCollection.where('gmId', '==', gmId));
+  const docs = snap && Array.isArray(snap.docs) ? snap.docs : [];
+  const matched = docs.find((doc) => {
+    const data = doc.data ? doc.data() || {} : {};
+    return teamMatchesScheduledSlot({ id: doc.id, ...data }, teamId, participant);
+  }) || docs[0];
+  if (!matched) return null;
+  return {
+    id: matched.id,
+    ref: matched.ref,
+    ...(matched.data ? matched.data() || {} : {}),
+  };
+}
+
+async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId, gmId }) {
   const participant = participantForScheduledTeam(schedule, teamId);
+  const teamsCollection = leagueRef.collection('teams');
   const teamDocId = participant && participant.sourceTeamDocId
     ? participant.sourceTeamDocId
     : null;
   if (teamDocId) {
-    const teamRef = leagueRef.collection('teams').doc(teamDocId);
+    const teamRef = teamsCollection.doc(teamDocId);
     const teamSnap = await tx.get(teamRef);
     if (teamSnap.exists) {
       return withFallbackRoster({
@@ -1509,7 +1598,7 @@ async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamI
       });
     }
   }
-  const directRef = leagueRef.collection('teams').doc(String(teamId));
+  const directRef = teamsCollection.doc(String(teamId));
   const directSnap = await tx.get(directRef);
   if (directSnap.exists) {
     return withFallbackRoster({
@@ -1517,6 +1606,17 @@ async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamI
       db,
       league,
       team: { id: directSnap.id, ref: directRef, ...(directSnap.data() || {}) },
+      teamId,
+      participant,
+    });
+  }
+  const gmTeam = await teamByParticipantGm({ tx, teamsCollection, participant, teamId, gmId });
+  if (gmTeam && gmTeam.ref) {
+    return withFallbackRoster({
+      tx,
+      db,
+      league,
+      team: gmTeam,
       teamId,
       participant,
     });
@@ -1565,8 +1665,8 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
       let nextGame;
       try {
@@ -1610,8 +1710,8 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
         throw new HttpsError('permission-denied', 'Only participating GMs or commissioners can submit this score.');
       }
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
       const [homePlan, awayPlan] = await Promise.all([
         coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),
@@ -1631,6 +1731,7 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
           nowMs: now(),
           homeScore: data.homeScore,
           awayScore: data.awayScore,
+          winnerTeamId: data.winnerTeamId,
           skipParticipantCheck: admin,
           homeTeam,
           awayTeam,
@@ -1682,8 +1783,8 @@ function createSimulateScheduledGameHandler(deps) {
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
       const [homeTeam, awayTeam] = await Promise.all([
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
-        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
       const [homePlan, awayPlan] = await Promise.all([
         coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),

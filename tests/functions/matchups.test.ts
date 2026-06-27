@@ -516,6 +516,29 @@ describe('matchup request state helpers', () => {
     expect(teamStateUpdatePayload(result.teamStates.away)).toMatchObject({ fatigueSequence: 12 });
   });
 
+  it('generates a simulated box score when a GM reports only the winner outcome', () => {
+    const game = seedAvailableGame();
+    const result = finalScoreGameResult({
+      game,
+      uid: game.homeGmId,
+      nowMs: 9_000,
+      winnerTeamId: game.awayTeamId,
+      homeTeam: seedRoster('Home', 76),
+      awayTeam: seedRoster('Away', 84),
+    });
+
+    expect(result.game).toMatchObject({
+      status: 'final',
+      winnerTeamId: game.awayTeamId,
+      resultSource: 'manual_winner',
+      finalScoreSubmittedByUid: game.homeGmId,
+    });
+    expect(result.game.awayScore).toBeGreaterThan(result.game.homeScore);
+    expect(result.game.boxScore.away.points).toBe(result.game.awayScore);
+    expect(result.game.boxScore.home.points).toBe(result.game.homeScore);
+    expect(result.game.liveTimeline.events.length).toBeGreaterThan(0);
+  });
+
   it('adds simulated box score production to roster season stats', () => {
     const payload = teamPersistencePayload({
       state: {
@@ -812,6 +835,115 @@ describe('matchup request state helpers', () => {
     expect(tx.update).toHaveBeenCalledWith(awayRef, expect.objectContaining({
       fatigue: 1,
       players: [expect.objectContaining({ seasonStats: expect.objectContaining({ games: 1, points: 10 }) })],
+    }));
+  });
+
+  it('rolls stats back for claimed teams when older schedules are missing participant doc ids', async () => {
+    const finalGame = seedAvailableGame({
+      status: 'final',
+      homeScore: 101,
+      awayScore: 99,
+      winnerTeamId: 'SAS_2011',
+      homeTeamId: 'SAS_2011',
+      awayTeamId: 'CHI',
+      homeGmId: 'gm-sas',
+      awayGmId: 'gm-chi',
+      fatigue: {
+        home: { before: 2, after: 5, sequence: 3 },
+        away: { before: 1, after: 4, sequence: 2 },
+      },
+      boxScore: {
+        home: { players: [{ playerId: 'sas-rose', minutes: 34, points: 24, rebounds: 4, assists: 7 }] },
+        away: { players: [{ playerId: 'chi-deng', minutes: 35, points: 18, rebounds: 6, assists: 3 }] },
+      },
+    });
+    const schedule = { games: [finalGame] };
+    const leagueRef = { collection: vi.fn() };
+    const scheduleRef = {};
+    const directMissingRef = {};
+    const homeRef = {};
+    const awayRef = {};
+    const homeQuery = {};
+    const awayQuery = {};
+    const teamsCollection = {
+      doc: vi.fn(() => directMissingRef),
+      where: vi.fn((field: string, op: string, value: string) => (value === 'gm-sas' ? homeQuery : awayQuery)),
+    };
+    const tx = {
+      get: vi.fn(async ref => {
+        if (ref === leagueRef) return { exists: true, data: () => ({ commissionerId: 'commissioner', scheduleId: '2011' }) };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === directMissingRef) return { exists: false, data: () => ({}) };
+        if (ref === homeQuery) return {
+          empty: false,
+          docs: [{
+            id: 'league_gm_sas',
+            ref: homeRef,
+            data: () => ({
+              teamId: 'SAS_2011',
+              abbreviation: 'SAS',
+              gmId: 'gm-sas',
+              players: [{ player_id: 'sas-rose', seasonStats: { games: 2, minutes: 70, points: 44, rebounds: 10, assists: 12 } }],
+              fatigue: 5,
+              fatigueSequence: 3,
+            }),
+          }],
+        };
+        if (ref === awayQuery) return {
+          empty: false,
+          docs: [{
+            id: 'league_gm_chi',
+            ref: awayRef,
+            data: () => ({
+              teamId: 'CHI',
+              abbreviation: 'CHI',
+              gmId: 'gm-chi',
+              players: [{ player_id: 'chi-deng', seasonStats: { games: 2, minutes: 73, points: 33, rebounds: 11, assists: 5 } }],
+              fatigue: 4,
+              fatigueSequence: 2,
+            }),
+          }],
+        };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+    };
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return teamsCollection;
+      return { doc: vi.fn() };
+    });
+    const db = {
+      collection: vi.fn(() => ({ doc: vi.fn(() => leagueRef) })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createResetScheduledGameHandler({
+      getFirestore: () => db,
+      now: () => 7_000,
+      HttpsError: TestHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', gameId: finalGame.id },
+    });
+
+    expect(teamsCollection.where).toHaveBeenCalledWith('gmId', '==', 'gm-sas');
+    expect(tx.update).toHaveBeenCalledWith(homeRef, expect.objectContaining({
+      fatigue: 2,
+      players: [expect.objectContaining({ seasonStats: expect.objectContaining({ games: 1, points: 20, assists: 5 }) })],
+    }));
+    expect(tx.update).toHaveBeenCalledWith(awayRef, expect.objectContaining({
+      fatigue: 1,
+      players: [expect.objectContaining({ seasonStats: expect.objectContaining({ games: 1, points: 15, rebounds: 5 }) })],
     }));
   });
 

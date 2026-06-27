@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import { COACHING_PRESETS, buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
@@ -78,8 +78,6 @@ export default function MatchupScreen() {
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
   const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
-  const [awayScoreInput, setAwayScoreInput] = useState('');
-  const [homeScoreInput, setHomeScoreInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -191,11 +189,6 @@ export default function MatchupScreen() {
     }
   }, [myTeam?.defaultCoachingPresetId]);
 
-  useEffect(() => {
-    setAwayScoreInput(typeof game?.awayScore === 'number' ? String(game.awayScore) : '');
-    setHomeScoreInput(typeof game?.homeScore === 'number' ? String(game.homeScore) : '');
-  }, [game?.awayScore, game?.homeScore, game?.id]);
-
   const resetGameLocally = async () => {
     if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready to reset.');
     const scheduleId = league.scheduleId || String(league.currentYear || 2025);
@@ -265,10 +258,13 @@ export default function MatchupScreen() {
     });
   };
 
-  const submitScoreLocally = async (homeScore: number, awayScore: number) => {
-    if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready for score entry.');
+  const submitWinnerLocally = async (winnerTeamId: string) => {
+    if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready for result entry.');
     const scheduleId = league.scheduleId || String(league.currentYear || 2025);
     const nowMs = Date.now();
+    const winnerIsHome = winnerTeamId === game.homeTeamId;
+    const homeScore = winnerIsHome ? 101 : 97;
+    const awayScore = winnerIsHome ? 97 : 101;
     const nextGames = scheduledGames.map((item) => (
       item.id === game.id
         ? {
@@ -276,8 +272,8 @@ export default function MatchupScreen() {
           status: 'final',
           homeScore,
           awayScore,
-          winnerTeamId: homeScore > awayScore ? item.homeTeamId : item.awayTeamId,
-          loserTeamId: homeScore > awayScore ? item.awayTeamId : item.homeTeamId,
+          winnerTeamId,
+          loserTeamId: winnerTeamId === item.homeTeamId ? item.awayTeamId : item.homeTeamId,
           finalScoreSubmittedByUid: uid,
           finalAtMs: nowMs,
         }
@@ -335,29 +331,28 @@ export default function MatchupScreen() {
     }
   };
 
-  const submitFinalScore = async () => {
+  const submitWinnerOutcome = async (winnerTeamId: string) => {
     if (!leagueId || !gameId) return;
-    const awayScore = Number(awayScoreInput);
-    const homeScore = Number(homeScoreInput);
-    if (!Number.isInteger(awayScore) || !Number.isInteger(homeScore) || awayScore < 0 || homeScore < 0 || awayScore === homeScore) {
-      Alert.alert('Score needed', 'Enter valid non-tied final scores.');
+    if (!game || ![game.homeTeamId, game.awayTeamId].includes(winnerTeamId)) {
+      Alert.alert('Winner needed', 'Choose one of the matchup teams.');
       return;
     }
     setWorking(true);
     try {
       const fn = httpsCallable(functions, 'reportGameScore');
-      await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular', awayScore, homeScore });
+      await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular', winnerTeamId });
+      router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
     } catch (error: any) {
       if (isMissingCallable(error) && isLeagueAdmin) {
         try {
-          await submitScoreLocally(homeScore, awayScore);
+          await submitWinnerLocally(winnerTeamId);
           return;
         } catch (fallbackError: any) {
-          Alert.alert('Score failed', fallbackError.message || 'Please try again.');
+          Alert.alert('Result failed', fallbackError.message || 'Please try again.');
           return;
         }
       }
-      Alert.alert('Score failed', error.message || 'Please try again.');
+      Alert.alert('Result failed', error.message || 'Please try again.');
     } finally {
       setWorking(false);
     }
@@ -513,33 +508,18 @@ export default function MatchupScreen() {
                     </Text>
                   </TouchableOpacity>
                 )}
-                {canReportScore && (
-                  <View style={styles.scoreEntry}>
-                    <View style={styles.scoreInputGroup}>
-                      <Text style={styles.scoreInputLabel}>Away · {awayLabel}</Text>
-                      <TextInput
-                        value={awayScoreInput}
-                        onChangeText={setAwayScoreInput}
-                        keyboardType="number-pad"
-                        placeholder="0"
-                        placeholderTextColor="#555"
-                        style={styles.scoreInput}
-                      />
+                {canReportScore && game && (
+                  <View style={styles.winnerEntry}>
+                    <Text style={styles.winnerEntryTitle}>Choose Winner</Text>
+                    <Text style={styles.winnerEntryHelp}>The sim engine will create the final score, box score, and Live Mode replay.</Text>
+                    <View style={styles.winnerButtonRow}>
+                      <TouchableOpacity disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
+                        <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.awayTeamId)} Wins</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity disabled={working} onPress={() => submitWinnerOutcome(game.homeTeamId)} style={styles.winnerButton}>
+                        <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.homeTeamId)} Wins</Text>
+                      </TouchableOpacity>
                     </View>
-                    <View style={styles.scoreInputGroup}>
-                      <Text style={styles.scoreInputLabel}>Home · {homeLabel}</Text>
-                      <TextInput
-                        value={homeScoreInput}
-                        onChangeText={setHomeScoreInput}
-                        keyboardType="number-pad"
-                        placeholder="0"
-                        placeholderTextColor="#555"
-                        style={styles.scoreInput}
-                      />
-                    </View>
-                    <TouchableOpacity disabled={working} onPress={submitFinalScore} style={styles.scoreSubmit}>
-                      <Text style={styles.scoreSubmitText}>Save Final Score</Text>
-                    </TouchableOpacity>
                   </View>
                 )}
                 {myTeam && (
@@ -626,12 +606,12 @@ const styles = StyleSheet.create({
   actionTextAlt: { color: '#00e58b', fontSize: 13, fontWeight: '900' },
   resetButton: { minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: '#ff6b6b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18, backgroundColor: '#1a0d0d' },
   resetText: { color: '#ff6b6b', fontSize: 12, fontWeight: '900' },
-  scoreEntry: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 18 },
-  scoreInputGroup: { marginBottom: 10 },
-  scoreInputLabel: { color: '#888', fontSize: 10, fontWeight: '900', marginBottom: 6, textTransform: 'uppercase' },
-  scoreInput: { minHeight: 42, borderRadius: 8, backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a', color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  scoreSubmit: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
-  scoreSubmitText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
+  winnerEntry: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 18 },
+  winnerEntryTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  winnerEntryHelp: { color: '#888', fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 4, marginBottom: 12 },
+  winnerButtonRow: { flexDirection: 'row', gap: 10 },
+  winnerButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  winnerButtonText: { color: '#06130c', fontSize: 12, fontWeight: '900', textAlign: 'center' },
   prepHeader: { marginBottom: 10 },
   prepHelp: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3 },
   sectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 10 },
