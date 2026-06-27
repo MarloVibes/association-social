@@ -568,6 +568,8 @@ describe('source safety regressions', () => {
       'constants/eraCaps.ts',
       'constants/mlbTeams.ts',
       'docs/superpowers/specs/2026-06-22-mlb-nfl-sport-logic-design.md',
+      'scripts/backfill-era-salaries.mjs',
+      'scripts/seed-mlb-pool.mjs',
     ];
 
     const offenders = paths.flatMap(path => {
