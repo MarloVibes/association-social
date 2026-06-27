@@ -11,7 +11,9 @@ const {
   chooseBoardAutoPick,
   createSaveDraftBoardHandler,
   createDraftSession,
+  draftContextForLeague,
   draftRoundsForSport,
+  draftRoundsForLeague,
   buildDraftFranchises,
   DEFAULT_DRAFT_PICK_SECONDS,
   validateManualDraftPick,
@@ -99,13 +101,53 @@ describe('live draft domain', () => {
     });
   });
 
+  it('uses historical NBA pool team identities for startup fantasy drafts', () => {
+    const eraIds = [
+      'ATL', 'BOS', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU',
+      'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NJN', 'NOH', 'NYK',
+      'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS',
+    ];
+    const teams = buildDraftFranchises('nba', [], eraIds.map(team => ({ player_id: `${team}-1`, team })), {
+      emptyRosters: true,
+    });
+
+    expect(teams.map((team: any) => team.teamId)).toContain('NJN');
+    expect(teams.map((team: any) => team.teamId)).toContain('NOH');
+    expect(teams.map((team: any) => team.teamId)).not.toContain('BKN');
+    expect(teams.map((team: any) => team.teamId)).not.toContain('NOP');
+    expect(teams.find((team: any) => team.teamId === 'NJN')).toMatchObject({ players: [] });
+  });
+
   it('rejects picks when the league is not in the active live draft stage', () => {
     expect(() => assertLeagueDraftIsLive({
       offseason: { stage: 'live_draft', draftStatus: 'live', seasonYear: 2027 },
     })).not.toThrow();
     expect(() => assertLeagueDraftIsLive({
+      mode: 'draft',
+      draftStatus: 'live',
+      draftSeasonYear: 2011,
+    })).not.toThrow();
+    expect(() => assertLeagueDraftIsLive({
       offseason: { stage: 'roster_cuts', draftStatus: 'complete', seasonYear: 2027 },
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+  });
+
+  it('uses startup fantasy draft context before a league has an offseason', () => {
+    expect(draftContextForLeague({
+      mode: 'draft',
+      sport: 'nba',
+      era: 'lebron',
+      currentYear: 2010,
+      draftStatus: 'setup',
+      rosterLimit: 15,
+    }, { allowSetup: true })).toMatchObject({
+      draftType: 'startup',
+      seasonYear: 2010,
+      classDocId: 'startup_2010',
+      sessionDocId: 'startup_2010',
+      poolKey: 'lebron',
+    });
+    expect(draftRoundsForLeague({ mode: 'draft', rosterLimit: 15 }, 'nba')).toBe(15);
   });
 
   it('builds a deterministic team order and initializes the first deadline', () => {
@@ -235,6 +277,23 @@ describe('live draft domain', () => {
 
   it('adds sport-specific rookie contract data to drafted players', () => {
     const prospect = { id: 'ace', full_name: 'Draft Ace', position: 'PG', talent: 95 };
+    expect(buildDraftedPlayer({
+      prospect: { ...prospect, salary: 31_000_000, contractYears: 2 },
+      session: { sport: 'nba', draftType: 'startup', seasonYear: 2011, currentOverallPick: 1, round: 1 },
+      league: {},
+    })).toMatchObject({
+      salary: 31_000_000,
+      contractYears: 2,
+      fantasyDraftedSeason: 2011,
+      fantasyDraftedOverall: 1,
+      fantasyDraftedRound: 1,
+    });
+    expect(buildDraftedPlayer({
+      prospect,
+      session: { sport: 'nba', draftType: 'startup', seasonYear: 2011, currentOverallPick: 1, round: 1 },
+      league: {},
+    })).not.toMatchObject({ rookie: true });
+
     const nbaLotteryPick = buildDraftedPlayer({
       prospect,
       session: { sport: 'nba', seasonYear: 2027, currentOverallPick: 3, round: 1 },

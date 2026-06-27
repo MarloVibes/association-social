@@ -320,7 +320,9 @@ export default function TeamSelectScreen() {
         const maxMembers = typeof currentLeague.maxMembers === 'number'
           ? currentLeague.maxMembers
           : getSportRules(currentLeague.sport).teamCount;
-        shouldGenerateSchedule = currentLeague.sport === 'nba' && currentLeague.scheduleLocked !== true;
+        shouldGenerateSchedule = currentLeague.sport === 'nba'
+          && currentLeague.scheduleLocked !== true
+          && currentLeague.mode !== 'draft';
         selectedGamesPerTeam = Number(currentLeague.gamesPerTeam || 29);
 
         if (currentTaken.includes(team.id)) {
@@ -389,7 +391,11 @@ export default function TeamSelectScreen() {
         }
       }
       router.dismissAll();
-      router.replace({ pathname: '/screens/league', params: { leagueId } });
+      if (isDraft) {
+        router.replace({ pathname: '/screens/offseason/live-draft', params: { leagueId } });
+      } else {
+        router.replace({ pathname: '/screens/league', params: { leagueId } });
+      }
     } catch (e: any) {
       Alert.alert('Error', e?.message || String(e));
       setSaving(false);

@@ -17,6 +17,10 @@ import { auth, db, functions } from '@/constants/firebase';
 
 type League = {
   name?: string;
+  mode?: string;
+  currentYear?: number;
+  draftSeasonYear?: number;
+  draftStatus?: string;
   commissionerId?: string;
   coCommissioners?: string[];
   members?: string[];
@@ -116,7 +120,8 @@ export default function LiveDraftScreen() {
     };
   }, [leagueId, router]);
 
-  const seasonYear = league?.offseason?.seasonYear;
+  const seasonYear = league?.offseason?.seasonYear || league?.draftSeasonYear || league?.currentYear;
+  const draftTitle = league?.mode === 'draft' ? 'Fantasy Draft' : `${seasonYear || ''} Live Draft`;
   useEffect(() => {
     if (!leagueId || !seasonYear) return;
     const unsubscribeClass = onSnapshot(
@@ -267,7 +272,7 @@ export default function LiveDraftScreen() {
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>{league?.name || 'League'}</Text>
-          <Text style={styles.title}>{seasonYear} Live Draft</Text>
+          <Text style={styles.title}>{draftTitle}</Text>
         </View>
         <View style={styles.iconButton} />
       </View>
@@ -277,7 +282,9 @@ export default function LiveDraftScreen() {
           <Text style={styles.emptyTitle}>Draft room not open</Text>
           <Text style={styles.emptyText}>
             {isCommissioner
-              ? 'Initialize the published class when every GM is ready.'
+              ? league?.mode === 'draft'
+                ? 'Open the draft room when every GM has claimed a team. CPU teams will auto-pick.'
+                : 'Initialize the published class when every GM is ready.'
               : 'Waiting for a commissioner to open the draft room.'}
           </Text>
           {isCommissioner && (

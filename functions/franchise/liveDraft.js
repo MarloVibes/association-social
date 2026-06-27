@@ -38,10 +38,16 @@ function teamIdentity(team) {
   ).toUpperCase();
 }
 
-function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
+function uniqueValues(values) {
+  return [...new Set((values || []).map(value => String(value || '').trim().toUpperCase()).filter(Boolean))];
+}
+
+function buildDraftFranchises(sportInput, liveTeams, poolPlayers = [], options = {}) {
   const sport = sportInput === 'nfl' ? 'madden' : sportInput;
+  const poolTeamIds = uniqueValues((poolPlayers || []).map(player => player.team));
+  const liveTeamIds = uniqueValues((liveTeams || []).map(teamIdentity));
   const canonicalIds = sport === 'nba'
-    ? NBA_TEAM_IDS
+    ? (poolTeamIds.length >= 20 ? uniqueValues([...poolTeamIds, ...liveTeamIds]) : NBA_TEAM_IDS)
     : sport === 'madden'
     ? NFL_TEAM_IDS
     : sport === 'mlb' ? MLB_TEAM_IDS : [];
@@ -65,7 +71,7 @@ function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
         abbreviation: identity,
         name: identity,
         gmId: null,
-        players: poolPlayers.filter(player => String(player.team || '').toUpperCase() === identity),
+        players: options.emptyRosters ? [] : poolPlayers.filter(player => String(player.team || '').toUpperCase() === identity),
         needs: [],
         virtual: true,
       };
@@ -80,7 +86,7 @@ function buildDraftFranchises(sportInput, liveTeams, poolPlayers = []) {
       ...team,
       teamId: identity,
       abbreviation: team.abbreviation || identity,
-      players: Array.isArray(team.players) && team.players.length > 0
+      players: options.emptyRosters ? [] : Array.isArray(team.players) && team.players.length > 0
         ? team.players
         : poolPlayers.filter(player => String(player.team || '').toUpperCase() === identity),
       needs: team.needs || [],
@@ -115,6 +121,27 @@ function draftRoundsForSport(sportInput) {
   if (sport === 'nba') return 2;
   if (sport === 'madden') return 7;
   return 5;
+}
+
+function startupDraftRoundsForSport(sportInput) {
+  const sport = sportInput === 'nfl' ? 'madden' : sportInput;
+  if (sport === 'madden') return 53;
+  if (sport === 'mlb') return 26;
+  return 15;
+}
+
+function draftRoundsForLeague(league, sportInput) {
+  const sport = normalizeSport(sportInput || (league && league.sport));
+  if (league && league.mode === 'draft') {
+    const configured = Number(league.startupDraftRounds || league.rosterLimit);
+    return Math.max(1, Math.min(100, Number.isFinite(configured) ? configured : startupDraftRoundsForSport(sport)));
+  }
+  return draftRoundsForSport(sport);
+}
+
+function draftTimerForLeague(league) {
+  const configured = Number(league && league.draftTimerSeconds);
+  return Math.max(10, Math.min(600, Number.isFinite(configured) ? configured : DEFAULT_DRAFT_PICK_SECONDS));
 }
 
 function normalizeSport(sportInput) {
@@ -170,6 +197,14 @@ function rookieContractForPick({ sport: sportInput, round, overall, league = {} 
 }
 
 function buildDraftedPlayer({ prospect, session, league = {} }) {
+  if (session && session.draftType === 'startup') {
+    return {
+      ...prospect,
+      fantasyDraftedSeason: session.seasonYear,
+      fantasyDraftedOverall: session.currentOverallPick,
+      fantasyDraftedRound: session.round,
+    };
+  }
   return {
     ...prospect,
     ...rookieContractForPick({
@@ -191,6 +226,7 @@ function createDraftSession({
   rounds,
   timerSeconds,
   now,
+  draftType,
 }) {
   if (!Number.isInteger(seasonYear) || !Array.isArray(teamOrder) || teamOrder.length === 0) {
     throw new LiveDraftError('failed-precondition', 'Draft season and team order are required.');
@@ -201,6 +237,7 @@ function createDraftSession({
   return {
     seasonYear,
     sport,
+    ...(draftType ? { draftType } : {}),
     status: 'live',
     teamOrder: [...teamOrder],
     totalPicks: teamOrder.length * rounds,
@@ -359,16 +396,49 @@ function isCommissioner(uid, league) {
   return league.commissionerId === uid || (league.coCommissioners || []).includes(uid);
 }
 
-function assertLeagueDraftIsLive(league) {
+function draftContextForLeague(league, options = {}) {
   const offseason = league && league.offseason || {};
   if (
-    offseason.stage !== 'live_draft'
-    || offseason.draftStatus !== 'live'
-    || !Number.isInteger(offseason.seasonYear)
+    offseason.stage === 'live_draft'
+    && offseason.draftStatus === 'live'
+    && Number.isInteger(offseason.seasonYear)
   ) {
-    throw new LiveDraftError('failed-precondition', 'The live draft stage is not active.');
+    return {
+      draftType: 'rookie',
+      seasonYear: offseason.seasonYear,
+      classDocId: String(offseason.seasonYear),
+      sessionDocId: String(offseason.seasonYear),
+      poolKey: normalizeSport(league && league.sport),
+    };
   }
-  return offseason;
+
+  if (league && league.mode === 'draft') {
+    const draftStatus = league.draftStatus || 'setup';
+    const canUseSetup = options.allowSetup === true && draftStatus === 'setup';
+    if (draftStatus !== 'live' && !canUseSetup) {
+      throw new LiveDraftError('failed-precondition', 'The live draft stage is not active.');
+    }
+    const seasonYear = Number.isInteger(league.draftSeasonYear)
+      ? league.draftSeasonYear
+      : Number.isInteger(league.currentYear) ? league.currentYear : null;
+    if (!Number.isInteger(seasonYear)) {
+      throw new LiveDraftError('failed-precondition', 'Draft season is required.');
+    }
+    const sport = normalizeSport(league.sport);
+    return {
+      draftType: 'startup',
+      seasonYear,
+      classDocId: `startup_${seasonYear}`,
+      sessionDocId: `startup_${seasonYear}`,
+      poolKey: sport === 'nba' ? (league.era || 'current') : sport,
+    };
+  }
+
+  throw new LiveDraftError('failed-precondition', 'The live draft stage is not active.');
+}
+
+function assertLeagueDraftIsLive(league) {
+  return draftContextForLeague(league);
 }
 
 function toHttpsError(error, HttpsError) {
@@ -447,17 +517,17 @@ function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
       if (!isCommissioner(uid, league)) {
         throw new HttpsError('permission-denied', 'Only a commissioner can initialize the draft.');
       }
-      const offseason = assertLeagueDraftIsLive(league);
-      const classRef = leagueRef.collection('draft_classes').doc(String(offseason.seasonYear));
-      const sessionRef = leagueRef.collection('draft_sessions').doc(String(offseason.seasonYear));
+      const context = draftContextForLeague(league, { allowSetup: true });
+      const classRef = leagueRef.collection('draft_classes').doc(context.classDocId);
+      const sessionRef = leagueRef.collection('draft_sessions').doc(context.sessionDocId);
       const sport = league.sport === 'nfl' ? 'madden' : league.sport;
-      const poolRef = db.collection('era_player_pools').doc(sport);
+      const poolRef = db.collection('era_player_pools').doc(context.poolKey);
       const [classSnap, sessionSnap, poolSnap] = await Promise.all([
         tx.get(classRef),
         tx.get(sessionRef),
         tx.get(poolRef),
       ]);
-      if (!classSnap.exists || (classSnap.data() || {}).published !== true) {
+      if (context.draftType !== 'startup' && (!classSnap.exists || (classSnap.data() || {}).published !== true)) {
         throw new HttpsError('failed-precondition', 'Publish the draft class first.');
       }
       if (sessionSnap.exists) return { session: sessionSnap.data() };
@@ -465,21 +535,47 @@ function createInitializeLiveDraftHandler({ getFirestore, now, HttpsError }) {
       const poolPlayers = poolSnap.exists && Array.isArray((poolSnap.data() || {}).players)
         ? poolSnap.data().players
         : [];
-      const draftTeams = buildDraftFranchises(sport, teamDocs, poolPlayers);
+      const startupPlayers = context.draftType === 'startup'
+        ? poolPlayers.map((player, index) => ({
+          id: prospectId(player) || `startup_${index + 1}`,
+          player_id: prospectId(player) || `startup_${index + 1}`,
+          ...player,
+        }))
+        : [];
+      if (context.draftType === 'startup' && startupPlayers.length === 0) {
+        throw new HttpsError('failed-precondition', 'No draft player pool is available for this league.');
+      }
+      const draftTeams = buildDraftFranchises(sport, teamDocs, context.draftType === 'startup' ? startupPlayers : poolPlayers, {
+        emptyRosters: context.draftType === 'startup',
+      });
       const teamOrder = buildDraftOrder(draftTeams, league.draftOrder);
       const session = createDraftSession({
-        seasonYear: offseason.seasonYear,
+        seasonYear: context.seasonYear,
         sport,
         teamOrder,
-        rounds: draftRoundsForSport(sport),
-        timerSeconds: DEFAULT_DRAFT_PICK_SECONDS,
+        rounds: draftRoundsForLeague(league, sport),
+        timerSeconds: draftTimerForLeague(league),
         now: now(),
+        draftType: context.draftType === 'startup' ? 'startup' : undefined,
       });
       for (const team of draftTeams) {
         if (team.virtual) {
           const { virtual, ...storedTeam } = team;
           tx.create(leagueRef.collection('teams').doc(team.id), storedTeam);
         }
+      }
+      if (context.draftType === 'startup') {
+        tx.set(classRef, {
+          seasonYear: context.seasonYear,
+          draftType: 'startup',
+          published: true,
+          players: startupPlayers,
+          version: 1,
+        });
+        tx.update(leagueRef, {
+          draftStatus: 'live',
+          draftSeasonYear: context.seasonYear,
+        });
       }
       tx.create(sessionRef, session);
       return { session };
@@ -509,10 +605,9 @@ function createDraftPickHandler({ getFirestore, now, HttpsError }) {
         const leagueSnap = await tx.get(leagueRef);
         if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
         const league = leagueSnap.data() || {};
-        const offseason = assertLeagueDraftIsLive(league);
-        const seasonYear = offseason.seasonYear;
-        const sessionRef = leagueRef.collection('draft_sessions').doc(String(seasonYear));
-        const classRef = leagueRef.collection('draft_classes').doc(String(seasonYear));
+        const context = assertLeagueDraftIsLive(league);
+        const sessionRef = leagueRef.collection('draft_sessions').doc(context.sessionDocId);
+        const classRef = leagueRef.collection('draft_classes').doc(context.classDocId);
         const [sessionSnap, classSnap] = await Promise.all([
           tx.get(sessionRef),
           tx.get(classRef),
@@ -550,16 +645,16 @@ function createDraftPickHandler({ getFirestore, now, HttpsError }) {
           selectedBy: uid,
           selectionType: 'manual',
           now: timestamp,
-          timerSeconds: session.deadlineMillis == null
-            ? DEFAULT_DRAFT_PICK_SECONDS
-            : DEFAULT_DRAFT_PICK_SECONDS,
+          timerSeconds: draftTimerForLeague(league),
         });
         tx.update(teamRef, {
           players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
         });
         tx.set(sessionRef, next);
         if (next.status === 'complete') {
-          tx.update(leagueRef, { 'offseason.draftStatus': 'complete' });
+          tx.update(leagueRef, context.draftType === 'startup'
+            ? { draftStatus: 'complete', draftComplete: true }
+            : { 'offseason.draftStatus': 'complete' });
         }
         return { session: next, pick: next.picks[next.picks.length - 1] };
       });
@@ -589,12 +684,11 @@ function createAutoPickHandler({ getFirestore, now, HttpsError }) {
         const leagueSnap = await tx.get(leagueRef);
         if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
         const league = leagueSnap.data() || {};
-        const offseason = assertLeagueDraftIsLive(league);
+        const context = assertLeagueDraftIsLive(league);
         const member = isCommissioner(uid, league) || (league.members || []).includes(uid);
         if (!member) throw new HttpsError('permission-denied', 'Only league members can advance an expired draft pick.');
-        const seasonYear = offseason.seasonYear;
-        const sessionRef = leagueRef.collection('draft_sessions').doc(String(seasonYear));
-        const classRef = leagueRef.collection('draft_classes').doc(String(seasonYear));
+        const sessionRef = leagueRef.collection('draft_sessions').doc(context.sessionDocId);
+        const classRef = leagueRef.collection('draft_classes').doc(context.classDocId);
         const [sessionSnap, classSnap] = await Promise.all([
           tx.get(sessionRef),
           tx.get(classRef),
@@ -636,14 +730,16 @@ function createAutoPickHandler({ getFirestore, now, HttpsError }) {
           selectedBy: isCommissioner(uid, league) ? uid : 'system',
           selectionType: 'auto',
           now: timestamp,
-          timerSeconds: DEFAULT_DRAFT_PICK_SECONDS,
+          timerSeconds: draftTimerForLeague(league),
         });
         tx.update(teamRef, {
           players: [...(team.players || []), buildDraftedPlayer({ prospect, session, league })],
         });
         tx.set(sessionRef, next);
         if (next.status === 'complete') {
-          tx.update(leagueRef, { 'offseason.draftStatus': 'complete' });
+          tx.update(leagueRef, context.draftType === 'startup'
+            ? { draftStatus: 'complete', draftComplete: true }
+            : { 'offseason.draftStatus': 'complete' });
         }
         return { session: next, pick: next.picks[next.picks.length - 1] };
       });
@@ -667,7 +763,10 @@ module.exports = {
   createDraftPickHandler,
   createDraftSession,
   DEFAULT_DRAFT_PICK_SECONDS,
+  draftContextForLeague,
+  draftRoundsForLeague,
   draftRoundsForSport,
+  draftTimerForLeague,
   createInitializeLiveDraftHandler,
   createSaveDraftBoardHandler,
   cleanDraftBoard,

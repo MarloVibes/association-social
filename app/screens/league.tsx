@@ -406,6 +406,22 @@ export default function LeagueScreen() {
           </TouchableOpacity>
         )}
 
+        {league.mode === 'draft' && league.draftStatus !== 'complete' && (
+          <TouchableOpacity
+            style={[styles.channelsTab, { borderColor: '#f4b942', backgroundColor: '#2a210d' }]}
+            onPress={() => router.push({ pathname: '/screens/offseason/live-draft', params: { leagueId } })}
+          >
+            <View style={styles.channelsTabLeft}>
+              <Text style={styles.channelsTabIcon}>🎯</Text>
+              <View>
+                <Text style={[styles.channelsTabLabel, { color: '#f4b942' }]}>Fantasy Draft Room</Text>
+                <Text style={styles.channelsTabSub}>80-second picks · draft boards · CPU auto-pick</Text>
+              </View>
+            </View>
+            <Text style={styles.channelsTabChevron}>›</Text>
+          </TouchableOpacity>
+        )}
+
         {isNBASport && (
           <View style={[styles.seasonHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
             <View style={styles.seasonHubHeader}>

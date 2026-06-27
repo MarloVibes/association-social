@@ -158,6 +158,21 @@ describe('source safety regressions', () => {
     expect(teamSelect).toContain('The team was claimed, but the schedule did not lock');
   });
 
+  it('routes fantasy draft leagues into a startup draft room before the season begins', () => {
+    const createLeague = source('app/screens/create-league.tsx');
+    const teamSelect = source('app/screens/team-select.tsx');
+    const league = source('app/screens/league.tsx');
+    const liveDraft = source('app/screens/offseason/live-draft.tsx');
+
+    expect(createLeague).toContain("draftStatus: finalMode === 'draft' ? 'setup' : 'none'");
+    expect(createLeague).toContain('draftSeasonYear: leagueSeasonYear');
+    expect(teamSelect).toContain("currentLeague.mode !== 'draft'");
+    expect(teamSelect).toContain("pathname: '/screens/offseason/live-draft'");
+    expect(league).toContain('Fantasy Draft Room');
+    expect(liveDraft).toContain("league?.draftSeasonYear || league?.currentYear");
+    expect(liveDraft).toContain("league?.mode === 'draft' ? 'Fantasy Draft' :");
+  });
+
   it('uses sport finance defaults when creating non-NBA leagues', () => {
     const createLeague = source('app/screens/create-league.tsx');
 
