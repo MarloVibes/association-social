@@ -6,9 +6,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
+import { buildArenaTheme } from '@/domain/nba/arenaTheme';
 import { COACHING_PRESETS, buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
+import { buildLiveTimeline } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 
 type Team = {
@@ -17,6 +19,8 @@ type Team = {
   name?: string;
   abbreviation?: string;
   gmId?: string;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
   coachingPresets?: CoachingPreset[];
   defaultCoachingPresetId?: string;
 };
@@ -274,11 +278,57 @@ export default function MatchupScreen() {
     return { homeScore, awayScore };
   };
 
+  const localQuarterScores = (homeScore: number, awayScore: number, seed: string) => {
+    const hash = (value: string) => {
+      let h = 2166136261;
+      for (let index = 0; index < value.length; index += 1) {
+        h ^= value.charCodeAt(index);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    };
+    const split = (total: number, label: string) => {
+      const raw = [0, 1, 2, 3].map(index => 20 + (hash(`${seed}:${label}:${index}`) % 12));
+      const rawTotal = raw.reduce((sum, value) => sum + value, 0) || 1;
+      const scores = raw.map(value => Math.floor((value / rawTotal) * total));
+      let diff = total - scores.reduce((sum, value) => sum + value, 0);
+      let cursor = 0;
+      while (diff > 0) {
+        scores[cursor] += 1;
+        diff -= 1;
+        cursor = (cursor + 1) % scores.length;
+      }
+      return scores;
+    };
+    const home = split(homeScore, 'home');
+    const away = split(awayScore, 'away');
+    return [0, 1, 2, 3].map(index => ({ quarter: index + 1, home: home[index], away: away[index] }));
+  };
+
   const simulateGameLocally = async () => {
     if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready to simulate.');
     const scheduleId = league.scheduleId || String(league.currentYear || 2025);
     const { homeScore, awayScore } = simulatedScore();
     const nowMs = Date.now();
+    const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
+    const quarters = localQuarterScores(homeScore, awayScore, seed);
+    const liveTimeline = buildLiveTimeline({
+      gameId: game.id,
+      seed,
+      homeTeamId: game.homeTeamId,
+      awayTeamId: game.awayTeamId,
+      homeScore,
+      awayScore,
+      quarters,
+      homePlayers: [{ playerId: `${game.homeTeamId}-local`, name: homeLabel, points: homeScore }],
+      awayPlayers: [{ playerId: `${game.awayTeamId}-local`, name: awayLabel, points: awayScore }],
+    });
+    const arenaTheme = buildArenaTheme({
+      homeAbbr: displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game.homeTeamId),
+      currentYear: league.currentYear,
+      primaryColor: homeTeam?.primaryColor,
+      secondaryColor: homeTeam?.secondaryColor,
+    });
     const nextGames = scheduledGames.map((item) => (
       item.id === game.id
         ? {
@@ -286,6 +336,15 @@ export default function MatchupScreen() {
           status: 'final',
           homeScore,
           awayScore,
+          quarters,
+          liveTimeline,
+          liveMode: {
+            status: 'ready',
+            simulationStartedAtMs: nowMs,
+            simulationEndsAtMs: nowMs + liveTimeline.revealDurationMs,
+            arenaTheme,
+          },
+          arenaTheme,
           winnerTeamId: homeScore > awayScore ? item.homeTeamId : item.awayTeamId,
           loserTeamId: homeScore > awayScore ? item.awayTeamId : item.homeTeamId,
           simulationStartedByUid: uid,
@@ -357,7 +416,7 @@ export default function MatchupScreen() {
       const responseData = response.data as any;
       if (name === 'simulateScheduledGame' && isLeagueAdmin && responseData?.status !== 'final') {
         await simulateGameLocally();
-        router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
+        router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
         return;
       }
       if (name === 'simulateScheduledGame') {
@@ -371,7 +430,7 @@ export default function MatchupScreen() {
       if (name === 'simulateScheduledGame' && isMissingCallable(error) && isLeagueAdmin) {
         try {
           await simulateGameLocally();
-          router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
+          router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
           return;
         } catch (fallbackError: any) {
           Alert.alert('Matchup action failed', fallbackError.message || 'Please try again.');

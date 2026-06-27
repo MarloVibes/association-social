@@ -254,10 +254,11 @@ describe('source safety regressions', () => {
       liveMode.indexOf('const startedAt = replayStartMs > 0'),
     );
     expect(matchup).toContain("const responseData = response.data as any;");
-    expect(matchup).toContain("responseData?.status !== 'final') {\n        await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/game-result'");
+    expect(matchup).toContain("await simulateGameLocally();\n        router.replace({ pathname: '/screens/season/live-mode'");
     expect(matchup).toContain("responseData?.status === 'final' && responseData?.liveTimeline");
     expect(matchup).toContain("name === 'requestMatchup'");
-    expect(matchup).toContain("router.replace({ pathname: '/screens/season/game-result'");
+    expect(matchup).toContain('buildLiveTimeline');
+    expect(matchup).toContain('simulationEndsAtMs: nowMs + liveTimeline.revealDurationMs');
     expect(matchup).toContain('liveTimeline,');
     expect(matchup).toContain('liveMode,');
     expect(matchup).toContain('arenaTheme,');
