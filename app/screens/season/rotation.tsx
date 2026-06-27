@@ -81,6 +81,30 @@ export default function RotationScreen() {
     setRotation(buildCpuRotation(team.players || []));
   };
 
+  const autoApplyRotation = async () => {
+    if (!leagueId || !team) return;
+    const nextRotation = buildCpuRotation(team.players || []);
+    const nextValidation = validateRotation(nextRotation);
+    if (!nextValidation.valid) {
+      Alert.alert('Auto rotation needs work', rotationValidationMessages(nextValidation).join('\n'));
+      return;
+    }
+    setSaving(true);
+    try {
+      setRotation(nextRotation);
+      await updateDoc(doc(db, 'leagues', leagueId, 'teams', team.id), {
+        rotation: nextRotation,
+        rotationUpdatedAt: serverTimestamp(),
+        rotationAutoAppliedAt: serverTimestamp(),
+      });
+      Alert.alert('Auto Applied', 'Minutes, starters, bench order, and closing lineup were saved.');
+    } catch (error: any) {
+      Alert.alert('Auto apply failed', error.message || 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const updateMinutes = (playerIdValue: string, delta: number) => {
     setRotation(current => current.map(slot => (
       slot.playerId === playerIdValue
@@ -147,10 +171,16 @@ export default function RotationScreen() {
                 <Text style={[styles.summaryStatus, { color: validation.valid ? '#00e58b' : '#f4b942' }]}>
                   {validationMessages.join(' / ')}
                 </Text>
-                <TouchableOpacity onPress={autoBuildRotation} style={styles.autoButton}>
-                  <Ionicons color="#00e58b" name="sparkles" size={15} />
-                  <Text style={styles.autoText}>Auto Rotation</Text>
-                </TouchableOpacity>
+                <View style={styles.autoRow}>
+                  <TouchableOpacity onPress={autoBuildRotation} style={styles.autoButton}>
+                    <Ionicons color="#00e58b" name="sparkles" size={15} />
+                    <Text style={styles.autoText}>Auto Minutes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity disabled={saving} onPress={autoApplyRotation} style={styles.autoApplyButton}>
+                    <Ionicons color="#06130c" name="flash" size={15} />
+                    <Text style={styles.autoApplyText}>Auto Apply</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </>
@@ -206,8 +236,11 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
   summaryText: { color: '#fff', fontSize: 17, fontWeight: '900' },
   summaryStatus: { fontSize: 12, fontWeight: '800', marginTop: 4 },
-  autoButton: { marginTop: 12, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#08160f' },
+  autoRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  autoButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#08160f' },
   autoText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
+  autoApplyButton: { flex: 1, minHeight: 38, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#00e58b' },
+  autoApplyText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
   rankBadge: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d1d1d' },
   rankText: { color: '#888', fontWeight: '900' },

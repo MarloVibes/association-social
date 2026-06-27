@@ -76,7 +76,8 @@ export default function MatchupScreen() {
   const [league, setLeague] = useState<any>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
-  const [selectedPresetId, setSelectedPresetId] = useState('balanced');
+  const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
+  const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
   const [awayScoreInput, setAwayScoreInput] = useState('');
   const [homeScoreInput, setHomeScoreInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -184,7 +185,10 @@ export default function MatchupScreen() {
   }, [myTeam?.coachingPresets]);
 
   useEffect(() => {
-    if (myTeam?.defaultCoachingPresetId) setSelectedPresetId(myTeam.defaultCoachingPresetId);
+    if (myTeam?.defaultCoachingPresetId) {
+      setFirstHalfPresetId(myTeam.defaultCoachingPresetId);
+      setSecondHalfPresetId(myTeam.defaultCoachingPresetId);
+    }
   }, [myTeam?.defaultCoachingPresetId]);
 
   useEffect(() => {
@@ -215,6 +219,7 @@ export default function MatchupScreen() {
         liveTimeline,
         liveMode,
         arenaTheme,
+        coachingImpact,
         ...baseGame
       } = item as any;
       void requestedByUid;
@@ -234,6 +239,7 @@ export default function MatchupScreen() {
       void liveTimeline;
       void liveMode;
       void arenaTheme;
+      void coachingImpact;
       return {
         ...baseGame,
         status: 'scheduled',
@@ -375,17 +381,20 @@ export default function MatchupScreen() {
 
   const savePrivatePrep = async () => {
     if (!leagueId || !league || !game || !myTeam) return;
-    const preset = presets.find(item => item.id === selectedPresetId) || presets[0];
+    const firstHalfPreset = presets.find(item => item.id === firstHalfPresetId) || presets[0];
+    const secondHalfPreset = presets.find(item => item.id === secondHalfPresetId) || firstHalfPreset;
     setWorking(true);
     try {
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
       await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'preparation', `${game.id}_${myTeam.id}`), {
         teamId: myTeam.id,
         gameId: game.id,
-        presetSnapshot: buildCoachingSnapshot(preset, myTeam.id, game.id),
+        presetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
+        firstHalfPresetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
+        secondHalfPresetSnapshot: buildCoachingSnapshot(secondHalfPreset, myTeam.id, game.id),
         updatedAt: serverTimestamp(),
       });
-      Alert.alert('Saved', 'Your private game prep has been saved.');
+      Alert.alert('Saved', 'Your first-half and second-half game prep has been saved.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -533,21 +542,40 @@ export default function MatchupScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-                {myTeam && <Text style={styles.sectionTitle}>Private Game Prep</Text>}
+                {myTeam && (
+                  <View style={styles.prepHeader}>
+                    <Text style={styles.sectionTitle}>Private Game Prep</Text>
+                    <Text style={styles.prepHelp}>Pick an opening plan and a halftime adjustment.</Text>
+                  </View>
+                )}
               </>
             )}
           </>
         )}
         renderItem={({ item }) => {
-          const selected = item.id === selectedPresetId;
+          const firstSelected = item.id === firstHalfPresetId;
+          const secondSelected = item.id === secondHalfPresetId;
           return (
-            <TouchableOpacity style={[styles.presetRow, selected && styles.presetRowActive]} onPress={() => setSelectedPresetId(item.id)}>
+            <View style={[styles.presetRow, (firstSelected || secondSelected) && styles.presetRowActive]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.presetName, selected && styles.presetNameActive]}>{item.name}</Text>
+                <Text style={[styles.presetName, (firstSelected || secondSelected) && styles.presetNameActive]}>{item.name}</Text>
                 <Text style={styles.presetMeta}>{item.offense.replace(/_/g, ' ')} · {item.defense.replace(/_/g, ' ')}</Text>
               </View>
-              {selected && <Ionicons color="#00e58b" name="checkmark-circle" size={22} />}
-            </TouchableOpacity>
+              <View style={styles.halfPicker}>
+                <TouchableOpacity
+                  onPress={() => setFirstHalfPresetId(item.id)}
+                  style={[styles.halfButton, firstSelected && styles.halfButtonActive]}
+                >
+                  <Text style={[styles.halfButtonText, firstSelected && styles.halfButtonTextActive]}>1H</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSecondHalfPresetId(item.id)}
+                  style={[styles.halfButton, secondSelected && styles.halfButtonActive]}
+                >
+                  <Text style={[styles.halfButtonText, secondSelected && styles.halfButtonTextActive]}>2H</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           );
         }}
         ListFooterComponent={game && myTeam ? (
@@ -604,12 +632,19 @@ const styles = StyleSheet.create({
   scoreInput: { minHeight: 42, borderRadius: 8, backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a', color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
   scoreSubmit: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
   scoreSubmitText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
+  prepHeader: { marginBottom: 10 },
+  prepHelp: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3 },
   sectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 10 },
   presetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#111', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
   presetRowActive: { backgroundColor: '#0a1d14', borderColor: '#00e58b' },
   presetName: { color: '#fff', fontSize: 14, fontWeight: '900' },
   presetNameActive: { color: '#00e58b' },
   presetMeta: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3, textTransform: 'capitalize' },
+  halfPicker: { flexDirection: 'row', gap: 6 },
+  halfButton: { minWidth: 40, minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center', backgroundColor: '#191919' },
+  halfButtonActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },
+  halfButtonText: { color: '#777', fontSize: 11, fontWeight: '900' },
+  halfButtonTextActive: { color: '#06130c' },
   saveButton: { backgroundColor: '#00e58b', borderRadius: 8, alignItems: 'center', paddingVertical: 14, marginTop: 12 },
   saveText: { color: '#06130c', fontSize: 13, fontWeight: '900' },
 });

@@ -313,6 +313,37 @@ function applyCoachingGradeAdjustmentsForSimulation(player, presetId) {
   };
 }
 
+function blendedCoachingGradeAdjustmentsForPlayer(presetIds, player) {
+  const ids = (presetIds || []).filter(Boolean);
+  if (ids.length === 0) return {};
+  const totals = {};
+  ids.forEach((presetId) => {
+    const adjustments = coachingGradeAdjustmentsForPlayer(presetId, player);
+    Object.entries(adjustments).forEach(([key, delta]) => {
+      totals[key] = (totals[key] || 0) + delta;
+    });
+  });
+  return Object.entries(totals).reduce((result, [key, total]) => {
+    const blended = total / ids.length;
+    const delta = blended > 0 ? Math.ceil(blended) : Math.floor(blended);
+    if (delta !== 0) result[key] = Math.max(-2, Math.min(2, delta));
+    return result;
+  }, {});
+}
+
+function applyCoachingPlanToPlayerForSimulation(player, presetIds) {
+  const adjustments = blendedCoachingGradeAdjustmentsForPlayer(presetIds, player);
+  const hidden = { ...((player && player.hidden) || {}) };
+  Object.entries(adjustments).forEach(([key, delta]) => {
+    hidden[key] = clamp(detailedPlayerSkill({ ...player, hidden }, key, [key]) + delta, 25, 99);
+  });
+  return {
+    ...player,
+    hidden,
+    ...(Object.keys(adjustments).length ? { coachingGradeAdjustments: adjustments } : {}),
+  };
+}
+
 function coachingPresetIdForSide(game, side) {
   const explicit = side === 'home' ? game && game.homeCoachingPresetId : game && game.awayCoachingPresetId;
   if (explicit) return explicit;
@@ -331,12 +362,24 @@ function coachingPresetIdForSide(game, side) {
   return 'balanced';
 }
 
-function applyCoachingToTeamForSimulation(team, presetId) {
+function coachingPlanPresetIdsForSide(game, side) {
+  const firstHalf = side === 'home'
+    ? game && (game.homeFirstHalfCoachingPresetId || game.homeCoachingPresetId)
+    : game && (game.awayFirstHalfCoachingPresetId || game.awayCoachingPresetId);
+  const secondHalf = side === 'home'
+    ? game && (game.homeSecondHalfCoachingPresetId || game.homeCoachingPresetId)
+    : game && (game.awaySecondHalfCoachingPresetId || game.awayCoachingPresetId);
+  const fallback = coachingPresetIdForSide(game, side);
+  return [firstHalf || fallback, secondHalf || firstHalf || fallback].filter(Boolean);
+}
+
+function applyCoachingToTeamForSimulation(team, presetIds) {
   if (!team || !Array.isArray(team.players)) return team;
-  if (!presetId || presetId === 'balanced') return team;
+  const ids = (presetIds || []).filter(Boolean);
+  if (ids.length === 0 || ids.every(id => id === 'balanced')) return team;
   return {
     ...team,
-    players: team.players.map(player => applyCoachingGradeAdjustmentsForSimulation(player, presetId)),
+    players: team.players.map(player => applyCoachingPlanToPlayerForSimulation(player, ids)),
   };
 }
 
@@ -635,10 +678,10 @@ function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
 function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
   assertSimulationRoster(homeTeam, game.homeTeamId);
   assertSimulationRoster(awayTeam, game.awayTeamId);
-  const homePresetId = coachingPresetIdForSide(game, 'home');
-  const awayPresetId = coachingPresetIdForSide(game, 'away');
-  const simulatedHomeTeam = applyCoachingToTeamForSimulation(homeTeam, homePresetId);
-  const simulatedAwayTeam = applyCoachingToTeamForSimulation(awayTeam, awayPresetId);
+  const homePresetIds = coachingPlanPresetIdsForSide(game, 'home');
+  const awayPresetIds = coachingPlanPresetIdsForSide(game, 'away');
+  const simulatedHomeTeam = applyCoachingToTeamForSimulation(homeTeam, homePresetIds);
+  const simulatedAwayTeam = applyCoachingToTeamForSimulation(awayTeam, awayPresetIds);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const homeStrength = teamSimulationStrength(simulatedHomeTeam, game.homeTeamId);
   const awayStrength = teamSimulationStrength(simulatedAwayTeam, game.awayTeamId);
@@ -666,8 +709,12 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
     awayScore,
     boxScore: { home, away },
     coachingImpact: {
-      homePresetId,
-      awayPresetId,
+      homePresetId: homePresetIds[0],
+      awayPresetId: awayPresetIds[0],
+      homeFirstHalfPresetId: homePresetIds[0],
+      homeSecondHalfPresetId: homePresetIds[1],
+      awayFirstHalfPresetId: awayPresetIds[0],
+      awaySecondHalfPresetId: awayPresetIds[1],
     },
     quarters: quarterScores(homeScore, awayScore, seed),
     story: `${winnerLabel} controlled the decisive stretches behind roster strength and rotation production.`,
@@ -822,9 +869,11 @@ function safeCoachingSnapshot(snapshot) {
   };
 }
 
-function gameWithCoachingSnapshots({ game, homeSnapshot, awaySnapshot }) {
+function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot, awaySnapshot, awaySecondHalfSnapshot }) {
   const home = safeCoachingSnapshot(homeSnapshot);
+  const homeSecondHalf = safeCoachingSnapshot(homeSecondHalfSnapshot) || home;
   const away = safeCoachingSnapshot(awaySnapshot);
+  const awaySecondHalf = safeCoachingSnapshot(awaySecondHalfSnapshot) || away;
   return {
     ...game,
     ...(home ? {
@@ -832,12 +881,28 @@ function gameWithCoachingSnapshots({ game, homeSnapshot, awaySnapshot }) {
       homeDefensiveStyle: home.defense,
       homeCoachingPresetName: home.name,
       homeCoachingPresetId: home.presetId,
+      homeFirstHalfCoachingStyle: home.offense,
+      homeFirstHalfDefensiveStyle: home.defense,
+      homeFirstHalfCoachingPresetName: home.name,
+      homeFirstHalfCoachingPresetId: home.presetId,
+      homeSecondHalfCoachingStyle: homeSecondHalf && homeSecondHalf.offense,
+      homeSecondHalfDefensiveStyle: homeSecondHalf && homeSecondHalf.defense,
+      homeSecondHalfCoachingPresetName: homeSecondHalf && homeSecondHalf.name,
+      homeSecondHalfCoachingPresetId: homeSecondHalf && homeSecondHalf.presetId,
     } : {}),
     ...(away ? {
       awayCoachingStyle: away.offense,
       awayDefensiveStyle: away.defense,
       awayCoachingPresetName: away.name,
       awayCoachingPresetId: away.presetId,
+      awayFirstHalfCoachingStyle: away.offense,
+      awayFirstHalfDefensiveStyle: away.defense,
+      awayFirstHalfCoachingPresetName: away.name,
+      awayFirstHalfCoachingPresetId: away.presetId,
+      awaySecondHalfCoachingStyle: awaySecondHalf && awaySecondHalf.offense,
+      awaySecondHalfDefensiveStyle: awaySecondHalf && awaySecondHalf.defense,
+      awaySecondHalfCoachingPresetName: awaySecondHalf && awaySecondHalf.name,
+      awaySecondHalfCoachingPresetId: awaySecondHalf && awaySecondHalf.presetId,
     } : {}),
   };
 }
@@ -1031,6 +1096,7 @@ function resetScheduledGame({ game, uid, nowMs }) {
     quarters,
     liveTimeline,
     liveMode,
+    coachingImpact,
     story,
     ...baseGame
   } = game;
@@ -1057,6 +1123,7 @@ function resetScheduledGame({ game, uid, nowMs }) {
   void quarters;
   void liveTimeline;
   void liveMode;
+  void coachingImpact;
   void story;
   return {
     ...baseGame,
@@ -1459,17 +1526,20 @@ async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamI
   return teamFromParticipantFallback({ teamId, participant, poolPlayers });
 }
 
-async function coachingSnapshotForTeam({ tx, scheduleRef, game, team }) {
-  if (!team || !team.id) return null;
+async function coachingPlanForTeam({ tx, scheduleRef, game, team }) {
+  if (!team || !team.id) return { firstHalf: null, secondHalf: null };
   const prepRef = scheduleRef.collection('preparation').doc(`${game.id}_${team.id}`);
   const prepSnap = await tx.get(prepRef);
   if (prepSnap.exists) {
     const prep = prepSnap.data() || {};
-    return safeCoachingSnapshot(prep.presetSnapshot);
+    const firstHalf = safeCoachingSnapshot(prep.firstHalfPresetSnapshot) || safeCoachingSnapshot(prep.presetSnapshot);
+    const secondHalf = safeCoachingSnapshot(prep.secondHalfPresetSnapshot) || firstHalf;
+    return { firstHalf, secondHalf };
   }
   const presets = Array.isArray(team.coachingPresets) ? team.coachingPresets : [];
   const preset = presets.find(item => item && item.id === team.defaultCoachingPresetId) || null;
-  return safeCoachingSnapshot(preset);
+  const fallback = safeCoachingSnapshot(preset);
+  return { firstHalf: fallback, secondHalf: fallback };
 }
 
 function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
@@ -1534,14 +1604,20 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
       ]);
-      const [homeSnapshot, awaySnapshot] = await Promise.all([
-        coachingSnapshotForTeam({ tx, scheduleRef, game, team: homeTeam }),
-        coachingSnapshotForTeam({ tx, scheduleRef, game, team: awayTeam }),
+      const [homePlan, awayPlan] = await Promise.all([
+        coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),
+        coachingPlanForTeam({ tx, scheduleRef, game, team: awayTeam }),
       ]);
       let result;
       try {
         result = finalScoreGameResult({
-          game: gameWithCoachingSnapshots({ game, homeSnapshot, awaySnapshot }),
+          game: gameWithCoachingSnapshots({
+            game,
+            homeSnapshot: homePlan.firstHalf,
+            homeSecondHalfSnapshot: homePlan.secondHalf,
+            awaySnapshot: awayPlan.firstHalf,
+            awaySecondHalfSnapshot: awayPlan.secondHalf,
+          }),
           uid,
           nowMs: now(),
           homeScore: data.homeScore,
@@ -1600,14 +1676,20 @@ function createSimulateScheduledGameHandler(deps) {
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId }),
       ]);
-      const [homeSnapshot, awaySnapshot] = await Promise.all([
-        coachingSnapshotForTeam({ tx, scheduleRef, game, team: homeTeam }),
-        coachingSnapshotForTeam({ tx, scheduleRef, game, team: awayTeam }),
+      const [homePlan, awayPlan] = await Promise.all([
+        coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),
+        coachingPlanForTeam({ tx, scheduleRef, game, team: awayTeam }),
       ]);
       let result;
       try {
         result = simulateScheduledGameResult({
-          game: gameWithCoachingSnapshots({ game, homeSnapshot, awaySnapshot }),
+          game: gameWithCoachingSnapshots({
+            game,
+            homeSnapshot: homePlan.firstHalf,
+            homeSecondHalfSnapshot: homePlan.secondHalf,
+            awaySnapshot: awayPlan.firstHalf,
+            awaySecondHalfSnapshot: awayPlan.secondHalf,
+          }),
           uid,
           nowMs: now(),
           homeTeam,

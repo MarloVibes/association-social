@@ -565,8 +565,10 @@ describe('matchup request state helpers', () => {
     const game = seedAvailableGame();
     const result = gameWithCoachingSnapshots({
       game,
-      homeSnapshot: { name: 'Pace and Space', offense: 'pace_and_space', defense: 'switch_heavy' },
-      awaySnapshot: { name: 'Grit and Grind', offense: 'post_heavy', defense: 'protect_paint' },
+      homeSnapshot: { name: 'Pace and Space', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'pace_and_space' },
+      homeSecondHalfSnapshot: { name: 'Lob City', offense: 'pick_and_roll', defense: 'drop', presetId: 'lob_city' },
+      awaySnapshot: { name: 'Grit and Grind', offense: 'post_heavy', defense: 'protect_paint', presetId: 'grit_and_grind' },
+      awaySecondHalfSnapshot: { name: 'Zone Trap', offense: 'balanced', defense: 'zone', presetId: 'zone_trap' },
     });
 
     expect(result).toMatchObject({
@@ -576,6 +578,35 @@ describe('matchup request state helpers', () => {
       awayDefensiveStyle: 'protect_paint',
       homeCoachingPresetName: 'Pace and Space',
       awayCoachingPresetName: 'Grit and Grind',
+      homeFirstHalfCoachingPresetId: 'pace_and_space',
+      homeSecondHalfCoachingPresetId: 'lob_city',
+      awayFirstHalfCoachingPresetId: 'grit_and_grind',
+      awaySecondHalfCoachingPresetId: 'zone_trap',
+    });
+  });
+
+  it('tracks first-half and second-half coaching impact for simulated games', () => {
+    const game = gameWithCoachingSnapshots({
+      game: seedAvailableGame(),
+      homeSnapshot: { name: 'Lob City', offense: 'pick_and_roll', defense: 'drop', presetId: 'lob_city' },
+      homeSecondHalfSnapshot: { name: 'Grit and Grind', offense: 'post_heavy', defense: 'protect_paint', presetId: 'grit_and_grind' },
+      awaySnapshot: { name: 'Pace and Space', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'pace_and_space' },
+      awaySecondHalfSnapshot: { name: 'Twin Towers', offense: 'post_heavy', defense: 'protect_paint', presetId: 'twin_towers' },
+    });
+
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: seedRoster('Home', 82),
+      awayTeam: seedRoster('Away', 72),
+    });
+
+    expect(result.coachingImpact).toMatchObject({
+      homeFirstHalfPresetId: 'lob_city',
+      homeSecondHalfPresetId: 'grit_and_grind',
+      awayFirstHalfPresetId: 'pace_and_space',
+      awaySecondHalfPresetId: 'twin_towers',
     });
   });
 
