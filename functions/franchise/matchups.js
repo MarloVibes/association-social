@@ -121,6 +121,225 @@ function detailedPlayerSkill(player, key, fallbacks = []) {
   return 60;
 }
 
+function coachingIdentityText(player) {
+  return [
+    ...(Array.isArray(player && player.labels) ? player.labels : []),
+    player && player.archetype,
+    player && player.playStyle,
+    player && player.playstyle,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function coachingPositionText(player) {
+  return String(player && player.position || '').toUpperCase();
+}
+
+function coachingIsBig(player) {
+  const position = coachingPositionText(player);
+  return position.includes('PF') || position.includes('C') || position.includes('F-C');
+}
+
+function coachingIsGuardOrWing(player) {
+  const position = coachingPositionText(player);
+  return position.includes('PG') || position.includes('SG') || position.includes('SF') || position === 'G' || position === 'F';
+}
+
+function addCoachingAdjustment(adjustments, key, value) {
+  if (!value) return;
+  adjustments[key] = Math.max(-2, Math.min(2, (adjustments[key] || 0) + value));
+}
+
+function coachingGradeAdjustmentsForPlayer(presetId, player) {
+  const id = String(presetId || 'balanced');
+  const text = coachingIdentityText(player);
+  const adjustments = {};
+  if (id === 'balanced') return adjustments;
+
+  if (id === 'pace_and_space' || id === 'seven_seconds') {
+    const fits = detailedPlayerSkill(player, 'threePoint', ['shooting']) >= 75
+      || detailedPlayerSkill(player, 'speed', ['athleticism']) >= 78
+      || playerSkill(player, 'playmaking') >= 78;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'threePoint', 1);
+      addCoachingAdjustment(adjustments, 'speed', id === 'seven_seconds' ? 2 : 1);
+      addCoachingAdjustment(adjustments, 'playmaking', 1);
+      addCoachingAdjustment(adjustments, 'stamina', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'postOffense', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'grit_and_grind') {
+    const fits = playerSkill(player, 'defense') >= 74
+      || playerSkill(player, 'rebounding') >= 76
+      || detailedPlayerSkill(player, 'strength', ['athleticism']) >= 76
+      || text.includes('defen');
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'defense', 2);
+      addCoachingAdjustment(adjustments, 'defenseIq', 1);
+      addCoachingAdjustment(adjustments, 'rebounding', 1);
+      addCoachingAdjustment(adjustments, 'strength', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'defense', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'blitz_pressure' || id === 'zone_trap') {
+    const fits = detailedPlayerSkill(player, 'steals', ['defense']) >= 74
+      || detailedPlayerSkill(player, 'speed', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'perimeterDefense', ['defense']) >= 76
+      || text.includes('defen');
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'steals', 2);
+      addCoachingAdjustment(adjustments, 'perimeterDefense', 1);
+      addCoachingAdjustment(adjustments, 'speed', 1);
+      addCoachingAdjustment(adjustments, 'defenseIq', id === 'zone_trap' ? 2 : 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'defenseIq', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'triangle_control') {
+    const fits = playerSkill(player, 'basketballIq') >= 76
+      || detailedPlayerSkill(player, 'passing', ['playmaking']) >= 76
+      || detailedPlayerSkill(player, 'postOffense', ['shooting']) >= 76
+      || detailedPlayerSkill(player, 'midRange', ['shooting']) >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'basketballIq', 2);
+      addCoachingAdjustment(adjustments, 'passing', 1);
+      addCoachingAdjustment(adjustments, 'midRange', 1);
+      addCoachingAdjustment(adjustments, 'postOffense', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'ballHandle', -1);
+    }
+  }
+
+  if (id === 'lob_city') {
+    const fits = detailedPlayerSkill(player, 'dunking', ['athleticism']) >= 78
+      || detailedPlayerSkill(player, 'athleticism') >= 80
+      || (coachingIsBig(player) && detailedPlayerSkill(player, 'closeShot', ['shooting']) >= 75);
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'dunking', 2);
+      addCoachingAdjustment(adjustments, 'athleticism', 2);
+      addCoachingAdjustment(adjustments, 'closeShot', 1);
+      addCoachingAdjustment(adjustments, 'shooting', 1);
+      addCoachingAdjustment(adjustments, 'playmaking', coachingIsGuardOrWing(player) ? 1 : 0);
+    } else {
+      addCoachingAdjustment(adjustments, 'midRange', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'midrange_clinic') {
+    const fits = detailedPlayerSkill(player, 'midRange', ['shooting']) >= 76
+      || detailedPlayerSkill(player, 'shotIq', ['basketballIq']) >= 76
+      || detailedPlayerSkill(player, 'freeThrow', ['shooting']) >= 78;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'midRange', 2);
+      addCoachingAdjustment(adjustments, 'shotIq', 1);
+      addCoachingAdjustment(adjustments, 'freeThrow', 1);
+      addCoachingAdjustment(adjustments, 'clutch', 1);
+      addCoachingAdjustment(adjustments, 'shooting', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'threePoint', -1);
+    }
+  }
+
+  if (id === 'bully_ball') {
+    const fits = detailedPlayerSkill(player, 'strength', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'postOffense', ['shooting']) >= 76
+      || detailedPlayerSkill(player, 'postDefense', ['defense']) >= 76
+      || text.includes('defen');
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'strength', 2);
+      addCoachingAdjustment(adjustments, 'postOffense', 1);
+      addCoachingAdjustment(adjustments, 'postDefense', 2);
+      addCoachingAdjustment(adjustments, 'rebounding', 1);
+      addCoachingAdjustment(adjustments, 'defense', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'speed', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'small_ball_switch') {
+    const fits = detailedPlayerSkill(player, 'speed', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'perimeterDefense', ['defense']) >= 76
+      || detailedPlayerSkill(player, 'threePoint', ['shooting']) >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'speed', 2);
+      addCoachingAdjustment(adjustments, 'perimeterDefense', 2);
+      addCoachingAdjustment(adjustments, 'threePoint', 1);
+      addCoachingAdjustment(adjustments, 'helpDefense', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'rebounding', -1);
+      addCoachingAdjustment(adjustments, 'postDefense', -1);
+    }
+  }
+
+  if (id === 'twin_towers') {
+    const fits = coachingIsBig(player) && (
+      detailedPlayerSkill(player, 'blocking', ['defense']) >= 74
+      || playerSkill(player, 'rebounding') >= 76
+      || detailedPlayerSkill(player, 'postDefense', ['defense']) >= 76
+    );
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'blocking', 2);
+      addCoachingAdjustment(adjustments, 'postDefense', 2);
+      addCoachingAdjustment(adjustments, 'rebounding', 2);
+      addCoachingAdjustment(adjustments, 'strength', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'speed', -1);
+      addCoachingAdjustment(adjustments, 'threePoint', -1);
+    }
+  }
+
+  return adjustments;
+}
+
+function applyCoachingGradeAdjustmentsForSimulation(player, presetId) {
+  const adjustments = coachingGradeAdjustmentsForPlayer(presetId, player);
+  const hidden = { ...((player && player.hidden) || {}) };
+  Object.entries(adjustments).forEach(([key, delta]) => {
+    hidden[key] = clamp(detailedPlayerSkill({ ...player, hidden }, key, [key]) + delta, 25, 99);
+  });
+  return {
+    ...player,
+    hidden,
+    ...(Object.keys(adjustments).length ? { coachingGradeAdjustments: adjustments } : {}),
+  };
+}
+
+function coachingPresetIdForSide(game, side) {
+  const explicit = side === 'home' ? game && game.homeCoachingPresetId : game && game.awayCoachingPresetId;
+  if (explicit) return explicit;
+  const name = String(side === 'home' ? game && game.homeCoachingPresetName : game && game.awayCoachingPresetName || '').toLowerCase();
+  if (name.includes('lob')) return 'lob_city';
+  if (name.includes('grit')) return 'grit_and_grind';
+  if (name.includes('blitz')) return 'blitz_pressure';
+  if (name.includes('seven')) return 'seven_seconds';
+  if (name.includes('triangle')) return 'triangle_control';
+  if (name.includes('midrange')) return 'midrange_clinic';
+  if (name.includes('bully')) return 'bully_ball';
+  if (name.includes('zone')) return 'zone_trap';
+  if (name.includes('small')) return 'small_ball_switch';
+  if (name.includes('tower')) return 'twin_towers';
+  if (name.includes('pace')) return 'pace_and_space';
+  return 'balanced';
+}
+
+function applyCoachingToTeamForSimulation(team, presetId) {
+  if (!team || !Array.isArray(team.players)) return team;
+  if (!presetId || presetId === 'balanced') return team;
+  return {
+    ...team,
+    players: team.players.map(player => applyCoachingGradeAdjustmentsForSimulation(player, presetId)),
+  };
+}
+
 function positionFactor(player, kind) {
   const position = String(player && player.position || '').toUpperCase();
   const isGuard = position.includes('PG') || position.includes('SG') || position === 'G';
@@ -416,21 +635,25 @@ function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
 function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
   assertSimulationRoster(homeTeam, game.homeTeamId);
   assertSimulationRoster(awayTeam, game.awayTeamId);
+  const homePresetId = coachingPresetIdForSide(game, 'home');
+  const awayPresetId = coachingPresetIdForSide(game, 'away');
+  const simulatedHomeTeam = applyCoachingToTeamForSimulation(homeTeam, homePresetId);
+  const simulatedAwayTeam = applyCoachingToTeamForSimulation(awayTeam, awayPresetId);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
-  const homeStrength = teamSimulationStrength(homeTeam, game.homeTeamId);
-  const awayStrength = teamSimulationStrength(awayTeam, game.awayTeamId);
+  const homeStrength = teamSimulationStrength(simulatedHomeTeam, game.homeTeamId);
+  const awayStrength = teamSimulationStrength(simulatedAwayTeam, game.awayTeamId);
   let homeScore = 75 + Math.round(homeStrength * 0.55) + 3 + (hash(`${seed}:home-roster`) % 8);
   let awayScore = 75 + Math.round(awayStrength * 0.55) + (hash(`${seed}:away-roster`) % 8);
   if (homeScore === awayScore) homeScore += 1;
   const home = buildSimulationTeamBox({
-    team: homeTeam,
+    team: simulatedHomeTeam,
     teamId: game.homeTeamId,
     targetPoints: homeScore,
     seed: `${seed}:home`,
     pointMargin: homeScore - awayScore,
   });
   const away = buildSimulationTeamBox({
-    team: awayTeam,
+    team: simulatedAwayTeam,
     teamId: game.awayTeamId,
     targetPoints: awayScore,
     seed: `${seed}:away`,
@@ -442,6 +665,10 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs }) {
     homeScore,
     awayScore,
     boxScore: { home, away },
+    coachingImpact: {
+      homePresetId,
+      awayPresetId,
+    },
     quarters: quarterScores(homeScore, awayScore, seed),
     story: `${winnerLabel} controlled the decisive stretches behind roster strength and rotation production.`,
   };
@@ -712,6 +939,7 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam }) {
         boxScore: rosterSimulation.boxScore,
         quarters: rosterSimulation.quarters,
         story: rosterSimulation.story,
+        coachingImpact: rosterSimulation.coachingImpact,
       }
       : {
         quarters: quarterScores(homeScore, awayScore, seed),
@@ -1416,6 +1644,8 @@ module.exports = {
   REQUEST_WINDOW_MS,
   PREPARATION_WINDOW_MS,
   acceptMatchupRequest,
+  applyCoachingGradeAdjustmentsForSimulation,
+  coachingGradeAdjustmentsForPlayer,
   createAcceptMatchupHandler,
   createExpireMatchupRequestHandler,
   createReportGameScoreHandler,

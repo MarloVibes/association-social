@@ -5,6 +5,13 @@ export type ProgressionPlayer = {
   playstyle?: string;
   archetype?: string;
   position?: string;
+  reputation?: string;
+  label?: string;
+  tier?: string;
+  labels?: string[];
+  visible?: {
+    reputation?: string;
+  };
   hidden: HiddenIdentityValues;
 };
 
@@ -25,8 +32,11 @@ export type ProgressedPlayer = ProgressionPlayer & {
     seasonDelta: Partial<Record<keyof HiddenIdentityValues, number>>;
     focusAreas: string[];
     seasonDeltaTotal: number;
+    outcome: ProgressionOutcome;
   };
 };
+
+export type ProgressionOutcome = 'Breakout' | 'Improved' | 'Stable' | 'Stagnated' | 'Declining' | 'Sharp Decline';
 
 type SkillKey =
   | 'shooting'
@@ -104,13 +114,16 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function ageCurve(age: number) {
+const PHYSICAL_AGING_KEYS = new Set<SkillKey>(['athleticism', 'speed', 'acceleration', 'dunking', 'stamina']);
+const LATERAL_AGING_KEYS = new Set<SkillKey>(['defense', 'perimeterDefense']);
+
+function ageCurve(age: number, ageResistance = 0) {
   if (age <= 23) return 3;
   if (age <= 26) return 2;
   if (age <= 29) return 1;
   if (age <= 32) return 0;
-  if (age <= 34) return -2;
-  return -4;
+  if (age <= 34) return Math.min(0, -2 + ageResistance);
+  return Math.min(0, -4 + ageResistance * 2);
 }
 
 function roleBonus(minutes: number) {
@@ -143,6 +156,63 @@ function potentialBonus(hidden: HiddenIdentityValues, current: number) {
   return 0;
 }
 
+function accoladeCount(hidden: HiddenIdentityValues, keys: string[]) {
+  const accolades = hidden.accolades || {};
+  return keys.reduce((total, key) => total + Math.max(0, Number(accolades[key] || 0)), 0);
+}
+
+function ageResistanceFor(player: ProgressionPlayer, hidden: HiddenIdentityValues) {
+  const labels = [
+    player.reputation,
+    player.label,
+    player.tier,
+    player.visible?.reputation,
+    ...(player.labels || []),
+  ].join(' ').toLowerCase();
+  const potential = Number(hidden.potential || 0);
+  const peakAwards = accoladeCount(hidden, ['mvp', 'finals_mvp', 'all_nba_1st']);
+  const legacyAwards = accoladeCount(hidden, ['championship', 'all_nba_2nd', 'all_nba_3rd', 'all_star']);
+  if (labels.includes('legend') || labels.includes('generational') || peakAwards >= 2 || legacyAwards >= 8) return 3;
+  if (labels.includes('superstar') || potential >= 95 || peakAwards >= 1) return 2;
+  if (labels.includes('star') || potential >= 90 || legacyAwards >= 3) return 1;
+  return 0;
+}
+
+function applyVeteranAgingGuard(key: SkillKey, age: number, ageResistance: number, delta: number) {
+  if (age < 33) return delta;
+  if (ageResistance >= 2) {
+    if (PHYSICAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 0 : 1);
+    if (LATERAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 1 : 2);
+    return delta;
+  }
+  if (ageResistance === 1) {
+    if (PHYSICAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? -1 : 0);
+    if (LATERAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 0 : 1);
+    return delta;
+  }
+  if (PHYSICAL_AGING_KEYS.has(key) || LATERAL_AGING_KEYS.has(key)) {
+    return Math.min(delta, age >= 35 ? -2 : -1);
+  }
+  return delta;
+}
+
+export function classifyProgressionOutcome(deltas: Partial<Record<keyof HiddenIdentityValues, number>>): ProgressionOutcome {
+  const values = Object.entries(deltas)
+    .filter(([key]) => key !== 'potential')
+    .map(([, value]) => Number(value || 0));
+  if (values.length === 0) return 'Stagnated';
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const positive = values.filter(value => value > 0).length;
+  const negative = values.filter(value => value < 0).length;
+  const average = total / values.length;
+  if (total >= 22 || (positive >= 6 && average >= 2.4)) return 'Breakout';
+  if (total >= 5 || positive >= 4) return 'Improved';
+  if (total <= -22 || (negative >= 6 && average <= -2.4)) return 'Sharp Decline';
+  if (total <= -5 || negative >= 4) return 'Declining';
+  if (Math.abs(total) <= 1 && positive <= 1 && negative <= 1) return 'Stagnated';
+  return 'Stable';
+}
+
 function focusAreasFor(player: ProgressionPlayer, season: ProgressionSeason): SkillKey[] {
   const label = `${player.playstyle || ''} ${player.archetype || ''} ${player.position || ''}`.toLowerCase();
   const focus = new Set<SkillKey>();
@@ -169,7 +239,8 @@ function focusAreasFor(player: ProgressionPlayer, season: ProgressionSeason): Sk
 export function progressPlayer(player: ProgressionPlayer, season: ProgressionSeason, seed: string): ProgressedPlayer {
   const hidden = { ...player.hidden };
   const age = Number(hidden.age || 19);
-  const base = ageCurve(age) + roleBonus(Number(season.minutes || 0));
+  const ageResistance = ageResistanceFor(player, hidden);
+  const base = ageCurve(age, ageResistance) + roleBonus(Number(season.minutes || 0));
   const awardBonus = (season.awards || []).length > 0 ? 1 : 0;
   const injuryPenalty = Math.min(3, Math.floor(Number(season.injuryGamesMissed || 0) / 10));
   const deltas: Partial<Record<keyof HiddenIdentityValues, number>> = {};
@@ -180,9 +251,7 @@ export function progressPlayer(player: ProgressionPlayer, season: ProgressionSea
     const variance = (hash(`${seed}:${player.id}:${key}`) % 5) - 2;
     const focusBonus = focusAreas.includes(key) ? 1 : 0;
     let delta = base + awardBonus + productionBonus(key, season) + potentialBonus(hidden, current) + focusBonus - injuryPenalty + variance;
-    if (age >= 33 && (key === 'athleticism' || key === 'defense')) {
-      delta = Math.min(delta, -1);
-    }
+    delta = applyVeteranAgingGuard(key, age, ageResistance, delta);
     delta = clamp(delta, -8, 8);
     hidden[key] = clamp(Math.round(current + delta), 25, 99);
     deltas[key] = (hidden[key] as number) - current;
@@ -199,6 +268,7 @@ export function progressPlayer(player: ProgressionPlayer, season: ProgressionSea
       seasonDelta: deltas,
       focusAreas,
       seasonDeltaTotal: Object.values(deltas).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0),
+      outcome: classifyProgressionOutcome(deltas),
     },
   };
 }

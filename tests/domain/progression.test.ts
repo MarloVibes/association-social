@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { progressPlayer } from '@/domain/nba/progression';
+import { classifyProgressionOutcome, progressPlayer } from '@/domain/nba/progression';
 
 const player = {
   id: 'player-1',
@@ -18,6 +18,29 @@ const player = {
 };
 
 describe('NBA player progression', () => {
+  it('classifies commissioner-friendly progression outcomes', () => {
+    expect(classifyProgressionOutcome({
+      shooting: 4,
+      playmaking: 4,
+      defense: 4,
+      rebounding: 4,
+      athleticism: 3,
+      basketballIq: 3,
+    })).toBe('Breakout');
+    expect(classifyProgressionOutcome({ shooting: 2, playmaking: 1, defense: 2, rebounding: 1 })).toBe('Improved');
+    expect(classifyProgressionOutcome({ shooting: 0, playmaking: 0, defense: 0 })).toBe('Stagnated');
+    expect(classifyProgressionOutcome({ shooting: 2, playmaking: -2, defense: 1, rebounding: -1 })).toBe('Stable');
+    expect(classifyProgressionOutcome({ shooting: -2, playmaking: -1, defense: -2, rebounding: -1 })).toBe('Declining');
+    expect(classifyProgressionOutcome({
+      shooting: -4,
+      playmaking: -4,
+      defense: -4,
+      rebounding: -4,
+      athleticism: -3,
+      basketballIq: -3,
+    })).toBe('Sharp Decline');
+  });
+
   it('keeps annual grade movement controlled and deterministic', () => {
     const first = progressPlayer(player, {
       minutes: 1800,
@@ -41,6 +64,7 @@ describe('NBA player progression', () => {
     expect(Math.abs((first.hidden.defense as number) - player.hidden.defense)).toBeLessThanOrEqual(8);
     expect(first.hidden.seasonsPlayed).toBe(2);
     expect(first.visible.grades.shooting).toBeTruthy();
+    expect(first.progression.outcome).toBeTruthy();
   });
 
   it('lets aging veterans decline without falling off a cliff', () => {
@@ -55,7 +79,57 @@ describe('NBA player progression', () => {
     expect(veteran.hidden.age).toBe(36);
     expect(veteran.hidden.athleticism as number).toBeLessThanOrEqual(78);
     expect(78 - (veteran.hidden.athleticism as number)).toBeLessThanOrEqual(8);
+    expect(['Declining', 'Sharp Decline', 'Stable']).toContain(veteran.progression.outcome);
   });
+
+  it('protects generational older players from ordinary age collapse', () => {
+    const baseHidden = {
+      shooting: 92,
+      playmaking: 88,
+      defense: 84,
+      rebounding: 70,
+      athleticism: 82,
+      basketballIq: 96,
+      consistency: 94,
+      chemistry: 92,
+      threePoint: 94,
+      shotIq: 97,
+      passing: 90,
+      clutch: 96,
+      speed: 78,
+      acceleration: 77,
+      stamina: 88,
+      age: 36,
+      seasonsPlayed: 16,
+    };
+    const season = {
+      minutes: 2500,
+      points: 1800,
+      assists: 520,
+      rebounds: 430,
+      awards: ['All-NBA'],
+      injuryGamesMissed: 0,
+    };
+    const ordinary = progressPlayer({
+      id: 'aging-great',
+      hidden: { ...baseHidden, potential: 86 },
+    }, season, 'elite-aging-seed');
+    const legend = progressPlayer({
+      id: 'aging-great',
+      reputation: 'Legend',
+      hidden: {
+        ...baseHidden,
+        potential: 97,
+        accolades: { mvp: 3, finals_mvp: 2, championship: 4 },
+      },
+    }, season, 'elite-aging-seed');
+
+    expect(legend.hidden.shooting as number).toBeGreaterThanOrEqual(ordinary.hidden.shooting as number);
+    expect(legend.hidden.basketballIq as number).toBeGreaterThanOrEqual(ordinary.hidden.basketballIq as number);
+    expect(legend.hidden.athleticism as number).toBeLessThanOrEqual(baseHidden.athleticism);
+    expect(legend.progression.outcome).not.toBe('Sharp Decline');
+  });
+
 
   it('uses potential, playstyle, and season performance to boost matching detailed grades', () => {
     const wing = progressPlayer({

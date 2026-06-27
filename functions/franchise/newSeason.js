@@ -271,13 +271,16 @@ function buildNbaGrades(hidden) {
   }, {});
 }
 
-function nbaAgeCurve(age) {
+const NBA_PHYSICAL_AGING_KEYS = new Set(['athleticism', 'speed', 'acceleration', 'dunking', 'stamina']);
+const NBA_LATERAL_AGING_KEYS = new Set(['defense', 'perimeterDefense']);
+
+function nbaAgeCurve(age, ageResistance = 0) {
   if (age <= 23) return 3;
   if (age <= 26) return 2;
   if (age <= 29) return 1;
   if (age <= 32) return 0;
-  if (age <= 34) return -2;
-  return -4;
+  if (age <= 34) return Math.min(0, -2 + ageResistance);
+  return Math.min(0, -4 + ageResistance * 2);
 }
 
 function nbaRoleBonus(minutes) {
@@ -310,6 +313,63 @@ function nbaPotentialBonus(hidden, current) {
   return 0;
 }
 
+function nbaAccoladeCount(hidden, keys) {
+  const accolades = hidden.accolades || {};
+  return keys.reduce((total, key) => total + Math.max(0, Number(accolades[key] || 0)), 0);
+}
+
+function nbaAgeResistanceFor(player, hidden) {
+  const labels = [
+    player.reputation,
+    player.label,
+    player.tier,
+    player.visible && player.visible.reputation,
+    ...(Array.isArray(player.labels) ? player.labels : []),
+  ].join(' ').toLowerCase();
+  const potential = Number(hidden.potential || 0);
+  const peakAwards = nbaAccoladeCount(hidden, ['mvp', 'finals_mvp', 'all_nba_1st']);
+  const legacyAwards = nbaAccoladeCount(hidden, ['championship', 'all_nba_2nd', 'all_nba_3rd', 'all_star']);
+  if (labels.includes('legend') || labels.includes('generational') || peakAwards >= 2 || legacyAwards >= 8) return 3;
+  if (labels.includes('superstar') || potential >= 95 || peakAwards >= 1) return 2;
+  if (labels.includes('star') || potential >= 90 || legacyAwards >= 3) return 1;
+  return 0;
+}
+
+function nbaApplyVeteranAgingGuard(key, age, ageResistance, delta) {
+  if (age < 33) return delta;
+  if (ageResistance >= 2) {
+    if (NBA_PHYSICAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 0 : 1);
+    if (NBA_LATERAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 1 : 2);
+    return delta;
+  }
+  if (ageResistance === 1) {
+    if (NBA_PHYSICAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? -1 : 0);
+    if (NBA_LATERAL_AGING_KEYS.has(key)) return Math.min(delta, age >= 35 ? 0 : 1);
+    return delta;
+  }
+  if (NBA_PHYSICAL_AGING_KEYS.has(key) || NBA_LATERAL_AGING_KEYS.has(key)) {
+    return Math.min(delta, age >= 35 ? -2 : -1);
+  }
+  return delta;
+}
+
+function nbaProgressionOutcome(deltas) {
+  const values = Object.entries(deltas || {})
+    .filter(([key]) => key !== 'potential')
+    .map(([, value]) => Number(value || 0));
+  if (values.length === 0) return 'Stagnated';
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const positive = values.filter(value => value > 0).length;
+  const negative = values.filter(value => value < 0).length;
+  const average = total / values.length;
+  if (total >= 22 || (positive >= 6 && average >= 2.4)) return 'Breakout';
+  if (total >= 5 || positive >= 4) return 'Improved';
+  if (total <= -22 || (negative >= 6 && average <= -2.4)) return 'Sharp Decline';
+  if (total <= -5 || negative >= 4) return 'Declining';
+  if (Math.abs(total) <= 1 && positive <= 1 && negative <= 1) return 'Stagnated';
+  return 'Stable';
+}
+
 function nbaFocusAreas(player, season) {
   const label = `${player.playstyle || ''} ${player.archetype || ''} ${player.position || ''}`.toLowerCase();
   const focus = new Set();
@@ -340,7 +400,8 @@ function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
   const completedSeasonYear = nextYear - 1;
   const hidden = { ...player.hidden };
   const age = Number(hidden.age || player.age || 19);
-  const base = nbaAgeCurve(age) + nbaRoleBonus(Number(season.minutes || season.min || 0));
+  const ageResistance = nbaAgeResistanceFor(player, hidden);
+  const base = nbaAgeCurve(age, ageResistance) + nbaRoleBonus(Number(season.minutes || season.min || 0));
   const awardBonus = Array.isArray(season.awards) && season.awards.length > 0 ? 1 : 0;
   const injuryPenalty = Math.min(3, Math.floor(Number(season.injuryGamesMissed || season.gamesMissed || 0) / 10));
   const deltas = {};
@@ -355,9 +416,7 @@ function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
     }
     const focusBonus = focusAreas.includes(key) ? 1 : 0;
     let delta = base + awardBonus + nbaProductionBonus(key, season) + nbaPotentialBonus(hidden, current) + focusBonus - injuryPenalty + variance;
-    if (age >= 33 && (key === 'athleticism' || key === 'defense')) {
-      delta = Math.min(delta, -1);
-    }
+    delta = nbaApplyVeteranAgingGuard(key, age, ageResistance, delta);
     delta = clamp(delta, -8, 8);
     hidden[key] = clamp(Math.round(current + delta), 25, 99);
     deltas[key] = hidden[key] - current;
@@ -379,6 +438,7 @@ function advanceNbaPlayerForNewSeason(player, nextYear, seed) {
       seasonDelta: deltas,
       focusAreas,
       seasonDeltaTotal: Object.values(deltas).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0),
+      outcome: nbaProgressionOutcome(deltas),
       progressedSeason: completedSeasonYear,
     },
     statHistory: archivePlayerSeasonStats(player, completedSeasonYear),

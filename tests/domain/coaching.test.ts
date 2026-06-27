@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   COACHING_PRESETS,
+  applyCoachingGradeAdjustments,
   buildCoachingSnapshot,
+  getCoachingGradeAdjustments,
   getCoachingPreset,
   validateCoachingPreset,
 } from '@/domain/nba/coaching';
@@ -22,7 +24,18 @@ describe('NBA coaching presets', () => {
         fatigue: 6,
       },
     });
-    expect(COACHING_PRESETS.length).toBeGreaterThanOrEqual(4);
+    expect(COACHING_PRESETS.length).toBeGreaterThanOrEqual(12);
+    expect(COACHING_PRESETS.map(preset => preset.id)).toEqual(expect.arrayContaining([
+      'seven_seconds',
+      'triangle_control',
+      'lob_city',
+      'midrange_clinic',
+      'bully_ball',
+      'zone_trap',
+      'small_ball_switch',
+      'twin_towers',
+    ]));
+    expect(COACHING_PRESETS.every(preset => validateCoachingPreset(preset).valid)).toBe(true);
   });
 
   it('validates named custom presets and rejects invalid modifier ranges', () => {
@@ -71,5 +84,58 @@ describe('NBA coaching presets', () => {
 
     source.modifiers.pace = 10;
     expect(snapshot.modifiers.pace).not.toBe(10);
+  });
+
+  it('boosts players whose grades fit the coaching identity', () => {
+    const blakeLikeFinisher = {
+      position: 'PF',
+      labels: ['star'],
+      hidden: {
+        dunking: 93,
+        athleticism: 91,
+        closeShot: 87,
+        postOffense: 78,
+        threePoint: 57,
+      },
+    };
+
+    const adjustments = getCoachingGradeAdjustments('lob_city', blakeLikeFinisher);
+    const coached = applyCoachingGradeAdjustments(blakeLikeFinisher, 'lob_city');
+
+    expect(adjustments).toMatchObject({
+      dunking: 2,
+      athleticism: 2,
+      closeShot: 1,
+    });
+    expect(coached.hidden).toMatchObject({
+      dunking: 95,
+      athleticism: 93,
+      closeShot: 88,
+    });
+    expect(blakeLikeFinisher.hidden.dunking).toBe(93);
+  });
+
+  it('dings poor fits without changing the saved player card', () => {
+    const lowMotorShooter = {
+      position: 'SG',
+      hidden: {
+        defense: 58,
+        perimeterDefense: 55,
+        defenseIq: 57,
+        strength: 49,
+        rebounding: 45,
+        stamina: 58,
+      },
+    };
+
+    const adjustments = getCoachingGradeAdjustments('grit_and_grind', lowMotorShooter);
+    const coached = applyCoachingGradeAdjustments(lowMotorShooter, 'grit_and_grind');
+
+    expect(adjustments).toMatchObject({
+      defense: -1,
+      stamina: -1,
+    });
+    expect(coached.hidden.defense).toBe(57);
+    expect(lowMotorShooter.hidden.defense).toBe(58);
   });
 });

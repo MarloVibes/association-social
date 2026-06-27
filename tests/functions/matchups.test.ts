@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   acceptMatchupRequest,
+  applyCoachingGradeAdjustmentsForSimulation,
+  coachingGradeAdjustmentsForPlayer,
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
@@ -575,6 +577,35 @@ describe('matchup request state helpers', () => {
       homeCoachingPresetName: 'Pace and Space',
       awayCoachingPresetName: 'Grit and Grind',
     });
+  });
+
+  it('applies coaching fit boosts to simulated player grades only', () => {
+    const blakeLikeFinisher = {
+      player_id: 'blake-like',
+      full_name: 'Explosive Finisher',
+      position: 'PF',
+      hidden: {
+        dunking: 93,
+        athleticism: 91,
+        closeShot: 87,
+        shooting: 78,
+      },
+    };
+
+    const adjustments = coachingGradeAdjustmentsForPlayer('lob_city', blakeLikeFinisher);
+    const coached = applyCoachingGradeAdjustmentsForSimulation(blakeLikeFinisher, 'lob_city');
+
+    expect(adjustments).toMatchObject({
+      dunking: 2,
+      athleticism: 2,
+      closeShot: 1,
+    });
+    expect(coached.hidden).toMatchObject({
+      dunking: 95,
+      athleticism: 93,
+      closeShot: 88,
+    });
+    expect(blakeLikeFinisher.hidden.dunking).toBe(93);
   });
 
   it('builds rollback payloads when commissioners reset finalized games', () => {

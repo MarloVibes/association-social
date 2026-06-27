@@ -237,6 +237,7 @@ describe('new season orchestration', () => {
     expect(player.hidden.seasonsPlayed).toBe(2);
     expect(player.grades.shooting).toBeTruthy();
     expect(player.progression.seasonDelta.shooting).toBeTypeOf('number');
+    expect(player.progression.outcome).toBeTruthy();
     expect(player.statHistory).toMatchObject({
       2024: { points: 800 },
       2025: {
@@ -283,6 +284,47 @@ describe('new season orchestration', () => {
     expect(player.hidden.helpDefense).toBeGreaterThan(82);
     expect(player.progression.focusAreas).toContain('perimeterDefense');
     expect(player.grades.potential).toBeTruthy();
+  });
+
+  it('keeps generational veteran skills resistant to normal age regression at rollover', () => {
+    const base = {
+      id: 'curry',
+      full_name: 'Stephen Curry',
+      age: 36,
+      contractYears: 2,
+      reputation: 'Legend',
+      hidden: {
+        shooting: 96,
+        playmaking: 90,
+        defense: 76,
+        athleticism: 78,
+        basketballIq: 97,
+        threePoint: 99,
+        shotIq: 98,
+        passing: 88,
+        clutch: 98,
+        speed: 77,
+        acceleration: 76,
+        stamina: 88,
+        potential: 97,
+        age: 36,
+        seasonsPlayed: 15,
+        accolades: { mvp: 2, championship: 4, finals_mvp: 1 },
+      },
+      seasonStats: {
+        minutes: 2500,
+        points: 1900,
+        assists: 520,
+        rebounds: 360,
+        awards: ['All-NBA'],
+      },
+    };
+    const player = advanceNbaPlayerForNewSeason(base, 2027, 'curry-aging-seed');
+
+    expect(player.hidden.shooting).toBeGreaterThanOrEqual(base.hidden.shooting);
+    expect(player.hidden.basketballIq).toBeGreaterThanOrEqual(base.hidden.basketballIq);
+    expect(player.hidden.athleticism).toBeLessThanOrEqual(base.hidden.athleticism);
+    expect(player.progression.outcome).not.toBe('Sharp Decline');
   });
 
   it('resets team season condition when advancing rosters', () => {
