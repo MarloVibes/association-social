@@ -77,7 +77,9 @@ const GRADE_VALUES = {
   'C+': 68,
   C: 63,
   'C-': 57,
+  'D+': 55,
   D: 52,
+  'D-': 47,
   F: 42,
 };
 
@@ -104,6 +106,18 @@ function playerSkill(player, key) {
   if (key === 'shooting') return numberFrom(player && (player.ppg || player.points), 60);
   if (key === 'playmaking') return numberFrom(player && (player.apg || player.assists), 60);
   if (key === 'rebounding') return numberFrom(player && (player.rpg || player.rebounds), 60);
+  return 60;
+}
+
+function detailedPlayerSkill(player, key, fallbacks = []) {
+  if (player && player.hidden && typeof player.hidden === 'object' && player.hidden[key] != null) {
+    return numberFrom(player.hidden[key], 60);
+  }
+  if (player && Number.isFinite(player[key])) return numberFrom(player[key], 60);
+  for (const fallback of fallbacks) {
+    const value = playerSkill(player, fallback);
+    if (Number.isFinite(value)) return value;
+  }
   return 60;
 }
 
@@ -228,21 +242,33 @@ function targetTeamAssists(players, minutes, fieldGoalsMade, seed) {
   return clamp(Math.round(fieldGoalsMade * assistedRate), 12, Math.min(34, Math.max(12, fieldGoalsMade)));
 }
 
-function shootingLine(points, variance) {
-  const threePointersMade = Math.min(Math.floor(points / 3), Math.floor((points * (15 + (variance % 18))) / 300));
+function shootingLine(points, variance, player) {
+  const threePoint = detailedPlayerSkill(player, 'threePoint', ['shooting']);
+  const midRange = detailedPlayerSkill(player, 'midRange', ['shooting']);
+  const closeShot = detailedPlayerSkill(player, 'closeShot', ['shooting']);
+  const dunking = detailedPlayerSkill(player, 'dunking', ['athleticism']);
+  const postOffense = detailedPlayerSkill(player, 'postOffense', ['shooting']);
+  const shotIq = detailedPlayerSkill(player, 'shotIq', ['basketballIq']);
+  const freeThrow = detailedPlayerSkill(player, 'freeThrow', ['shooting']);
+  const perimeterProfile = threePoint + shotIq * 0.35;
+  const interiorProfile = closeShot * 0.45 + dunking * 0.35 + postOffense * 0.2;
+  const threeRate = clamp(0.08 + (perimeterProfile - interiorProfile + 40) / 210, 0.05, 0.5);
+  const threePointersMade = Math.min(Math.floor(points / 3), Math.floor(points * threeRate / 3));
   let remaining = points - (threePointersMade * 3);
-  let freeThrowsMade = Math.min(remaining, variance % 5);
+  const rimPressure = clamp((closeShot + dunking + postOffense - threePoint + 70) / 260, 0.08, 0.82);
+  let freeThrowsMade = Math.min(remaining, Math.round(((freeThrow + closeShot + dunking) / 240) * ((variance % 5) + rimPressure * 4)));
   if ((remaining - freeThrowsMade) % 2 !== 0 && freeThrowsMade > 0) freeThrowsMade -= 1;
   remaining -= freeThrowsMade;
   const twoPointersMade = Math.max(0, Math.floor(remaining / 2));
   const fieldGoalsMade = twoPointersMade + threePointersMade;
+  const shotQuality = clamp((shotIq + midRange + freeThrow) / 300, 0.48, 0.9);
   return {
     fieldGoalsMade,
-    fieldGoalsAttempted: fieldGoalsMade + 2 + (variance % 7),
+    fieldGoalsAttempted: fieldGoalsMade + 2 + Math.max(0, Math.round((variance % 7) * (1.04 - shotQuality))),
     threePointersMade,
-    threePointersAttempted: threePointersMade + (variance % 5),
+    threePointersAttempted: threePointersMade + Math.max(1, Math.round(threeRate * 8) + (variance % 3)),
     freeThrowsMade,
-    freeThrowsAttempted: freeThrowsMade + (variance % 3),
+    freeThrowsAttempted: freeThrowsMade + Math.max(0, Math.round(rimPressure * 2) + (variance % 2)),
   };
 }
 
@@ -250,7 +276,7 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
   const players = simPlayersForTeam(team, teamId);
   const minutes = normalizeSimulationMinutes(players);
   const points = distributeTeamPoints(players, minutes, targetPoints, seed);
-  const shootingLines = players.map((player, index) => shootingLine(points[index], hash(`${seed}:${teamId}:${playerKey(player)}:line`)));
+  const shootingLines = players.map((player, index) => shootingLine(points[index], hash(`${seed}:${teamId}:${playerKey(player)}:line`), player));
   const fieldGoalsMade = shootingLines.reduce((total, line) => total + line.fieldGoalsMade, 0);
   const teamRebounds = targetTeamRebounds(players, minutes, seed);
   const teamAssists = targetTeamAssists(players, minutes, fieldGoalsMade, seed);

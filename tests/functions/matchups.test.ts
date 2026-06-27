@@ -282,6 +282,36 @@ describe('matchup request state helpers', () => {
     expect(awayLines.get('Omer Asik').assists).toBeLessThanOrEqual(2);
   });
 
+  it('uses detailed player grades for server-side shot profiles', () => {
+    const game = seedAvailableGame({ homeTeamId: 'SKILL', awayTeamId: 'CPU' });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {
+        players: [
+          { player_id: 'shooter', full_name: 'Pure Shooter', position: 'SG', minutes: 38, hidden: { shooting: 82, playmaking: 70, defense: 72, threePoint: 97, midRange: 84, closeShot: 62, dunking: 42, shotIq: 91 } },
+          { player_id: 'driver', full_name: 'Paint Driver', position: 'SF', minutes: 38, hidden: { shooting: 82, playmaking: 70, defense: 72, threePoint: 55, midRange: 72, closeShot: 94, dunking: 92, postOffense: 82, shotIq: 80 } },
+          { player_id: 'guard', full_name: 'Table Guard', position: 'PG', minutes: 32, hidden: { shooting: 74, playmaking: 88, passing: 91, basketballIq: 86, defense: 70 } },
+          { player_id: 'big', full_name: 'Glass Big', position: 'C', minutes: 30, hidden: { shooting: 62, rebounding: 94, defense: 86, postDefense: 88, blocking: 90 } },
+          { player_id: 'wing', full_name: 'Wing Stopper', position: 'SF', minutes: 28, hidden: { shooting: 70, playmaking: 62, defense: 90, perimeterDefense: 94, defenseIq: 92 } },
+        ],
+      },
+      awayTeam: {
+        players: Array.from({ length: 5 }, (_, index) => ({
+          player_id: `plain-${index}`,
+          full_name: `Plain ${index}`,
+          minutes: 30,
+          hidden: { shooting: 70, playmaking: 68, defense: 68 },
+        })),
+      },
+    });
+
+    const lines = new Map<string, any>(result.boxScore.home.players.map((player: any) => [player.name, player]));
+    expect(lines.get('Pure Shooter').threePointersAttempted).toBeGreaterThan(lines.get('Paint Driver').threePointersAttempted);
+    expect(lines.get('Paint Driver').freeThrowsAttempted).toBeGreaterThanOrEqual(lines.get('Pure Shooter').freeThrowsAttempted);
+  });
+
   it('fills vacant era schedule teams from the era player pool before using placeholders', () => {
     const team = teamFromParticipantFallback({
       teamId: 'SAS_2011',
