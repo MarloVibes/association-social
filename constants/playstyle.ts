@@ -66,6 +66,38 @@ function normalizedManualTier(player: any): Playstyle | null {
   return null;
 }
 
+function numberFrom(player: any, keys: string[]): number {
+  for (const key of keys) {
+    const value = key.split('.').reduce((current, part) => current?.[part], player);
+    if (value !== undefined && value !== null && value !== '') {
+      const parsed = parseFloat(String(value));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function percentFrom(player: any, keys: string[]): number {
+  const value = numberFrom(player, keys);
+  return value > 1 ? value / 100 : value;
+}
+
+function tierFromText(value: unknown): Playstyle | null {
+  const raw = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (raw === 'LEGEND') return { label: 'LEGEND', color: '#ff00ff' };
+  if (raw === 'SUPERSTAR') return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (raw === 'STAR') return { label: 'STAR', color: '#FFA500' };
+  return null;
+}
+
+function trustedReputationTier(player: any): Playstyle | null {
+  return tierFromText(player?.reputation)
+    || tierFromText(player?.visible?.reputation)
+    || tierFromText(player?.visibleIdentity?.reputation)
+    || tierFromText(player?.identity?.reputation)
+    || tierFromText(player?.tier);
+}
+
 function accoladeText(accolade: string): string {
   return String(accolade || '').toLowerCase();
 }
@@ -107,14 +139,20 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   const manualTier = normalizedManualTier(player);
   if (manualTier) return manualTier;
 
+  const reputationTier = trustedReputationTier(player);
+  if (reputationTier) return reputationTier;
+
   const f = paceFactor(eraKey);
   // pace-adjust counting stats; leave shooting rates alone
-  const ppg = (parseFloat(player?.ppg) || 0) * f;
-  const apg = (parseFloat(player?.apg) || 0) * f;
-  const rpg = (parseFloat(player?.rpg) || 0) * f;
-  const spg = (parseFloat(player?.spg) || 0) * f;
-  const bpg = (parseFloat(player?.bpg) || 0) * f;
-  const fg3 = parseFloat(player?.fg3_pct) || 0;
+  const ppg = numberFrom(player, ['ppg', 'pointsPerGame', 'points_per_game', 'pts_per_g', 'career_ppg']) * f;
+  const apg = numberFrom(player, ['apg', 'assistsPerGame', 'assists_per_game', 'ast_per_g', 'career_apg']) * f;
+  const rpg = numberFrom(player, ['rpg', 'reboundsPerGame', 'rebounds_per_game', 'trb_per_g', 'career_rpg']) * f;
+  const spg = numberFrom(player, ['spg', 'stealsPerGame', 'steals_per_game', 'stl_per_g', 'career_spg']) * f;
+  const bpg = numberFrom(player, ['bpg', 'blocksPerGame', 'blocks_per_game', 'blk_per_g', 'career_bpg']) * f;
+  const fg3 = percentFrom(player, ['fg3_pct', 'threePointPct', 'three_point_pct', 'threePointPercentage']);
+  const per = numberFrom(player, ['per', 'playerEfficiencyRating']);
+  const winShares = numberFrom(player, ['winShares', 'win_shares', 'ws']);
+  const overallSignal = numberFrom(player, ['overall', 'overallImpact', 'impactRating', 'hidden.overall', 'attribute_model.overallImpact']);
   const pos = player?.position || '';
   const t3 = threeFloor(eraKey);
   const isShooter = fg3 >= t3 && fg3 <= THREE_NOISE_CAP;
@@ -139,7 +177,7 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   const retiredYear = player?.retirement_year;
   const birthYear = player?.birth_year;
   const seasons = retiredYear && birthYear ? retiredYear - birthYear - 18 : 0;
-  if (seasons >= 15 && (parseFloat(player?.ppg) || 0) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
+  if (seasons >= 15 && numberFrom(player, ['ppg', 'pointsPerGame', 'points_per_game', 'pts_per_g', 'career_ppg']) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
 
   if (
     mvpCount >= 1
@@ -148,13 +186,17 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   ) {
     return { label: 'SUPERSTAR', color: '#FFD700' };
   }
-  if (ppg >= 25) return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (overallSignal >= 94 || per >= 25 || winShares >= 120 || ppg >= 25 || (ppg >= 22 && rpg >= 6 && apg >= 6)) {
+    return { label: 'SUPERSTAR', color: '#FFD700' };
+  }
   if (
     accoladeCount(accolades, text => isAllStar(text) || isAllNbaSecondOrThird(text) || isDpoy(text)) > 0
   ) {
     return { label: 'STAR', color: '#FFA500' };
   }
-  if (ppg >= 20) return { label: 'STAR', color: '#FFA500' };
+  if (overallSignal >= 86 || per >= 19 || winShares >= 45 || ppg >= 20 || (ppg >= 16 && rpg >= 5 && apg >= 5)) {
+    return { label: 'STAR', color: '#FFA500' };
+  }
   if (apg >= 7) return { label: 'PLAYMAKER', color: '#00ccff' };
   if (rpg >= 10) return { label: 'REBOUNDER', color: '#aa44ff' };
   if (bpg >= 2) return { label: 'SHOT BLOCKER', color: '#ff6644' };

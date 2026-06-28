@@ -112,10 +112,6 @@ function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof liv
   }));
 }
 
-function skillChipText(chips: string[] | undefined) {
-  return Array.isArray(chips) && chips.length > 0 ? chips.slice(0, 2).join('  ') : '';
-}
-
 function safeElapsedMs(game: LiveGame | null, nowMs: number, replayStartedAtMs?: string) {
   if (!game?.liveTimeline) return 0;
   const replayStartMs = Number(replayStartedAtMs || 0);
@@ -377,7 +373,7 @@ export default function LiveModeScreen() {
 
             <View style={styles.panel}>
               <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Starter Matchups</Text>
+                <Text style={styles.panelTitle}>Matchups</Text>
                 <TouchableOpacity onPress={() => setShowFullPlayerStats(value => !value)} style={[styles.smallOutlineButton, { borderColor: arenaTheme.secondary }]}>
                   <Text style={[styles.smallOutlineButtonText, { color: arenaTheme.text }]}>{showFullPlayerStats ? 'Hide' : 'See More Player Stats'}</Text>
                 </TouchableOpacity>
@@ -392,13 +388,11 @@ export default function LiveModeScreen() {
                   <View style={styles.matchupPlayer}>
                     <Text numberOfLines={1} style={styles.matchupName}>{row.awayPlayer.name}</Text>
                     <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats)}</Text>
-                    {skillChipText(row.awayPlayer.skillChips) ? <Text numberOfLines={1} style={styles.matchupChip}>{skillChipText(row.awayPlayer.skillChips)}</Text> : null}
                   </View>
                   <Text style={[styles.matchupPosition, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{row.position}</Text>
                   <View style={[styles.matchupPlayer, styles.matchupPlayerRight]}>
                     <Text numberOfLines={1} style={styles.matchupName}>{row.homePlayer.name}</Text>
                     <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats)}</Text>
-                    {skillChipText(row.homePlayer.skillChips) ? <Text numberOfLines={1} style={styles.matchupChip}>{skillChipText(row.homePlayer.skillChips)}</Text> : null}
                   </View>
                 </View>
               ))}
@@ -512,7 +506,6 @@ const styles = StyleSheet.create({
   matchupPlayerRight: { alignItems: 'flex-end' },
   matchupName: { color: '#fff', fontSize: 12, fontWeight: '900' },
   matchupStats: { color: '#bdbdbd', fontSize: 10, fontWeight: '900', marginTop: 3, fontVariant: ['tabular-nums'] },
-  matchupChip: { color: '#777', fontSize: 9, fontWeight: '900', marginTop: 4 },
   matchupPosition: { width: 34, minHeight: 28, borderRadius: 7, borderWidth: 1, textAlign: 'center', textAlignVertical: 'center', fontSize: 10, fontWeight: '900', paddingTop: 6 },
   fullStatsWrap: { gap: 10, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
   statTeamGroup: { gap: 2 },

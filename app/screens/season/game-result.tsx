@@ -20,12 +20,22 @@ type Team = {
 type BoxScorePlayer = {
   playerId?: string;
   name?: string;
+  position?: string;
   minutes?: number;
   points?: number;
   rebounds?: number;
   assists?: number;
   steals?: number;
   blocks?: number;
+  turnovers?: number;
+  fieldGoalsMade?: number;
+  fieldGoalsAttempted?: number;
+  threePointersMade?: number;
+  threePointersAttempted?: number;
+  freeThrowsMade?: number;
+  freeThrowsAttempted?: number;
+  plusMinus?: number;
+  starter?: boolean;
 };
 
 type ResultGame = NbaScheduleGame & {
@@ -76,6 +86,98 @@ function periodLabel(quarter: { quarter?: number }) {
   return quarter.quarter === 5 ? 'OT' : `${period - 4}OT`;
 }
 
+function playerScore(player: BoxScorePlayer) {
+  return Number(player.points || 0) * 2
+    + Number(player.rebounds || 0) * 1.15
+    + Number(player.assists || 0) * 1.35
+    + Number(player.steals || 0) * 2
+    + Number(player.blocks || 0) * 2
+    - Number(player.turnovers || 0) * 0.8;
+}
+
+function formatShot(made?: number, attempted?: number) {
+  return `${stat(made)}/${stat(attempted)}`;
+}
+
+function plusMinusText(value: unknown) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed === 0) return '0';
+  return parsed > 0 ? `+${parsed}` : String(parsed);
+}
+
+function genericStoredStory(story?: string) {
+  const text = String(story || '').toLowerCase();
+  return text.includes('controlled the decisive stretches')
+    || text.includes('balanced rotation production')
+    || text.includes('roster strength and rotation production');
+}
+
+function buildResultStory({
+  game,
+  awayLabel,
+  homeLabel,
+  awayAbbr,
+  homeAbbr,
+  performers,
+}: {
+  game: ResultGame | null;
+  awayLabel: string;
+  homeLabel: string;
+  awayAbbr: string;
+  homeAbbr: string;
+  performers: Array<BoxScorePlayer & { side: string; sideAbbr: string }>;
+}) {
+  if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') {
+    return game?.story || '';
+  }
+  if (game.story && !genericStoredStory(game.story)) return game.story;
+
+  const awayScore = Number(game.awayScore || 0);
+  const homeScore = Number(game.homeScore || 0);
+  const homeWon = homeScore > awayScore;
+  const winner = homeWon ? homeLabel : awayLabel;
+  const loser = homeWon ? awayLabel : homeLabel;
+  const winnerAbbr = homeWon ? homeAbbr : awayAbbr;
+  const loserAbbr = homeWon ? awayAbbr : homeAbbr;
+  const winnerScore = homeWon ? homeScore : awayScore;
+  const loserScore = homeWon ? awayScore : homeScore;
+  const margin = Math.abs(homeScore - awayScore);
+  const opener = game.quarters?.some(quarter => Number(quarter.quarter) > 4)
+    ? `${winner} outlasted ${loser} in overtime, ${winnerScore}-${loserScore}.`
+    : margin <= 3
+      ? `${winner} survived a one-possession finish against ${loser}, ${winnerScore}-${loserScore}.`
+      : margin <= 9
+        ? `${winner} closed a tight game over ${loser}, ${winnerScore}-${loserScore}.`
+        : margin >= 20
+          ? `${winner} ran away from ${loser}, ${winnerScore}-${loserScore}.`
+          : `${winner} handled the key stretches against ${loser}, ${winnerScore}-${loserScore}.`;
+
+  const leader = performers[0];
+  const teammate = leader ? performers.find(player => player.side === leader.side && player.playerId !== leader.playerId) : null;
+  const opponentLeader = leader ? performers.find(player => player.side !== leader.side) : null;
+  const leaderLine = leader
+    ? `${leader.name || 'The top scorer'} set the tone with ${stat(leader.points)} points, ${stat(leader.rebounds)} rebounds, and ${stat(leader.assists)} assists.`
+    : '';
+  const supportLine = teammate
+    ? `${teammate.name || 'A teammate'} added ${stat(teammate.points)}-${stat(teammate.rebounds)}-${stat(teammate.assists)}, while ${opponentLeader?.name || `${loserAbbr}'s top option`} answered with ${stat(opponentLeader?.points)}.`
+    : opponentLeader
+      ? `${opponentLeader.name || `${loserAbbr}'s top option`} kept pressure on with ${stat(opponentLeader.points)} points.`
+      : '';
+  const swing = (game.quarters || [])
+    .map(quarter => {
+      const homeDiff = Number(quarter.home || 0) - Number(quarter.away || 0);
+      const winnerDiff = homeWon ? homeDiff : -homeDiff;
+      return { quarter, winnerDiff };
+    })
+    .filter(item => item.winnerDiff > 0)
+    .sort((left, right) => right.winnerDiff - left.winnerDiff)[0];
+  const swingLine = swing
+    ? `${winnerAbbr}'s biggest push came in ${periodLabel(swing.quarter)}, winning that frame by ${swing.winnerDiff}.`
+    : '';
+
+  return [opener, leaderLine, supportLine, swingLine].filter(Boolean).join(' ');
+}
+
 export default function GameResultScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
   const router = useRouter();
@@ -85,6 +187,7 @@ export default function GameResultScreen() {
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [showFullBoxScore, setShowFullBoxScore] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -141,9 +244,21 @@ export default function GameResultScreen() {
   const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
   const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const topPerformers = useMemo(() => [
-    ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: awayLabel })),
-    ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: homeLabel })),
-  ].sort((a, b) => Number(b.points || 0) - Number(a.points || 0)).slice(0, 6), [awayLabel, game?.boxScore, homeLabel]);
+    ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: awayLabel, sideAbbr: awayAbbr })),
+    ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: homeLabel, sideAbbr: homeAbbr })),
+  ].sort((a, b) => playerScore(b) - playerScore(a)).slice(0, 6), [awayAbbr, awayLabel, game?.boxScore, homeAbbr, homeLabel]);
+  const fullBoxScore = useMemo(() => ({
+    away: [...(game?.boxScore?.away?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
+    home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
+  }), [game?.boxScore]);
+  const resultStory = useMemo(() => buildResultStory({
+    game,
+    awayLabel,
+    homeLabel,
+    awayAbbr,
+    homeAbbr,
+    performers: topPerformers,
+  }), [awayAbbr, awayLabel, game, homeAbbr, homeLabel, topPerformers]);
   const isLeagueAdmin = Boolean(
     uid
     && league
@@ -263,10 +378,10 @@ export default function GameResultScreen() {
               </TouchableOpacity>
             ) : null}
 
-            {game.story ? (
+            {resultStory ? (
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Game Story</Text>
-                <Text style={styles.story}>{game.story}</Text>
+                <Text style={styles.story}>{resultStory}</Text>
               </View>
             ) : null}
 
@@ -313,6 +428,51 @@ export default function GameResultScreen() {
                 <Text style={styles.emptySmall}>Box score details will appear after a simulated result is finalized.</Text>
               )}
             </View>
+
+            <View style={styles.panel}>
+              <View style={styles.panelHeaderRow}>
+                <Text style={styles.panelTitleNoMargin}>Full Box Score</Text>
+                <TouchableOpacity onPress={() => setShowFullBoxScore(value => !value)} style={styles.smallOutlineButton}>
+                  <Text style={styles.smallOutlineButtonText}>{showFullBoxScore ? 'Hide' : 'View All'}</Text>
+                </TouchableOpacity>
+              </View>
+              {showFullBoxScore ? (
+                <View style={styles.boxScoreWrap}>
+                  {([
+                    { key: 'away', label: awayLabel, abbr: awayAbbr, players: fullBoxScore.away },
+                    { key: 'home', label: homeLabel, abbr: homeAbbr, players: fullBoxScore.home },
+                  ] as const).map(group => (
+                    <View key={group.key} style={styles.boxTeamGroup}>
+                      <Text style={styles.boxTeamTitle}>{group.label}</Text>
+                      {group.players.length > 0 ? group.players.map((player, index) => (
+                        <View key={`${group.key}-${player.playerId || player.name || index}`} style={styles.boxPlayerRow}>
+                          <View style={styles.boxPlayerNameBlock}>
+                            <Text numberOfLines={1} style={styles.boxPlayerName}>{player.name || 'Player'}</Text>
+                            <Text style={styles.boxPlayerMeta}>{[player.position, player.starter ? 'Starter' : null].filter(Boolean).join(' · ') || group.abbr}</Text>
+                          </View>
+                          <View style={styles.boxStatsGrid}>
+                            <Text style={styles.boxStatStrong}>{stat(player.points)} PTS</Text>
+                            <Text style={styles.boxStat}>{stat(player.rebounds)} REB</Text>
+                            <Text style={styles.boxStat}>{stat(player.assists)} AST</Text>
+                            <Text style={styles.boxStat}>{stat(player.steals)} STL</Text>
+                            <Text style={styles.boxStat}>{stat(player.blocks)} BLK</Text>
+                            <Text style={styles.boxStat}>FG {formatShot(player.fieldGoalsMade, player.fieldGoalsAttempted)}</Text>
+                            <Text style={styles.boxStat}>3PT {formatShot(player.threePointersMade, player.threePointersAttempted)}</Text>
+                            <Text style={styles.boxStat}>FT {formatShot(player.freeThrowsMade, player.freeThrowsAttempted)}</Text>
+                            <Text style={styles.boxStat}>TO {stat(player.turnovers)}</Text>
+                            <Text style={styles.boxStat}>+/- {plusMinusText(player.plusMinus)}</Text>
+                          </View>
+                        </View>
+                      )) : (
+                        <Text style={styles.emptySmall}>No box score players stored for {group.label}.</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptySmall}>Open the full team-by-team box score for every player line.</Text>
+              )}
+            </View>
           </>
         )}
       </ScrollView>
@@ -345,6 +505,10 @@ const styles = StyleSheet.create({
   resetButtonDisabled: { opacity: 0.6 },
   resetButtonText: { color: '#fff', fontSize: 13, fontWeight: '900' },
   panelTitle: { color: '#fff', fontSize: 16, fontWeight: '900', marginBottom: 10 },
+  panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
+  panelTitleNoMargin: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  smallOutlineButton: { minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2c3d34', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  smallOutlineButtonText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
   story: { color: '#ccc', fontSize: 13, lineHeight: 20 },
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#202020' },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
@@ -356,6 +520,16 @@ const styles = StyleSheet.create({
   playerTeam: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 2 },
   playerStat: { width: 58, color: '#00e58b', fontSize: 12, fontWeight: '900', textAlign: 'right' },
   playerMini: { width: 48, color: '#aaa', fontSize: 11, fontWeight: '800', textAlign: 'right' },
+  boxScoreWrap: { gap: 14 },
+  boxTeamGroup: { gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
+  boxTeamTitle: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  boxPlayerRow: { gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#1b1b1b' },
+  boxPlayerNameBlock: { gap: 2 },
+  boxPlayerName: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  boxPlayerMeta: { color: '#777', fontSize: 10, fontWeight: '800' },
+  boxStatsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  boxStatStrong: { minWidth: 58, color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  boxStat: { minWidth: 54, color: '#c8c8c8', fontSize: 11, fontWeight: '800' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20 },
   emptySmall: { color: '#777', fontSize: 13, lineHeight: 19 },
 });

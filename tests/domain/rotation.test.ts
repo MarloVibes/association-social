@@ -64,6 +64,57 @@ describe('NBA rotations', () => {
     expect(fallback.map(slot => slot.playerId)).toEqual(players.map(player => player.player_id));
   });
 
+  it('prioritizes stars and high-impact creators over low-usage role players', () => {
+    const rotation = buildCpuRotation([
+      {
+        player_id: 'rose',
+        full_name: 'Derrick Rose',
+        position: 'PG',
+        ppg: 25,
+        apg: 7.7,
+        playerLabel: 'SUPERSTAR',
+        hidden: { shooting: 92, playmaking: 94, defense: 70, rebounding: 50, basketballIq: 90, stamina: 94 },
+      },
+      {
+        player_id: 'deng',
+        full_name: 'Luol Deng',
+        position: 'SF',
+        ppg: 17,
+        rpg: 6,
+        hidden: { shooting: 78, playmaking: 64, defense: 86, rebounding: 74, basketballIq: 84, stamina: 92 },
+      },
+      {
+        player_id: 'noah',
+        full_name: 'Joakim Noah',
+        position: 'C',
+        ppg: 11,
+        rpg: 10,
+        hidden: { shooting: 62, playmaking: 72, defense: 91, rebounding: 92, basketballIq: 86, stamina: 88 },
+      },
+      {
+        player_id: 'asik',
+        full_name: 'Omer Asik',
+        position: 'C',
+        ppg: 3,
+        rpg: 5,
+        hidden: { shooting: 45, playmaking: 34, defense: 82, rebounding: 84, basketballIq: 62, stamina: 74 },
+      },
+      ...Array.from({ length: 7 }, (_, index) => ({
+        player_id: `bench-${index}`,
+        full_name: `Bench ${index}`,
+        position: index % 2 ? 'G' : 'F',
+        hidden: { shooting: 66 - index, playmaking: 58, defense: 60, rebounding: 54, basketballIq: 60 },
+      })),
+    ]);
+
+    const minutesByPlayer = new Map(rotation.map(slot => [slot.playerId, slot.minutes]));
+
+    expect(minutesByPlayer.get('rose')).toBeGreaterThan(minutesByPlayer.get('asik') || 0);
+    expect(minutesByPlayer.get('rose')).toBeGreaterThanOrEqual(38);
+    expect(rotation.find(slot => slot.playerId === 'rose')).toMatchObject({ starter: true, closing: true, role: 'primary' });
+    expect(rotation.find(slot => slot.playerId === 'asik')?.minutes).toBeLessThanOrEqual(18);
+  });
+
   it('converts validation codes into readable messages', () => {
     const validation = validateRotation([{ playerId: 'a', minutes: 48 }]);
 

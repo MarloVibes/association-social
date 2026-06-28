@@ -19,4 +19,22 @@ describe('NBA player tier labels', () => {
     expect(getPlaystyle({ ppg: 28 }, 'current').label).toBe('SUPERSTAR');
     expect(getPlaystyle({ ppg: 23 }, 'current').label).toBe('STAR');
   });
+
+  it('does not downgrade all-around era icons to generic role labels', () => {
+    expect(getPlaystyle({
+      full_name: 'LeBron James',
+      pointsPerGame: 27.2,
+      reboundsPerGame: 7.4,
+      assistsPerGame: 7.2,
+      per: 27.6,
+      winShares: 226.6,
+    }, 'lebron').label).toBe('SUPERSTAR');
+  });
+
+  it('uses trusted reputation separately from current team role', () => {
+    expect(getPlaystyle({
+      role: 'starter',
+      visibleIdentity: { reputation: 'Superstar' },
+    }).label).toBe('SUPERSTAR');
+  });
 });

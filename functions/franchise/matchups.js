@@ -65,6 +65,12 @@ function displayScheduleAbbr(value) {
   return eraMatch ? eraMatch[1] : raw;
 }
 
+function periodLabel(period) {
+  const value = Number(period || 0);
+  if (value <= 4) return `Q${value}`;
+  return value === 5 ? 'OT' : `${value - 4}OT`;
+}
+
 function numberFrom(value, fallback = 60) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -729,11 +735,16 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
   const awayScore = liveTimeline.awayScore;
   const { home, away } = boxScoreFromPossessionTimeline(liveTimeline);
   const simulatedWinnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
-  const winnerLabel = displayScheduleAbbr(simulatedWinnerTeamId);
+  const quarters = liveTimeline.periods.map(period => ({
+    quarter: period.period,
+    home: period.home,
+    away: period.away,
+  }));
+  const boxScore = { home, away };
   return {
     homeScore,
     awayScore,
-    boxScore: { home, away },
+    boxScore,
     coachingImpact: {
       homePresetId: homePresetIds[0],
       awayPresetId: awayPresetIds[0],
@@ -742,14 +753,69 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       awayFirstHalfPresetId: awayPresetIds[0],
       awaySecondHalfPresetId: awayPresetIds[1],
     },
-    quarters: liveTimeline.periods.map(period => ({
-      quarter: period.period,
-      home: period.home,
-      away: period.away,
-    })),
+    quarters,
     liveTimeline,
-    story: `${winnerLabel} controlled the decisive stretches behind roster strength and rotation production.`,
+    story: gameStoryFromResult({
+      homeTeamId: game.homeTeamId,
+      awayTeamId: game.awayTeamId,
+      homeScore,
+      awayScore,
+      quarters,
+      boxScore,
+      winnerTeamId: simulatedWinnerTeamId,
+    }),
   };
+}
+
+function playerImpactScore(player) {
+  return Number(player && player.points || 0) * 2
+    + Number(player && player.rebounds || 0) * 1.15
+    + Number(player && player.assists || 0) * 1.35
+    + Number(player && player.steals || 0) * 2
+    + Number(player && player.blocks || 0) * 2
+    - Number(player && player.turnovers || 0) * 0.8;
+}
+
+function gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, quarters, boxScore, winnerTeamId }) {
+  const homeWon = homeScore > awayScore;
+  const winnerId = winnerTeamId || (homeWon ? homeTeamId : awayTeamId);
+  const loserId = winnerId === homeTeamId ? awayTeamId : homeTeamId;
+  const winnerLabel = displayScheduleAbbr(winnerId);
+  const loserLabel = displayScheduleAbbr(loserId);
+  const winnerScore = winnerId === homeTeamId ? homeScore : awayScore;
+  const loserScore = winnerId === homeTeamId ? awayScore : homeScore;
+  const margin = Math.abs(Number(homeScore || 0) - Number(awayScore || 0));
+  const opener = (quarters || []).some(period => Number(period.quarter) > 4)
+    ? `${winnerLabel} outlasted ${loserLabel} in overtime, ${winnerScore}-${loserScore}.`
+    : margin <= 3
+      ? `${winnerLabel} survived a one-possession finish against ${loserLabel}, ${winnerScore}-${loserScore}.`
+      : margin <= 9
+        ? `${winnerLabel} closed a tight game over ${loserLabel}, ${winnerScore}-${loserScore}.`
+        : margin >= 20
+          ? `${winnerLabel} ran away from ${loserLabel}, ${winnerScore}-${loserScore}.`
+          : `${winnerLabel} handled the key stretches against ${loserLabel}, ${winnerScore}-${loserScore}.`;
+  const performers = [
+    ...((boxScore && boxScore.away && boxScore.away.players) || []).map(player => ({ ...player, side: awayTeamId })),
+    ...((boxScore && boxScore.home && boxScore.home.players) || []).map(player => ({ ...player, side: homeTeamId })),
+  ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left));
+  const leader = performers[0];
+  const opponentLeader = leader && performers.find(player => player.side !== leader.side);
+  const leaderLine = leader
+    ? `${leader.name || 'The top performer'} led the night with ${Number(leader.points || 0)} points, ${Number(leader.rebounds || 0)} rebounds, and ${Number(leader.assists || 0)} assists.`
+    : '';
+  const responseLine = opponentLeader
+    ? `${opponentLeader.name || `${loserLabel}'s top option`} kept it competitive with ${Number(opponentLeader.points || 0)} points.`
+    : '';
+  const winnerIsHome = winnerId === homeTeamId;
+  const swing = (quarters || [])
+    .map(period => {
+      const diff = Number(period.home || 0) - Number(period.away || 0);
+      return { period, winnerDiff: winnerIsHome ? diff : -diff };
+    })
+    .filter(item => item.winnerDiff > 0)
+    .sort((left, right) => right.winnerDiff - left.winnerDiff)[0];
+  const swingLine = swing ? `${winnerLabel}'s best stretch came in ${periodLabel(swing.period.quarter)}, winning that period by ${swing.winnerDiff}.` : '';
+  return [opener, leaderLine, responseLine, swingLine].filter(Boolean).join(' ');
 }
 
 function teamStateForFinalization(team) {

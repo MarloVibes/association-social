@@ -400,19 +400,7 @@ function playerSummary(player, teamId) {
     name: player && player.name || 'Player',
     teamId,
     position: player && player.position,
-    skillChips: player ? skillChips(player) : [],
   });
-}
-
-function skillChips(player) {
-  const chips = [
-    { label: '3PT', value: player.threePoint },
-    { label: 'Playmaking', value: player.playmaking },
-    { label: 'Defense', value: player.defense },
-    { label: 'Rebound', value: player.rebounding },
-    { label: 'Scoring', value: player.scoring },
-  ].sort((left, right) => right.value - left.value);
-  return chips.slice(0, 2).map(chip => `${chip.label} ${gradeFor(chip.value)}`);
 }
 
 function totalsFromPossessionEvents(timeline) {
@@ -655,21 +643,6 @@ function periodLabel(period) {
   if (period <= 4) return `Q${period}`;
   const overtimeNumber = period - 4;
   return overtimeNumber === 1 ? 'OT' : `${overtimeNumber}OT`;
-}
-
-function gradeFor(value) {
-  if (value >= 99) return 'S';
-  if (value >= 95) return 'A+';
-  if (value >= 92) return 'A';
-  if (value >= 89) return 'A-';
-  if (value >= 85) return 'B+';
-  if (value >= 80) return 'B';
-  if (value >= 75) return 'B-';
-  if (value >= 70) return 'C+';
-  if (value >= 65) return 'C';
-  if (value >= 60) return 'C-';
-  if (value >= 50) return 'D';
-  return 'F';
 }
 
 function shortName(name) {

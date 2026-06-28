@@ -57,6 +57,10 @@ describe('possession timeline engine', () => {
     expect(timeline.version).toBe(2);
     expect(timeline.events.length).toBeGreaterThan(120);
     expect(timeline.starterMatchups).toHaveLength(5);
+    expect(timeline.starterMatchups.flatMap((row: any) => [
+      ...(row.awayPlayer.skillChips || []),
+      ...(row.homePlayer.skillChips || []),
+    ])).toEqual([]);
     expect(undefinedPaths(timeline)).toEqual([]);
     expect(timeline.events.at(-1)).toMatchObject({ eventType: 'final_buzzer', clockSeconds: 0 });
     expect(timeline.revealDurationMs).toBe(Math.round((48 * 60 / 3) * 1000));

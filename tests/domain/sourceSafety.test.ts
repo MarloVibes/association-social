@@ -247,6 +247,7 @@ describe('source safety regressions', () => {
     expect(result).toContain('Final Score');
     expect(result).toContain('Quarter Scores');
     expect(result).toContain('Top Performers');
+    expect(result).toContain('Full Box Score');
   });
 
   it('exposes NBA live mode without in-game adjustment controls', () => {
@@ -261,7 +262,9 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('arenaTheme');
     expect(liveMode).toContain('currentTimelineEvent');
     expect(liveMode).toContain('livePlayerStatsAt');
-    expect(liveMode).toContain('Starter Matchups');
+    expect(liveMode).toContain('Matchups');
+    expect(liveMode).not.toContain('Starter Matchups');
+    expect(liveMode).not.toContain('matchupChip');
     expect(liveMode).toContain('See More Player Stats');
     expect(liveMode).not.toContain('httpsCallable(functions');
     expect(liveMode).not.toContain('Push Tempo');
@@ -588,7 +591,8 @@ describe('source safety regressions', () => {
 
     expect(liveMode).toContain('starterMatchupsForTimeline');
     expect(liveMode).toContain('See More Player Stats');
-    expect(liveMode).toContain('Starter Matchups');
+    expect(liveMode).toContain('Matchups');
+    expect(liveMode).not.toContain('Starter Matchups');
   });
 
   it('keeps prohibited commercial-game branding out of app source and docs', () => {
