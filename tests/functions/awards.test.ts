@@ -44,6 +44,28 @@ describe('season awards callable helpers', () => {
     expect(records.all_star).toHaveLength(5);
   });
 
+  it('does not save era ids as award team names', () => {
+    const records = buildSeasonAwardRecords({
+      seasonYear: 2026,
+      teams: [
+        {
+          id: 'SAS_2011',
+          abbreviation: 'SAS_2011',
+          name: 'SAS_2011',
+          players: [
+            { id: 'duncan', full_name: 'Tim Duncan', seasonStats: { games: 10, points: 260, assists: 30, rebounds: 120, steals: 10 } },
+          ],
+        },
+      ],
+    });
+
+    expect(records.mvp[0]).toMatchObject({
+      winnerName: 'Tim Duncan',
+      teamName: 'SAS',
+      teamAbbr: 'SAS',
+    });
+  });
+
   it('adds finalized award accolades back onto matching players', () => {
     const teams = applyAwardRecordsToTeams({
       teams: [

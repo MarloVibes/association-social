@@ -54,12 +54,32 @@ function awardPool(teams) {
   }))).filter(item => metric(item.player, 'games') > 0);
 }
 
+function displayTeamAbbr(value) {
+  const key = normalize(value);
+  const eraMatch = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraMatch ? eraMatch[1] : key;
+}
+
+function sameTeam(left, right) {
+  return displayTeamAbbr(left) === displayTeamAbbr(right);
+}
+
+function cleanStoredTeamName(rawName, rawAbbr) {
+  const name = String(rawName || '').trim();
+  if (!name) return null;
+  if (sameTeam(name, rawAbbr) || /^([A-Z]{2,3})_\d{4}$/i.test(name)) {
+    return displayTeamAbbr(name);
+  }
+  return name;
+}
+
 function teamName(team) {
-  return team.name || team.full_name || team.abbreviation || team.abbr || team.teamId || team.id || null;
+  const abbr = teamAbbr(team);
+  return cleanStoredTeamName(team.name || team.full_name || team.abbreviation || team.abbr || team.teamId || team.id, abbr);
 }
 
 function teamAbbr(team) {
-  return team.abbreviation || team.abbr || team.teamId || team.id || null;
+  return displayTeamAbbr(team.abbreviation || team.abbr || team.teamId || team.id);
 }
 
 function recordForPlayer(item, seasonYear, note) {

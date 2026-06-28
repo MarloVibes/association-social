@@ -1,3 +1,5 @@
+import { displayScheduleAbbr, displayScheduleName, scheduleKeyAliases } from './scheduleView';
+
 export type NbaAwardKind = 'championship' | 'player' | 'coach' | 'team';
 
 export type NbaAwardCategory = {
@@ -188,6 +190,70 @@ function normalizeTeamKey(value?: string | null) {
   return String(value || '').trim().toUpperCase();
 }
 
+function awardTeamAliases(value?: string | null) {
+  return scheduleKeyAliases(value).map(normalizeTeamKey).filter(Boolean);
+}
+
+function sameAwardTeam(left?: string | null, right?: string | null) {
+  const leftKeys = awardTeamAliases(left);
+  const rightKeys = new Set(awardTeamAliases(right));
+  return leftKeys.some(key => rightKeys.has(key));
+}
+
+function participantForTeam(team: AwardParticipant, context?: AwardContext) {
+  const teamKeys = [team.scheduleTeamId, team.teamId, team.abbreviation, team.abbr, team.id]
+    .flatMap(awardTeamAliases);
+  return (context?.schedule?.participants || []).find(participant => (
+    [participant.scheduleTeamId, participant.teamId, participant.abbreviation, participant.abbr, participant.id]
+      .some(value => teamKeys.some(key => sameAwardTeam(key, value)))
+  ));
+}
+
+function cleanTeamAbbr(team?: AwardParticipant | null) {
+  if (!team) return null;
+  return displayScheduleAbbr(team.abbreviation || team.abbr || team.teamId || team.scheduleTeamId || team.id);
+}
+
+function cleanTeamName(team?: AwardParticipant | null) {
+  if (!team) return null;
+  return displayScheduleName(team);
+}
+
+function cleanStoredTeamName(rawName?: string | null, rawAbbr?: string | null) {
+  const name = String(rawName || '').trim();
+  if (!name) return null;
+  if (sameAwardTeam(name, rawAbbr) || /^([A-Z]{2,3})_\d{4}$/i.test(name)) {
+    return displayScheduleAbbr(name);
+  }
+  return name;
+}
+
+function resolveAwardTeam(team: AwardParticipant, context?: AwardContext) {
+  const participant = participantForTeam(team, context);
+  const source = participant || team;
+  return {
+    name: cleanTeamName(source),
+    abbr: cleanTeamAbbr(source),
+  };
+}
+
+function resolveRecordTeam(record: NbaAwardRecord, context?: AwardContext): NbaAwardRecord {
+  const lookup = record.teamAbbr || record.teamName || record.winnerName;
+  const participant = (context?.schedule?.participants || []).find(team => (
+    [team.scheduleTeamId, team.teamId, team.abbreviation, team.abbr, team.id]
+      .some(value => sameAwardTeam(value, lookup))
+  ));
+  const abbr = participant ? cleanTeamAbbr(participant) : displayScheduleAbbr(record.teamAbbr || record.teamName || '');
+  const name = participant ? cleanTeamName(participant) : cleanStoredTeamName(record.teamName, record.teamAbbr);
+  const winnerName = record.winnerName && sameAwardTeam(record.winnerName, lookup) ? (name || abbr) : record.winnerName;
+  return {
+    ...record,
+    winnerName: winnerName || record.winnerName,
+    teamName: name || null,
+    teamAbbr: abbr || record.teamAbbr || null,
+  };
+}
+
 function numberFrom(value: unknown) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
@@ -240,11 +306,12 @@ function playerAwardPool(context?: AwardContext) {
 }
 
 function recordForPlayer(item: { player: any; team: AwardParticipant }, note: string, context?: AwardContext): NbaAwardRecord {
+  const team = resolveAwardTeam(item.team, context);
   return {
     season: context?.currentYear || null,
     winnerName: playerName(item.player),
-    teamName: item.team.name || item.team.full_name || item.team.abbreviation || item.team.abbr || item.team.teamId || item.team.scheduleTeamId || null,
-    teamAbbr: item.team.abbreviation || item.team.abbr || item.team.teamId || item.team.scheduleTeamId || item.team.id || null,
+    teamName: team.name || null,
+    teamAbbr: team.abbr || null,
     note,
   };
 }
@@ -322,13 +389,13 @@ function projectedAwardRecords(key: string, context?: AwardContext): NbaAwardRec
 }
 
 function participantMatches(participant: AwardParticipant, teamId: string) {
-  const wanted = normalizeTeamKey(teamId);
   return [
     participant.scheduleTeamId,
     participant.teamId,
     participant.abbreviation,
     participant.abbr,
-  ].some(value => normalizeTeamKey(value) === wanted);
+    participant.id,
+  ].some(value => sameAwardTeam(value, teamId));
 }
 
 function scheduleRecordsForAward(key: string, context?: AwardContext): NbaAwardRecord[] {
@@ -360,8 +427,8 @@ function scheduleRecordsForAward(key: string, context?: AwardContext): NbaAwardR
   const championTeamId = cup?.championTeamId || cup?.winnerTeamId;
   if (!championTeamId) return [];
   const participant = (context?.schedule?.participants || []).find(team => participantMatches(team, championTeamId));
-  const teamName = cup?.championTeamName || participant?.name || participant?.full_name || participant?.abbreviation || championTeamId;
-  const teamAbbr = cup?.championTeamAbbr || participant?.abbreviation || participant?.abbr || championTeamId;
+  const teamName = cup?.championTeamName || cleanTeamName(participant || { abbreviation: championTeamId });
+  const teamAbbr = cup?.championTeamAbbr || cleanTeamAbbr(participant || { abbreviation: championTeamId });
   return [{
     season: cup?.seasonYear || context?.currentYear || null,
     winnerName: teamName,
@@ -379,5 +446,5 @@ export function recordsForAward(league: any, key: string, context?: AwardContext
     ...recordsFromSource(league?.seasonAwards, key),
     ...scheduleRecordsForAward(key, context),
     ...(context?.includeProjected === false ? [] : projectedAwardRecords(key, context)),
-  ];
+  ].map(record => resolveRecordTeam(record, context));
 }

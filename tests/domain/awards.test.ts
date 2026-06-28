@@ -163,4 +163,42 @@ describe('NBA awards trophy case', () => {
     expect(recordsForAward({}, 'all_nba', { teams, currentYear: 2026 })).toHaveLength(5);
     expect(recordsForAward({}, 'mvp', { teams, currentYear: 2026, includeProjected: false })).toEqual([]);
   });
+
+  it('cleans era schedule ids from stored and projected award team labels', () => {
+    const schedule = {
+      participants: [
+        { scheduleTeamId: 'SAS_2011', abbreviation: 'SAS', name: 'San Antonio Spurs' },
+        { scheduleTeamId: 'CHI', abbreviation: 'CHI', name: 'Chicago Bulls' },
+      ],
+    };
+
+    expect(recordsForAward({
+      seasonAwards: {
+        mvp: [{ season: 2026, winnerName: 'Tim Duncan', teamName: 'SAS_2011', teamAbbr: 'SAS_2011' }],
+      },
+    }, 'mvp', { schedule, currentYear: 2026, includeProjected: false })[0]).toMatchObject({
+      winnerName: 'Tim Duncan',
+      teamName: 'San Antonio Spurs',
+      teamAbbr: 'SAS',
+    });
+
+    expect(recordsForAward({}, 'mvp', {
+      schedule,
+      currentYear: 2026,
+      teams: [
+        {
+          id: 'SAS_2011',
+          teamId: 'SAS_2011',
+          abbreviation: 'SAS_2011',
+          players: [
+            { full_name: 'Tim Duncan', seasonStats: { games: 10, points: 260, rebounds: 120, assists: 30 } },
+          ],
+        },
+      ],
+    })[0]).toMatchObject({
+      winnerName: 'Tim Duncan',
+      teamName: 'San Antonio Spurs',
+      teamAbbr: 'SAS',
+    });
+  });
 });
