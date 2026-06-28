@@ -134,6 +134,29 @@ describe('NBA scouting grades', () => {
     expect(cardGrades.ballHandle).toBe('A+');
   });
 
+  it('prefers the canonical rating profile over stale roster hidden grades', () => {
+    const rosterSnapshot = {
+      full_name: 'Era Guard',
+      position: 'PG',
+      hidden: {
+        threePoint: 98,
+        shotIq: 90,
+        consistency: 90,
+        offenseIq: 90,
+      },
+    };
+    const canonicalProfile = {
+      attribute_model: {
+        threePoint: 78,
+        shotIq: 80,
+        consistency: 76,
+        offenseIq: 88,
+      },
+    };
+
+    expect(buildScoutingGrades(rosterSnapshot, canonicalProfile).threePoint).toBe('B-');
+  });
+
   it('separates skill, role, impact, overall, and trade value grades', () => {
     const benchShooter = buildScoutingGrades({
       hidden: {

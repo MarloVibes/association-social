@@ -30,7 +30,9 @@ const {
 const {
   createCompleteOffseasonActionHandler,
   createContractDeadlineWarningsHandler,
+  createInSeasonExtensionInterestScanHandler,
   createInSeasonExtensionInterestHandler,
+  createResolveDueExtensionsHandler,
   createResolveContractRoundHandler,
   createSubmitInSeasonExtensionHandler,
   createSubmitContractOfferHandler,
@@ -377,6 +379,20 @@ exports.submitInSeasonExtension = onCall(createSubmitInSeasonExtensionHandler({
 
 exports.sendContractDeadlineWarnings = onSchedule('every 60 minutes', createContractDeadlineWarningsHandler({
   getFirestore,
+  now: () => Date.now(),
+  FieldValue,
+}));
+
+exports.scanInSeasonExtensionInterest = onSchedule('every 24 hours', createInSeasonExtensionInterestScanHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  now: () => Date.now(),
+  FieldValue,
+}));
+
+exports.resolveDueExtensions = onSchedule('every 10 minutes', createResolveDueExtensionsHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
   now: () => Date.now(),
   FieldValue,
 }));

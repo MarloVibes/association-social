@@ -255,11 +255,47 @@ function contractDeadlineWarning({ gamesPlayed, deadlineGame }) {
   return null;
 }
 
-function gamesPlayedForTeam(teamId, games) {
-  const aliases = new Set([String(teamId)]);
+function teamScheduleAliases(teamInput) {
+  const team = typeof teamInput === 'object' && teamInput ? teamInput : { id: teamInput };
+  const rawAliases = [
+    team.id,
+    team.teamId,
+    team.franchiseId,
+    team.scheduleTeamId,
+    team.abbreviation,
+    team.abbr,
+    team.team,
+    team.code,
+  ].filter(Boolean);
+  const aliases = new Set();
+  rawAliases.forEach(value => {
+    const normalized = String(value).trim();
+    if (!normalized) return;
+    aliases.add(normalized);
+    if (normalized.includes('_')) aliases.add(normalized.split('_')[0]);
+  });
+  return aliases;
+}
+
+function gameSideAliases(game, side) {
+  const prefix = side === 'home' ? 'home' : 'away';
+  return [
+    game[`${prefix}TeamId`],
+    game[`${prefix}Team`],
+    game[`${prefix}TeamAbbr`],
+    game[`${prefix}Abbr`],
+    game[`${prefix}Abbreviation`],
+  ].filter(Boolean).map(value => String(value));
+}
+
+function gamesPlayedForTeam(teamInput, games) {
+  const aliases = teamScheduleAliases(teamInput);
   return (games || []).filter(game => (
     game.status === 'final'
-    && (aliases.has(String(game.homeTeamId)) || aliases.has(String(game.awayTeamId)))
+    && (
+      gameSideAliases(game, 'home').some(alias => aliases.has(alias) || aliases.has(alias.split('_')[0]))
+      || gameSideAliases(game, 'away').some(alias => aliases.has(alias) || aliases.has(alias.split('_')[0]))
+    )
   )).length;
 }
 
@@ -459,7 +495,7 @@ function applyContract(team, offer, stage) {
       contractHistoryEntry,
     ],
   };
-  if (stage === 're_signing') {
+  if (stage === 're_signing' || stage === 'extension') {
     const target = offer.playerId;
     const nextPlayers = players.map(player => (
       playerKey(player) === target ? signedPlayer : player
@@ -928,7 +964,7 @@ function createSubmitInSeasonExtensionHandler({
       const scheduleSnap = await tx.get(leagueRef.collection('schedules').doc(scheduleId));
       if (scheduleSnap.exists) schedule = scheduleSnap.data() || {};
       const deadlinePlan = contractDeadlinePlan({ gamesPerTeam: schedule.gamesPerTeam || league.gamesPerTeam || 82 });
-      const gamesPlayed = gamesPlayedForTeam(teamId, schedule.games || []);
+      const gamesPlayed = gamesPlayedForTeam(team, schedule.games || []);
       if (gamesPlayed >= deadlinePlan.extensionDeadlineGame) {
         throw callableError(HttpsError, 'failed-precondition', 'The extension deadline has passed.');
       }
@@ -976,6 +1012,219 @@ function createSubmitInSeasonExtensionHandler({
   };
 }
 
+function evaluateExtensionOffer({ offer, window }) {
+  const ask = window && window.ask ? window.ask : offer.ask || {};
+  const salary = Number(offer.salary) || 0;
+  const years = Number(offer.years) || 0;
+  const askSalary = Number(ask.salary) || salary;
+  const floor = Number(ask.acceptanceFloor) || Math.round(askSalary * 0.94);
+  const requestedYears = Number(ask.years) || years;
+  const roleMatches = !ask.role || offer.role === ask.role;
+  const salaryRatio = askSalary > 0 ? salary / askSalary : 1;
+  const floorRatio = floor > 0 ? salary / floor : 1;
+  const yearsRatio = requestedYears > 0 ? Math.min(1.12, years / requestedYears) : 1;
+  const roleScore = roleMatches ? 1 : 0.84;
+  const interestScore = clampUnit(Number(window && window.interestScore != null ? window.interestScore : 0.65));
+  const score = Math.round((
+    Math.min(1.12, salaryRatio) * 0.46
+    + Math.min(1.12, floorRatio) * 0.2
+    + yearsRatio * 0.16
+    + roleScore * 0.1
+    + interestScore * 0.08
+  ) * 1000) / 1000;
+  const accepted = salary >= floor && years >= Math.max(1, requestedYears - 1) && score >= 0.9;
+  return {
+    accepted,
+    score,
+    reason: accepted ? 'accepted_terms' : salary < floor ? 'below_asking_floor' : years < Math.max(1, requestedYears - 1) ? 'too_few_years' : 'fit_short',
+  };
+}
+
+function createResolveDueExtensionsHandler({
+  getFirestore,
+  serverTimestamp,
+  FieldValue,
+  now,
+}) {
+  return async function resolveDueExtensions() {
+    const db = getFirestore();
+    const leaguesSnap = await db.collection('leagues').get();
+    let resolved = 0;
+    for (const leagueDoc of leaguesSnap.docs || []) {
+      const league = leagueDoc.data ? leagueDoc.data() || {} : {};
+      if (normalizeSport(league.sport) !== 'nba') continue;
+      const leagueId = leagueDoc.id;
+      const leagueRef = leagueDoc.ref || db.collection('leagues').doc(leagueId);
+      const offersSnap = await leagueRef.collection('extension_offers').get();
+      const dueOffers = (offersSnap.docs || [])
+        .map(doc => ({ id: doc.id, ref: doc.ref, ...(doc.data ? doc.data() || {} : {}) }))
+        .filter(offer => offer.status === 'pending' && Number(offer.responseDueAtMs || 0) <= now());
+      for (const dueOffer of dueOffers) {
+        await db.runTransaction(async tx => {
+          const offerRef = dueOffer.ref || leagueRef.collection('extension_offers').doc(dueOffer.id);
+          const windowRef = leagueRef.collection('extension_windows').doc(dueOffer.id);
+          const teamRef = leagueRef.collection('teams').doc(String(dueOffer.teamId));
+          const [offerSnap, windowSnap, teamSnap] = await Promise.all([
+            tx.get(offerRef),
+            tx.get(windowRef),
+            tx.get(teamRef),
+          ]);
+          if (!offerSnap.exists || !teamSnap.exists) return;
+          const offer = { id: offerSnap.id || dueOffer.id, ...(offerSnap.data() || {}) };
+          if (offer.status !== 'pending' || Number(offer.responseDueAtMs || 0) > now()) return;
+          const window = windowSnap.exists ? windowSnap.data() || {} : {};
+          const team = { id: teamSnap.id || offer.teamId, ...(teamSnap.data() || {}) };
+          const decision = evaluateExtensionOffer({ offer, window, team, league });
+          const resolvedAtIso = new Date(now()).toISOString();
+          const offerUpdate = {
+            status: decision.accepted ? 'accepted' : 'rejected',
+            decisionReason: decision.reason,
+            preferenceScore: decision.score,
+            resolvedAt: serverTimestamp(),
+            resolvedAtIso,
+          };
+          tx.update(offerRef, offerUpdate);
+          tx.set(windowRef, {
+            status: decision.accepted ? 'accepted' : 'declined',
+            decisionReason: decision.reason,
+            preferenceScore: decision.score,
+            resolvedAt: serverTimestamp(),
+            resolvedAtIso,
+          }, { merge: true });
+          if (decision.accepted) {
+            const signedTeam = applyContract(team, {
+              ...offer,
+              resolvedAt: resolvedAtIso,
+              player: (team.players || []).find(player => playerKey(player) === String(offer.playerId)) || offer.player,
+            }, 'extension');
+            tx.update(teamRef, {
+              players: signedTeam.players || [],
+              ...(Array.isArray(signedTeam.rotation) ? { rotation: signedTeam.rotation } : {}),
+            });
+          } else {
+            const nextPlayers = (team.players || []).map(player => (
+              playerKey(player) === String(offer.playerId)
+                ? { ...player, extensionDeclinedSeason: offer.seasonYear || league.currentYear || league.seasonYear }
+                : player
+            ));
+            tx.update(teamRef, { players: nextPlayers });
+          }
+          if (FieldValue && team.gmId) {
+            tx.set(db.collection('users').doc(team.gmId), {
+              notifications: FieldValue.arrayUnion(notificationPayload(
+                `extension-decision:${leagueId}:${offer.id}:${offerUpdate.status}`,
+                decision.accepted ? 'contract_offer_accepted' : 'contract_offer_rejected',
+                leagueId,
+                `${offer.player?.full_name || offer.player?.name || 'A player'} ${decision.accepted ? 'accepted' : 'declined'} your extension offer.`,
+                {
+                  createdAt: resolvedAtIso,
+                  stage: 'extension',
+                  playerId: offer.playerId,
+                  teamId: offer.teamId,
+                },
+              )),
+            }, { merge: true });
+          }
+          resolved += 1;
+        });
+      }
+    }
+    return { resolved };
+  };
+}
+
+function createInSeasonExtensionInterestScanHandler({
+  getFirestore,
+  serverTimestamp,
+  FieldValue,
+  now,
+}) {
+  return async function scanInSeasonExtensionInterest() {
+    const db = getFirestore();
+    const leaguesSnap = await db.collection('leagues').get();
+    let created = 0;
+    for (const leagueDoc of leaguesSnap.docs || []) {
+      const league = leagueDoc.data ? leagueDoc.data() || {} : {};
+      if (normalizeSport(league.sport) !== 'nba') continue;
+      const leagueId = leagueDoc.id;
+      const leagueRef = leagueDoc.ref || db.collection('leagues').doc(leagueId);
+      const scheduleId = league.scheduleId || String(league.currentYear || league.seasonYear || 2025);
+      const [teamsSnap, windowsSnap, scheduleSnap] = await Promise.all([
+        leagueRef.collection('teams').get(),
+        leagueRef.collection('extension_windows').get(),
+        leagueRef.collection('schedules').doc(scheduleId).get(),
+      ]);
+      const schedule = scheduleSnap && scheduleSnap.exists ? scheduleSnap.data() || {} : {};
+      const plan = contractDeadlinePlan({ gamesPerTeam: schedule.gamesPerTeam || league.gamesPerTeam || 82 });
+      const teams = (teamsSnap.docs || []).map(doc => ({ id: doc.id, ref: doc.ref, ...(doc.data ? doc.data() || {} : {}) }));
+      const allPlayers = teams.flatMap(team => team.players || []);
+      const eraSalaryBaseline = deriveEraSalaryBaseline(allPlayers);
+      const openPlayerIdsByTeam = new Map();
+      for (const windowDoc of windowsSnap.docs || []) {
+        const window = windowDoc.data ? windowDoc.data() || {} : {};
+        if (!['open', 'offer_pending'].includes(window.status)) continue;
+        const teamId = String(window.teamId || '');
+        if (!openPlayerIdsByTeam.has(teamId)) openPlayerIdsByTeam.set(teamId, new Set());
+        openPlayerIdsByTeam.get(teamId).add(String(window.playerId || ''));
+      }
+      for (const team of teams) {
+        if (!team.gmId) continue;
+        const gamesPlayed = gamesPlayedForTeam(team, schedule.games || []);
+        if (gamesPlayed >= plan.extensionDeadlineGame) continue;
+        const existingWindowPlayerIds = [...(openPlayerIdsByTeam.get(String(team.id)) || new Set())];
+        const selected = selectInSeasonExtensionCandidates({
+          seasonYear: Number(league.currentYear || league.seasonYear || new Date(now()).getFullYear()),
+          team,
+          existingWindowPlayerIds,
+          seed: `${leagueId}:${team.id}:${Math.floor(now() / (24 * 60 * 60 * 1000))}`,
+          limit: 1,
+        })[0];
+        if (!selected) continue;
+        const seasonYear = Number(league.currentYear || league.seasonYear || new Date(now()).getFullYear());
+        const playerId = playerKey(selected.player);
+        const id = extensionWindowId({ seasonYear, teamId: team.id, playerId });
+        const windowRef = leagueRef.collection('extension_windows').doc(id);
+        if (typeof windowRef.get === 'function') {
+          const existingWindowSnap = await windowRef.get();
+          if (existingWindowSnap.exists) continue;
+        }
+        const createdAt = new Date(now()).toISOString();
+        await windowRef.set({
+          id,
+          leagueId,
+          seasonYear,
+          teamId: String(team.id),
+          playerId,
+          player: selected.player,
+          status: 'open',
+          ask: expectedExtensionAsk({ player: selected.player, team, eraSalaryBaseline }),
+          interestScore: selected.interest.score,
+          interestReason: selected.interest.reason,
+          source: 'scheduled_in_season_interest',
+          version: 1,
+          createdAt: serverTimestamp(),
+          createdAtIso: createdAt,
+        }, { merge: false });
+        await db.collection('users').doc(team.gmId).set({
+          notifications: FieldValue.arrayUnion(notificationPayload(
+            `extension-interest:${leagueId}:${id}`,
+            'extension_interest',
+            leagueId,
+            `${selected.player.full_name || selected.player.name || 'A player'} is open to an extension.`,
+            {
+              createdAt,
+              playerId,
+              teamId: String(team.id),
+            },
+          )),
+        }, { merge: true });
+        created += 1;
+      }
+    }
+    return { created };
+  };
+}
+
 function deadlineMessage(kind, warning, teamName) {
   const label = kind === 'trade' ? 'trade deadline' : 'extension deadline';
   if (warning === '25_games_remaining') return `${teamName} has 25 games left before the ${label}.`;
@@ -1005,10 +1254,11 @@ function createContractDeadlineWarningsHandler({
       const teamsSnap = await leagueRef.collection('teams').get();
       const plan = contractDeadlinePlan({ gamesPerTeam: schedule.gamesPerTeam || league.gamesPerTeam || 82 });
       const sentMap = { ...(schedule.deadlineNotificationsSent || {}) };
+      let leagueSent = 0;
       for (const teamDoc of teamsSnap.docs || []) {
         const team = { id: teamDoc.id, ...(teamDoc.data ? teamDoc.data() || {} : {}) };
         if (!team.gmId) continue;
-        const gamesPlayed = gamesPlayedForTeam(team.id, schedule.games || []);
+        const gamesPlayed = gamesPlayedForTeam(team, schedule.games || []);
         for (const kind of ['extension', 'trade']) {
           const deadlineGame = kind === 'trade' ? plan.tradeDeadlineGame : plan.extensionDeadlineGame;
           const warning = contractDeadlineWarning({ gamesPlayed, deadlineGame });
@@ -1035,9 +1285,10 @@ function createContractDeadlineWarningsHandler({
           });
           sentMap[key] = createdAt;
           sent += 1;
+          leagueSent += 1;
         }
       }
-      if (sent > 0 && typeof scheduleRef.update === 'function') {
+      if (leagueSent > 0 && typeof scheduleRef.update === 'function') {
         await scheduleRef.update({ deadlineNotificationsSent: sentMap });
       }
     }
@@ -1470,7 +1721,9 @@ module.exports = {
   cpuContractDecisionId,
   createCompleteOffseasonActionHandler,
   createContractDeadlineWarningsHandler,
+  createInSeasonExtensionInterestScanHandler,
   createInSeasonExtensionInterestHandler,
+  createResolveDueExtensionsHandler,
   createResolveContractRoundHandler,
   createSubmitInSeasonExtensionHandler,
   createSubmitContractOfferHandler,

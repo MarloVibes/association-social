@@ -8,7 +8,9 @@ const {
   buildCpuContractOffers,
   contractDeadlineWarning,
   createContractDeadlineWarningsHandler,
+  createInSeasonExtensionInterestScanHandler,
   createInSeasonExtensionInterestHandler,
+  createResolveDueExtensionsHandler,
   createSubmitInSeasonExtensionHandler,
   createSubmitContractOfferHandler,
   deriveCpuNeeds,
@@ -228,6 +230,240 @@ describe('contract orchestration', () => {
         status: 'pending',
         responseDueAt: '2027-01-01T14:00:00.000Z',
       }),
+    });
+  });
+
+  it('resolves due extension offers and updates the roster contract after the two-hour response clock', async () => {
+    const now = Date.parse('2027-01-01T14:01:00.000Z');
+    const offerRef = { kind: 'extension_offers-doc', id: '2027__CHI__rose' };
+    const windowRef = { kind: 'extension_windows-doc', id: '2027__CHI__rose' };
+    const teamRef = { kind: 'teams-doc', id: 'CHI' };
+    const updates: any[] = [];
+    const sets: any[] = [];
+    const leagueRef: any = {
+      collection: (name: string) => ({
+        get: vi.fn(async () => name === 'extension_offers'
+          ? {
+              docs: [{
+                id: '2027__CHI__rose',
+                ref: offerRef,
+                data: () => ({
+                  id: '2027__CHI__rose',
+                  status: 'pending',
+                  teamId: 'CHI',
+                  playerId: 'rose',
+                  player: { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000 },
+                  salary: 16_000_000,
+                  years: 5,
+                  role: 'franchise',
+                  seasonYear: 2027,
+                  responseDueAtMs: Date.parse('2027-01-01T14:00:00.000Z'),
+                }),
+              }],
+            }
+          : { docs: [] }),
+        doc: (id: string) => {
+          if (name === 'extension_offers') return offerRef;
+          if (name === 'extension_windows') return windowRef;
+          if (name === 'teams') return teamRef;
+          return { kind: `${name}-doc`, id };
+        },
+      }),
+    };
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === offerRef) {
+          return {
+            exists: true,
+            id: '2027__CHI__rose',
+            data: () => ({
+              id: '2027__CHI__rose',
+              status: 'pending',
+              teamId: 'CHI',
+              playerId: 'rose',
+              player: { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000 },
+              salary: 16_000_000,
+              years: 5,
+              role: 'franchise',
+              seasonYear: 2027,
+              responseDueAtMs: Date.parse('2027-01-01T14:00:00.000Z'),
+            }),
+          };
+        }
+        if (ref === windowRef) {
+          return {
+            exists: true,
+            data: () => ({
+              ask: { salary: 16_000_000, years: 5, role: 'franchise', acceptanceFloor: 14_000_000 },
+              interestScore: 0.9,
+            }),
+          };
+        }
+        if (ref === teamRef) {
+          return {
+            exists: true,
+            id: 'CHI',
+            data: () => ({
+              gmId: 'gm-1',
+              players: [
+                { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000 },
+              ],
+            }),
+          };
+        }
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn((ref, data) => updates.push({ ref, data })),
+      set: vi.fn((ref, data) => sets.push({ ref, data })),
+    };
+    const db = {
+      collection: (name: string) => name === 'leagues'
+        ? {
+            get: vi.fn(async () => ({
+              docs: [{ id: 'league-1', ref: leagueRef, data: () => ({ sport: 'nba', currentYear: 2027 }) }],
+            })),
+            doc: () => leagueRef,
+          }
+        : { doc: (id: string) => ({ kind: `${name}-doc`, id }) },
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createResolveDueExtensionsHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      now: () => now,
+      FieldValue: { arrayUnion: (...values: any[]) => ({ op: 'arrayUnion', values }) },
+    });
+
+    const result = await handler();
+
+    expect(result.resolved).toBe(1);
+    expect(updates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        ref: offerRef,
+        data: expect.objectContaining({ status: 'accepted' }),
+      }),
+      expect.objectContaining({
+        ref: teamRef,
+        data: expect.objectContaining({
+          players: [expect.objectContaining({
+            player_id: 'rose',
+            contractYears: 5,
+            salary: 16_000_000,
+            contract: expect.objectContaining({ stage: 'extension' }),
+          })],
+        }),
+      }),
+    ]));
+    expect(sets).toContainEqual({
+      ref: { kind: 'users-doc', id: 'gm-1' },
+      data: {
+        notifications: {
+          op: 'arrayUnion',
+          values: [expect.objectContaining({ type: 'contract_offer_accepted', stage: 'extension' })],
+        },
+      },
+    });
+  });
+
+  it('creates scheduled in-season extension windows for interested expiring players', async () => {
+    const now = Date.parse('2027-01-02T12:00:00.000Z');
+    const windowWrites: any[] = [];
+    const userWrites: any[] = [];
+    const scheduleRef: any = {
+      get: vi.fn(async () => ({
+        exists: true,
+        data: () => ({
+          gamesPerTeam: 82,
+          games: Array.from({ length: 12 }, (_, index) => ({
+            id: `g-${index}`,
+            status: 'final',
+            homeTeamId: 'CHI_2011',
+            awayTeamId: 'BOS_2011',
+          })),
+        }),
+      })),
+    };
+    const leagueRef: any = {
+      collection: (name: string) => {
+        if (name === 'teams') {
+          return {
+            get: vi.fn(async () => ({
+              docs: [{
+                id: 'CHI',
+                ref: { kind: 'team-doc', id: 'CHI' },
+                data: () => ({
+                  gmId: 'gm-1',
+                  name: 'Chicago Bulls',
+                  abbreviation: 'CHI',
+                  contender: 0.9,
+                  reputation: 0.9,
+                  players: [
+                    { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000, overall: 92, label: 'Superstar', loyalty: 0.9, morale: 0.9 },
+                  ],
+                }),
+              }],
+            })),
+          };
+        }
+        if (name === 'extension_windows') {
+          return {
+            get: vi.fn(async () => ({ docs: [] })),
+            doc: (id: string) => ({
+              kind: 'extension-window-doc',
+              id,
+              set: vi.fn((data: any) => windowWrites.push({ id, data })),
+            }),
+          };
+        }
+        if (name === 'schedules') return { doc: () => scheduleRef };
+        return { get: vi.fn(async () => ({ docs: [] })) };
+      },
+    };
+    const db = {
+      collection: (name: string) => {
+        if (name === 'leagues') {
+          return {
+            get: vi.fn(async () => ({
+              docs: [{ id: 'league-1', ref: leagueRef, data: () => ({ sport: 'nba', currentYear: 2027, scheduleId: '2027' }) }],
+            })),
+          };
+        }
+        if (name === 'users') {
+          return {
+            doc: (id: string) => ({
+              set: vi.fn((data: any) => userWrites.push({ id, data })),
+            }),
+          };
+        }
+        return { doc: (id: string) => ({ kind: `${name}-doc`, id }) };
+      },
+    };
+    const handler = createInSeasonExtensionInterestScanHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      now: () => now,
+      FieldValue: { arrayUnion: (...values: any[]) => ({ op: 'arrayUnion', values }) },
+    });
+
+    const result = await handler();
+
+    expect(result.created).toBe(1);
+    expect(windowWrites[0]).toMatchObject({
+      id: '2027__CHI__rose',
+      data: expect.objectContaining({
+        playerId: 'rose',
+        status: 'open',
+        source: 'scheduled_in_season_interest',
+      }),
+    });
+    expect(userWrites[0]).toMatchObject({
+      id: 'gm-1',
+      data: {
+        notifications: {
+          op: 'arrayUnion',
+          values: [expect.objectContaining({ type: 'extension_interest', playerId: 'rose' })],
+        },
+      },
     });
   });
 
