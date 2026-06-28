@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -16,7 +16,13 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
-import { MLB_DRAFT_POSITIONS, NBA_DRAFT_POSITIONS, NFL_DRAFT_POSITIONS } from '@/domain/draft/generateClass';
+import {
+  FIRST_GENERATED_NBA_DRAFT_YEAR,
+  MLB_DRAFT_POSITIONS,
+  NBA_DRAFT_POSITIONS,
+  NFL_DRAFT_POSITIONS,
+  draftClassPlayersForDisplay,
+} from '@/domain/draft/generateClass';
 import type { OffseasonState } from '@/domain/offseason/types';
 
 type League = {
@@ -29,12 +35,14 @@ type League = {
 };
 
 type Prospect = {
-  id: string;
+  id?: string;
   player_id?: string;
-  full_name: string;
+  full_name?: string;
   name?: string;
-  position: string;
-  projectedRound: number;
+  position?: string;
+  projectedRound?: number;
+  draft_round?: number;
+  draft_pick?: number;
   archetype?: string;
   age?: number;
   potential?: number;
@@ -47,14 +55,14 @@ type DraftClass = {
   version?: number;
 };
 
-const FIRST_DYNAMIC_NBA_DRAFT_YEAR = 2026;
-
 export default function DraftClassScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
   const uid = auth.currentUser?.uid;
   const [league, setLeague] = useState<League | null>(null);
   const [draftClass, setDraftClass] = useState<DraftClass | null>(null);
+  const [vaultDraftClass, setVaultDraftClass] = useState<DraftClass | null>(null);
+  const [teamCount, setTeamCount] = useState(30);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [editing, setEditing] = useState<Prospect | null>(null);
@@ -65,7 +73,7 @@ export default function DraftClassScreen() {
 
   useEffect(() => {
     if (!leagueId) return;
-    return onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
+    const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (!snapshot.exists()) {
         router.back();
         return;
@@ -73,16 +81,31 @@ export default function DraftClassScreen() {
       setLeague(snapshot.data() as League);
       setLoading(false);
     });
+    const unsubscribeTeams = onSnapshot(collection(db, 'leagues', leagueId, 'teams'), snapshot => {
+      setTeamCount(Math.max(1, snapshot.size || 30));
+    });
+    return () => {
+      unsubscribeLeague();
+      unsubscribeTeams();
+    };
   }, [leagueId, router]);
 
   const seasonYear = league?.offseason?.seasonYear
     || (league?.sport === 'nba' && typeof league?.currentYear === 'number' ? league.currentYear + 1 : undefined);
   useEffect(() => {
     if (!leagueId || !seasonYear) return;
-    return onSnapshot(
+    const unsubscribeLeagueClass = onSnapshot(
       doc(db, 'leagues', leagueId, 'draft_classes', String(seasonYear)),
       snapshot => setDraftClass(snapshot.exists() ? snapshot.data() as DraftClass : null),
     );
+    const unsubscribeVaultClass = onSnapshot(
+      doc(db, 'draft_classes', String(seasonYear)),
+      snapshot => setVaultDraftClass(snapshot.exists() ? snapshot.data() as DraftClass : null),
+    );
+    return () => {
+      unsubscribeLeagueClass();
+      unsubscribeVaultClass();
+    };
   }, [leagueId, seasonYear]);
 
   const isCommissioner = Boolean(
@@ -96,13 +119,22 @@ export default function DraftClassScreen() {
     league?.sport === 'nba'
     && !league?.offseason
     && typeof league?.currentYear === 'number'
-    && league.currentYear < FIRST_DYNAMIC_NBA_DRAFT_YEAR
+    && league.currentYear + 1 < FIRST_GENERATED_NBA_DRAFT_YEAR
+  );
+  const hasSavedDraftSource = Boolean((draftClass?.players?.length || 0) + (vaultDraftClass?.players?.length || 0));
+  const nbaLockedDraftYear = Boolean(
+    league?.sport === 'nba'
+    && typeof seasonYear === 'number'
+    && seasonYear < FIRST_GENERATED_NBA_DRAFT_YEAR
+    && !hasSavedDraftSource
   );
   const editable = isCommissioner
     && (
       league?.offseason?.stage === 'draft_class_review'
       || (league?.sport === 'nba' && !league?.offseason && !historicalNbaPreOffseason)
     )
+    && !nbaLockedDraftYear
+    && !vaultDraftClass
     && draftClass?.published !== true;
   const expectedVersion = league?.offseason?.version ?? 0;
   const positions = league?.sport === 'nba'
@@ -110,13 +142,23 @@ export default function DraftClassScreen() {
     : league?.sport === 'mlb'
       ? MLB_DRAFT_POSITIONS
       : NFL_DRAFT_POSITIONS;
+  const sourceDraftClass = draftClass || vaultDraftClass;
+  const draftDisplay = useMemo(() => draftClassPlayersForDisplay({
+    players: sourceDraftClass?.players || [],
+    sport: league?.sport || 'nba',
+    seasonYear,
+    teamCount,
+    seed: `${leagueId || 'league'}:${league?.name || 'draft'}`,
+    lockedHistoricalNba: historicalNbaPreOffseason || nbaLockedDraftYear,
+  }), [sourceDraftClass?.players, league?.sport, league?.name, seasonYear, teamCount, leagueId, historicalNbaPreOffseason, nbaLockedDraftYear]);
   const players = useMemo(
-    () => [...(draftClass?.players || [])].sort((left, right) => (
-      left.projectedRound - right.projectedRound
-      || left.full_name.localeCompare(right.full_name)
+    () => [...draftDisplay.players].sort((left: any, right: any) => (
+      Number(left.projectedRound || left.draft_round || 99) - Number(right.projectedRound || right.draft_round || 99)
+      || String(left.full_name || left.name || '').localeCompare(String(right.full_name || right.name || ''))
     )),
-    [draftClass?.players],
+    [draftDisplay.players],
   );
+  const canEditRows = editable && !draftDisplay.generatedPreview && Boolean(draftClass);
 
   const mutate = async (data: Record<string, unknown>) => {
     if (!leagueId || !league) return;
@@ -163,9 +205,9 @@ export default function DraftClassScreen() {
   const openEdit = (prospect: Prospect) => {
     setAdding(false);
     setEditing(prospect);
-    setName(prospect.full_name);
-    setPosition(prospect.position);
-    setRound(String(prospect.projectedRound));
+    setName(prospect.full_name || prospect.name || '');
+    setPosition(prospect.position || '');
+    setRound(String(prospect.projectedRound || prospect.draft_round || 1));
   };
 
   const saveProspect = async () => {
@@ -198,7 +240,7 @@ export default function DraftClassScreen() {
     } else if (editing) {
       await mutate({
         action: 'edit',
-        prospectId: editing.id,
+        prospectId: editing.id || editing.player_id,
         patch: {
           full_name: name.trim(),
           name: name.trim(),
@@ -212,12 +254,12 @@ export default function DraftClassScreen() {
   };
 
   const removeProspect = (prospect: Prospect) => {
-    Alert.alert('Remove prospect?', prospect.full_name, [
+    Alert.alert('Remove prospect?', prospect.full_name || prospect.name || 'Prospect', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => mutate({ action: 'remove', prospectId: prospect.id }),
+        onPress: () => mutate({ action: 'remove', prospectId: prospect.id || prospect.player_id }),
       },
     ]);
   };
@@ -278,9 +320,15 @@ export default function DraftClassScreen() {
             <Text style={styles.summaryMeta}>
               {draftClass?.published
                 ? 'Published and locked'
-                : historicalNbaPreOffseason
+                : draftDisplay.locked
                   ? 'Historical class locked'
-                  : league?.offseason ? 'Commissioner review' : 'Pre-offseason review'}
+                  : draftDisplay.generatedPreview
+                    ? 'Preview class - generate to save'
+                    : draftClass
+                      ? 'League class'
+                      : vaultDraftClass
+                        ? 'Era source class'
+                        : league?.offseason ? 'Commissioner review' : 'Pre-offseason review'}
             </Text>
           </View>
           {draftClass?.published && <Ionicons color="#00e58b" name="lock-closed" size={21} />}
@@ -304,37 +352,44 @@ export default function DraftClassScreen() {
         )}
 
         {players.length === 0 ? (
-          <Text style={styles.empty}>No draft class has been generated yet.</Text>
-        ) : players.map(prospect => (
-          <View key={prospect.id} style={styles.prospectRow}>
+          <Text style={styles.empty}>
+            {draftDisplay.locked
+              ? 'This era uses a sourced NBA draft class. No generated class will be created for this year.'
+              : 'No draft class has been generated yet.'}
+          </Text>
+        ) : players.map(rawProspect => {
+          const prospect = rawProspect as Prospect;
+          return (
+          <View key={prospect.id || prospect.player_id || prospect.full_name} style={styles.prospectRow}>
             <TouchableOpacity
-              disabled={!editable}
-              onPress={() => editable && openEdit(prospect)}
+              disabled={!canEditRows}
+              onPress={() => canEditRows && openEdit(prospect)}
               style={styles.prospectMain}
             >
               <View style={styles.roundBadge}>
-                <Text style={styles.roundLabel}>R{prospect.projectedRound}</Text>
+                <Text style={styles.roundLabel}>R{prospect.projectedRound || prospect.draft_round || '?'}</Text>
               </View>
               <View style={styles.prospectCopy}>
-                <Text style={styles.prospectName}>{prospect.full_name}</Text>
+                <Text style={styles.prospectName}>{prospect.full_name || prospect.name || 'Unnamed prospect'}</Text>
                 <Text style={styles.prospectMeta}>
                   {[prospect.position, prospect.archetype, prospect.age ? `Age ${prospect.age}` : null]
                     .filter(Boolean).join(' · ')}
                 </Text>
               </View>
-              {editable && <Ionicons color="#626a64" name="create-outline" size={19} />}
+              {canEditRows && <Ionicons color="#626a64" name="create-outline" size={19} />}
             </TouchableOpacity>
-            {editable && (
+            {canEditRows && (
               <TouchableOpacity
-                accessibilityLabel={`Remove ${prospect.full_name}`}
-                onPress={() => removeProspect(prospect)}
+                accessibilityLabel={`Remove ${prospect.full_name || prospect.name || 'prospect'}`}
+                onPress={() => removeProspect(prospect as Prospect)}
                 style={styles.deleteButton}
               >
                 <Ionicons color="#d86d6d" name="trash-outline" size={19} />
               </TouchableOpacity>
             )}
           </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <Modal

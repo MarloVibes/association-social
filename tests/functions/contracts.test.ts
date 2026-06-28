@@ -8,6 +8,7 @@ const {
   buildCpuContractOffers,
   createSubmitContractOfferHandler,
   deriveCpuNeeds,
+  materializeFreeAgencyPool,
   pendingTeamOfferIds,
   resolveContractRound,
   selectOfferBatch,
@@ -35,6 +36,37 @@ class FakeHttpsError extends Error {
 }
 
 describe('contract orchestration', () => {
+  it('materializes expired contracts into the free agency pool and removes them from rosters', () => {
+    const result = materializeFreeAgencyPool([
+      {
+        id: 'CHI',
+        players: [
+          { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 2, team: 'CHI' },
+          { player_id: 'deng', full_name: 'Luol Deng', contractYears: 0, contractExpired: true, team: 'CHI' },
+          { player_id: 'noah', full_name: 'Joakim Noah', contractYears: 0, contractExpired: true, retired: true, team: 'CHI' },
+        ],
+      },
+      {
+        id: 'SAS',
+        players: [
+          { player_id: 'duncan', full_name: 'Tim Duncan', contractYears: 1, team: 'SAS' },
+        ],
+      },
+    ], 2027);
+
+    expect(result.freeAgents).toEqual([
+      expect.objectContaining({
+        player_id: 'deng',
+        full_name: 'Luol Deng',
+        previousTeamId: 'CHI',
+        team: '',
+        freeAgencySeason: 2027,
+      }),
+    ]);
+    expect(result.teams.find((team: any) => team.id === 'CHI').players.map((item: any) => item.player_id))
+      .toEqual(['rose', 'noah']);
+  });
+
   it('uses one deterministic offer id per stage, team, and player', () => {
     expect(contractOfferId({
       seasonYear: 2027,

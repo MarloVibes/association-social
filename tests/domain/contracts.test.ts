@@ -4,6 +4,7 @@ import {
   derivePlayerContractPreferences,
   expectedAnnualSalary,
   scoreContractOffer,
+  selectContractCandidates,
   validateContractOfferFinance,
 } from '../../domain/offseason/contracts';
 
@@ -139,6 +140,44 @@ describe('contract offer scoring', () => {
 
     expect(moneyFirst).toBeGreaterThan(winningOffer);
     expect(ringChaserWinner).toBeGreaterThan(ringChaserMoney);
+  });
+});
+
+describe('contract candidate selection', () => {
+  it('uses the free agent pool first and falls back to expired roster contracts', () => {
+    const teams: any[] = [
+      {
+        id: 'CHI',
+        players: [
+          { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 2 },
+          { player_id: 'deng', full_name: 'Luol Deng', contractYears: 0, contractExpired: true },
+        ],
+      },
+    ];
+
+    expect(selectContractCandidates({
+      stage: 'free_agency',
+      teams,
+      freeAgents: [{ player_id: 'pool', full_name: 'Pool Player' }],
+    }).map(player => player.player_id)).toEqual(['pool']);
+
+    expect(selectContractCandidates({
+      stage: 'free_agency',
+      teams,
+      freeAgents: [] as any[],
+    }).map(player => player.player_id)).toEqual(['deng']);
+  });
+
+  it('selects only the controlled team expiring players for re-signing', () => {
+    expect(selectContractCandidates({
+      stage: 're_signing',
+      myTeamId: 'CHI',
+      teams: [
+        { id: 'CHI', players: [{ player_id: 'deng', contractYears: 1 }, { player_id: 'rose', contractYears: 3 }] },
+        { id: 'SAS', players: [{ player_id: 'duncan', contractYears: 1 }] },
+      ],
+      freeAgents: [],
+    }).map(player => player.player_id)).toEqual(['deng']);
   });
 });
 

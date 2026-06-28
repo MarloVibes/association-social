@@ -66,9 +66,37 @@ type GenerateDraftClassInput = {
   seed: string;
 };
 
+export const FIRST_GENERATED_NBA_DRAFT_YEAR = 2028;
+
 export type NflDraftProspect = ReturnType<typeof nflProspect>;
 export type MlbDraftProspect = ReturnType<typeof mlbProspect>;
 export type NbaDraftProspect = ReturnType<typeof nbaProspect>;
+export type GeneratedDraftProspect = NbaDraftProspect | NflDraftProspect | MlbDraftProspect;
+
+export type DraftClassDisplayPlayer = Partial<GeneratedDraftProspect> & {
+  id?: string;
+  player_id?: string;
+  full_name?: string;
+  name?: string;
+  projectedRound?: number;
+  draft_round?: number;
+  draft_pick?: number;
+};
+
+export type DraftClassDisplayInput<T extends DraftClassDisplayPlayer = DraftClassDisplayPlayer> = {
+  players?: T[];
+  sport: string;
+  seasonYear?: number | null;
+  teamCount?: number | null;
+  seed: string;
+  lockedHistoricalNba?: boolean;
+};
+
+export type DraftClassDisplayResult<T extends DraftClassDisplayPlayer = DraftClassDisplayPlayer> = {
+  players: Array<T | GeneratedDraftProspect>;
+  generatedPreview: boolean;
+  locked: boolean;
+};
 
 function positionArchetype(
   position: string,
@@ -94,6 +122,25 @@ function identity(random: () => number, index: number, seed: string) {
     id: `${seed.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${index + 1}`,
     name: `${first} ${last}`,
     full_name: `${first} ${last}`,
+  };
+}
+
+function normalizeDisplayPlayer<T extends DraftClassDisplayPlayer>(player: T): T {
+  const id = player.id || player.player_id;
+  const fullName = player.full_name || player.name;
+  const projectedRound = Number.isInteger(player.projectedRound)
+    ? player.projectedRound
+    : Number.isInteger(player.draft_round)
+      ? player.draft_round
+      : undefined;
+  if (id === player.id && fullName === player.full_name && projectedRound === player.projectedRound) {
+    return player;
+  }
+  return {
+    ...player,
+    id,
+    full_name: fullName,
+    projectedRound,
   };
 }
 
@@ -242,4 +289,34 @@ export function generateDraftClass(input: GenerateDraftClassInput) {
       ? nflProspect(random, index, input.seed, input.teams)
       : mlbProspect(random, index, input.seed, input.teams)
   ));
+}
+
+export function draftClassPlayersForDisplay<T extends DraftClassDisplayPlayer>(
+  input: DraftClassDisplayInput<T>,
+): DraftClassDisplayResult<T> {
+  const savedPlayers = Array.isArray(input.players)
+    ? input.players.filter(Boolean).map(normalizeDisplayPlayer)
+    : [];
+  if (savedPlayers.length > 0) {
+    return { players: savedPlayers, generatedPreview: false, locked: false };
+  }
+  if (input.lockedHistoricalNba) {
+    return { players: [], generatedPreview: false, locked: true };
+  }
+  const sport = input.sport === 'nfl' ? 'madden' : input.sport;
+  const seasonYear = Number.isInteger(input.seasonYear) ? Number(input.seasonYear) : null;
+  if (sport === 'nba' && seasonYear !== null && seasonYear < FIRST_GENERATED_NBA_DRAFT_YEAR) {
+    return { players: [], generatedPreview: false, locked: true };
+  }
+  const teamCount = Number.isInteger(input.teamCount) && Number(input.teamCount) > 0
+    ? Number(input.teamCount)
+    : sport === 'madden'
+      ? 32
+      : 30;
+  const seed = `${input.seed}:${seasonYear || 'upcoming'}`;
+  return {
+    players: generateDraftClass({ sport, teams: teamCount, seed }),
+    generatedPreview: true,
+    locked: false,
+  };
 }

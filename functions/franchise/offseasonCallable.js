@@ -7,6 +7,9 @@ const {
 const {
   buildExpansionTeamDocs,
 } = require('./expansion');
+const {
+  materializeFreeAgencyPool,
+} = require('./contracts');
 
 const OFFSEASON_STAGES = new Set([
   'awards_recap',
@@ -305,6 +308,42 @@ function transitionForCallable(input) {
   });
 }
 
+async function writeFreeAgencyPoolIfNeeded({
+  tx,
+  leagueRef,
+  teamsQuery,
+  teams,
+  teamDocs,
+  previousStage,
+  offseason,
+}) {
+  if (!offseason || offseason.stage !== 'free_agency' || previousStage === 'free_agency') return;
+  const pending = materializeFreeAgencyPool(teams, offseason.seasonYear, []);
+  if (pending.freeAgents.length === 0) return;
+  const poolRef = leagueRef.collection('free_agents').doc(`contracts_${offseason.seasonYear}`);
+  const poolSnap = await tx.get(poolRef);
+  const existingFreeAgents = poolSnap.exists && Array.isArray((poolSnap.data() || {}).players)
+    ? (poolSnap.data() || {}).players
+    : [];
+  const materialized = materializeFreeAgencyPool(teams, offseason.seasonYear, existingFreeAgents);
+  const byId = new Map(materialized.teams.map(team => [String(team.id), team]));
+  (teamDocs || []).forEach((doc) => {
+    const original = teams.find(team => String(team.id) === String(doc.id));
+    const next = byId.get(String(doc.id));
+    if (!original || !next) return;
+    if ((original.players || []).length !== (next.players || []).length) {
+      tx.update(doc.ref || teamsQuery.doc(doc.id), { players: next.players || [] });
+    }
+  });
+  if (materialized.freeAgents.length > existingFreeAgents.length) {
+    tx.set(poolRef, {
+      seasonYear: offseason.seasonYear,
+      source: 'contract_expiration',
+      players: materialized.freeAgents,
+    }, { merge: true });
+  }
+}
+
 function toHttpsError(error, HttpsError) {
   if (error instanceof OffseasonTransitionError || error instanceof OffseasonCallableError) {
     return new HttpsError(error.code, error.message, error.details);
@@ -425,6 +464,15 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           stageEndsAt: usesNbaOffseasonSequence(league && league.sport)
             ? new Date(Date.now() + 600000)
             : null,
+        });
+        await writeFreeAgencyPoolIfNeeded({
+          tx,
+          leagueRef,
+          teamsQuery,
+          teams,
+          teamDocs: teamsSnap.docs,
+          previousStage: input.expectedStage,
+          offseason,
         });
         expansionTeamDocs.forEach(team => tx.set(teamsQuery.doc(team.id), team.data));
         tx.update(leagueRef, { offseason });
@@ -561,6 +609,15 @@ function createAdvanceDueOffseasonsHandler({
             stageEndsAt: usesNbaOffseasonSequence(league && league.sport)
               ? new Date(nowMillis + 600000)
               : null,
+          });
+          await writeFreeAgencyPoolIfNeeded({
+            tx,
+            leagueRef,
+            teamsQuery: leagueRef.collection('teams'),
+            teams,
+            teamDocs: teamsSnap.docs,
+            previousStage: expectedStage,
+            offseason,
           });
           tx.update(leagueRef, { offseason });
           return { advanced: true, leagueId: leagueDoc.id, league, offseason };

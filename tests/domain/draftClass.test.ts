@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FIRST_GENERATED_NBA_DRAFT_YEAR,
   MLB_DRAFT_POSITIONS,
   NFL_DRAFT_POSITIONS,
+  draftClassPlayersForDisplay,
   generateDraftClass,
 } from '../../domain/draft/generateClass';
 import {
@@ -33,6 +35,53 @@ describe('seeded draft randomness', () => {
 });
 
 describe('generateDraftClass', () => {
+  it('builds display players from saved classes or a deterministic preview fallback', () => {
+    const saved = [{ id: 'saved', full_name: 'Saved Player', projectedRound: 1 }];
+    expect(draftClassPlayersForDisplay({
+      players: saved,
+      sport: 'nba',
+      seasonYear: 2032,
+      teamCount: 30,
+      seed: 'league-1',
+    })).toEqual({
+      players: saved,
+      generatedPreview: false,
+      locked: false,
+    });
+
+    const preview = draftClassPlayersForDisplay({
+      players: [],
+      sport: 'nba',
+      seasonYear: 2032,
+      teamCount: 2,
+      seed: 'league-1',
+    });
+    expect(preview.generatedPreview).toBe(true);
+    expect(preview.players).toHaveLength(4);
+
+    expect(draftClassPlayersForDisplay({
+      players: [],
+      sport: 'nba',
+      seasonYear: FIRST_GENERATED_NBA_DRAFT_YEAR - 1,
+      teamCount: 30,
+      seed: 'league-1',
+    })).toEqual({
+      players: [],
+      generatedPreview: false,
+      locked: true,
+    });
+
+    const generated = draftClassPlayersForDisplay({
+      players: [],
+      sport: 'nba',
+      seasonYear: FIRST_GENERATED_NBA_DRAFT_YEAR,
+      teamCount: 2,
+      seed: 'league-1',
+    });
+    expect(generated.generatedPreview).toBe(true);
+    expect(generated.players).toHaveLength(4);
+  });
+
   it('generates stable sport-specific class sizes', () => {
     expect(generateDraftClass({ sport: 'nba', teams: 30, seed: 'x' })).toHaveLength(60);
     expect(generateDraftClass({ sport: 'madden', teams: 32, seed: 'x' })).toHaveLength(224);

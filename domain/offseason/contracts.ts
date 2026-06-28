@@ -68,6 +68,35 @@ export type ContractFinanceValidation = {
   errors: ContractFinanceError[];
 };
 
+export type ContractCandidateStage = 're_signing' | 'free_agency';
+
+export type ContractCandidatePlayer = {
+  id?: string;
+  player_id?: string;
+  full_name?: string;
+  name?: string;
+  contractYears?: number;
+  contractExpired?: boolean;
+  freeAgent?: boolean;
+  isFreeAgent?: boolean;
+  retired?: boolean;
+  contract?: {
+    years?: number;
+  };
+};
+
+export type ContractCandidateTeam<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  id: string;
+  players?: T[];
+};
+
+export type SelectContractCandidatesInput<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  stage: ContractCandidateStage;
+  teams: Array<ContractCandidateTeam<T>>;
+  freeAgents: T[];
+  myTeamId?: string | null;
+};
+
 const ROLE_SCORE: Readonly<Record<ContractRole, number>> = Object.freeze({
   franchise: 18,
   starter: 12,
@@ -106,6 +135,59 @@ function normalizeSport(sport?: string | null): 'nba' | 'madden' | 'mlb' {
   if (sport === 'nfl' || sport === 'madden') return 'madden';
   if (sport === 'mlb') return 'mlb';
   return 'nba';
+}
+
+function candidateId(player: ContractCandidatePlayer): string {
+  return String(player.player_id || player.id || player.full_name || player.name || '');
+}
+
+function expiringCandidate(player: ContractCandidatePlayer): boolean {
+  if (!player || player.retired) return false;
+  if (player.freeAgent === true || player.isFreeAgent === true || player.contractExpired === true) return true;
+  if (Number.isFinite(player.contractYears) && Number(player.contractYears) <= 1) return true;
+  const contractYears = Number(player.contract?.years);
+  return Number.isFinite(contractYears) && contractYears <= 1;
+}
+
+function openMarketCandidate(player: ContractCandidatePlayer): boolean {
+  if (!player || player.retired) return false;
+  if (player.freeAgent === true || player.isFreeAgent === true || player.contractExpired === true) return true;
+  if (Number.isFinite(player.contractYears) && Number(player.contractYears) <= 0) return true;
+  const contractYears = Number(player.contract?.years);
+  return Number.isFinite(contractYears) && contractYears <= 0;
+}
+
+function uniqueCandidates<T extends ContractCandidatePlayer>(players: T[]): T[] {
+  const seen = new Set<string>();
+  return players.filter(player => {
+    const id = candidateId(player);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+export function selectContractCandidates<T extends ContractCandidatePlayer>(
+  input: SelectContractCandidatesInput<T>,
+): T[] {
+  if (input.stage === 're_signing') {
+    const team = input.teams.find(item => String(item.id) === String(input.myTeamId || ''));
+    return uniqueCandidates((team?.players || []).filter(expiringCandidate));
+  }
+  const rosteredIds = new Set(input.teams.flatMap(team => team.players || []).map(candidateId).filter(Boolean));
+  const pooled = uniqueCandidates((input.freeAgents || []).filter(player => !rosteredIds.has(candidateId(player))));
+  if (pooled.length > 0) return pooled;
+  return uniqueCandidates(
+    input.teams.flatMap(team => (
+      (team.players || [])
+        .filter(openMarketCandidate)
+        .map(player => ({
+          ...player,
+          team: '',
+          previousTeamId: team.id,
+        }))
+    )) as T[],
+  );
 }
 
 export function scoreContractOffer(input: ContractOfferScoreInput): number {

@@ -587,6 +587,94 @@ describe('offseason callable helpers', () => {
     }]);
   });
 
+  it('creates a free agency pool when advancing into free agency', async () => {
+    const teamsCollection = {
+      kind: 'teams-query',
+      doc: (id: string) => ({ kind: 'team-doc', id }),
+    };
+    const freeAgentsCollection = {
+      doc: (id: string) => ({ kind: 'free-agents-doc', id }),
+    };
+    const draftSessionsCollection = {
+      doc: (id: string) => ({ kind: 'draft-session-doc', id }),
+    };
+    const leagueRef = {
+      collection: (name: string) => {
+        if (name === 'teams') return teamsCollection;
+        if (name === 'draft_sessions') return draftSessionsCollection;
+        return freeAgentsCollection;
+      },
+    };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({
+        sport: 'nba',
+        commissionerId: 'comm',
+        offseason: {
+          stage: 'live_draft',
+          seasonYear: 2028,
+          completedTeamIds: [],
+          draftStatus: 'complete',
+          version: 7,
+        },
+      }),
+    };
+    const teamsSnap = {
+      docs: Array.from({ length: 30 }, (_, index) => ({
+        id: `T${index}`,
+        data: () => ({
+          abbreviation: `T${index}`,
+          players: index === 0
+            ? [
+              { player_id: 'keep', full_name: 'Kept Player', contractYears: 2 },
+              { player_id: 'free', full_name: 'Free Player', contractYears: 0, contractExpired: true },
+            ]
+            : [],
+        }),
+      })),
+    };
+    const writes: any[] = [];
+    const updates: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) return leagueSnap;
+        if (ref.kind === 'teams-query') return teamsSnap;
+        if (ref.kind === 'draft-session-doc') return { exists: true, data: () => ({ status: 'complete' }) };
+        return { exists: false, data: () => ({}) };
+      }),
+      set: vi.fn((ref, data) => writes.push({ ref, data })),
+      update: vi.fn((ref, update) => updates.push({ ref, update })),
+    };
+    const db = {
+      collection: () => ({ doc: () => leagueRef }),
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createAdvanceOffseasonHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      HttpsError: FakeHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', expectedStage: 'live_draft', expectedVersion: 7 },
+    });
+
+    expect(updates).toContainEqual({
+      ref: { kind: 'team-doc', id: 'T0' },
+      update: {
+        players: [expect.objectContaining({ player_id: 'keep' })],
+      },
+    });
+    expect(writes).toContainEqual({
+      ref: { kind: 'free-agents-doc', id: 'contracts_2028' },
+      data: expect.objectContaining({
+        seasonYear: 2028,
+        players: [expect.objectContaining({ player_id: 'free', previousTeamId: 'T0' })],
+      }),
+    });
+  });
+
   it('requires authentication and maps transition errors to HttpsError', async () => {
     const handler = createAdvanceOffseasonHandler({
       getFirestore: () => ({}),

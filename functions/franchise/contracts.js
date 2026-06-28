@@ -25,6 +25,61 @@ function playerKey(player) {
   return String(player && (player.player_id || player.id || player.bref_id || player.full_name) || '');
 }
 
+function isFreeAgencyEligible(player) {
+  if (!player || player.retired) return false;
+  if (player.freeAgent === true || player.isFreeAgent === true) return true;
+  if (player.contractExpired === true) return true;
+  if (Number.isFinite(player.contractYears) && Number(player.contractYears) <= 0) return true;
+  const contractYears = player.contract && Number(player.contract.years);
+  return Number.isFinite(contractYears) && contractYears <= 0;
+}
+
+function materializeFreeAgencyPool(teams, seasonYear, existingFreeAgents = []) {
+  const seen = new Set((existingFreeAgents || []).map(playerKey).filter(Boolean));
+  const freeAgents = [...(existingFreeAgents || [])];
+  const nextTeams = (teams || []).map(team => {
+    const kept = [];
+    for (const player of team.players || []) {
+      if (!isFreeAgencyEligible(player)) {
+        kept.push(player);
+        continue;
+      }
+      const key = playerKey(player);
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        freeAgents.push({
+          ...player,
+          team: '',
+          previousTeamId: team.id,
+          previousTeamName: team.name || team.abbreviation || team.id,
+          freeAgent: true,
+          freeAgencySeason: seasonYear,
+        });
+      }
+    }
+    return {
+      ...team,
+      players: kept,
+    };
+  });
+  return { teams: nextTeams, freeAgents };
+}
+
+function normalizeVaultFreeAgentDoc(docSnap, era) {
+  const data = docSnap && typeof docSnap.data === 'function' ? docSnap.data() || {} : {};
+  const id = docSnap && docSnap.id ? docSnap.id : data.id || data.bref_id || data.player_id;
+  return {
+    ...data,
+    id,
+    player_id: data.player_id || data.bref_id || id,
+    full_name: data.full_name || data.name || 'Free Agent',
+    team: '',
+    freeAgent: true,
+    freeAgentSource: 'vault',
+    freeAgentEra: era,
+  };
+}
+
 function contractOfferId({ seasonYear, stage, teamId, playerId }) {
   return [seasonYear, stage, teamId, playerId]
     .map(value => encodeURIComponent(String(value)))
@@ -614,11 +669,20 @@ function createSubmitContractOfferHandler({
       const league = leagueSnap.data() || {};
       const team = { id: teamSnap.id, ...(teamSnap.data() || {}) };
       const offseason = league.offseason || {};
-      const authoritativePlayer = expectedStage === 're_signing'
+      let authoritativePlayer = expectedStage === 're_signing'
         ? (team.players || []).find(player => playerKey(player) === playerId)
         : freeAgentsSnap.docs
           .flatMap(doc => (doc.data() || {}).players || [])
           .find(player => playerKey(player) === playerId);
+      if (!authoritativePlayer && expectedStage === 'free_agency' && normalizeSport(league.sport) === 'nba') {
+        const era = league.era || 'current';
+        const vaultSnap = await tx.get(
+          db.collection('players').where('free_in_eras', 'array-contains', era),
+        );
+        authoritativePlayer = (vaultSnap.docs || [])
+          .map(docSnap => normalizeVaultFreeAgentDoc(docSnap, era))
+          .find(player => playerKey(player) === playerId);
+      }
       if (!authoritativePlayer) {
         throw callableError(HttpsError, 'not-found', 'The player is not eligible for this contract stage.');
       }
@@ -980,6 +1044,7 @@ module.exports = {
   createResolveContractRoundHandler,
   createSubmitContractOfferHandler,
   deriveCpuNeeds,
+  materializeFreeAgencyPool,
   pendingTeamOfferIds,
   selectOfferBatch,
   teamCompletionBlocker,

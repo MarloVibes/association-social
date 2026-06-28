@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -20,6 +20,7 @@ import {
   derivePlayerContractPreferences,
   expectedAnnualSalary,
   scoreContractOffer,
+  selectContractCandidates,
   type ContractRole,
   type EraSalaryBaseline,
   type PlayerContractPreferences,
@@ -66,6 +67,8 @@ type Team = {
 
 type League = {
   name?: string;
+  era?: string;
+  sport?: string;
   commissionerId?: string;
   coCommissioners?: string[];
   offseason?: OffseasonState;
@@ -161,7 +164,8 @@ export default function ContractStageScreen({ stage }: Props) {
   const uid = auth.currentUser?.uid;
   const [league, setLeague] = useState<League | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [freeAgents, setFreeAgents] = useState<Player[]>([]);
+  const [leagueFreeAgents, setLeagueFreeAgents] = useState<Player[]>([]);
+  const [vaultFreeAgents, setVaultFreeAgents] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Player | null>(null);
   const [tab, setTab] = useState<Tab>('available');
@@ -190,13 +194,16 @@ export default function ContractStageScreen({ stage }: Props) {
         ...team.data(),
       })) as Team[]),
     );
+    let unsubscribeFreeAgents: (() => void) | undefined;
     if (stage === 'free_agency') {
-      getDocs(collection(db, 'leagues', leagueId, 'free_agents'))
-        .then(snapshot => {
+      unsubscribeFreeAgents = onSnapshot(
+        collection(db, 'leagues', leagueId, 'free_agents'),
+        snapshot => {
           const players = snapshot.docs.flatMap(item => item.data().players || []);
-          setFreeAgents(players);
-        })
-        .catch(error => Alert.alert('Unable to load free agents', error.message));
+          setLeagueFreeAgents(players);
+        },
+        error => Alert.alert('Unable to load free agents', error.message),
+      );
     }
     const unsubscribeOffers = onSnapshot(
       collection(db, 'leagues', leagueId, 'contract_offers'),
@@ -209,21 +216,57 @@ export default function ContractStageScreen({ stage }: Props) {
     return () => {
       unsubscribeLeague();
       unsubscribeTeams();
+      if (unsubscribeFreeAgents) unsubscribeFreeAgents();
       unsubscribeOffers();
       unsubscribeResolutions();
     };
   }, [leagueId, router, stage]);
 
+  useEffect(() => {
+    if (stage !== 'free_agency' || league?.sport !== 'nba') {
+      setVaultFreeAgents([]);
+      return;
+    }
+    const era = league?.era || 'current';
+    return onSnapshot(
+      query(collection(db, 'players'), where('free_in_eras', 'array-contains', era)),
+      snapshot => {
+        setVaultFreeAgents(snapshot.docs.map(item => {
+          const data = item.data() as Player;
+          return {
+            ...data,
+            id: data.id || item.id,
+            player_id: data.player_id || item.id,
+            team: '',
+          };
+        }));
+      },
+      error => {
+        console.warn('Unable to load vault free agents', error);
+        setVaultFreeAgents([]);
+      },
+    );
+  }, [league?.era, league?.sport, stage]);
+
+  const freeAgents = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Player[] = [];
+    [...leagueFreeAgents, ...vaultFreeAgents].forEach(player => {
+      const key = playerId(player).toLowerCase() || playerName(player).toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(player);
+    });
+    return merged;
+  }, [leagueFreeAgents, vaultFreeAgents]);
+
   const myTeam = teams.find(team => team.gmId === uid);
-  const rosteredIds = useMemo(
-    () => new Set(teams.flatMap(team => team.players || []).map(playerId)),
-    [teams],
-  );
-  const candidates = stage === 're_signing'
-    ? (myTeam?.players || []).filter(player => (
-      player.contractYears == null || player.contractYears <= 1
-    ))
-    : freeAgents.filter(player => !rosteredIds.has(playerId(player)));
+  const candidates = useMemo(() => selectContractCandidates({
+    stage,
+    teams,
+    freeAgents,
+    myTeamId: myTeam?.id,
+  }), [freeAgents, myTeam?.id, stage, teams]);
   const allVisiblePlayers = useMemo(
     () => [...teams.flatMap(team => team.players || []), ...freeAgents],
     [freeAgents, teams],
