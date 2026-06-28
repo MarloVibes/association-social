@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import PlayerCard from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
@@ -19,6 +20,7 @@ type Team = {
   abbreviation?: string;
   primaryColor?: string | null;
   secondaryColor?: string | null;
+  players?: any[];
 };
 
 type LiveGame = NbaScheduleGame & {
@@ -93,6 +95,21 @@ function statsTextForPlayer(playerId: string | undefined, players: ReturnType<ty
   return `${player.points} PTS ${player.rebounds} REB ${player.assists} AST`;
 }
 
+function playerKey(player: any) {
+  return String(player?.player_id || player?.playerId || player?.id || player?.bref_id || player?.full_name || player?.name || '').trim();
+}
+
+function playerForCard(player: { playerId?: string; name?: string; teamId?: string }, team: Team | undefined) {
+  const key = playerKey({ player_id: player.playerId, full_name: player.name });
+  const found = (team?.players || []).find(candidate => playerKey(candidate) === key);
+  return found || {
+    player_id: player.playerId,
+    full_name: player.name,
+    name: player.name,
+    team: team?.abbreviation || team?.teamId || team?.name,
+  };
+}
+
 function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof livePlayerStatsAt>; home: ReturnType<typeof livePlayerStatsAt> }): LiveTimelineStarterMatchup[] {
   const positions = ['PG', 'SG', 'SF', 'PF', 'C'];
   return positions.map((position, index) => ({
@@ -130,6 +147,7 @@ export default function LiveModeScreen() {
   const [loading, setLoading] = useState(true);
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
+  const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
   const ballX = useSharedValue(0);
   const ballY = useSharedValue(0);
   const availableCourtWidth = Math.max(120, windowWidth - SCREEN_HORIZONTAL_PADDING);
@@ -242,6 +260,13 @@ export default function LiveModeScreen() {
     homeAbbr,
     awayAbbr,
   }), [awayAbbr, currentEvent, game?.awayTeamId, game?.homeTeamId, homeAbbr]);
+  const openPlayerCard = (player: { playerId?: string; name?: string; teamId?: string }) => {
+    const sideTeam = normalizeScheduleKey(player.teamId || '') === normalizeScheduleKey(game?.awayTeamId || '') ? awayTeam : homeTeam;
+    setSelectedPlayerCard({
+      player: playerForCard(player, sideTeam),
+      teamId: sideTeam?.id || '',
+    });
+  };
 
   useEffect(() => {
     const nextX = (courtState.ball.x / 100) * courtWidth;
@@ -386,13 +411,17 @@ export default function LiveModeScreen() {
               {matchupRows.map(row => (
                 <View key={row.position} style={styles.matchupRow}>
                   <View style={styles.matchupPlayer}>
-                    <Text numberOfLines={1} style={styles.matchupName}>{row.awayPlayer.name}</Text>
-                    <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats)}</Text>
+                    <TouchableOpacity onPress={() => openPlayerCard(row.awayPlayer)} style={styles.playerTapArea}>
+                      <Text numberOfLines={1} style={styles.matchupName}>{row.awayPlayer.name}</Text>
+                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats)}</Text>
+                    </TouchableOpacity>
                   </View>
                   <Text style={[styles.matchupPosition, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{row.position}</Text>
                   <View style={[styles.matchupPlayer, styles.matchupPlayerRight]}>
-                    <Text numberOfLines={1} style={styles.matchupName}>{row.homePlayer.name}</Text>
-                    <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats)}</Text>
+                    <TouchableOpacity onPress={() => openPlayerCard(row.homePlayer)} style={[styles.playerTapArea, styles.playerTapAreaRight]}>
+                      <Text numberOfLines={1} style={styles.matchupName}>{row.homePlayer.name}</Text>
+                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats)}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))}
@@ -405,7 +434,7 @@ export default function LiveModeScreen() {
                     <View key={group.key} style={styles.statTeamGroup}>
                       <Text style={styles.statGroupTitle}>{group.label}</Text>
                       {group.players.map(player => (
-                        <View key={player.playerId} style={styles.statRow}>
+                        <TouchableOpacity key={player.playerId} onPress={() => openPlayerCard(player)} style={styles.statRow}>
                           <View style={styles.statNameBlock}>
                             <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
                           </View>
@@ -414,7 +443,7 @@ export default function LiveModeScreen() {
                           <Text style={styles.statValue}>{player.assists} AST</Text>
                           <Text style={styles.statValue}>{player.steals} STL</Text>
                           <Text style={styles.statValue}>{player.blocks} BLK</Text>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   ))}
@@ -438,6 +467,15 @@ export default function LiveModeScreen() {
           </>
         )}
       </ScrollView>
+      <PlayerCard
+        player={selectedPlayerCard?.player || null}
+        era={league?.era || league?.currentYear || 'current'}
+        sport="nba"
+        leagueId={leagueId}
+        teamId={selectedPlayerCard?.teamId || ''}
+        visible={!!selectedPlayerCard}
+        onClose={() => setSelectedPlayerCard(null)}
+      />
     </View>
   );
 }
@@ -504,6 +542,8 @@ const styles = StyleSheet.create({
   matchupRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingVertical: 10 },
   matchupPlayer: { flex: 1, minWidth: 0 },
   matchupPlayerRight: { alignItems: 'flex-end' },
+  playerTapArea: { minHeight: 36, justifyContent: 'center' },
+  playerTapAreaRight: { alignItems: 'flex-end' },
   matchupName: { color: '#fff', fontSize: 12, fontWeight: '900' },
   matchupStats: { color: '#bdbdbd', fontSize: 10, fontWeight: '900', marginTop: 3, fontVariant: ['tabular-nums'] },
   matchupPosition: { width: 34, minHeight: 28, borderRadius: 7, borderWidth: 1, textAlign: 'center', textAlignVertical: 'center', fontSize: 10, fontWeight: '900', paddingTop: 6 },

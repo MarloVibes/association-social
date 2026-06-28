@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import PlayerCard from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
@@ -15,6 +16,7 @@ type Team = {
   name?: string;
   abbreviation?: string;
   gmId?: string;
+  players?: any[];
 };
 
 type BoxScorePlayer = {
@@ -105,6 +107,21 @@ function plusMinusText(value: unknown) {
   return parsed > 0 ? `+${parsed}` : String(parsed);
 }
 
+function playerKey(player: any) {
+  return String(player?.player_id || player?.playerId || player?.id || player?.bref_id || player?.full_name || player?.name || '').trim();
+}
+
+function playerForCard(player: BoxScorePlayer, team: Team | undefined) {
+  const key = playerKey({ player_id: player.playerId, full_name: player.name });
+  const found = (team?.players || []).find(candidate => playerKey(candidate) === key);
+  return found || {
+    ...player,
+    player_id: player.playerId,
+    full_name: player.name,
+    team: team?.abbreviation || team?.teamId || team?.name,
+  };
+}
+
 function genericStoredStory(story?: string) {
   const text = String(story || '').toLowerCase();
   return text.includes('controlled the decisive stretches')
@@ -188,6 +205,7 @@ export default function GameResultScreen() {
   const [resetting, setResetting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullBoxScore, setShowFullBoxScore] = useState(false);
+  const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -415,7 +433,14 @@ export default function GameResultScreen() {
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Top Performers</Text>
               {topPerformers.length > 0 ? topPerformers.map((player, index) => (
-                <View key={`${player.playerId || player.name || index}`} style={styles.performerRow}>
+                <TouchableOpacity
+                  key={`${player.playerId || player.name || index}`}
+                  onPress={() => setSelectedPlayerCard({
+                    player: playerForCard(player, player.sideAbbr === awayAbbr ? awayTeam : homeTeam),
+                    teamId: player.sideAbbr === awayAbbr ? awayTeam?.id || '' : homeTeam?.id || '',
+                  })}
+                  style={styles.performerRow}
+                >
                   <View style={styles.performerCopy}>
                     <Text numberOfLines={1} style={styles.playerName}>{player.name || 'Player'}</Text>
                     <Text style={styles.playerTeam}>{player.side}</Text>
@@ -423,7 +448,7 @@ export default function GameResultScreen() {
                   <Text style={styles.playerStat}>{stat(player.points)} PTS</Text>
                   <Text style={styles.playerMini}>{stat(player.rebounds)} REB</Text>
                   <Text style={styles.playerMini}>{stat(player.assists)} AST</Text>
-                </View>
+                </TouchableOpacity>
               )) : (
                 <Text style={styles.emptySmall}>Box score details will appear after a simulated result is finalized.</Text>
               )}
@@ -445,7 +470,14 @@ export default function GameResultScreen() {
                     <View key={group.key} style={styles.boxTeamGroup}>
                       <Text style={styles.boxTeamTitle}>{group.label}</Text>
                       {group.players.length > 0 ? group.players.map((player, index) => (
-                        <View key={`${group.key}-${player.playerId || player.name || index}`} style={styles.boxPlayerRow}>
+                        <TouchableOpacity
+                          key={`${group.key}-${player.playerId || player.name || index}`}
+                          onPress={() => setSelectedPlayerCard({
+                            player: playerForCard(player, group.key === 'away' ? awayTeam : homeTeam),
+                            teamId: group.key === 'away' ? awayTeam?.id || '' : homeTeam?.id || '',
+                          })}
+                          style={styles.boxPlayerRow}
+                        >
                           <View style={styles.boxPlayerNameBlock}>
                             <Text numberOfLines={1} style={styles.boxPlayerName}>{player.name || 'Player'}</Text>
                             <Text style={styles.boxPlayerMeta}>{[player.position, player.starter ? 'Starter' : null].filter(Boolean).join(' · ') || group.abbr}</Text>
@@ -462,7 +494,7 @@ export default function GameResultScreen() {
                             <Text style={styles.boxStat}>TO {stat(player.turnovers)}</Text>
                             <Text style={styles.boxStat}>+/- {plusMinusText(player.plusMinus)}</Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       )) : (
                         <Text style={styles.emptySmall}>No box score players stored for {group.label}.</Text>
                       )}
@@ -476,6 +508,15 @@ export default function GameResultScreen() {
           </>
         )}
       </ScrollView>
+      <PlayerCard
+        player={selectedPlayerCard?.player || null}
+        era={league?.era || league?.currentYear || 'current'}
+        sport="nba"
+        leagueId={leagueId}
+        teamId={selectedPlayerCard?.teamId || ''}
+        visible={!!selectedPlayerCard}
+        onClose={() => setSelectedPlayerCard(null)}
+      />
     </View>
   );
 }

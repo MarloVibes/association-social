@@ -38,6 +38,11 @@ type ScheduleDoc = {
   }[];
 };
 
+function gamesBehindText(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '-';
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 export default function StandingsScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -134,7 +139,7 @@ export default function StandingsScreen() {
             </View>
             <View style={styles.summary}>
               <Text style={styles.summaryText}>{selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
-              <Text style={styles.summaryMeta}>{completedGames} final games recorded · Sorted by win percentage, wins, then point differential</Text>
+              <Text style={styles.summaryMeta}>{completedGames} final games recorded · GB tracks the leader like NBA standings</Text>
             </View>
             <View style={styles.segment}>
               <TouchableOpacity
@@ -158,7 +163,7 @@ export default function StandingsScreen() {
               <Text style={[styles.headerCell, { flex: 1 }]}>Team</Text>
               <Text style={styles.headerCell}>W</Text>
               <Text style={styles.headerCell}>L</Text>
-              <Text style={styles.headerCell}>Diff</Text>
+              <Text style={styles.headerCell}>GB</Text>
             </View>
           </>
         )}
@@ -179,9 +184,7 @@ export default function StandingsScreen() {
             </View>
             <Text style={styles.value}>{item.wins}</Text>
             <Text style={styles.value}>{item.losses}</Text>
-            <Text style={[styles.value, item.pointDiff > 0 && styles.positive, item.pointDiff < 0 && styles.negative]}>
-              {item.pointDiff > 0 ? `+${item.pointDiff}` : item.pointDiff}
-            </Text>
+            <Text style={styles.value}>{gamesBehindText(item.gamesBehind || 0)}</Text>
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>{selectedViewMode === 'cup' ? 'No NBA Cup standings yet. Complete or simulate Cup games to start the table.' : 'No standings yet. Complete or simulate games to start the table.'}</Text>}
@@ -219,7 +222,5 @@ const styles = StyleSheet.create({
   teamName: { color: '#fff', fontSize: 13, fontWeight: '900' },
   teamMeta: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
   value: { width: 42, color: '#fff', fontSize: 13, fontWeight: '900', textAlign: 'center' },
-  positive: { color: '#00e58b' },
-  negative: { color: '#ff6b6b' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20, marginTop: 12 },
 });

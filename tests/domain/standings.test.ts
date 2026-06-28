@@ -25,6 +25,11 @@ describe('NBA standings', () => {
       ['LAL', 0, 1],
     ]);
     expect(standings[0].gmId).toBe('gm-noh');
+    expect(standings.map(row => [row.abbreviation, row.gamesBehind])).toEqual([
+      ['NOH', 0],
+      ['BOS', 0.5],
+      ['LAL', 1],
+    ]);
   });
 
   it('builds NBA Cup standings by group', () => {

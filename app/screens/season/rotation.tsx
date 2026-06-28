@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, FlatList, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { buildCpuRotation, rotationValidationMessages, validateRotation, type RotationSlot } from '@/domain/nba/rotation';
 
@@ -32,6 +32,111 @@ function playerId(player: Player): string {
 
 function playerName(player?: Player): string {
   return player?.full_name || player?.name || 'Unnamed player';
+}
+
+function roleLabel(slot: RotationSlot) {
+  if (slot.role === 'sixth_man') return '6th Man';
+  if (slot.starter) return 'Starter';
+  if (slot.role === 'primary') return 'Primary';
+  if (slot.role === 'secondary') return 'Secondary';
+  if (slot.role === 'reserve') return 'Reserve';
+  if (slot.role === 'bench') return 'Bench';
+  return slot.role || 'Bench';
+}
+
+function roleForIndex(index: number): RotationSlot['role'] {
+  if (index < 2) return 'primary';
+  if (index < 5) return 'starter';
+  if (index === 5) return 'sixth_man';
+  if (index < 10) return 'bench';
+  return 'reserve';
+}
+
+function normalizeOrder(slots: RotationSlot[]) {
+  return slots.map((slot, index) => ({
+    ...slot,
+    starter: index < 5,
+    closing: index < 5,
+    benchOrder: index >= 5 ? index - 4 : undefined,
+    role: roleForIndex(index),
+    status: index < 10 ? 'active' as const : 'inactive' as const,
+    minutes: index < 10 ? slot.minutes : 0,
+  }));
+}
+
+function clampIndex(value: number, length: number) {
+  return Math.max(0, Math.min(length - 1, value));
+}
+
+function RotationRow({
+  item,
+  index,
+  total,
+  player,
+  onReorder,
+  onUpdateMinutes,
+  onToggle,
+}: {
+  item: RotationSlot;
+  index: number;
+  total: number;
+  player?: Player;
+  onReorder: (from: number, to: number) => void;
+  onUpdateMinutes: (playerId: string, delta: number) => void;
+  onToggle: (playerId: string, field: 'starter' | 'closing') => void;
+}) {
+  const dragY = useRef(new Animated.Value(0)).current;
+  const [dragging, setDragging] = useState(false);
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 4,
+    onPanResponderGrant: () => setDragging(true),
+    onPanResponderMove: (_, gesture) => {
+      dragY.setValue(gesture.dy);
+    },
+    onPanResponderRelease: (_, gesture) => {
+      const rowStep = 72;
+      const target = clampIndex(index + Math.round(gesture.dy / rowStep), total);
+      setDragging(false);
+      Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+      if (target !== index) onReorder(index, target);
+    },
+    onPanResponderTerminate: () => {
+      setDragging(false);
+      Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+    },
+  }), [dragY, index, onReorder, total]);
+
+  return (
+    <Animated.View style={[styles.row, dragging && styles.rowDragging, { transform: [{ translateY: dragY }] }]}>
+      <View style={styles.rankBadge}><Text style={styles.rankText}>{index + 1}</Text></View>
+      <View style={styles.playerCopy}>
+        <Text style={styles.playerName}>{playerName(player)}</Text>
+        <Text style={styles.playerMeta}>
+          {[player?.position, roleLabel(item), item.closing ? 'Closing' : null]
+            .filter(Boolean).join(' · ')}
+        </Text>
+      </View>
+      <View {...panResponder.panHandlers} style={styles.dragHandle}>
+        <Ionicons color="#8a8a8a" name="reorder-three" size={22} />
+      </View>
+      <View style={styles.controls}>
+        <TouchableOpacity onPress={() => onUpdateMinutes(item.playerId, -1)} style={styles.controlButton}>
+          <Ionicons color="#ffffff" name="remove" size={16} />
+        </TouchableOpacity>
+        <Text style={styles.minutes}>{item.minutes}</Text>
+        <TouchableOpacity onPress={() => onUpdateMinutes(item.playerId, 1)} style={styles.controlButton}>
+          <Ionicons color="#ffffff" name="add" size={16} />
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity onPress={() => onToggle(item.playerId, 'starter')} style={[styles.chip, item.starter && styles.chipActive]}>
+        <Text style={[styles.chipText, item.starter && styles.chipTextActive]}>S</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onToggle(item.playerId, 'closing')} style={[styles.chip, item.closing && styles.chipActive]}>
+        <Text style={[styles.chipText, item.closing && styles.chipTextActive]}>C</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 }
 
 export default function RotationScreen() {
@@ -77,29 +182,9 @@ export default function RotationScreen() {
   const validation = useMemo(() => validateRotation(rotation), [rotation]);
   const validationMessages = useMemo(() => rotationValidationMessages(validation), [validation]);
 
-  const autoBuildRotation = () => {
+  const autoAdjustRotation = () => {
     if (!team) return;
     setRotation(buildCpuRotation(team.players || []));
-  };
-
-  const autoApplyRotation = async () => {
-    if (!leagueId || !team) return;
-    const nextRotation = buildCpuRotation(team.players || []);
-    const nextValidation = validateRotation(nextRotation);
-    if (!nextValidation.valid) {
-      Alert.alert('Auto rotation needs work', rotationValidationMessages(nextValidation).join('\n'));
-      return;
-    }
-    setSaving(true);
-    try {
-      setRotation(nextRotation);
-      await httpsCallable(functions, 'saveTeamRotation')({ leagueId, rotation: nextRotation });
-      Alert.alert('Auto Applied', 'Minutes, starters, bench order, and closing lineup were saved.');
-    } catch (error: any) {
-      Alert.alert('Auto apply failed', error.message || 'Please try again.');
-    } finally {
-      setSaving(false);
-    }
   };
 
   const updateMinutes = (playerIdValue: string, delta: number) => {
@@ -108,6 +193,16 @@ export default function RotationScreen() {
         ? { ...slot, minutes: Math.max(0, Math.min(48, slot.minutes + delta)) }
         : slot
     )));
+  };
+
+  const reorderSlot = (from: number, to: number) => {
+    setRotation(current => {
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return current;
+      next.splice(to, 0, moved);
+      return normalizeOrder(next);
+    });
   };
 
   const toggle = (playerIdValue: string, field: 'starter' | 'closing') => {
@@ -166,13 +261,9 @@ export default function RotationScreen() {
                   {validationMessages.join(' / ')}
                 </Text>
                 <View style={styles.autoRow}>
-                  <TouchableOpacity onPress={autoBuildRotation} style={styles.autoButton}>
+                  <TouchableOpacity onPress={autoAdjustRotation} style={styles.autoButton}>
                     <Ionicons color="#00e58b" name="sparkles" size={15} />
-                    <Text style={styles.autoText}>Auto Minutes</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity disabled={saving} onPress={autoApplyRotation} style={styles.autoApplyButton}>
-                    <Ionicons color="#06130c" name="flash" size={15} />
-                    <Text style={styles.autoApplyText}>Auto Apply</Text>
+                    <Text style={styles.autoText}>Auto Adjust</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -182,31 +273,15 @@ export default function RotationScreen() {
         renderItem={({ item, index }) => {
           const player = playersById.get(item.playerId);
           return (
-            <View style={styles.row}>
-              <View style={styles.rankBadge}><Text style={styles.rankText}>{index + 1}</Text></View>
-              <View style={styles.playerCopy}>
-                <Text style={styles.playerName}>{playerName(player)}</Text>
-                <Text style={styles.playerMeta}>
-                  {[player?.position, item.starter ? 'Starter' : item.role, item.closing ? 'Closing' : null]
-                    .filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-              <View style={styles.controls}>
-                <TouchableOpacity onPress={() => updateMinutes(item.playerId, -1)} style={styles.controlButton}>
-                  <Ionicons color="#ffffff" name="remove" size={16} />
-                </TouchableOpacity>
-                <Text style={styles.minutes}>{item.minutes}</Text>
-                <TouchableOpacity onPress={() => updateMinutes(item.playerId, 1)} style={styles.controlButton}>
-                  <Ionicons color="#ffffff" name="add" size={16} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity onPress={() => toggle(item.playerId, 'starter')} style={[styles.chip, item.starter && styles.chipActive]}>
-                <Text style={[styles.chipText, item.starter && styles.chipTextActive]}>S</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => toggle(item.playerId, 'closing')} style={[styles.chip, item.closing && styles.chipActive]}>
-                <Text style={[styles.chipText, item.closing && styles.chipTextActive]}>C</Text>
-              </TouchableOpacity>
-            </View>
+            <RotationRow
+              item={item}
+              index={index}
+              total={rotation.length}
+              player={player}
+              onReorder={reorderSlot}
+              onUpdateMinutes={updateMinutes}
+              onToggle={toggle}
+            />
           );
         }}
       />
@@ -233,14 +308,14 @@ const styles = StyleSheet.create({
   autoRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   autoButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#08160f' },
   autoText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
-  autoApplyButton: { flex: 1, minHeight: 38, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#00e58b' },
-  autoApplyText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
+  rowDragging: { borderColor: '#00e58b', backgroundColor: '#132018', zIndex: 5 },
   rankBadge: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d1d1d' },
   rankText: { color: '#888', fontWeight: '900' },
   playerCopy: { flex: 1 },
   playerName: { color: '#fff', fontSize: 14, fontWeight: '800' },
   playerMeta: { color: '#777', fontSize: 11, marginTop: 3 },
+  dragHandle: { width: 32, height: 38, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#282828' },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   controlButton: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#222' },
   minutes: { color: '#fff', fontSize: 14, fontWeight: '900', minWidth: 24, textAlign: 'center' },

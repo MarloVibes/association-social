@@ -5,7 +5,7 @@ export type RotationSlot = {
   minutes: number;
   starter?: boolean;
   benchOrder?: number;
-  role?: 'primary' | 'secondary' | 'starter' | 'bench' | 'reserve';
+  role?: 'primary' | 'secondary' | 'starter' | 'sixth_man' | 'bench' | 'reserve';
   status?: RotationStatus;
   closing?: boolean;
 };
@@ -81,6 +81,18 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 function playerKey(player: CpuRotationPlayer): string {
   return String(player.playerId || player.player_id || player.id || player.bref_id || player.full_name || player.name || '');
+}
+
+function normalizedPosition(player: CpuRotationPlayer): string {
+  const value = String(player.position || '').toUpperCase();
+  if (value.includes('PG')) return 'PG';
+  if (value.includes('SG')) return 'SG';
+  if (value.includes('SF')) return 'SF';
+  if (value.includes('PF')) return 'PF';
+  if (value.includes('C')) return 'C';
+  if (value === 'G') return 'PG';
+  if (value === 'F') return 'SF';
+  return '';
 }
 
 function playerValue(player: CpuRotationPlayer): number {
@@ -226,6 +238,31 @@ function rotationMinutesFor(players: CpuRotationPlayer[]): number[] {
   return minutes;
 }
 
+function orderForLineup(players: CpuRotationPlayer[]): CpuRotationPlayer[] {
+  const remaining = [...players];
+  const starters: CpuRotationPlayer[] = [];
+
+  for (const position of ['PG', 'SG', 'SF', 'PF', 'C']) {
+    let index = remaining.findIndex(player => normalizedPosition(player) === position);
+    if (index < 0 && position === 'SG') index = remaining.findIndex(player => normalizedPosition(player) === 'PG');
+    if (index < 0 && position === 'SF') index = remaining.findIndex(player => ['SG', 'PF'].includes(normalizedPosition(player)));
+    if (index < 0 && position === 'PF') index = remaining.findIndex(player => ['SF', 'C'].includes(normalizedPosition(player)));
+    if (index < 0) index = 0;
+    const [player] = remaining.splice(index, 1);
+    if (player) starters.push(player);
+  }
+
+  return [...starters, ...remaining];
+}
+
+function roleForIndex(index: number): RotationSlot['role'] {
+  if (index < 2) return 'primary';
+  if (index < 5) return 'starter';
+  if (index === 5) return 'sixth_man';
+  if (index < 10) return 'bench';
+  return 'reserve';
+}
+
 function isActive(slot: RotationSlot): boolean {
   return (slot.status || 'active') === 'active';
 }
@@ -280,7 +317,7 @@ export function buildCpuRotation(players: CpuRotationPlayer[]): RotationSlot[] {
   const ordered = [...players]
     .filter(player => playerKey(player))
     .sort((left, right) => playerValue(right) - playerValue(left) || playerKey(left).localeCompare(playerKey(right)));
-  const selected = ordered.slice(0, Math.max(10, Math.min(ordered.length, 15)));
+  const selected = orderForLineup(ordered.slice(0, Math.max(10, Math.min(ordered.length, 15))));
   const minutes = rotationMinutesFor(selected);
 
   return selected.map((player, index): RotationSlot => ({
@@ -288,7 +325,7 @@ export function buildCpuRotation(players: CpuRotationPlayer[]): RotationSlot[] {
     minutes: minutes[index] || 0,
     starter: index < 5,
     benchOrder: index >= 5 ? index - 4 : undefined,
-    role: index < 2 ? 'primary' : index < 5 ? 'starter' : index < 10 ? 'bench' : 'reserve',
+    role: roleForIndex(index),
     status: index < 10 ? 'active' : 'inactive',
     closing: index < 5,
   }));

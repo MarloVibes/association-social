@@ -29,6 +29,7 @@ export type StandingsRow = {
   pointsFor: number;
   pointsAgainst: number;
   pointDiff: number;
+  gamesBehind?: number;
   pct: number;
 };
 
@@ -88,6 +89,7 @@ function registerTeam(
     pointsFor: 0,
     pointsAgainst: 0,
     pointDiff: 0,
+    gamesBehind: 0,
     pct: 0,
   };
   rows.set(teamId, row);
@@ -140,7 +142,7 @@ export function buildNbaStandings({
     }
   });
 
-  return [...rows.values()]
+  const sorted = [...rows.values()]
     .map(row => {
       const gamesPlayed = row.wins + row.losses;
       return {
@@ -155,6 +157,12 @@ export function buildNbaStandings({
       || b.pointDiff - a.pointDiff
       || a.abbreviation.localeCompare(b.abbreviation)
     ));
+
+  const leader = sorted[0];
+  return sorted.map(row => ({
+    ...row,
+    gamesBehind: leader ? Math.max(0, ((leader.wins - row.wins) + (row.losses - leader.losses)) / 2) : 0,
+  }));
 }
 
 export function buildNbaCupGroupStandings({
