@@ -1556,13 +1556,16 @@ function normalizeScheduleKey(value) {
 function scheduleAliases(value) {
   const key = normalizeScheduleKey(value);
   if (!key) return [];
-  if (key === 'NOP') return ['NOP', 'NOH', 'NOK'];
-  if (key === 'NOH' || key === 'NOK') return ['NOH', 'NOK', 'NOP'];
-  if (key === 'BKN') return ['BKN', 'NJN'];
-  if (key === 'NJN') return ['NJN', 'BKN'];
-  if (key === 'OKC') return ['OKC', 'SEA'];
-  if (key === 'SEA') return ['SEA', 'OKC'];
-  return [key];
+  const displayKey = normalizeScheduleKey(displayScheduleAbbr(key));
+  const aliases = new Set([key, displayKey]);
+  const add = (...values) => values.filter(Boolean).forEach(value => aliases.add(normalizeScheduleKey(value)));
+  if (key === 'NOP' || displayKey === 'NOP') add('NOP', 'NOH', 'NOK');
+  if (key === 'NOH' || key === 'NOK' || displayKey === 'NOH' || displayKey === 'NOK') add('NOH', 'NOK', 'NOP');
+  if (key === 'BKN' || displayKey === 'BKN') add('BKN', 'NJN');
+  if (key === 'NJN' || displayKey === 'NJN') add('NJN', 'BKN');
+  if (key === 'OKC' || displayKey === 'OKC') add('OKC', 'SEA');
+  if (key === 'SEA' || displayKey === 'SEA') add('SEA', 'OKC');
+  return [...aliases];
 }
 
 function schedulePoolKeys(teamId, participant) {
@@ -1929,6 +1932,7 @@ module.exports = {
   gamesForCompetition,
   requestMatchup,
   resetScheduledGame,
+  scheduleAliases,
   scheduleCompetition,
   simulateScheduledGame,
   simulateScheduledGameResult,

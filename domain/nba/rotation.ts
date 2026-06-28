@@ -41,6 +41,15 @@ export type CpuRotationPlayer = {
   tierLabel?: string;
   reputation?: string;
   role?: string;
+  salary?: number;
+  currentSalary?: number;
+  annualSalary?: number;
+  seasonStats?: Record<string, unknown>;
+  careerStats?: Record<string, unknown>;
+  stats?: Record<string, unknown>;
+  ratings?: Record<string, unknown>;
+  attribute_model?: Record<string, unknown>;
+  era_adjusted_profiles?: Record<string, unknown>;
   hidden?: Record<string, unknown>;
   grades?: Record<string, unknown>;
   skill_grades?: Record<string, unknown>;
@@ -104,16 +113,27 @@ function playerValue(player: CpuRotationPlayer): number {
 }
 
 function numberFrom(player: CpuRotationPlayer, keys: string[], fallback = 0): number {
+  const nestedSources = [
+    (player as any).seasonStats,
+    (player as any).careerStats,
+    (player as any).stats,
+    (player as any).ratings,
+    (player as any).attribute_model,
+    (player as any).era_adjusted_profiles,
+    (player as any).identity?.hidden,
+    (player as any).visibleIdentity?.hidden,
+    player.hidden,
+  ].filter(Boolean);
+
   for (const key of keys) {
     const direct = (player as Record<string, unknown>)[key];
     if (typeof direct === 'number' && Number.isFinite(direct)) return direct;
     if (typeof direct === 'string' && direct.trim() !== '' && Number.isFinite(Number(direct))) return Number(direct);
-    const hidden = player.hidden?.[key];
-    if (typeof hidden === 'number' && Number.isFinite(hidden)) return hidden;
-    if (typeof hidden === 'string' && hidden.trim() !== '' && Number.isFinite(Number(hidden))) return Number(hidden);
-    const identityHidden = (player as any).identity?.hidden?.[key] ?? (player as any).visibleIdentity?.hidden?.[key];
-    if (typeof identityHidden === 'number' && Number.isFinite(identityHidden)) return identityHidden;
-    if (typeof identityHidden === 'string' && identityHidden.trim() !== '' && Number.isFinite(Number(identityHidden))) return Number(identityHidden);
+    for (const source of nestedSources) {
+      const nested = source?.[key];
+      if (typeof nested === 'number' && Number.isFinite(nested)) return nested;
+      if (typeof nested === 'string' && nested.trim() !== '' && Number.isFinite(Number(nested))) return Number(nested);
+    }
   }
   return fallback;
 }
@@ -168,6 +188,12 @@ export function rosterPlayerValue(player: CpuRotationPlayer): number {
     + numberFrom(player, ['spg', 'stealsPerGame', 'stl_per_g'], 0) * 1.8
     + numberFrom(player, ['bpg', 'blocksPerGame', 'blk_per_g'], 0) * 1.6;
   const realMinutes = numberFrom(player, ['minutes', 'rotationMinutes', 'minutesPerGame', 'mpg', 'mp_per_g'], 0);
+  const impactStats = Math.min(10, numberFrom(player, ['per', 'playerEfficiencyRating'], 0) * 0.18)
+    + Math.min(8, numberFrom(player, ['winShares', 'ws', 'careerWinShares'], 0) * 0.08)
+    + Math.min(6, numberFrom(player, ['vorp', 'valueOverReplacement'], 0) * 0.45);
+  const salarySignal = Math.min(7, numberFrom(player, ['salary', 'currentSalary', 'annualSalary'], 0) / 2_500_000);
+  const draftPick = numberFrom(player, ['draft_pick', 'draftPick', 'draftNumber'], 0);
+  const draftSignal = draftPick > 0 && draftPick <= 14 ? Math.max(0, (15 - draftPick) * 0.3) : 0;
   return scoring * 0.28
     + creation * 0.2
     + defense * 0.22
@@ -176,6 +202,9 @@ export function rosterPlayerValue(player: CpuRotationPlayer): number {
     + stamina * 0.08
     + Math.min(12, production)
     + Math.min(8, realMinutes * 0.2)
+    + impactStats
+    + salarySignal
+    + draftSignal
     + tierBoost(player);
 }
 

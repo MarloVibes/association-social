@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, FlatList, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -26,6 +26,36 @@ type Team = {
   rotation?: RotationSlot[];
 };
 
+function extractBrefId(player: Player): string {
+  if (player?.bref_id) return String(player.bref_id);
+  const raw = String(player?.player_id || player?.id || '');
+  if (!raw) return '';
+  if (raw.startsWith('pool_')) return raw.split('_').slice(2).join('_');
+  if (raw.startsWith('current_')) return raw.replace(/^current_/, '');
+  return raw.includes('_') ? raw.split('_').pop() || '' : raw;
+}
+
+async function enrichRotationPlayers(players: Player[]): Promise<Player[]> {
+  const ids = [...new Set(players.map(extractBrefId).filter(Boolean))];
+  if (ids.length === 0) return players;
+
+  try {
+    const profiles = await Promise.all(ids.map(id => getDoc(doc(db, 'players', id))));
+    const profileById = new Map<string, any>();
+    profiles.forEach((snapshot, index) => {
+      if (snapshot.exists()) profileById.set(ids[index], snapshot.data());
+    });
+
+    return players.map(player => {
+      const profile = profileById.get(extractBrefId(player));
+      return profile ? { ...profile, ...player } : player;
+    });
+  } catch (error) {
+    console.warn('rotation profile enrich skipped', error);
+    return players;
+  }
+}
+
 function playerId(player: Player): string {
   return String(player.player_id || player.id || player.bref_id || player.full_name || player.name || '');
 }
@@ -35,8 +65,8 @@ function playerName(player?: Player): string {
 }
 
 function roleLabel(slot: RotationSlot) {
-  if (slot.role === 'sixth_man') return '6th Man';
   if (slot.starter) return 'Starter';
+  if (slot.role === 'sixth_man') return '6th Man';
   if (slot.role === 'primary') return 'Primary';
   if (slot.role === 'secondary') return 'Secondary';
   if (slot.role === 'reserve') return 'Reserve';
@@ -75,7 +105,6 @@ function RotationRow({
   player,
   onReorder,
   onUpdateMinutes,
-  onToggle,
 }: {
   item: RotationSlot;
   index: number;
@@ -83,7 +112,6 @@ function RotationRow({
   player?: Player;
   onReorder: (from: number, to: number) => void;
   onUpdateMinutes: (playerId: string, delta: number) => void;
-  onToggle: (playerId: string, field: 'starter' | 'closing') => void;
 }) {
   const dragY = useRef(new Animated.Value(0)).current;
   const [dragging, setDragging] = useState(false);
@@ -113,8 +141,7 @@ function RotationRow({
       <View style={styles.playerCopy}>
         <Text style={styles.playerName}>{playerName(player)}</Text>
         <Text style={styles.playerMeta}>
-          {[player?.position, roleLabel(item), item.closing ? 'Closing' : null]
-            .filter(Boolean).join(' · ')}
+          {[player?.position, roleLabel(item)].filter(Boolean).join(' · ')}
         </Text>
       </View>
       <View {...panResponder.panHandlers} style={styles.dragHandle}>
@@ -129,12 +156,6 @@ function RotationRow({
           <Ionicons color="#ffffff" name="add" size={16} />
         </TouchableOpacity>
       </View>
-      <TouchableOpacity onPress={() => onToggle(item.playerId, 'starter')} style={[styles.chip, item.starter && styles.chipActive]}>
-        <Text style={[styles.chipText, item.starter && styles.chipTextActive]}>Start</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => onToggle(item.playerId, 'closing')} style={[styles.chip, item.closing && styles.chipActive]}>
-        <Text style={[styles.chipText, item.closing && styles.chipTextActive]}>Close</Text>
-      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -154,7 +175,7 @@ export default function RotationScreen() {
     const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (snapshot.exists()) setLeagueSport((snapshot.data() as any).sport || 'nba');
     });
-    const unsubscribeTeams = onSnapshot(collection(db, 'leagues', leagueId, 'teams'), snapshot => {
+    const unsubscribeTeams = onSnapshot(collection(db, 'leagues', leagueId, 'teams'), async snapshot => {
       const mine = snapshot.docs.find(item => item.data().gmId === uid);
       if (!mine) {
         setTeam(null);
@@ -162,11 +183,13 @@ export default function RotationScreen() {
         setLoading(false);
         return;
       }
-      const nextTeam = { id: mine.id, ...mine.data() } as Team;
+      const rawTeam = { id: mine.id, ...mine.data() } as Team;
+      const enrichedPlayers = await enrichRotationPlayers(rawTeam.players || []);
+      const nextTeam = { ...rawTeam, players: enrichedPlayers };
       setTeam(nextTeam);
       setRotation(Array.isArray(nextTeam.rotation) && nextTeam.rotation.length > 0
-        ? nextTeam.rotation
-        : buildCpuRotation(nextTeam.players || []));
+        ? normalizeOrder(nextTeam.rotation)
+        : buildCpuRotation(enrichedPlayers));
       setLoading(false);
     });
     return () => {
@@ -205,12 +228,6 @@ export default function RotationScreen() {
     });
   };
 
-  const toggle = (playerIdValue: string, field: 'starter' | 'closing') => {
-    setRotation(current => current.map(slot => (
-      slot.playerId === playerIdValue ? { ...slot, [field]: !slot[field] } : slot
-    )));
-  };
-
   const save = async () => {
     if (!leagueId || !team) return;
     if (!validation.valid) {
@@ -219,7 +236,7 @@ export default function RotationScreen() {
     }
     setSaving(true);
     try {
-      await httpsCallable(functions, 'saveTeamRotation')({ leagueId, rotation });
+      await httpsCallable(functions, 'saveTeamRotation')({ leagueId, rotation: normalizeOrder(rotation) });
       Alert.alert('Saved', 'Rotation saved for this team.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
@@ -280,7 +297,6 @@ export default function RotationScreen() {
               player={player}
               onReorder={reorderSlot}
               onUpdateMinutes={updateMinutes}
-              onToggle={toggle}
             />
           );
         }}
@@ -319,8 +335,4 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   controlButton: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#222' },
   minutes: { color: '#fff', fontSize: 14, fontWeight: '900', minWidth: 24, textAlign: 'center' },
-  chip: { minWidth: 48, height: 28, paddingHorizontal: 7, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#191919', borderWidth: 1, borderColor: '#2a2a2a' },
-  chipActive: { backgroundColor: '#0a2a1a', borderColor: '#00e58b' },
-  chipText: { color: '#777', fontSize: 10, fontWeight: '900' },
-  chipTextActive: { color: '#00e58b' },
 });

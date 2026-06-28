@@ -67,7 +67,64 @@ type BoxScorePlayer = {
   points?: number;
   rebounds?: number;
   assists?: number;
+  steals?: number;
+  blocks?: number;
+  turnovers?: number;
 };
+
+function genericStoredStory(story?: string) {
+  const text = String(story || '').toLowerCase();
+  return text.includes('controlled the decisive stretches')
+    || text.includes('balanced rotation production')
+    || text.includes('roster strength and rotation production');
+}
+
+function playerImpactScore(player: BoxScorePlayer) {
+  return Number(player.points || 0) * 2
+    + Number(player.rebounds || 0) * 1.15
+    + Number(player.assists || 0) * 1.35
+    + Number(player.steals || 0) * 2
+    + Number(player.blocks || 0) * 2
+    - Number(player.turnovers || 0) * 0.8;
+}
+
+function buildMatchupResultStory({
+  game,
+  homeLabel,
+  awayLabel,
+  performers,
+}: {
+  game: MatchupGame | null | undefined;
+  homeLabel: string;
+  awayLabel: string;
+  performers: Array<BoxScorePlayer & { side: 'home' | 'away' }>;
+}) {
+  if (!game || typeof game.homeScore !== 'number' || typeof game.awayScore !== 'number') return '';
+  if (game.story && !genericStoredStory(game.story)) return game.story;
+
+  const homeWon = Number(game.homeScore) > Number(game.awayScore);
+  const winner = homeWon ? homeLabel : awayLabel;
+  const loser = homeWon ? awayLabel : homeLabel;
+  const winnerScore = homeWon ? Number(game.homeScore) : Number(game.awayScore);
+  const loserScore = homeWon ? Number(game.awayScore) : Number(game.homeScore);
+  const margin = Math.abs(Number(game.homeScore) - Number(game.awayScore));
+  const opener = game.quarters?.some(quarter => Number(quarter.quarter) > 4)
+    ? `${winner} outlasted ${loser} in overtime, ${winnerScore}-${loserScore}.`
+    : margin <= 3
+      ? `${winner} survived a one-possession finish against ${loser}, ${winnerScore}-${loserScore}.`
+      : margin <= 9
+        ? `${winner} closed a tight game over ${loser}, ${winnerScore}-${loserScore}.`
+        : margin >= 20
+          ? `${winner} ran away from ${loser}, ${winnerScore}-${loserScore}.`
+          : `${winner} handled the key stretches against ${loser}, ${winnerScore}-${loserScore}.`;
+
+  const leader = performers[0];
+  const leaderTeam = leader?.side === 'home' ? homeLabel : awayLabel;
+  const leaderLine = leader
+    ? `${leader.name || 'The top performer'} led ${leaderTeam} with ${Number(leader.points || 0)} points, ${Number(leader.rebounds || 0)} rebounds, and ${Number(leader.assists || 0)} assists.`
+    : '';
+  return [opener, leaderLine].filter(Boolean).join(' ');
+}
 
 export default function MatchupScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
@@ -189,114 +246,6 @@ export default function MatchupScreen() {
     }
   }, [myTeam?.defaultCoachingPresetId]);
 
-  const resetGameLocally = async () => {
-    if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready to reset.');
-    const scheduleId = league.scheduleId || String(league.currentYear || 2025);
-    const nextGames = scheduledGames.map((item) => {
-      if (item.id !== game.id) return item;
-      const {
-        requestedByUid,
-        requestedAtMs,
-        responseDeadlineMs,
-        acceptedByUid,
-        acceptedAtMs,
-        preparationDeadlineMs,
-        expiredAtMs,
-        simulationStartedByUid,
-        simulationStartedAtMs,
-        homeScore,
-        awayScore,
-        winnerTeamId,
-        loserTeamId,
-        finalAtMs,
-        liveTimeline,
-        liveMode,
-        arenaTheme,
-        coachingImpact,
-        ...baseGame
-      } = item as any;
-      void requestedByUid;
-      void requestedAtMs;
-      void responseDeadlineMs;
-      void acceptedByUid;
-      void acceptedAtMs;
-      void preparationDeadlineMs;
-      void expiredAtMs;
-      void simulationStartedByUid;
-      void simulationStartedAtMs;
-      void homeScore;
-      void awayScore;
-      void winnerTeamId;
-      void loserTeamId;
-      void finalAtMs;
-      void liveTimeline;
-      void liveMode;
-      void arenaTheme;
-      void coachingImpact;
-      return {
-        ...baseGame,
-        status: 'scheduled',
-        resetByUid: uid,
-        resetAtMs: Date.now(),
-      };
-    });
-    await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), isCupGame ? {
-      'nbaCup.games': nextGames,
-    } : isPlayoffGame ? {
-      playoffs: {
-        ...(schedule.playoffs || {}),
-        rounds: schedule.playoffs?.rounds?.map(round => ({
-          ...round,
-          series: round.series?.map(series => ({
-            ...series,
-            games: series.games?.map(item => nextGames.find(next => next.id === item.id) || item) || [],
-          })) || [],
-        })) || [],
-      },
-    } : {
-      games: nextGames,
-    });
-  };
-
-  const submitWinnerLocally = async (winnerTeamId: string) => {
-    if (!leagueId || !league || !game || !schedule || !uid) throw new Error('Game is not ready for result entry.');
-    const scheduleId = league.scheduleId || String(league.currentYear || 2025);
-    const nowMs = Date.now();
-    const winnerIsHome = winnerTeamId === game.homeTeamId;
-    const homeScore = winnerIsHome ? 101 : 97;
-    const awayScore = winnerIsHome ? 97 : 101;
-    const nextGames = scheduledGames.map((item) => (
-      item.id === game.id
-        ? {
-          ...item,
-          status: 'final',
-          homeScore,
-          awayScore,
-          winnerTeamId,
-          loserTeamId: winnerTeamId === item.homeTeamId ? item.awayTeamId : item.homeTeamId,
-          finalScoreSubmittedByUid: uid,
-          finalAtMs: nowMs,
-        }
-        : item
-    ));
-    await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), isCupGame ? {
-      'nbaCup.games': nextGames,
-    } : isPlayoffGame ? {
-      playoffs: {
-        ...(schedule.playoffs || {}),
-        rounds: schedule.playoffs?.rounds?.map(round => ({
-          ...round,
-          series: round.series?.map(series => ({
-            ...series,
-            games: series.games?.map(item => nextGames.find(next => next.id === item.id) || item) || [],
-          })) || [],
-        })) || [],
-      },
-    } : {
-      games: nextGames,
-    });
-  };
-
   const call = async (name: string) => {
     if (!leagueId || !gameId) return;
     setWorking(true);
@@ -317,13 +266,8 @@ export default function MatchupScreen() {
         return;
       }
       if (name === 'resetScheduledGame' && isMissingCallable(error)) {
-        try {
-          await resetGameLocally();
-          return;
-        } catch (fallbackError: any) {
-          Alert.alert('Matchup action failed', fallbackError.message || 'Please try again.');
-          return;
-        }
+        Alert.alert('Reset unavailable', 'Reset needs the latest cloud functions so player stats roll back correctly. Deploy functions, then try again.');
+        return;
       }
       Alert.alert('Matchup action failed', error.message || 'Please try again.');
     } finally {
@@ -344,13 +288,8 @@ export default function MatchupScreen() {
       router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
     } catch (error: any) {
       if (isMissingCallable(error) && isLeagueAdmin) {
-        try {
-          await submitWinnerLocally(winnerTeamId);
-          return;
-        } catch (fallbackError: any) {
-          Alert.alert('Result failed', fallbackError.message || 'Please try again.');
-          return;
-        }
+        Alert.alert('Result unavailable', 'Winner selection needs the latest cloud functions so the box score and player stats stay synced. Deploy functions, then try again.');
+        return;
       }
       Alert.alert('Result failed', error.message || 'Please try again.');
     } finally {
@@ -406,9 +345,10 @@ export default function MatchupScreen() {
   const canReset = Boolean(isLeagueAdmin && game && game.status !== 'scheduled');
   const hasFinalScore = game?.status === 'final' && typeof game.homeScore === 'number' && typeof game.awayScore === 'number';
   const topPerformers = [
-    ...(game?.boxScore?.home?.players || []),
-    ...(game?.boxScore?.away?.players || []),
-  ].sort((left, right) => Number(right.points || 0) - Number(left.points || 0)).slice(0, 4);
+    ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: 'home' as const })),
+    ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: 'away' as const })),
+  ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left)).slice(0, 4);
+  const resultStory = buildMatchupResultStory({ game, homeLabel, awayLabel, performers: topPerformers });
 
   return (
     <View style={styles.screen}>
@@ -458,9 +398,9 @@ export default function MatchupScreen() {
                   ) : null}
                   <Text style={styles.summaryMeta}>{gameContextLabel}</Text>
                 </View>
-                {hasFinalScore && (game.story || game.quarters?.length || game.boxScore) ? (
+                {hasFinalScore && (resultStory || game.quarters?.length || game.boxScore) ? (
                   <View style={styles.resultCard}>
-                    {game.story ? <Text style={styles.storyText}>{game.story}</Text> : null}
+                    {resultStory ? <Text style={styles.storyText}>{resultStory}</Text> : null}
                     {game.quarters?.length ? (
                       <View style={styles.quarterRow}>
                         {game.quarters.map(quarter => (

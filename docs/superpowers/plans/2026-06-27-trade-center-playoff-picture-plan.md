@@ -432,9 +432,9 @@ setTradePickerOpen(true)
 router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId } })
 ```
 
-- [ ] **Step 2: Replace the standalone Propose Trade button with a Trade Center section**
+- [ ] **Step 2: Replace the standalone Trade button with a Trade Center section**
 
-Remove the standalone `🔁 Propose Trade` button below `League Rosters`.
+Remove the standalone Trade button below `League Rosters`.
 
 Insert this section after the `Season Hub` block and before `Recent Activity`:
 
@@ -456,7 +456,7 @@ Insert this section after the `Season Hub` block and before `Recent Activity`:
       }}
     >
       <Text style={styles.tradeCenterButtonIcon}>🔁</Text>
-      <Text style={[styles.tradeCenterButtonText, { color: titleColor }]}>Propose Trade</Text>
+      <Text style={[styles.tradeCenterButtonText, { color: titleColor }]}>Trade</Text>
     </TouchableOpacity>
     <TouchableOpacity
       style={[styles.tradeCenterButton, { borderColor: teamTheme.borderColor + '88' }]}
@@ -573,4 +573,3 @@ git status --short
 ```
 
 Expected: only `.superpowers/` remains untracked, or a clean tree if that scratch folder is ignored locally.
-

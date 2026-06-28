@@ -67,6 +67,7 @@ describe('neutral player rating profile', () => {
     expect(profile.era_adjusted_profiles.threePoint).toBeGreaterThanOrEqual(profile.attribute_model.threePoint);
     expect(profile.skill_grades.passing).toBeTruthy();
     expect(profile.archetypes.length).toBeGreaterThan(0);
+    expect(profile.archetypes.join(' ')).not.toContain('Contributor');
     expect(profile.traits.length).toBeGreaterThan(0);
     expect(profile.development_curve.potential).toBe(profile.era_adjusted_profiles.potential);
   });

@@ -10,7 +10,7 @@ The league home screen should expose a clearer Trade Center area instead of maki
 
 Trade Center should include:
 
-- `Propose Trade`: opens a team/GM picker and routes into the existing Trade Room with the selected team.
+- `Trade`: opens a team/GM picker and routes into the existing Trade Room with the selected team.
 - `Trade Block`: opens the existing trade channel / trade center feed.
 - `CPU Trade Requests`: visible to commissioners when relevant.
 - Existing trade-room behavior remains the source of truth for offers, picks, salary checks, approvals, vetoes, and execution.
@@ -59,7 +59,7 @@ Existing playoff series and matchup screens should remain the runtime for simula
 League home should eventually group these as:
 
 - `Trade Center`
-  - Propose Trade
+  - Trade
   - Trade Block
   - CPU Trade Requests
 - `Season`
@@ -97,9 +97,8 @@ Postseason start:
 
 Coverage should include:
 
-- Trade Center `Propose Trade` routes to the right trade room setup.
+- Trade Center `Trade` routes to the right trade room setup.
 - Playoff picture updates from standings without writing playoff games.
 - Incomplete seasons cannot start postseason.
 - Complete seasons can create the playable postseason schedule.
 - Play-in format creates play-in first and does not pretend the first round is final before play-in winners exist.
-

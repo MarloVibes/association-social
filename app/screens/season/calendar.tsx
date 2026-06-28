@@ -59,10 +59,15 @@ type TeamPresentation = {
   abbr: string;
 };
 
+type CalendarSectionRow = {
+  id: string;
+  games: CalendarGame[];
+};
+
 type CalendarSection = {
   title: string;
   gameRange: string;
-  data: CalendarGame[];
+  data: CalendarSectionRow[];
 };
 
 function cupSectionTitle(game: CalendarGame) {
@@ -92,6 +97,10 @@ function formatGameRange(games: CalendarGame[]) {
 function formatFinalScore(game: CalendarGame) {
   if (game.status !== 'final' || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return '';
   return `${game.awayScore}-${game.homeScore}`;
+}
+
+function sectionRowId(prefix: string, value: string | number) {
+  return `${prefix}-${String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
 
 export default function CalendarScreen() {
@@ -225,7 +234,7 @@ export default function CalendarScreen() {
           return {
             title: group,
             gameRange: formatGameRange(sortedGames),
-            data: sortedGames,
+            data: [{ id: sectionRowId('cup', group), games: sortedGames }],
           };
         });
     }
@@ -241,7 +250,7 @@ export default function CalendarScreen() {
         return {
           title: `Week ${week}`,
           gameRange: formatGameRange(sortedGames),
-          data: sortedGames,
+          data: [{ id: sectionRowId('week', week), games: sortedGames }],
         };
       });
   }, [games, selectedViewMode]);
@@ -368,13 +377,24 @@ export default function CalendarScreen() {
             ) : (
               <>
                 <View style={styles.summary}>
-                  <Text style={styles.summaryText}>{selectedViewMode === 'cup' ? 'NBA Cup' : `${schedule.gamesPerTeam || 0} games per team`}</Text>
+                  <View style={styles.summaryTop}>
+                    <View>
+                      <Text style={styles.summaryText}>{selectedViewMode === 'cup' ? 'NBA Cup' : `${schedule.gamesPerTeam || 0} games per team`}</Text>
+                      <Text style={styles.summaryMeta}>
+                        {selectedViewMode === 'cup'
+                          ? `${cupGames.length} NBA Cup games`
+                          : selectedViewMode === 'mine'
+                            ? `${myGames.length} team games`
+                            : `${allGames.length} league games`}
+                      </Text>
+                    </View>
+                    <View style={styles.boardBadge}>
+                      <Ionicons color="#00e58b" name="grid-outline" size={15} />
+                      <Text style={styles.boardBadgeText}>Board</Text>
+                    </View>
+                  </View>
                   <Text style={styles.summaryMeta}>
-                    {selectedViewMode === 'cup'
-                      ? `${cupGames.length} group-play games`
-                      : selectedViewMode === 'mine'
-                        ? `${myGames.length} team games`
-                        : `${allGames.length} league games`}
+                    Season windows and reset ranges
                   </Text>
                 </View>
                 <View style={styles.segment}>
@@ -403,6 +423,20 @@ export default function CalendarScreen() {
                     </TouchableOpacity>
                   ) : null}
                 </View>
+                <View style={styles.legend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendSwatch, styles.legendHome]} />
+                    <Text style={styles.legendText}>Home</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendSwatch, styles.legendAway]} />
+                    <Text style={styles.legendText}>Away</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendSwatch, styles.legendMine]} />
+                    <Text style={styles.legendText}>My games</Text>
+                  </View>
+                </View>
                 {selectedViewMode === 'cup' && isLeagueAdmin ? (
                   <TouchableOpacity
                     disabled={advancingCup || Boolean(schedule.nbaCup?.championTeamId)}
@@ -428,79 +462,90 @@ export default function CalendarScreen() {
             <Text style={styles.weekRange}>{section.gameRange}</Text>
           </View>
         )}
-        renderItem={({ item }) => {
-          const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || displayScheduleName({ scheduleTeamId: item.homeTeamId }), abbr: displayScheduleAbbr(item.homeTeamId) };
-          const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || displayScheduleName({ scheduleTeamId: item.awayTeamId }), abbr: displayScheduleAbbr(item.awayTeamId) };
-          const cupGame = selectedViewMode === 'cup' || item.competition === 'nbaCup';
-          const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
-          const mine = myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid);
-          const openable = Boolean(mine || isLeagueAdmin);
-          const resultRevealed = isLiveResultRevealed(item, nowMs);
-          const needsReset = isLeagueAdmin && item.status !== 'scheduled' && resultRevealed;
-          const finalScore = resultRevealed ? formatFinalScore(item) : '';
-          const statusLabel = item.status === 'final' && !resultRevealed
-            ? 'Live'
-            : item.status === 'final'
-            ? finalScore || 'Final'
-            : item.status === 'scheduled' && mine
-              ? 'Ready'
-              : item.status === 'requested'
-                ? 'Requested'
-                : item.status === 'preparing'
-                  ? 'Prep'
-                  : item.status === 'simulating'
-                    ? 'Sim'
-                    : '';
-          return (
-            <TouchableOpacity
-              style={[styles.gameRow, mine && styles.myGame, !openable && styles.disabledGame]}
-              disabled={!openable}
-              onPress={() => {
-                const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
-                const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;
-                router.push({
-                  pathname: destination as any,
-                  params: {
-                    leagueId,
-                    gameId: item.id,
-                    competition: competitionParam,
-                  },
-                });
-              }}
-            >
-              <View style={styles.gameCopy}>
-                <View style={styles.logoMatchup}>
-                  <View style={styles.logoSide}>
-                    <View style={styles.logoDisc}>
-                      <SportTeamLogo sport="nba" abbr={away.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+        renderItem={({ item: sectionRow }) => (
+          <View style={styles.calendarGrid}>
+            {sectionRow.games.map((item) => {
+              const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || displayScheduleName({ scheduleTeamId: item.homeTeamId }), abbr: displayScheduleAbbr(item.homeTeamId) };
+              const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || displayScheduleName({ scheduleTeamId: item.awayTeamId }), abbr: displayScheduleAbbr(item.awayTeamId) };
+              const cupGame = selectedViewMode === 'cup' || item.competition === 'nbaCup';
+              const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
+              const mine = Boolean(myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid));
+              const openable = Boolean(mine || isLeagueAdmin);
+              const resultRevealed = isLiveResultRevealed(item, nowMs);
+              const needsReset = isLeagueAdmin && item.status !== 'scheduled' && resultRevealed;
+              const finalScore = resultRevealed ? formatFinalScore(item) : '';
+              const statusLabel = item.status === 'final' && !resultRevealed
+                ? 'Live'
+                : item.status === 'final'
+                ? finalScore || 'Final'
+                : item.status === 'scheduled' && mine
+                  ? 'Ready'
+                  : item.status === 'requested'
+                    ? 'Requested'
+                    : item.status === 'preparing'
+                      ? 'Prep'
+                      : item.status === 'simulating'
+                        ? 'Sim'
+                        : 'Open';
+              const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
+              const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.calendarTile, mine && styles.myGame, !openable && styles.disabledGame]}
+                  disabled={!openable}
+                  onPress={() => {
+                    router.push({
+                      pathname: destination as any,
+                      params: {
+                        leagueId,
+                        gameId: item.id,
+                        competition: competitionParam,
+                      },
+                    });
+                  }}
+                >
+                  <View style={styles.tileTop}>
+                    <Text style={styles.tileGameNo}>Game {item.sequence}</Text>
+                    <Text style={[styles.tileStatus, item.status === 'final' && styles.finalText]}>{statusLabel}</Text>
+                  </View>
+                  <View style={styles.tileMatchup}>
+                    <View style={styles.tileTeam}>
+                      <View style={[styles.tileLogoDisc, styles.awayLogoDisc]}>
+                        <SportTeamLogo sport="nba" abbr={away.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+                      </View>
+                      <Text style={styles.teamLabel} numberOfLines={1}>{away.abbr}</Text>
+                      <Text style={styles.teamName} numberOfLines={1}>{away.label}</Text>
                     </View>
-                    <Text style={styles.teamLabel} numberOfLines={1}>{away.label}</Text>
-                  </View>
-                  <View style={styles.versusPill}>
-                    <Text style={styles.versusText}>AT</Text>
-                  </View>
-                  <View style={styles.logoSide}>
-                    <View style={styles.logoDisc}>
-                      <SportTeamLogo sport="nba" abbr={home.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+                    <View style={styles.versusStack}>
+                      <View style={styles.versusPill}>
+                        <Text style={styles.versusText}>AT</Text>
+                      </View>
+                      {finalScore ? <Text style={styles.tileScore}>{finalScore}</Text> : null}
                     </View>
-                    <Text style={styles.teamLabel} numberOfLines={1}>{home.label}</Text>
+                    <View style={styles.tileTeam}>
+                      <View style={[styles.tileLogoDisc, styles.homeLogoDisc]}>
+                        <SportTeamLogo sport="nba" abbr={home.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+                      </View>
+                      <Text style={styles.teamLabel} numberOfLines={1}>{home.abbr}</Text>
+                      <Text style={styles.teamName} numberOfLines={1}>{home.label}</Text>
+                    </View>
                   </View>
-                </View>
-              </View>
-              <View style={styles.gameStatusColumn}>
-                {statusLabel ? (
-                  <Text style={[styles.statusText, item.status === 'final' && styles.finalText]}>{statusLabel}</Text>
-                ) : null}
-                {needsReset ? (
-                  <Text style={styles.resetHint}>Reset</Text>
-                ) : null}
-                {cupGame ? (
-                  <Text style={styles.cupHint}>Cup</Text>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+                  <View style={styles.tileFooter}>
+                    {cupGame ? (
+                      <Text style={styles.cupHint}>NBA Cup</Text>
+                    ) : (
+                      <Text style={styles.tileHint}>{openable ? 'Tap to manage' : 'League game'}</Text>
+                    )}
+                    {needsReset ? (
+                      <Text style={styles.resetHint}>Reset</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
         ListEmptyComponent={schedule ? (
           <View style={styles.emptyCard}>
             <Text style={styles.empty}>
@@ -533,8 +578,11 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontSize: 28, fontWeight: '900' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20, marginBottom: 16 },
   summary: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
+  summaryTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   summaryText: { color: '#fff', fontSize: 17, fontWeight: '900' },
   summaryMeta: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  boardBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, borderWidth: 1, borderColor: '#00e58b44', paddingHorizontal: 9, paddingVertical: 6, backgroundColor: '#06140e' },
+  boardBadgeText: { color: '#00e58b', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
   segment: { flexDirection: 'row', backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 4, marginBottom: 14, gap: 4 },
   segmentButton: { flex: 1, minHeight: 42, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   segmentButtonActive: { backgroundColor: '#0a1d14', borderWidth: 1, borderColor: '#00e58b55' },
@@ -542,22 +590,37 @@ const styles = StyleSheet.create({
   segmentText: { color: '#777', fontSize: 12, fontWeight: '900' },
   segmentTextActive: { color: '#00e58b' },
   segmentCount: { color: '#555', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6, paddingHorizontal: 2 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendSwatch: { width: 14, height: 6, borderRadius: 999 },
+  legendHome: { backgroundColor: '#2477ff' },
+  legendAway: { backgroundColor: '#d8345f' },
+  legendMine: { backgroundColor: '#00e58b' },
+  legendText: { color: '#777', fontSize: 10, fontWeight: '800' },
   weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 8, paddingHorizontal: 2 },
   weekTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },
-  gameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#111', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 2 },
+  calendarTile: { width: '48.7%', minHeight: 158, borderRadius: 8, borderWidth: 1, borderColor: '#202020', backgroundColor: '#111', padding: 10, justifyContent: 'space-between' },
   myGame: { borderColor: '#00e58b55', backgroundColor: '#0a1d14' },
   disabledGame: { opacity: 0.7 },
-  gameCopy: { flex: 1 },
-  logoMatchup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoSide: { flex: 1, minWidth: 0, alignItems: 'center', gap: 5 },
-  logoDisc: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 },
+  tileGameNo: { color: '#777', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  tileStatus: { color: '#00e58b', fontSize: 11, fontWeight: '900', textAlign: 'right' },
+  tileMatchup: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  tileTeam: { flex: 1, minWidth: 0, alignItems: 'center' },
+  tileLogoDisc: { width: 47, height: 47, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 2 },
+  awayLogoDisc: { borderColor: '#d8345f88' },
+  homeLogoDisc: { borderColor: '#2477ff88' },
   teamLogo: { width: 35, height: 35 },
   teamLabel: { color: '#fff', fontSize: 11, fontWeight: '900', maxWidth: '100%' },
+  teamName: { color: '#777', fontSize: 8, fontWeight: '800', marginTop: 2, maxWidth: '100%' },
+  versusStack: { alignItems: 'center', gap: 6, width: 34 },
   versusPill: { width: 28, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#080808', borderWidth: 1, borderColor: '#2a2a2a' },
   versusText: { color: '#777', fontSize: 9, fontWeight: '900' },
-  gameStatusColumn: { width: 52, alignItems: 'flex-end', gap: 4 },
-  statusText: { color: '#00e58b', fontSize: 12, fontWeight: '900', textAlign: 'right' },
+  tileScore: { color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  tileFooter: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 },
+  tileHint: { color: '#555', fontSize: 9, fontWeight: '800' },
   finalText: { color: '#fff' },
   resetHint: { color: '#ff6b6b', fontSize: 11, fontWeight: '900' },
   cupHint: { color: '#f4c542', fontSize: 10, fontWeight: '900' },

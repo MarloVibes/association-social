@@ -518,7 +518,7 @@ git commit -m "feat: support possession timeline metadata"
 
 ---
 
-### Task 4: Starters-First Head-To-Head Live Feed
+### Task 4: Head-To-Head Live Feed
 
 **Files:**
 - Modify: `app/screens/season/live-mode.tsx`
@@ -529,11 +529,11 @@ git commit -m "feat: support possession timeline metadata"
 Add a test in `tests/domain/sourceSafety.test.ts`:
 
 ```ts
-it('renders Live Mode player stats as starter head-to-head matchups', () => {
+it('renders Live Mode player stats as head-to-head matchups', () => {
   const liveMode = source('app/screens/season/live-mode.tsx');
   expect(liveMode).toContain('starterMatchupsForTimeline');
   expect(liveMode).toContain('See More Player Stats');
-  expect(liveMode).toContain('Starter Matchups');
+  expect(liveMode).toContain('Matchups');
 });
 ```
 
@@ -557,20 +557,20 @@ Add local state:
 const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
 ```
 
-Add memoized starter rows:
+Add memoized matchup rows:
 
 ```ts
 const starterMatchups = useMemo(() => starterMatchupsForTimeline(liveTimeline), [liveTimeline]);
 ```
 
-- [ ] **Step 4: Replace the old player stats list with starter matchup rows**
+- [ ] **Step 4: Replace the old player stats list with matchup rows**
 
-Render a section titled `Starter Matchups` before play-by-play:
+Render a section titled `Matchups` before play-by-play:
 
 ```tsx
 <View style={styles.panel}>
   <View style={styles.panelHeaderRow}>
-    <Text style={styles.panelTitle}>Starter Matchups</Text>
+    <Text style={styles.panelTitle}>Matchups</Text>
     <TouchableOpacity onPress={() => setShowFullPlayerStats(value => !value)} style={styles.smallOutlineButton}>
       <Text style={styles.smallOutlineButtonText}>{showFullPlayerStats ? 'Hide' : 'See More Player Stats'}</Text>
     </TouchableOpacity>

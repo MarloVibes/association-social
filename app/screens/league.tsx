@@ -1,14 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { arrayRemove, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Alert, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
-import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal, getTeamTheme, getCurrentTeamAbbr } from '@/constants/teamColors';
+import { getTeamColors, getTeamTheme } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
-import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import { setLastLeagueId } from '@/utils/lastLeague';
@@ -47,10 +46,7 @@ export default function LeagueScreen() {
   const [myTeam, setMyTeam] = useState<any>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
-  const [activity, setActivity] = useState<any[]>([]);
-  const [activityIndex, setActivityIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
 
   const user = auth.currentUser;
   const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
@@ -77,17 +73,13 @@ export default function LeagueScreen() {
     const b = parseInt(hex.slice(5,7), 16) / 255;
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
-  // If team color is very dark (close to black), use white as visual fallback for borders/tints
-  const displayPrimary = hexToLum(teamPrimary) < 0.1 ? '#ffffff' : teamPrimary;
   // Per-team theme overrides (button labels, borders, tints)
   const teamTheme = isNBASport
     ? getTeamTheme(myTeam?.abbreviation || teamAbbr, league?.era)
     : getSportTeamTheme(leagueSport, myTeam?.abbreviation || teamAbbr);
   const titleColor = teamTheme.titleColor;
-  const borderColor = teamTheme.borderColor;
   const tintColor = teamTheme.tintColor;
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
-  const teamNameColor = hexToLum(teamSecondary) < 0.35 || hexToLum(teamSecondary) > 0.95 ? '#ffffff' : teamSecondary;
   const myTeamPlayersByValue = [...(myTeam?.players || [])].sort(compareRosterPlayersByValue);
 
   useEffect(() => {
@@ -123,14 +115,6 @@ export default function LeagueScreen() {
 
     loadLeague();
 
-    const activityQuery = query(
-      collection(db, 'leagues', leagueId, 'activity'),
-      orderBy('createdAt', 'desc')
-    );
-    const unsubscribe = onSnapshot(activityQuery, snap => {
-      setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, err => { if (err.code !== 'permission-denied') console.error(err); });
-
     // If the league is deleted while we're viewing it, return to the main menu.
     const unsubLeague = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
       if (!snap.exists()) {
@@ -141,7 +125,7 @@ export default function LeagueScreen() {
       }
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
-    return () => { unsubscribe(); unsubLeague(); };
+    return () => { unsubLeague(); };
   }, [leagueId]);
 
   const handleLeaveLeague = async () => {
@@ -189,22 +173,6 @@ export default function LeagueScreen() {
           }
         },
       },
-    ]);
-  };
-
-  const handleMemberLongPress = (member: any) => {
-    if (member.uid === user?.uid) return;
-    Alert.alert(member.displayName, 'What would you like to do?', [
-      {
-        text: 'DM',
-        onPress: () => router.push({ pathname: '/screens/dm', params: { uid: member.uid, name: member.displayName } }),
-      },
-      {
-        text: 'Block / Report',
-        style: 'destructive',
-        onPress: () => blockAndReport(member.uid, member.displayName),
-      },
-      { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
@@ -424,188 +392,6 @@ export default function LeagueScreen() {
           </TouchableOpacity>
         )}
 
-        {isNBASport && (
-          <View style={[styles.seasonHub, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '16' }]}>
-            <View style={styles.seasonHubHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.seasonHubTitle, { color: titleColor }]}>Season Hub</Text>
-                <Text style={styles.seasonHubSub}>Calendar, standings, playoffs, awards, scouting, rotations, and coaching</Text>
-              </View>
-              <Text style={[styles.seasonHubChevron, { color: titleColor }]}>NBA</Text>
-            </View>
-            <View style={styles.seasonHubGrid}>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>📅</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Calendar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/season/standings', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>🏆</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Standings</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/season/playoffs', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>🥇</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Playoff Picture</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/season/awards', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>💍</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Awards</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => {
-                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before spending upgrade points.'); return; }
-                  router.push({ pathname: '/screens/season/player-upgrades', params: { leagueId } });
-                }}
-              >
-                <Text style={styles.seasonHubButtonIcon}>⬆️</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Upgrades</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => {
-                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before setting rotations.'); return; }
-                  router.push({ pathname: '/screens/season/rotation', params: { leagueId } });
-                }}
-              >
-                <Text style={styles.seasonHubButtonIcon}>⛹️</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Rotation</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => {
-                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before scouting.'); return; }
-                  router.push({ pathname: '/screens/season/scouting', params: { leagueId } });
-                }}
-              >
-                <Text style={styles.seasonHubButtonIcon}>🔎</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Scouting</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/season/injuries', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>➕</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Injuries</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => {
-                  if (!myTeam) { Alert.alert('No team yet', 'Claim a team before saving coaching presets.'); return; }
-                  router.push({ pathname: '/screens/season/coaching-presets', params: { leagueId } });
-                }}
-              >
-                <Text style={styles.seasonHubButtonIcon}>📋</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Coaching</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seasonHubButton, { borderColor: teamTheme.borderColor + '88' }]}
-                onPress={() => router.push({ pathname: '/screens/offseason/draft-class', params: { leagueId } })}
-              >
-                <Text style={styles.seasonHubButtonIcon}>🧾</Text>
-                <Text style={[styles.seasonHubButtonText, { color: titleColor }]}>Draft Class</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* League Activity Carousel */}
-        <View style={styles.activityCarouselHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {activity.length > 0 && (
-            <View style={styles.activityNav}>
-              <TouchableOpacity
-                onPress={() => setActivityIndex(i => Math.max(0, i - 1))}
-                style={[styles.activityNavBtn, activityIndex === 0 && styles.activityNavBtnDisabled]}
-              >
-                <Text style={styles.activityNavText}>‹</Text>
-              </TouchableOpacity>
-              <Text style={styles.activityNavCount}>{activityIndex + 1} of {activity.length}</Text>
-              <TouchableOpacity
-                onPress={() => setActivityIndex(i => Math.min(activity.length - 1, i + 1))}
-                style={[styles.activityNavBtn, activityIndex === activity.length - 1 && styles.activityNavBtnDisabled]}
-              >
-                <Text style={styles.activityNavText}>›</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        {activity.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No activity yet. Pick up your first player!</Text>
-          </View>
-        ) : (() => {
-          const item = activity[activityIndex];
-          const typeIcon = item.type === 'pickup' || item.type === 'sign' ? '✍️' :
-            item.type === 'drop' ? '❌' :
-            item.type === 'tradeblock' ? '🔄' :
-            item.type === 'trade_listing' ? '💰' :
-            item.type === 'join' ? '👋' :
-            item.type === 'announcement' ? '📰' :
-            item.type === 'reset_request' ? '🔁' : '📋';
-
-          const getDeepLink = () => {
-            if (item.type === 'trade_listing' || item.type === 'tradeblock')
-              return () => router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
-            if (item.type === 'pickup' || item.type === 'sign' || item.type === 'drop')
-              return () => router.push({ pathname: '/screens/roster', params: { leagueId, teamId: myTeam?.id || '', leagueName: league.name, era: league.era, sport: league.sport, mode: league.mode } });
-            if (item.type === 'announcement')
-              return () => router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: league.name, channelId: 'announcements', channelLabel: 'League News', channelIcon: '📰', commissionerId: league.commissionerId, coCommissioners: JSON.stringify(league.coCommissioners || []) } });
-            if (item.type === 'reset_request')
-              return () => router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: league.name, channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: league.commissionerId, coCommissioners: JSON.stringify(league.coCommissioners || []) } });
-            if (item.type === 'join')
-              return () => router.push({ pathname: '/screens/league-members', params: { leagueId } });
-            return null;
-          };
-
-          const deepLink = getDeepLink();
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.activityCarouselCard}
-              onPress={deepLink || undefined}
-              activeOpacity={deepLink ? 0.7 : 1}
-            >
-              <View style={styles.activityCardTop}>
-                <Text style={styles.activityTypeIcon}>{typeIcon}</Text>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityMessage}>
-                    {item.playerName ? (
-                      <>
-                        {item.message.split(item.playerName)[0]}
-                        <Text style={styles.activityPlayerLink}>{item.playerName}</Text>
-                        {item.message.split(item.playerName)[1]}
-                      </>
-                    ) : item.message}
-                  </Text>
-                  {deepLink && <Text style={styles.activityLink}>Tap to view →</Text>}
-                  <Text style={styles.activityTime}>
-                    {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : ''}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })()}
-
-        <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
-          onPress={() => router.push({ pathname: '/screens/league-activity', params: { leagueId } })}
-        >
-          <Text style={[styles.rostersBtnText, { color: titleColor }]}>📜 League Activity</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
           onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
@@ -685,7 +471,6 @@ const styles = StyleSheet.create({
   channelsTabLabel: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 3 },
   channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
   channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
   myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 2 },
   myTeamChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
   myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -703,46 +488,13 @@ const styles = StyleSheet.create({
   pickTeamBtnText: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
   pickTeamBtnSub: { color: '#4a8a4a', fontSize: 12 },
   pickTeamChevron: { color: '#4a8a4a', fontSize: 24, marginLeft: 'auto' },
-  rosterBtn: { backgroundColor: '#00ff87', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 18 },
-  rosterBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
   findGMsBtn: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center', borderWidth: 1, marginLeft: 'auto' },
   findGMsBtnText: { fontSize: 12, fontWeight: '700' },
-  myTeamChip: { backgroundColor: '#1a1a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#2a2a2a', flex: 1 },
-  myTeamChipText: { color: '#888', fontSize: 13 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 8 },
-  memberHint: { color: '#333', fontSize: 12, marginBottom: 14 },
-  emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },
-  emptyText: { color: '#666', fontSize: 14, textAlign: 'center' },
 
-  activityCarouselHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  activityNav: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  activityNavBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },
-  activityNavBtnDisabled: { opacity: 0.3 },
-  activityNavText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  activityNavCount: { color: '#666', fontSize: 12 },
-  activityCarouselCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  activityLink: { color: '#ff9900', fontSize: 11, marginTop: 4, fontWeight: '600' },
-  activityCardTop: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', flex: 1 },
-  activityTypeIcon: { fontSize: 20, lineHeight: 24 },
-  activityPlayerLink: { color: '#00ff87', fontWeight: '700' },
   metaBtns: { flexDirection: 'row', gap: 8, marginLeft: 'auto' },
   membersTabBtn: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center', borderWidth: 1 },
   membersTabBtnText: { fontSize: 11, fontWeight: '700' },
-  activityItem: { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'flex-start' },
-  activityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00ff87', marginTop: 5 },
-  activityDotTrade: { backgroundColor: '#ff9900' },
-  activityContent: { flex: 1 },
-  activityMessage: { color: '#cccccc', fontSize: 14, lineHeight: 20 },
-  activityBold: { color: '#ffffff', fontWeight: '700' },
-  activityTime: { color: '#555', fontSize: 12, marginTop: 2 },
-  membersCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 32, borderWidth: 1, borderColor: '#2a2a2a', gap: 14 },
-  memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
-  memberAvatarText: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
-  memberName: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
-  memberRole: { color: '#00ff87', fontSize: 12 },
-  dmSmallBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#4444ff' },
-  dmSmallBtnText: { color: '#8888ff', fontSize: 12, fontWeight: '700' },
   commSection: { marginTop: 32, marginBottom: 16, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#1a1a1a' },
   stickyHeader: {
     position: 'absolute',
@@ -767,29 +519,7 @@ const styles = StyleSheet.create({
   offseasonWarning: { color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 8, textAlign: 'center' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
-  seasonHub: { borderRadius: 14, padding: 12, borderWidth: 1, marginBottom: 18 },
-  seasonHubHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  seasonHubTitle: { fontSize: 16, fontWeight: '900' },
-  seasonHubSub: { color: '#777', fontSize: 11, marginTop: 2 },
-  seasonHubChevron: { fontSize: 11, fontWeight: '900' },
-  seasonHubGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  seasonHubButton: { width: '48%', minHeight: 62, borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 6, backgroundColor: '#11111188', alignItems: 'center', justifyContent: 'center' },
-  seasonHubButtonIcon: { fontSize: 18, marginBottom: 4 },
-  seasonHubButtonText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  deleteBtn: { backgroundColor: '#1a0a0a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#ff3333' },
-  deleteBtnText: { color: '#ff3333', fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },
   leaveBtnText: { color: '#888', fontSize: 15, fontWeight: '600' },
   spacer: { height: 60 },
-  deleteScreen: { flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', padding: 24 },
-  deleteCard: { backgroundColor: '#1a0a0a', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#ff3333' },
-  deleteTitle: { fontSize: 22, fontWeight: '800', color: '#ff3333', marginBottom: 8 },
-  deleteSubtitle: { fontSize: 14, color: '#888', marginBottom: 12 },
-  deleteName: { fontSize: 15, fontWeight: '700', color: '#ffffff', marginBottom: 20 },
-  deleteInput: { backgroundColor: '#0a0a0a', borderRadius: 12, padding: 16, color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#333', marginBottom: 16 },
-  deleteConfirmBtn: { backgroundColor: '#ff3333', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
-  deleteConfirmBtnDisabled: { opacity: 0.3 },
-  deleteConfirmBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
-  deleteCancelBtn: { paddingVertical: 12, alignItems: 'center' },
-  deleteCancelBtnText: { color: '#888', fontSize: 15 },
 });

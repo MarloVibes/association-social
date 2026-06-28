@@ -169,9 +169,9 @@ function buildResultStory({
           ? `${winner} ran away from ${loser}, ${winnerScore}-${loserScore}.`
           : `${winner} handled the key stretches against ${loser}, ${winnerScore}-${loserScore}.`;
 
-  const leader = performers[0];
-  const teammate = leader ? performers.find(player => player.side === leader.side && player.playerId !== leader.playerId) : null;
-  const opponentLeader = leader ? performers.find(player => player.side !== leader.side) : null;
+  const leader = performers.find(player => player.sideAbbr === winnerAbbr) || performers[0];
+  const teammate = leader ? performers.find(player => player.sideAbbr === winnerAbbr && player.playerId !== leader.playerId) : null;
+  const opponentLeader = performers.find(player => player.sideAbbr === loserAbbr);
   const leaderLine = leader
     ? `${leader.name || 'The top scorer'} set the tone with ${stat(leader.points)} points, ${stat(leader.rebounds)} rebounds, and ${stat(leader.assists)} assists.`
     : '';

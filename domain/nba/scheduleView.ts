@@ -11,9 +11,14 @@ export type ScheduleViewGame = {
   homeGmId?: string | null;
   awayGmId?: string | null;
   status?: string;
-  liveTimeline?: unknown;
+  finalAtMs?: number | null;
+  simulationStartedAtMs?: number | null;
+  liveTimeline?: {
+    revealDurationMs?: number | null;
+  } | unknown;
   liveMode?: {
     simulationEndsAtMs?: number | null;
+    simulationStartedAtMs?: number | null;
   } | null;
 };
 
@@ -65,14 +70,32 @@ export function displayScheduleName(team: {
 }
 
 export function isLiveResultRevealed(game?: (Partial<ScheduleViewGame> & {
-  liveTimeline?: unknown;
+  liveTimeline?: {
+    revealDurationMs?: number | null;
+  } | unknown;
   liveMode?: {
     simulationEndsAtMs?: number | null;
+    simulationStartedAtMs?: number | null;
   } | null;
 }) | null, nowMs = Date.now()) {
   if (!game?.liveTimeline) return true;
   const simulationEndsAtMs = Number(game.liveMode?.simulationEndsAtMs || 0);
-  return simulationEndsAtMs <= 0 || nowMs >= simulationEndsAtMs;
+  if (simulationEndsAtMs > 0) return nowMs >= simulationEndsAtMs;
+  const simulationStartedAtMs = Number(
+    game.liveMode?.simulationStartedAtMs
+    || game.simulationStartedAtMs
+    || game.finalAtMs
+    || 0,
+  );
+  const revealDurationMs = Number(
+    typeof game.liveTimeline === 'object' && game.liveTimeline
+      ? (game.liveTimeline as { revealDurationMs?: number | null }).revealDurationMs || 0
+      : 0,
+  );
+  if (simulationStartedAtMs > 0 && revealDurationMs > 0) {
+    return nowMs >= simulationStartedAtMs + revealDurationMs;
+  }
+  return false;
 }
 
 export function teamScheduleKeys(team?: ScheduleViewTeam | null) {

@@ -15,6 +15,7 @@ const {
   gamesForCompetition,
   requestMatchup,
   resetScheduledGame,
+  scheduleAliases,
   scheduleCompetition,
   simulateScheduledGame,
   simulateScheduledGameResult,
@@ -67,6 +68,11 @@ function seedRoster(prefix: string, skill = 78) {
 }
 
 describe('matchup request state helpers', () => {
+  it('aliases era-suffixed schedule ids back to their team abbreviation', () => {
+    expect(scheduleAliases('SAS_2011')).toEqual(['SAS_2011', 'SAS']);
+    expect(scheduleAliases('NOH_2011')).toEqual(['NOH_2011', 'NOH', 'NOK', 'NOP']);
+  });
+
   it('expires an unaccepted request after one hour', () => {
     const request = seedRequestedGame({ requestedAtMs: 0 });
     const result = expireMatchupRequest({ game: request, nowMs: 3_600_001 });

@@ -137,4 +137,13 @@ describe('NBA game simulation', () => {
 
     expect(result.story).not.toContain('_2011');
   });
+
+  it('writes a specific postgame story instead of a generic rotation summary', () => {
+    const result = simulateGame(fixture, 'story-detail-seed');
+
+    expect(result.story).not.toContain('controlled the decisive stretches');
+    expect(result.story).not.toContain('balanced rotation production');
+    expect(result.story).toMatch(/BOS|LAL/);
+    expect(result.story).toMatch(/points/);
+  });
 });

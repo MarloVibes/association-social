@@ -147,6 +147,59 @@ describe('NBA rotations', () => {
     expect(minutes.get('noah')).toBeGreaterThan(minutes.get('asik') || 0);
   });
 
+  it('uses nested stats and contracts when live roster records do not have hidden grades', () => {
+    const rotation = buildCpuRotation([
+      {
+        player_id: 'lucas',
+        full_name: 'John Lucas III',
+        position: 'PG',
+        value: 0,
+        seasonStats: { ppg: 7.5, apg: 2.2, rpg: 1.6, mpg: 14.8, per: 11.8 },
+        salary: 130165,
+      },
+      {
+        player_id: 'rose',
+        full_name: 'Derrick Rose',
+        position: 'PG',
+        value: 0,
+        seasonStats: { ppg: 25.0, apg: 7.7, rpg: 4.1, spg: 1.0, mpg: 37.4, per: 23.5 },
+        salary: 5546160,
+        playerLabel: 'SUPERSTAR',
+      },
+      {
+        player_id: 'deng',
+        full_name: 'Luol Deng',
+        position: 'SF',
+        value: 0,
+        seasonStats: { ppg: 17.4, apg: 2.8, rpg: 5.8, mpg: 39.1, per: 15.5 },
+        salary: 11345000,
+      },
+      {
+        player_id: 'noah',
+        full_name: 'Joakim Noah',
+        position: 'C',
+        value: 0,
+        seasonStats: { ppg: 11.3, apg: 2.2, rpg: 10.4, bpg: 1.5, mpg: 32.8, per: 18.8 },
+        salary: 3128536,
+      },
+      ...Array.from({ length: 7 }, (_, index) => ({
+        player_id: `bench-${index}`,
+        full_name: `Bench ${index}`,
+        position: index % 2 ? 'G' : 'F',
+        seasonStats: { ppg: 5 + index, apg: 1, rpg: 2, mpg: 14 + index, per: 10 + index },
+        salary: 800000 + index * 100000,
+      })),
+    ]);
+
+    const minutes = new Map(rotation.map(slot => [slot.playerId, slot.minutes]));
+    const topFive = rotation.slice(0, 5).map(slot => slot.playerId);
+
+    expect(topFive).toContain('rose');
+    expect(topFive).toContain('deng');
+    expect(topFive).toContain('noah');
+    expect(minutes.get('rose')).toBeGreaterThan(minutes.get('lucas') || 0);
+  });
+
   it('sorts team displays by roster value so stronger players appear first', () => {
     const players = [
       {

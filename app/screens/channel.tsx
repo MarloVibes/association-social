@@ -2189,8 +2189,8 @@ const styles = StyleSheet.create({
   // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   backText: { color: '#F5A623', fontSize: 15, fontWeight: '600', width: 60 },
-  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIcon: { fontSize: 20 },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' },
+  headerIcon: { minWidth: 40, maxWidth: 54, minHeight: 28, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, overflow: 'hidden', color: '#00ff87', borderWidth: 1, borderColor: 'rgba(0,255,135,0.35)', backgroundColor: 'rgba(0,255,135,0.09)', fontSize: 10, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
   headerSub: { color: '#888', fontSize: 11, textAlign: 'center' },
 

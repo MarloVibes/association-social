@@ -39,6 +39,8 @@ type LiveGame = NbaScheduleGame & {
     arenaTheme?: ArenaTheme;
   };
   arenaTheme?: ArenaTheme;
+  finalAtMs?: number;
+  simulationStartedAtMs?: number;
 };
 
 type ScheduleDoc = {
@@ -132,8 +134,10 @@ function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof liv
 function safeElapsedMs(game: LiveGame | null, nowMs: number, replayStartedAtMs?: string) {
   if (!game?.liveTimeline) return 0;
   const replayStartMs = Number(replayStartedAtMs || 0);
-  const startedAt = replayStartMs > 0 ? replayStartMs : Number(game.liveMode?.simulationStartedAtMs || 0);
-  const rawElapsed = startedAt > 0 ? nowMs - startedAt : game.liveTimeline.revealDurationMs;
+  const startedAt = replayStartMs > 0
+    ? replayStartMs
+    : Number(game.liveMode?.simulationStartedAtMs || game.simulationStartedAtMs || game.finalAtMs || 0);
+  const rawElapsed = startedAt > 0 ? nowMs - startedAt : 0;
   return Math.max(0, Math.min(rawElapsed, game.liveTimeline.revealDurationMs || rawElapsed));
 }
 
@@ -384,7 +388,7 @@ export default function LiveModeScreen() {
               <Text style={styles.panelTitle}>Event Feed</Text>
               {visibleEvents.length > 0 ? visibleEvents.map(event => (
                 <View key={event.id} style={styles.feedRow}>
-                  <View style={[styles.feedDot, { backgroundColor: event.actingTeamId === game.homeTeamId ? arenaTheme.primary : '#f1f1f1' }]} />
+                  <View style={[styles.feedDot, { backgroundColor: normalizeScheduleKey(event.actingTeamId || '') === normalizeScheduleKey(game.homeTeamId) ? arenaTheme.primary : '#f1f1f1' }]} />
                   <View style={styles.feedCopy}>
                     <Text style={styles.feedMeta}>{event.periodLabel} · {clockText(event)}</Text>
                     <Text style={styles.feedText}>{event.text}</Text>

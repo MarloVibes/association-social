@@ -13,7 +13,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Known 2K/Madden/MLB legend full names — matched against Sleeper data
+// Known franchise-sim legend full names matched against Sleeper data.
 const NBA_LEGENDS = new Set([
   'Michael Jordan','Kobe Bryant','LeBron James','Magic Johnson','Larry Bird',
   'Shaquille O\'Neal','Tim Duncan','Kevin Garnett','Allen Iverson','Dirk Nowitzki',

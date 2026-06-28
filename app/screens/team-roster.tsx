@@ -253,7 +253,7 @@ export default function TeamRosterScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>
-          <Text style={styles.teamGm}>{isOwned ? '🧑 ' + (team.gmName || 'GM') : '🤖 Unowned'}</Text>
+          <Text style={styles.teamGm}>{isOwned ? (team.gmName || 'GM') : 'Unowned'}</Text>
         </View>
       </View>
 
@@ -344,11 +344,11 @@ export default function TeamRosterScreen() {
             </View>
             {canTrade ? (
               <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
-                <Text style={styles.tradeBtnText}>Propose Trade</Text>
+                <Text style={styles.tradeBtnText}>Trade</Text>
               </TouchableOpacity>
             ) : canCpuTrade ? (
               <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
-                <Text style={styles.tradeBtnText}>Propose Trade</Text>
+                <Text style={styles.tradeBtnText}>Trade</Text>
               </TouchableOpacity>
             ) : null}
           </TouchableOpacity>

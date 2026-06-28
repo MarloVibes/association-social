@@ -15,6 +15,7 @@ export default function SeasonLayout() {
       <Stack.Screen name="game-result" />
       <Stack.Screen name="rotation" />
       <Stack.Screen name="coaching-presets" />
+      <Stack.Screen name="finances" />
     </Stack>
   );
 }

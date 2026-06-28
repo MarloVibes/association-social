@@ -71,4 +71,23 @@ describe('NBA schedule view helpers', () => {
     expect(isLiveResultRevealed(game, 20_000)).toBe(true);
     expect(isLiveResultRevealed({ status: 'final' }, 10_000)).toBe(true);
   });
+
+  it('does not reveal a live result immediately when the end timestamp is missing', () => {
+    expect(isLiveResultRevealed({
+      status: 'final',
+      liveTimeline: { version: 1, revealDurationMs: 30_000 },
+    }, 60_000)).toBe(false);
+
+    expect(isLiveResultRevealed({
+      status: 'final',
+      finalAtMs: 10_000,
+      liveTimeline: { version: 1, revealDurationMs: 30_000 },
+    }, 39_999)).toBe(false);
+
+    expect(isLiveResultRevealed({
+      status: 'final',
+      finalAtMs: 10_000,
+      liveTimeline: { version: 1, revealDurationMs: 30_000 },
+    }, 40_000)).toBe(true);
+  });
 });

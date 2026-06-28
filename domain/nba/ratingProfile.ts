@@ -87,7 +87,7 @@ function archetypesFor(model: AttributeModel, source: PublicStatLine) {
   if (model.blocking >= 86 && model.rebounding >= 83) archetypes.push('Rim Protector');
   if (model.postOffense >= 84 && model.rebounding >= 82) archetypes.push('Post Scorer');
   if (model.dunking >= 86 && model.speed >= 80) archetypes.push('Slashing Creator');
-  if (archetypes.length === 0) archetypes.push(String(source.position || '').includes('C') ? 'Interior Contributor' : 'Rotation Contributor');
+  if (archetypes.length === 0) archetypes.push(String(source.position || '').includes('C') ? 'Interior Anchor' : 'Balanced Connector');
   return archetypes.slice(0, 3);
 }
 

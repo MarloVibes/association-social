@@ -95,6 +95,8 @@ function trustedReputationTier(player: any): Playstyle | null {
     || tierFromText(player?.visible?.reputation)
     || tierFromText(player?.visibleIdentity?.reputation)
     || tierFromText(player?.identity?.reputation)
+    || tierFromText(player?.profile?.visibleIdentity?.reputation)
+    || tierFromText(player?.profile?.identity?.reputation)
     || tierFromText(player?.tier);
 }
 
@@ -152,7 +154,20 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   const fg3 = percentFrom(player, ['fg3_pct', 'threePointPct', 'three_point_pct', 'threePointPercentage']);
   const per = numberFrom(player, ['per', 'playerEfficiencyRating']);
   const winShares = numberFrom(player, ['winShares', 'win_shares', 'ws']);
-  const overallSignal = numberFrom(player, ['overall', 'overallImpact', 'impactRating', 'hidden.overall', 'attribute_model.overallImpact']);
+  const overallSignal = numberFrom(player, [
+    'overall',
+    'overallImpact',
+    'impactRating',
+    'hidden.overall',
+    'attribute_model.overallImpact',
+    'attribute_model.overall',
+    'player_ratings.overall',
+    'ratings.overall',
+    'profile.attribute_model.overallImpact',
+    'profile.attribute_model.overall',
+    'profile.player_ratings.overall',
+    'profile.ratings.overall',
+  ]);
   const pos = player?.position || '';
   const t3 = threeFloor(eraKey);
   const isShooter = fg3 >= t3 && fg3 <= THREE_NOISE_CAP;
@@ -292,7 +307,18 @@ const YEAR_COLOR = '#00ccff';
 export function getPlaystyleForYear(player: any, profile: any, currentYear: number | undefined): Playstyle {
   // Accolades (incl. All-Star) live on the profile, not the pool player — carry
   // them through so accolade-based tiers (LEGEND, All-Star floor) can fire.
-  const withAccolades = { ...player, accolades: profile?.accolades || player?.accolades || [] };
+  const profileIdentity = profile?.visibleIdentity || profile?.identity || null;
+  const withAccolades = {
+    ...player,
+    profile,
+    accolades: profile?.accolades || player?.accolades || [],
+    visibleIdentity: player?.visibleIdentity || profile?.visibleIdentity || profile?.identity,
+    identity: player?.identity || profile?.identity || profile?.visibleIdentity,
+    reputation: player?.reputation || profile?.reputation || profileIdentity?.reputation,
+    attribute_model: player?.attribute_model || profile?.attribute_model,
+    player_ratings: player?.player_ratings || profile?.player_ratings,
+    ratings: player?.ratings || profile?.ratings,
+  };
   const season = getSeasonForYear(profile, currentYear);
   if (!season) return getPlaystyle(withAccolades, eraForYear(currentYear));
   // Use the season's stat when it's actually present; otherwise keep the

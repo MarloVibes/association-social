@@ -381,12 +381,12 @@ export default function TradeChannelScreen() {
           {(() => {
             const allAvail = [
               ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
-                key: l.id, teamName: l.fromTeamName, player: l.player, uid: l.fromUid,
+                key: l.id, teamName: l.fromTeamName, teamId: l.fromTeamId, player: l.player, uid: l.fromUid,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '', prefillPlayer: JSON.stringify(l.player || {}) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
               })),
               ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
-                key: 'tb_' + i, teamName: p.teamName, player: p, uid: p.gmId,
+                key: 'tb_' + i, teamName: p.teamName, teamId: p.teamId, player: p, uid: p.gmId,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '', prefillPlayer: JSON.stringify(p) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
@@ -402,7 +402,10 @@ export default function TradeChannelScreen() {
               }
               return true;
             });
-            const sorted = [...filtered].sort((a, b) => (a.teamName || '').localeCompare(b.teamName || '') || compareRosterPlayersByValue(a.player || {}, b.player || {}));
+            const sorted = [...filtered].sort((a, b) => (
+              compareRosterPlayersByValue(a.player || {}, b.player || {})
+              || (a.teamName || '').localeCompare(b.teamName || '')
+            ));
             return sorted.map(item => (
               <View key={item.key} style={styles.listingCard}>
                 <Text style={styles.listingTeam}>{item.teamName}</Text>
@@ -411,7 +414,7 @@ export default function TradeChannelScreen() {
                     player={item.player}
                     eraKey={myTeam?.era} sport={sport}
                     style={{ flex: 1 }}
-                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: (item.player?.teamId || ''), teamName: item.teamName || '' })}
+                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
                   />
                   <View style={styles.listingBtns}>
                     <TouchableOpacity style={styles.proposeBtn} onPress={item.onOffer}>
@@ -438,7 +441,7 @@ export default function TradeChannelScreen() {
           {!myTeam ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>🏆</Text>
-              <Text style={styles.emptyText}>Claim a team before proposing trades</Text>
+              <Text style={styles.emptyText}>Claim a team before opening trade rooms</Text>
             </View>
           ) : claimedTradeTeams.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -515,7 +518,7 @@ export default function TradeChannelScreen() {
                       const matchPos = matchesRosterPosition(p, targetPosFilter);
                       return matchSearch && matchPos;
                     })
-                    .sort((a: any, b: any) => (a.teamName || '').localeCompare(b.teamName || '') || compareRosterPlayersByValue(a, b))
+                    .sort((a: any, b: any) => compareRosterPlayersByValue(a, b) || (a.teamName || '').localeCompare(b.teamName || ''))
                 : [...myRoster].sort(compareRosterPlayersByValue);
               return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
@@ -637,7 +640,7 @@ export default function TradeChannelScreen() {
         } : undefined}
       />
 
-      {/* Propose Trade Modal */}
+      {/* Trade Modal */}
       <GlobalNav />
     </View>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPlaystyle } from '@/constants/playstyle';
+import { getPlaystyle, getPlaystyleForYear } from '@/constants/playstyle';
 
 describe('NBA player tier labels', () => {
   it('lets commissioner overrides grant top labels', () => {
@@ -36,5 +36,16 @@ describe('NBA player tier labels', () => {
       role: 'starter',
       visibleIdentity: { reputation: 'Superstar' },
     }).label).toBe('SUPERSTAR');
+  });
+
+  it('carries profile reputation into year-aware roster labels', () => {
+    expect(getPlaystyleForYear(
+      { full_name: 'Profile Star', role: 'bench', ppg: 4 },
+      {
+        visibleIdentity: { reputation: 'Superstar' },
+        seasons: [{ year: '2010-11', ppg: 4, apg: 1, rpg: 1 }],
+      },
+      2010,
+    ).label).toBe('SUPERSTAR');
   });
 });

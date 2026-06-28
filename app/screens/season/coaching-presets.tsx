@@ -67,6 +67,21 @@ function clampModifier(value: number) {
   return Math.max(-10, Math.min(10, value));
 }
 
+function tendencyRows(preset: CoachingPreset) {
+  return [
+    { label: 'Tempo', value: preset.modifiers.pace },
+    { label: 'Spacing', value: preset.modifiers.threePointRate },
+    { label: 'Paint', value: preset.modifiers.rimPressure },
+    { label: 'Mid', value: preset.modifiers.midrangeRate },
+    { label: 'Pressure', value: preset.modifiers.turnovers },
+    { label: 'Boards', value: preset.modifiers.rebounding },
+  ];
+}
+
+function tendencyWidth(value: number) {
+  return `${Math.max(12, Math.min(100, Math.abs(value) * 10))}%` as const;
+}
+
 export default function CoachingPresetsScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -98,6 +113,9 @@ export default function CoachingPresetsScreen() {
     [...COACHING_PRESETS, ...(team?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
     return [...byId.values()];
   }, [team?.coachingPresets]);
+  const selectedPreset = useMemo(() => (
+    presets.find(preset => preset.id === team?.defaultCoachingPresetId) || presets[0] || customPreset
+  ), [customPreset, presets, team?.defaultCoachingPresetId]);
 
   useEffect(() => {
     const savedCustom = team?.coachingPresets?.find(preset => preset.id === 'custom_gameplan');
@@ -168,59 +186,97 @@ export default function CoachingPresetsScreen() {
             ) : !team ? (
               <Text style={styles.empty}>Claim a team before saving coaching presets.</Text>
             ) : (
-              <View style={styles.builder}>
-                <View style={styles.builderTop}>
-                  <TextInput
-                    style={styles.nameInput}
-                    value={customPreset.name}
-                    onChangeText={name => setCustomPreset(current => ({ ...current, name }))}
-                    placeholder="Custom Gameplan"
-                    placeholderTextColor="#555"
-                  />
-                  <TouchableOpacity disabled={savingId === customPreset.id} onPress={() => savePreset(customPreset)} style={styles.customSave}>
-                    <Ionicons color="#06130c" name="save-outline" size={15} />
-                    <Text style={styles.customSaveText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.optionStrip}>
-                  {OFFENSE_OPTIONS.map(option => (
-                    <TouchableOpacity
-                      key={option.value}
-                      onPress={() => updateCustomStyle('offense', option.value)}
-                      style={[styles.optionChip, customPreset.offense === option.value && styles.optionChipActive]}
-                    >
-                      <Text style={[styles.optionText, customPreset.offense === option.value && styles.optionTextActive]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={styles.optionStrip}>
-                  {DEFENSE_OPTIONS.map(option => (
-                    <TouchableOpacity
-                      key={option.value}
-                      onPress={() => updateCustomStyle('defense', option.value)}
-                      style={[styles.optionChip, customPreset.defense === option.value && styles.optionChipActive]}
-                    >
-                      <Text style={[styles.optionText, customPreset.defense === option.value && styles.optionTextActive]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={styles.tunerGrid}>
-                  {(Object.keys(customPreset.modifiers) as Array<keyof CoachingModifiers>).map(key => (
-                    <View key={key} style={styles.tuner}>
-                      <Text style={styles.tunerLabel}>{MODIFIER_LABELS[key]}</Text>
-                      <View style={styles.tunerControls}>
-                        <TouchableOpacity onPress={() => updateModifier(key, -1)} style={styles.tunerButton}>
-                          <Ionicons color="#fff" name="remove" size={14} />
-                        </TouchableOpacity>
-                        <Text style={styles.tunerValue}>{customPreset.modifiers[key] > 0 ? `+${customPreset.modifiers[key]}` : customPreset.modifiers[key]}</Text>
-                        <TouchableOpacity onPress={() => updateModifier(key, 1)} style={styles.tunerButton}>
-                          <Ionicons color="#fff" name="add" size={14} />
-                        </TouchableOpacity>
-                      </View>
+              <>
+                <View style={styles.systemBoard}>
+                  <View style={styles.systemTop}>
+                    <View>
+                      <Text style={styles.systemKicker}>Active System</Text>
+                      <Text style={styles.systemTitle}>{selectedPreset.name}</Text>
+                      <Text style={styles.systemMeta}>{selectedPreset.offense.replace(/_/g, ' ')} · {selectedPreset.defense.replace(/_/g, ' ')}</Text>
                     </View>
-                  ))}
+                    <TouchableOpacity onPress={() => showPresetInfo(selectedPreset)} style={styles.systemInfoButton}>
+                      <Ionicons color="#00e58b" name="information-circle-outline" size={22} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.courtPanel}>
+                    <View style={styles.courtArc} />
+                    <View style={[styles.courtNode, styles.courtNodeOne]} />
+                    <View style={[styles.courtNode, styles.courtNodeTwo]} />
+                    <View style={[styles.courtNode, styles.courtNodeThree]} />
+                    <View style={[styles.courtNode, styles.courtNodeFour]} />
+                    <View style={[styles.courtNode, styles.courtNodeFive]} />
+                  </View>
+                  <View style={styles.tendencyList}>
+                    {tendencyRows(selectedPreset).map(row => (
+                      <View key={row.label} style={styles.tendencyRow}>
+                        <Text style={styles.tendencyLabel}>{row.label}</Text>
+                        <View style={styles.tendencyTrack}>
+                          <View style={[
+                            styles.tendencyFill,
+                            row.value < 0 && styles.tendencyFillNegative,
+                            { width: tendencyWidth(row.value) },
+                          ]} />
+                        </View>
+                        <Text style={styles.tendencyValue}>{row.value > 0 ? `+${row.value}` : row.value}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              </View>
+
+                <View style={styles.builder}>
+                  <View style={styles.builderTop}>
+                    <TextInput
+                      style={styles.nameInput}
+                      value={customPreset.name}
+                      onChangeText={name => setCustomPreset(current => ({ ...current, name }))}
+                      placeholder="Custom Gameplan"
+                      placeholderTextColor="#555"
+                    />
+                    <TouchableOpacity disabled={savingId === customPreset.id} onPress={() => savePreset(customPreset)} style={styles.customSave}>
+                      <Ionicons color="#06130c" name="save-outline" size={15} />
+                      <Text style={styles.customSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.optionStrip}>
+                    {OFFENSE_OPTIONS.map(option => (
+                      <TouchableOpacity
+                        key={option.value}
+                        onPress={() => updateCustomStyle('offense', option.value)}
+                        style={[styles.optionChip, customPreset.offense === option.value && styles.optionChipActive]}
+                      >
+                        <Text style={[styles.optionText, customPreset.offense === option.value && styles.optionTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.optionStrip}>
+                    {DEFENSE_OPTIONS.map(option => (
+                      <TouchableOpacity
+                        key={option.value}
+                        onPress={() => updateCustomStyle('defense', option.value)}
+                        style={[styles.optionChip, customPreset.defense === option.value && styles.optionChipActive]}
+                      >
+                        <Text style={[styles.optionText, customPreset.defense === option.value && styles.optionTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.tunerGrid}>
+                    {(Object.keys(customPreset.modifiers) as Array<keyof CoachingModifiers>).map(key => (
+                      <View key={key} style={styles.tuner}>
+                        <Text style={styles.tunerLabel}>{MODIFIER_LABELS[key]}</Text>
+                        <View style={styles.tunerControls}>
+                          <TouchableOpacity onPress={() => updateModifier(key, -1)} style={styles.tunerButton}>
+                            <Ionicons color="#fff" name="remove" size={14} />
+                          </TouchableOpacity>
+                          <Text style={styles.tunerValue}>{customPreset.modifiers[key] > 0 ? `+${customPreset.modifiers[key]}` : customPreset.modifiers[key]}</Text>
+                          <TouchableOpacity onPress={() => updateModifier(key, 1)} style={styles.tunerButton}>
+                            <Ionicons color="#fff" name="add" size={14} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </>
             )}
           </>
         )}
@@ -250,6 +306,13 @@ export default function CoachingPresetsScreen() {
                   <Text style={[styles.selectText, selected && styles.selectTextActive]}>{selected ? 'Default' : 'Use'}</Text>
                 </TouchableOpacity>
               </View>
+              {item.description ? <Text style={styles.presetDesc}>{item.description}</Text> : null}
+              {item.boostSummary ? (
+                <View style={styles.boostBox}>
+                  <Ionicons color="#00e58b" name="pulse-outline" size={15} />
+                  <Text style={styles.boostText}>{item.boostSummary}</Text>
+                </View>
+              ) : null}
               <View style={styles.modGrid}>
                 {Object.entries(item.modifiers).map(([key, value]) => (
                   <View key={key} style={styles.modItem}>
@@ -276,6 +339,27 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#777', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   title: { color: '#fff', fontSize: 28, fontWeight: '900' },
   empty: { color: '#aaa', fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  systemBoard: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
+  systemTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  systemKicker: { color: '#00e58b', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  systemTitle: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 2 },
+  systemMeta: { color: '#777', fontSize: 11, fontWeight: '800', marginTop: 3, textTransform: 'capitalize' },
+  systemInfoButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#122018' },
+  courtPanel: { height: 128, borderRadius: 8, borderWidth: 2, borderColor: '#d8e0dc44', backgroundColor: '#16221c', overflow: 'hidden', marginBottom: 12 },
+  courtArc: { position: 'absolute', top: 25, left: '28%', width: '44%', height: 78, borderRadius: 80, borderWidth: 2, borderColor: '#d8e0dc44' },
+  courtNode: { position: 'absolute', width: 25, height: 25, borderRadius: 13, backgroundColor: '#00e58b', borderWidth: 3, borderColor: '#f4c542' },
+  courtNodeOne: { left: '46%', bottom: 16 },
+  courtNodeTwo: { left: '22%', top: 35 },
+  courtNodeThree: { right: '22%', top: 35 },
+  courtNodeFour: { left: '34%', top: 68 },
+  courtNodeFive: { right: '34%', top: 68 },
+  tendencyList: { gap: 8 },
+  tendencyRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  tendencyLabel: { width: 60, color: '#999', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  tendencyTrack: { flex: 1, height: 8, borderRadius: 999, backgroundColor: '#242424', overflow: 'hidden' },
+  tendencyFill: { height: 8, borderRadius: 999, backgroundColor: '#00e58b' },
+  tendencyFillNegative: { backgroundColor: '#ff6b6b' },
+  tendencyValue: { width: 32, color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'right' },
   builder: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 12, marginBottom: 16 },
   builderTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   nameInput: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a', color: '#fff', paddingHorizontal: 12, fontSize: 14, fontWeight: '800' },
@@ -299,6 +383,9 @@ const styles = StyleSheet.create({
   presetName: { color: '#fff', fontSize: 16, fontWeight: '900' },
   infoButton: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#122018' },
   presetMeta: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'capitalize' },
+  presetDesc: { color: '#bbb', fontSize: 12, lineHeight: 18, fontWeight: '700', marginBottom: 10 },
+  boostBox: { flexDirection: 'row', gap: 8, borderRadius: 8, borderWidth: 1, borderColor: '#1f3328', backgroundColor: '#0b1510', padding: 10, marginBottom: 12 },
+  boostText: { flex: 1, color: '#8faaa0', fontSize: 11, lineHeight: 16, fontWeight: '700' },
   selectButton: { borderRadius: 8, borderWidth: 1, borderColor: '#333', paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#191919' },
   selectButtonActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },
   selectText: { color: '#fff', fontSize: 12, fontWeight: '900' },

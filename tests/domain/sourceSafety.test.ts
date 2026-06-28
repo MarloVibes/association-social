@@ -141,12 +141,18 @@ describe('source safety regressions', () => {
     expect(functionsIndex).toContain("competition: n.competition || n.scheduleCompetition || 'regular'");
   });
 
-  it('keeps the NBA season calendar visible without requiring a claimed team', () => {
+  it('keeps the NBA season calendar visible inside the command center without requiring a claimed team', () => {
     const league = source('app/screens/league.tsx');
+    const channels = source('app/screens/channels.tsx');
 
-    expect(league).toContain('Season Hub');
+    expect(league).toContain('goToChannels');
+    expect(channels).toContain('Command Center');
+    expect(channels).toContain('/screens/season/calendar');
+    expect(channels).toContain('Calendar');
+    expect(channels).toContain('/screens/season/finances');
+    expect(channels).toContain('Payroll, cap room, and player contracts');
     expect(league).not.toContain('isNBASport && myTeam && (');
-    expect(league.indexOf('Season Hub')).toBeLessThan(league.indexOf('Recent Activity'));
+    expect(league).not.toContain('Season Hub');
   });
 
   it('puts NBA schedule setup in the league creation flow', () => {
@@ -270,6 +276,19 @@ describe('source safety regressions', () => {
     expect(cpuTrade).toContain('getPosFilter');
   });
 
+  it('keeps NBA rotation lineup controlled by row order instead of starter closer toggles', () => {
+    const rotation = source('app/screens/season/rotation.tsx');
+
+    expect(rotation).toContain('normalizeOrder(nextTeam.rotation)');
+    expect(rotation).toContain('rotation: normalizeOrder(rotation)');
+    expect(rotation).toContain('enrichRotationPlayers');
+    expect(rotation).toContain("getDoc(doc(db, 'players', id))");
+    expect(rotation).not.toContain('onToggle');
+    expect(rotation).not.toContain('>Start</Text>');
+    expect(rotation).not.toContain('>Close</Text>');
+    expect(rotation).not.toContain("item.closing ? 'Closing' : null");
+  });
+
   it('exposes NBA live mode without in-game adjustment controls', () => {
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');
@@ -283,7 +302,7 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('currentTimelineEvent');
     expect(liveMode).toContain('livePlayerStatsAt');
     expect(liveMode).toContain('Matchups');
-    expect(liveMode).not.toContain('Starter Matchups');
+    expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
     expect(liveMode).not.toContain('matchupChip');
     expect(liveMode).toContain('See More Player Stats');
     expect(liveMode).not.toContain('httpsCallable(functions');
@@ -310,6 +329,9 @@ describe('source safety regressions', () => {
     expect(matchup).toContain("responseData?.status === 'final' && responseData?.liveTimeline");
     expect(matchup).toContain("name === 'requestMatchup'");
     expect(matchup).not.toContain('simulateGameLocally');
+    expect(matchup).not.toContain('resetGameLocally');
+    expect(matchup).not.toContain('submitWinnerLocally');
+    expect(matchup).not.toContain('winnerIsHome ? 101 : 97');
     expect(matchup).not.toContain('homePlayers: [{ playerId:');
     expect(matchup).not.toContain('buildLiveTimeline');
     expect(calendar).toContain('const resultRevealed = isLiveResultRevealed(item, nowMs);');
@@ -345,13 +367,13 @@ describe('source safety regressions', () => {
     expect(result).toContain("quarter.quarter === 5 ? 'OT'");
   });
 
-  it('exposes NBA playoffs from the season hub and router', () => {
-    const league = source('app/screens/league.tsx');
+  it('exposes NBA playoffs from the command center and router', () => {
+    const channels = source('app/screens/channels.tsx');
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');
 
-    expect(league).toContain('/screens/season/playoffs');
-    expect(league).toContain('Playoff Picture');
+    expect(channels).toContain('/screens/season/playoffs');
+    expect(channels).toContain('Playoff Picture');
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/playoffs');
     expect(seasonLayout).toContain('playoffs');
@@ -403,14 +425,14 @@ describe('source safety regressions', () => {
     expect(playoffs).toContain('winnerTeamId');
   });
 
-  it('exposes historical scouting from the season hub and router', () => {
-    const league = source('app/screens/league.tsx');
+  it('exposes historical scouting from the command center and router', () => {
+    const channels = source('app/screens/channels.tsx');
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');
     const scouting = source('app/screens/season/scouting.tsx');
 
-    expect(league).toContain('/screens/season/scouting');
-    expect(league).toContain('Scouting');
+    expect(channels).toContain('/screens/season/scouting');
+    expect(channels).toContain('Scouting');
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/scouting');
     expect(seasonLayout).toContain('scouting');
@@ -559,14 +581,14 @@ describe('source safety regressions', () => {
     expect(matchupsFn).toContain("data.competition === 'playoffs'");
   });
 
-  it('exposes commissioner injury management from the season hub', () => {
-    const league = source('app/screens/league.tsx');
+  it('exposes commissioner injury management from the command center', () => {
+    const channels = source('app/screens/channels.tsx');
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');
     const injuries = source('app/screens/season/injuries.tsx');
     const functionsIndex = source('functions/index.js');
 
-    expect(league).toContain('/screens/season/injuries');
+    expect(channels).toContain('/screens/season/injuries');
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/injuries');
     expect(seasonLayout).toContain('injuries');
@@ -612,7 +634,7 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('starterMatchupsForTimeline');
     expect(liveMode).toContain('See More Player Stats');
     expect(liveMode).toContain('Matchups');
-    expect(liveMode).not.toContain('Starter Matchups');
+    expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
   });
 
   it('keeps prohibited commercial-game branding out of app source and docs', () => {

@@ -355,6 +355,60 @@ function cleanTeamLabel(teamId: string) {
   return match ? match[1] : teamId;
 }
 
+function playerImpact(player: PlayerBoxScore) {
+  return player.points * 2
+    + player.rebounds * 1.15
+    + player.assists * 1.35
+    + player.steals * 2
+    + player.blocks * 2
+    - player.turnovers * 0.8;
+}
+
+function buildGameStory({
+  home,
+  away,
+  quarters,
+  winnerTeamId,
+}: {
+  home: TeamBoxScore;
+  away: TeamBoxScore;
+  quarters: SimulatedGame['quarters'];
+  winnerTeamId: string;
+}) {
+  const homeWon = winnerTeamId === home.teamId;
+  const winner = homeWon ? home : away;
+  const loser = homeWon ? away : home;
+  const winnerLabel = cleanTeamLabel(winner.teamId);
+  const loserLabel = cleanTeamLabel(loser.teamId);
+  const margin = Math.abs(home.points - away.points);
+  const opener = quarters.some(quarter => Number(quarter.quarter) > 4)
+    ? `${winnerLabel} outlasted ${loserLabel} in overtime, ${winner.points}-${loser.points}.`
+    : margin <= 3
+      ? `${winnerLabel} survived a one-possession finish against ${loserLabel}, ${winner.points}-${loser.points}.`
+      : margin <= 9
+        ? `${winnerLabel} closed a tight game over ${loserLabel}, ${winner.points}-${loser.points}.`
+        : margin >= 20
+          ? `${winnerLabel} ran away from ${loserLabel}, ${winner.points}-${loser.points}.`
+          : `${winnerLabel} handled the key stretches against ${loserLabel}, ${winner.points}-${loser.points}.`;
+
+  const performers = [
+    ...home.players.map(player => ({ player, teamId: home.teamId })),
+    ...away.players.map(player => ({ player, teamId: away.teamId })),
+  ].sort((left, right) => playerImpact(right.player) - playerImpact(left.player));
+  const leader = performers[0];
+  const support = leader
+    ? performers.find(item => item.teamId === leader.teamId && item.player.playerId !== leader.player.playerId)
+    : null;
+  const leaderLine = leader
+    ? `${leader.player.name} powered ${cleanTeamLabel(leader.teamId)} with ${leader.player.points} points, ${leader.player.rebounds} rebounds, and ${leader.player.assists} assists.`
+    : '';
+  const supportLine = support
+    ? `${support.player.name} added ${support.player.points} points as a second option.`
+    : '';
+
+  return [opener, leaderLine, supportLine].filter(Boolean).join(' ');
+}
+
 export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
   if (input.home.players.length < 5 || input.away.players.length < 5) {
     throw new Error('Cannot simulate an NBA game without real players for both teams.');
@@ -368,12 +422,13 @@ export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
   const home = buildTeamBox(input.home, homePoints, seed, homePoints - awayPoints);
   const away = buildTeamBox(input.away, awayPoints, seed, awayPoints - homePoints);
   const winnerTeamId = home.points > away.points ? home.teamId : away.teamId;
+  const periodScores = quarters(home.points, away.points, seed);
 
   return {
     home,
     away,
-    quarters: quarters(home.points, away.points, seed),
+    quarters: periodScores,
     winnerTeamId,
-    story: `${cleanTeamLabel(winnerTeamId)} controlled the decisive stretches behind balanced rotation production.`,
+    story: buildGameStory({ home, away, quarters: periodScores, winnerTeamId }),
   };
 }
