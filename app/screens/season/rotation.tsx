@@ -35,6 +35,25 @@ function extractBrefId(player: Player): string {
   return raw.includes('_') ? raw.split('_').pop() || '' : raw;
 }
 
+function meaningfulNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function mergeRotationProfile(profile: any, player: Player): Player {
+  return {
+    ...profile,
+    ...player,
+    value: meaningfulNumber(player.value) ? player.value : profile?.value,
+    rating: meaningfulNumber(player.rating) ? player.rating : profile?.rating,
+    overall: meaningfulNumber(player.overall) ? player.overall : profile?.overall,
+    seasonStats: (player as any).seasonStats || profile?.seasonStats,
+    stats: (player as any).stats || profile?.stats,
+    hidden: (player as any).hidden || profile?.hidden,
+    skill_grades: (player as any).skill_grades || profile?.skill_grades,
+    attribute_model: (player as any).attribute_model || profile?.attribute_model,
+  };
+}
+
 async function enrichRotationPlayers(players: Player[]): Promise<Player[]> {
   const ids = [...new Set(players.map(extractBrefId).filter(Boolean))];
   if (ids.length === 0) return players;
@@ -48,7 +67,7 @@ async function enrichRotationPlayers(players: Player[]): Promise<Player[]> {
 
     return players.map(player => {
       const profile = profileById.get(extractBrefId(player));
-      return profile ? { ...profile, ...player } : player;
+      return profile ? mergeRotationProfile(profile, player) : player;
     });
   } catch (error) {
     console.warn('rotation profile enrich skipped', error);

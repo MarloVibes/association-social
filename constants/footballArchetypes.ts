@@ -1,4 +1,4 @@
-// Football (Madden) archetype engine — the playstyle.ts equivalent for NFL.
+// Football archetype engine — the playstyle.ts equivalent for NFL.
 // Returns the same { label, color } shape basketball uses, so PlayerCard can
 // render it unchanged. Uses stats when present; falls back to position role.
 

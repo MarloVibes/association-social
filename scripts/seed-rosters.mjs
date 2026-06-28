@@ -107,7 +107,7 @@ async function main() {
 
   // MLB — Sleeper has limited MLB data so we seed what we can
   // For MLB we pull all positions since rosters are smaller
-  await seedSport('nfl', [
+  await seedSport('mlb', [
     'P','C','1B','2B','3B','SS','LF','CF','RF','DH','SP','RP','CP'
   ], MLB_LEGENDS).catch(() => {
     console.log('  MLB via Sleeper limited — seeding legends only');

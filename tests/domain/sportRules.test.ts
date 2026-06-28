@@ -16,7 +16,7 @@ describe('getSportRules', () => {
     });
   });
 
-  it('returns the complete Madden rules', () => {
+  it('returns the complete NFL rules', () => {
     expect(getSportRules('madden')).toEqual({
       key: 'madden',
       teamCount: 32,
@@ -44,7 +44,7 @@ describe('getSportRules', () => {
     });
   });
 
-  it('normalizes the NFL alias to Madden', () => {
+  it('normalizes the NFL alias to the stored football key', () => {
     expect(getSportRules('nfl')).toEqual(getSportRules('madden'));
   });
 
@@ -70,11 +70,11 @@ describe('seasonLabel', () => {
     expect(seasonLabel('nba', 2026)).toBe('2026-27');
   });
 
-  it('formats Madden seasons as a single year', () => {
+  it('formats NFL seasons as a single year', () => {
     expect(seasonLabel('madden', 2026)).toBe('2026');
   });
 
-  it('normalizes the NFL alias to Madden formatting', () => {
+  it('normalizes the NFL alias to football formatting', () => {
     expect(seasonLabel('nfl', 2026)).toBe('2026');
   });
 

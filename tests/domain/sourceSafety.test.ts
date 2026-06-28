@@ -282,6 +282,8 @@ describe('source safety regressions', () => {
     expect(rotation).toContain('normalizeOrder(nextTeam.rotation)');
     expect(rotation).toContain('rotation: normalizeOrder(rotation)');
     expect(rotation).toContain('enrichRotationPlayers');
+    expect(rotation).toContain('mergeRotationProfile');
+    expect(rotation).toContain('meaningfulNumber(player.value) ? player.value : profile?.value');
     expect(rotation).toContain("getDoc(doc(db, 'players', id))");
     expect(rotation).not.toContain('onToggle');
     expect(rotation).not.toContain('>Start</Text>');
@@ -620,12 +622,15 @@ describe('source safety regressions', () => {
     const dashboard = source('app/(tabs)/dashboard.tsx');
     const profileSetup = source('app/(tabs)/profile-setup.tsx');
     const profile = source('app/screens/profile.tsx');
+    const joinLeague = source('app/screens/join-league.tsx');
 
     for (const file of [createLeague, dashboard, profileSetup, profile]) {
       expect(file).toContain('NBA Franchise');
       expect(file).toContain('NFL Franchise');
       expect(file).toContain('MLB Franchise');
     }
+    expect(joinLeague).toContain("s === 'madden' ? 'NFL'");
+    expect(joinLeague).not.toContain("s === 'madden' ? 'MADDEN'");
   });
 
   it('renders Live Mode player stats as starter head-to-head matchups', () => {

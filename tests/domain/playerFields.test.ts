@@ -9,7 +9,7 @@ import {
 } from '@/domain/sports/playerFields';
 
 describe('getPositionFilters', () => {
-  it('uses football positions for Madden leagues', () => {
+  it('uses football positions for NFL leagues', () => {
     expect(getPositionFilters('madden')).toEqual(['ALL', ...NFL_POSITIONS]);
     expect(getPositionFilters('madden')).toContain('QB');
     expect(getPositionFilters('madden')).not.toContain('PG');
@@ -33,7 +33,7 @@ describe('getPositionFilters', () => {
 });
 
 describe('getPlayerEditorSchema', () => {
-  it('uses football stats and excludes basketball scoring for Madden', () => {
+  it('uses football stats and excludes basketball scoring for NFL', () => {
     const statKeys = getPlayerEditorSchema('madden').stats.map(field => field.key);
 
     expect(statKeys).not.toContain('ppg');
@@ -77,7 +77,7 @@ describe('getPlayerEditorSchema', () => {
     expect(schema.awards.map(field => field.key)).toContain('all_nba_1st');
   });
 
-  it('uses the Madden schema for nfl and NBA for unknown sports', () => {
+  it('uses the football schema for nfl and NBA for unknown sports', () => {
     expect(getPlayerEditorSchema('nfl')).toEqual(getPlayerEditorSchema('madden'));
     expect(getPlayerEditorSchema('unknown')).toEqual(getPlayerEditorSchema('nba'));
   });

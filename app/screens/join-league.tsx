@@ -277,7 +277,7 @@ export default function JoinLeagueScreen() {
           <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
             {['all','nba','madden','mlb'].map(s => (
               <TouchableOpacity key={s} style={[styles.filterChip, filterSport === s && styles.filterChipActive]} onPress={() => setFilterSport(s)}>
-                <Text style={[styles.filterChipText, filterSport === s && styles.filterChipTextActive]}>{s === 'all' ? 'All Sports' : s.toUpperCase()}</Text>
+                <Text style={[styles.filterChipText, filterSport === s && styles.filterChipTextActive]}>{s === 'all' ? 'All Sports' : s === 'madden' ? 'NFL' : s.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
             <View style={styles.filterDivider} />

@@ -616,7 +616,6 @@ export default function TradeRoomScreen() {
   };
 
   const handleConfirm = async () => {
-    console.log('[handleConfirm] called', { passes: salaryCheck.passes, overrideAppliedLocal, salaryOverrideApplied: room?.salaryOverrideApplied, myOfferLen: myOffer.length, otherOfferLen: otherOffer.length, anyConfirmed, myConfirmed });
     if (leagueSport === 'nba' && !salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
       const myNeed = myShortfall;
       const theirNeed = otherShortfall;
@@ -739,7 +738,6 @@ export default function TradeRoomScreen() {
           }
           Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => {
             localFinalizeSuccessPendingRef.current = false;
-            console.log('Trade OK pressed - calling router.back()');
             router.back();
           } }]);
         } catch (e) {
