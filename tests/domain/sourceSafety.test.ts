@@ -633,6 +633,18 @@ describe('source safety regressions', () => {
     expect(joinLeague).not.toContain("s === 'madden' ? 'MADDEN'");
   });
 
+  it('keeps signup language preference private to the account', () => {
+    const auth = source('app/(tabs)/auth.tsx');
+    const profileSetup = source('app/(tabs)/profile-setup.tsx');
+
+    expect(auth).toContain('SUPPORTED_ACCOUNT_LANGUAGES');
+    expect(auth).toContain('preferredLanguage');
+    expect(profileSetup).toContain('private');
+    expect(profileSetup).toContain('preferences');
+    expect(profileSetup).toContain('preferredLanguage');
+    expect(profileSetup).not.toContain('profileData = {\n        uid: user.uid,\n        preferredLanguage');
+  });
+
   it('renders Live Mode player stats as starter head-to-head matchups', () => {
     const liveMode = source('app/screens/season/live-mode.tsx');
 

@@ -3,13 +3,15 @@ import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase
 import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { normalizeAccountLanguage } from '@/constants/accountLanguages';
 import { auth, db, functions } from '@/constants/firebase';
 
 export default function ProfileSetupScreen() {
-  const { initialUsername, promoCode } = useLocalSearchParams<{
-    initialUsername?: string; promoCode?: string;
+  const { initialUsername, promoCode, preferredLanguage } = useLocalSearchParams<{
+    initialUsername?: string; promoCode?: string; preferredLanguage?: string;
   }>();
   const hasPromo = !!promoCode?.trim();
+  const privatePreferredLanguage = normalizeAccountLanguage(preferredLanguage);
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState(String(initialUsername || ''));
   const [age, setAge] = useState('');
@@ -118,6 +120,14 @@ export default function ProfileSetupScreen() {
       } else {
         await setDoc(doc(db, 'users', user.uid), profileData);
       }
+      await setDoc(
+        doc(db, 'users', user.uid, 'private', 'preferences'),
+        {
+          preferredLanguage: privatePreferredLanguage,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
 
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
