@@ -151,7 +151,7 @@ describe('matchup request state helpers', () => {
 
     expect(result.status).toBe('final');
     expect(result.liveTimeline).toMatchObject({
-      version: 1,
+      version: 2,
       gameId: game.id,
       homeTeamId: game.homeTeamId,
       awayTeamId: game.awayTeamId,
@@ -166,9 +166,10 @@ describe('matchup request state helpers', () => {
         away: quarter.away,
       })),
     );
+    expect(result.liveTimeline.starterMatchups).toHaveLength(5);
     expect(result.liveTimeline.events.length).toBeGreaterThan(0);
     expect(result.liveTimeline.events.some((event: { eventType: string }) => event.eventType === 'miss')).toBe(true);
-    expect(result.liveTimeline.events.some((event: { eventType: string }) => event.eventType === 'foul')).toBe(true);
+    expect(result.liveTimeline.events.some((event: { eventType: string }) => event.eventType === 'free_throw_trip')).toBe(true);
     expect(result.liveTimeline.events.some((event: { statDeltas?: { stats?: { rebounds?: number } }[] }) => event.statDeltas?.some(delta => delta.stats?.rebounds === 1))).toBe(true);
     expect(result.liveTimeline.events.at(-1)).toMatchObject({
       eventType: 'final_buzzer',
@@ -202,11 +203,12 @@ describe('matchup request state helpers', () => {
     expect(result.status).toBe('final');
     expect(result.quarters).toHaveLength(4);
     expect(result.liveTimeline).toMatchObject({
-      version: 1,
+      version: 2,
       gameId: game.id,
       homeScore: result.homeScore,
       awayScore: result.awayScore,
     });
+    expect(result.liveTimeline.starterMatchups).toHaveLength(5);
     expect(result.liveTimeline.periods).toEqual(
       result.quarters.map((quarter: { quarter: number; home: number; away: number }) => ({
         period: quarter.quarter,

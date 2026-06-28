@@ -17,13 +17,45 @@ export type LiveTimelinePeriod = {
   away: number;
 };
 
-export type LiveStatKey = 'points' | 'rebounds' | 'assists' | 'steals' | 'blocks' | 'turnovers' | 'fouls';
+export type LiveStatKey =
+  | 'points'
+  | 'rebounds'
+  | 'assists'
+  | 'steals'
+  | 'blocks'
+  | 'turnovers'
+  | 'fouls'
+  | 'fieldGoalsMade'
+  | 'fieldGoalsAttempted'
+  | 'threePointersMade'
+  | 'threePointersAttempted'
+  | 'freeThrowsMade'
+  | 'freeThrowsAttempted'
+  | 'offensiveRebounds'
+  | 'defensiveRebounds';
 
 export type LiveStatDelta = {
   playerId: string;
   playerName: string;
   teamId: string;
+  position?: string;
+  minutes?: number;
+  starter?: boolean;
   stats: Partial<Record<LiveStatKey, number>>;
+};
+
+export type LiveTimelineMatchupPlayer = {
+  playerId: string;
+  name: string;
+  teamId: string;
+  position?: string;
+  skillChips?: string[];
+};
+
+export type LiveTimelineStarterMatchup = {
+  position: string;
+  awayPlayer: LiveTimelineMatchupPlayer;
+  homePlayer: LiveTimelineMatchupPlayer;
 };
 
 export type LiveTimelineEvent = {
@@ -34,7 +66,7 @@ export type LiveTimelineEvent = {
   elapsedMs: number;
   homeScore: number;
   awayScore: number;
-  eventType: 'score' | 'miss' | 'block' | 'turnover' | 'foul' | 'timeout' | 'run' | 'momentum' | 'period_end' | 'final_buzzer';
+  eventType: 'score' | 'miss' | 'block' | 'turnover' | 'foul' | 'free_throw_trip' | 'timeout' | 'run' | 'momentum' | 'period_end' | 'final_buzzer';
   actingTeamId: string | null;
   text: string;
   x: number;
@@ -46,6 +78,10 @@ export type LiveTimelineEvent = {
   points?: number;
   statDelta?: Partial<Record<LiveStatKey, number>>;
   statDeltas?: LiveStatDelta[];
+  currentLineups?: {
+    home?: string[];
+    away?: string[];
+  };
 };
 
 export type LiveTimelineInput = {
@@ -65,15 +101,21 @@ export type LiveTimelineInput = {
 };
 
 export type LiveTimeline = {
-  version: 1;
+  version: 1 | 2;
   gameId: string;
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number;
   awayScore: number;
   revealDurationMs: number;
+  speedMultiplier?: number;
   periods: LiveTimelinePeriod[];
   events: LiveTimelineEvent[];
+  starterMatchups?: LiveTimelineStarterMatchup[];
+  benchPreview?: {
+    home?: LiveTimelineMatchupPlayer[];
+    away?: LiveTimelineMatchupPlayer[];
+  };
 };
 
 type ScoringSide = 'home' | 'away';
@@ -91,7 +133,8 @@ type StatQueueItem = {
   order: number;
 };
 
-type StatBank = Record<ScoringSide, Record<Exclude<LiveStatKey, 'points'>, StatQueueItem[]>>;
+type LegacyStatBankKey = 'rebounds' | 'assists' | 'steals' | 'blocks' | 'turnovers' | 'fouls';
+type StatBank = Record<ScoringSide, Record<LegacyStatBankKey, StatQueueItem[]>>;
 
 const REGULATION_PERIOD_SECONDS = 720;
 const OVERTIME_PERIOD_SECONDS = 300;
@@ -237,6 +280,14 @@ export function livePlayerStatsAt(timeline: LiveTimeline, elapsedMs: number) {
     blocks: number;
     turnovers: number;
     fouls: number;
+    fieldGoalsMade: number;
+    fieldGoalsAttempted: number;
+    threePointersMade: number;
+    threePointersAttempted: number;
+    freeThrowsMade: number;
+    freeThrowsAttempted: number;
+    offensiveRebounds: number;
+    defensiveRebounds: number;
   }>();
 
   timeline.events
@@ -257,6 +308,14 @@ export function livePlayerStatsAt(timeline: LiveTimeline, elapsedMs: number) {
           blocks: 0,
           turnovers: 0,
           fouls: 0,
+          fieldGoalsMade: 0,
+          fieldGoalsAttempted: 0,
+          threePointersMade: 0,
+          threePointersAttempted: 0,
+          freeThrowsMade: 0,
+          freeThrowsAttempted: 0,
+          offensiveRebounds: 0,
+          defensiveRebounds: 0,
         };
         Object.entries(delta.stats || {}).forEach(([key, value]) => {
           const statKey = key as LiveStatKey;
@@ -272,6 +331,10 @@ export function livePlayerStatsAt(timeline: LiveTimeline, elapsedMs: number) {
     || right.rebounds - left.rebounds
     || left.name.localeCompare(right.name)
   ));
+}
+
+export function starterMatchupsForTimeline(timeline: LiveTimeline | null | undefined): LiveTimelineStarterMatchup[] {
+  return Array.isArray(timeline?.starterMatchups) ? timeline.starterMatchups : [];
 }
 
 export function currentTimelineEvent(
@@ -452,7 +515,7 @@ function buildPossessionActionsForPeriod(input: LiveTimelineInput, period: LiveT
   return actions;
 }
 
-function consumeStatsForPeriod(bank: StatBank, side: ScoringSide, stat: Exclude<LiveStatKey, 'points'>, period: number, finalPeriod: boolean) {
+function consumeStatsForPeriod(bank: StatBank, side: ScoringSide, stat: LegacyStatBankKey, period: number, finalPeriod: boolean) {
   const consumed: StatQueueItem[] = [];
   let next = consumeStat(bank, side, stat, period);
   while (next) {
@@ -472,7 +535,7 @@ function consumeStatsForPeriod(bank: StatBank, side: ScoringSide, stat: Exclude<
 function consumeStat(
   bank: StatBank,
   side: ScoringSide,
-  stat: Exclude<LiveStatKey, 'points'>,
+  stat: LegacyStatBankKey,
   period?: number,
   excludePlayerId?: string,
 ): StatQueueItem | null {

@@ -4,6 +4,7 @@ import {
   currentTimelineEvent,
   livePlayerStatsAt,
   periodLabel,
+  starterMatchupsForTimeline,
   type LiveTimelineEvent,
   type LiveTimelineInput,
 } from '@/domain/nba/liveTimeline';
@@ -14,6 +15,7 @@ const supportedEventTypes: LiveTimelineEvent['eventType'][] = [
   'miss',
   'turnover',
   'foul',
+  'free_throw_trip',
   'timeout',
   'run',
   'momentum',
@@ -215,5 +217,29 @@ describe('Live Mode timeline', () => {
     }, 10_000);
 
     expect(visible).toEqual({ index: -1, event: null });
+  });
+
+  it('reads starter matchup rows from version 2 timelines', () => {
+    const timeline = {
+      version: 2,
+      gameId: 'game-1',
+      homeTeamId: 'CHI',
+      awayTeamId: 'PHI',
+      homeScore: 100,
+      awayScore: 98,
+      revealDurationMs: 960000,
+      periods: [],
+      starterMatchups: [
+        { position: 'PG', awayPlayer: { playerId: 'a1', name: 'Away PG', teamId: 'PHI' }, homePlayer: { playerId: 'h1', name: 'Home PG', teamId: 'CHI' } },
+        { position: 'SG', awayPlayer: { playerId: 'a2', name: 'Away SG', teamId: 'PHI' }, homePlayer: { playerId: 'h2', name: 'Home SG', teamId: 'CHI' } },
+        { position: 'SF', awayPlayer: { playerId: 'a3', name: 'Away SF', teamId: 'PHI' }, homePlayer: { playerId: 'h3', name: 'Home SF', teamId: 'CHI' } },
+        { position: 'PF', awayPlayer: { playerId: 'a4', name: 'Away PF', teamId: 'PHI' }, homePlayer: { playerId: 'h4', name: 'Home PF', teamId: 'CHI' } },
+        { position: 'C', awayPlayer: { playerId: 'a5', name: 'Away C', teamId: 'PHI' }, homePlayer: { playerId: 'h5', name: 'Home C', teamId: 'CHI' } },
+      ],
+      events: [],
+    } as any;
+
+    expect(starterMatchupsForTimeline(timeline)).toHaveLength(5);
+    expect(starterMatchupsForTimeline(null)).toEqual([]);
   });
 });

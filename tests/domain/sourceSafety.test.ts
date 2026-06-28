@@ -261,7 +261,8 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('arenaTheme');
     expect(liveMode).toContain('currentTimelineEvent');
     expect(liveMode).toContain('livePlayerStatsAt');
-    expect(liveMode).toContain('Live Player Stats');
+    expect(liveMode).toContain('Starter Matchups');
+    expect(liveMode).toContain('See More Player Stats');
     expect(liveMode).not.toContain('httpsCallable(functions');
     expect(liveMode).not.toContain('Push Tempo');
     expect(liveMode).not.toContain('Trap Star');
@@ -580,6 +581,14 @@ describe('source safety regressions', () => {
       expect(file).toContain('NFL Franchise');
       expect(file).toContain('MLB Franchise');
     }
+  });
+
+  it('renders Live Mode player stats as starter head-to-head matchups', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+
+    expect(liveMode).toContain('starterMatchupsForTimeline');
+    expect(liveMode).toContain('See More Player Stats');
+    expect(liveMode).toContain('Starter Matchups');
   });
 
   it('keeps prohibited commercial-game branding out of app source and docs', () => {

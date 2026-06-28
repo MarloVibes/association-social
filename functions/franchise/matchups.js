@@ -3,6 +3,10 @@
 const { buildArenaTheme } = require('./arenaTheme');
 const { FinalizeGameError, finalizeGame } = require('./finalizeGame');
 const { buildLiveTimeline } = require('./liveTimeline');
+const {
+  boxScoreFromPossessionTimeline,
+  buildPossessionTimeline,
+} = require('./possessionTimeline');
 
 const REQUEST_WINDOW_MS = 60 * 60 * 1000;
 const PREPARATION_WINDOW_MS = 5 * 60 * 1000;
@@ -649,6 +653,17 @@ function timelinePlayers(teamBoxScore) {
 }
 
 function gameWithLiveMode({ game, nowMs, seed, homeTeam }) {
+  if (game && game.liveTimeline) {
+    return {
+      ...game,
+      liveMode: {
+        status: 'ready',
+        simulationStartedAtMs: nowMs,
+        simulationEndsAtMs: nowMs + Number(game.liveTimeline.revealDurationMs || 0),
+        arenaTheme: arenaThemeForHomeTeam({ game, homeTeam }),
+      },
+    };
+  }
   const homePlayers = timelinePlayers(game.boxScore && game.boxScore.home);
   const awayPlayers = timelinePlayers(game.boxScore && game.boxScore.away);
   const liveTimeline = buildLiveTimeline({
@@ -698,32 +713,21 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
   const simulatedHomeTeam = applyCoachingToTeamForSimulation(homeTeam, homePresetIds);
   const simulatedAwayTeam = applyCoachingToTeamForSimulation(awayTeam, awayPresetIds);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
-  const homeStrength = teamSimulationStrength(simulatedHomeTeam, game.homeTeamId);
-  const awayStrength = teamSimulationStrength(simulatedAwayTeam, game.awayTeamId);
-  let homeScore = 75 + Math.round(homeStrength * 0.55) + 3 + (hash(`${seed}:home-roster`) % 8);
-  let awayScore = 75 + Math.round(awayStrength * 0.55) + (hash(`${seed}:away-roster`) % 8);
-  if (homeScore === awayScore) homeScore += 1;
-  ({ homeScore, awayScore } = adjustScoresForWinner({
-    homeScore,
-    awayScore,
-    winnerTeamId,
-    game,
+  const liveTimeline = buildPossessionTimeline({
+    gameId: game.id,
     seed,
-  }));
-  const home = buildSimulationTeamBox({
-    team: simulatedHomeTeam,
-    teamId: game.homeTeamId,
-    targetPoints: homeScore,
-    seed: `${seed}:home`,
-    pointMargin: homeScore - awayScore,
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeTeam: simulatedHomeTeam,
+    awayTeam: simulatedAwayTeam,
+    homeCoachingPresetIds: homePresetIds,
+    awayCoachingPresetIds: awayPresetIds,
+    preferredWinnerTeamId: winnerTeamId,
+    nowMs,
   });
-  const away = buildSimulationTeamBox({
-    team: simulatedAwayTeam,
-    teamId: game.awayTeamId,
-    targetPoints: awayScore,
-    seed: `${seed}:away`,
-    pointMargin: awayScore - homeScore,
-  });
+  const homeScore = liveTimeline.homeScore;
+  const awayScore = liveTimeline.awayScore;
+  const { home, away } = boxScoreFromPossessionTimeline(liveTimeline);
   const simulatedWinnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
   const winnerLabel = displayScheduleAbbr(simulatedWinnerTeamId);
   return {
@@ -738,7 +742,12 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       awayFirstHalfPresetId: awayPresetIds[0],
       awaySecondHalfPresetId: awayPresetIds[1],
     },
-    quarters: quarterScores(homeScore, awayScore, seed),
+    quarters: liveTimeline.periods.map(period => ({
+      quarter: period.period,
+      home: period.home,
+      away: period.away,
+    })),
+    liveTimeline,
     story: `${winnerLabel} controlled the decisive stretches behind roster strength and rotation production.`,
   };
 }
@@ -1025,6 +1034,7 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam }) {
       ? {
         boxScore: rosterSimulation.boxScore,
         quarters: rosterSimulation.quarters,
+        liveTimeline: rosterSimulation.liveTimeline,
         story: rosterSimulation.story,
         coachingImpact: rosterSimulation.coachingImpact,
       }
@@ -1087,6 +1097,7 @@ function finalScoreGameResult({
       ...result.game,
       boxScore: rosterSimulation.boxScore,
       quarters: rosterSimulation.quarters,
+      liveTimeline: rosterSimulation.liveTimeline,
       story: rosterSimulation.story,
       coachingImpact: rosterSimulation.coachingImpact,
     };

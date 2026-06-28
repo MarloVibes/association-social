@@ -8,7 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
 import { buildLiveCourtState } from '@/domain/nba/liveCourt';
-import { currentTimelineEvent, livePlayerStatsAt, type LiveTimeline, type LiveTimelineEvent } from '@/domain/nba/liveTimeline';
+import { currentTimelineEvent, livePlayerStatsAt, starterMatchupsForTimeline, type LiveTimeline, type LiveTimelineEvent, type LiveTimelineStarterMatchup } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
@@ -87,6 +87,35 @@ function eventSide(event: LiveTimelineEvent | null, game: LiveGame | null) {
   return 'LIVE';
 }
 
+function statsTextForPlayer(playerId: string | undefined, players: ReturnType<typeof livePlayerStatsAt>) {
+  const player = players.find(item => item.playerId === playerId);
+  if (!player) return '0 PTS 0 REB 0 AST';
+  return `${player.points} PTS ${player.rebounds} REB ${player.assists} AST`;
+}
+
+function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof livePlayerStatsAt>; home: ReturnType<typeof livePlayerStatsAt> }): LiveTimelineStarterMatchup[] {
+  const positions = ['PG', 'SG', 'SF', 'PF', 'C'];
+  return positions.map((position, index) => ({
+    position,
+    awayPlayer: {
+      playerId: away[index]?.playerId || `away-${position}`,
+      name: away[index]?.name || 'Away Player',
+      teamId: away[index]?.teamId || '',
+      skillChips: [],
+    },
+    homePlayer: {
+      playerId: home[index]?.playerId || `home-${position}`,
+      name: home[index]?.name || 'Home Player',
+      teamId: home[index]?.teamId || '',
+      skillChips: [],
+    },
+  }));
+}
+
+function skillChipText(chips: string[] | undefined) {
+  return Array.isArray(chips) && chips.length > 0 ? chips.slice(0, 2).join('  ') : '';
+}
+
 function safeElapsedMs(game: LiveGame | null, nowMs: number, replayStartedAtMs?: string) {
   if (!game?.liveTimeline) return 0;
   const replayStartMs = Number(replayStartedAtMs || 0);
@@ -104,6 +133,7 @@ export default function LiveModeScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
   const ballX = useSharedValue(0);
   const ballY = useSharedValue(0);
   const availableCourtWidth = Math.max(120, windowWidth - SCREEN_HORIZONTAL_PADDING);
@@ -202,6 +232,10 @@ export default function LiveModeScreen() {
     away: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.awayTeamId || '')).slice(0, 8),
     home: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.homeTeamId || '')).slice(0, 8),
   }), [game?.awayTeamId, game?.homeTeamId, livePlayerStats]);
+  const starterMatchups = useMemo(() => starterMatchupsForTimeline(liveTimeline), [liveTimeline]);
+  const matchupRows = starterMatchups.length > 0
+    ? starterMatchups
+    : fallbackMatchupsFromStats({ away: liveStatsByTeam.away.slice(0, 5), home: liveStatsByTeam.home.slice(0, 5) });
   const scoreboardBackground = translucentColor(arenaTheme.primary, '22', 'rgba(255,255,255,0.06)');
   const courtBackground = translucentColor(arenaTheme.primary, '33', 'rgba(255,255,255,0.08)');
   const crowdGlowBackground = translucentColor(arenaTheme.crowdGlow, '44', 'rgba(255,255,255,0.12)');
@@ -342,31 +376,56 @@ export default function LiveModeScreen() {
             </View>
 
             <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Live Player Stats</Text>
-              {livePlayerStats.length > 0 ? (
-                ([
-                  { key: 'away', label: awayLabel, players: liveStatsByTeam.away },
-                  { key: 'home', label: homeLabel, players: liveStatsByTeam.home },
-                ] as const).map(group => (
-                  <View key={group.key} style={styles.statTeamGroup}>
-                    <Text style={styles.statGroupTitle}>{group.label}</Text>
-                    {group.players.map(player => (
-                      <View key={player.playerId} style={styles.statRow}>
-                        <View style={styles.statNameBlock}>
-                          <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
-                        </View>
-                        <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
-                        <Text style={styles.statValue}>{player.rebounds} REB</Text>
-                        <Text style={styles.statValue}>{player.assists} AST</Text>
-                        <Text style={styles.statValue}>{player.steals} STL</Text>
-                        <Text style={styles.statValue}>{player.blocks} BLK</Text>
-                      </View>
-                    ))}
+              <View style={styles.panelHeaderRow}>
+                <Text style={styles.panelTitle}>Starter Matchups</Text>
+                <TouchableOpacity onPress={() => setShowFullPlayerStats(value => !value)} style={[styles.smallOutlineButton, { borderColor: arenaTheme.secondary }]}>
+                  <Text style={[styles.smallOutlineButtonText, { color: arenaTheme.text }]}>{showFullPlayerStats ? 'Hide' : 'See More Player Stats'}</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.matchupHeader}>
+                <Text numberOfLines={1} style={styles.matchupTeamLabel}>{awayLabel}</Text>
+                <Text style={styles.matchupTeamVs}>vs</Text>
+                <Text numberOfLines={1} style={[styles.matchupTeamLabel, styles.matchupTeamRight]}>{homeLabel}</Text>
+              </View>
+              {matchupRows.map(row => (
+                <View key={row.position} style={styles.matchupRow}>
+                  <View style={styles.matchupPlayer}>
+                    <Text numberOfLines={1} style={styles.matchupName}>{row.awayPlayer.name}</Text>
+                    <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats)}</Text>
+                    {skillChipText(row.awayPlayer.skillChips) ? <Text numberOfLines={1} style={styles.matchupChip}>{skillChipText(row.awayPlayer.skillChips)}</Text> : null}
                   </View>
-                ))
-              ) : (
-                <Text style={styles.emptySmall}>Stats will update as plays appear.</Text>
-              )}
+                  <Text style={[styles.matchupPosition, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{row.position}</Text>
+                  <View style={[styles.matchupPlayer, styles.matchupPlayerRight]}>
+                    <Text numberOfLines={1} style={styles.matchupName}>{row.homePlayer.name}</Text>
+                    <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats)}</Text>
+                    {skillChipText(row.homePlayer.skillChips) ? <Text numberOfLines={1} style={styles.matchupChip}>{skillChipText(row.homePlayer.skillChips)}</Text> : null}
+                  </View>
+                </View>
+              ))}
+              {showFullPlayerStats ? (
+                <View style={styles.fullStatsWrap}>
+                  {([
+                    { key: 'away', label: awayLabel, players: liveStatsByTeam.away },
+                    { key: 'home', label: homeLabel, players: liveStatsByTeam.home },
+                  ] as const).map(group => (
+                    <View key={group.key} style={styles.statTeamGroup}>
+                      <Text style={styles.statGroupTitle}>{group.label}</Text>
+                      {group.players.map(player => (
+                        <View key={player.playerId} style={styles.statRow}>
+                          <View style={styles.statNameBlock}>
+                            <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
+                          </View>
+                          <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
+                          <Text style={styles.statValue}>{player.rebounds} REB</Text>
+                          <Text style={styles.statValue}>{player.assists} AST</Text>
+                          <Text style={styles.statValue}>{player.steals} STL</Text>
+                          <Text style={styles.statValue}>{player.blocks} BLK</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
 
             {resultVisible ? (
@@ -422,8 +481,11 @@ const styles = StyleSheet.create({
   ballToken: { position: 'absolute', left: 0, top: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#f97316', borderWidth: 1, borderColor: '#fff1d6' },
   panel: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 14, gap: 10 },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   panelTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
   panelPill: { borderWidth: 1, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 5, fontSize: 10, fontWeight: '900' },
+  smallOutlineButton: { minHeight: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  smallOutlineButtonText: { fontSize: 11, fontWeight: '900' },
   eventText: { color: '#ddd', fontSize: 15, fontWeight: '800', lineHeight: 21 },
   momentumRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   momentumLabel: { color: '#777', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
@@ -441,6 +503,18 @@ const styles = StyleSheet.create({
   feedMeta: { color: '#777', fontSize: 10, fontWeight: '900' },
   feedText: { color: '#ddd', fontSize: 12, fontWeight: '800', marginTop: 2 },
   feedScore: { color: '#fff', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  matchupHeader: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
+  matchupTeamLabel: { flex: 1, minWidth: 0, color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  matchupTeamRight: { textAlign: 'right' },
+  matchupTeamVs: { width: 34, textAlign: 'center', color: '#555', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  matchupRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingVertical: 10 },
+  matchupPlayer: { flex: 1, minWidth: 0 },
+  matchupPlayerRight: { alignItems: 'flex-end' },
+  matchupName: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  matchupStats: { color: '#bdbdbd', fontSize: 10, fontWeight: '900', marginTop: 3, fontVariant: ['tabular-nums'] },
+  matchupChip: { color: '#777', fontSize: 9, fontWeight: '900', marginTop: 4 },
+  matchupPosition: { width: 34, minHeight: 28, borderRadius: 7, borderWidth: 1, textAlign: 'center', textAlignVertical: 'center', fontSize: 10, fontWeight: '900', paddingTop: 6 },
+  fullStatsWrap: { gap: 10, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
   statTeamGroup: { gap: 2 },
   statGroupTitle: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 2 },
   statRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingVertical: 8 },
