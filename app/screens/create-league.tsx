@@ -24,7 +24,7 @@ const TEAM_MODES = [
   { label: 'Fantasy Draft', value: 'draft', desc: 'GMs draft players from scratch', icon: '🎯' },
 ];
 
-const MADDEN_MODES = [
+const NFL_MODES = [
   { label: 'Current Rosters', value: 'current', desc: 'Start with current NFL rosters', icon: '📅' },
   { label: 'Randomize Teams', value: 'random', desc: 'Teams randomly assigned to GMs', icon: '🎲' },
   { label: 'Fantasy Draft', value: 'draft', desc: 'Draft players from scratch before the season', icon: '🎯' },
@@ -84,7 +84,7 @@ export default function CreateLeagueScreen() {
   const totalSteps = sport === 'nba' ? 4 : 3;
 
   const getModeOptions = () => {
-    if (sport === 'madden') return MADDEN_MODES;
+    if (sport === 'madden') return NFL_MODES;
     if (sport === 'mlb') return MLB_MODES;
     return [];
   };
