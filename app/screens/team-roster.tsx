@@ -6,6 +6,8 @@ import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
+import { getPositionFilters } from '@/domain/sports/playerFields';
+import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -28,6 +30,7 @@ export default function TeamRosterScreen() {
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
   const [isLeagueCommissioner, setIsLeagueCommissioner] = useState(false);
+  const [posFilter, setPosFilter] = useState('ALL');
   const myUid = auth.currentUser?.uid;
 
   useEffect(() => {
@@ -158,6 +161,7 @@ export default function TeamRosterScreen() {
   const untouchables: string[] = team.untouchables || [];
   const tradeBlock: string[] = team.tradeBlock || [];
   const players: any[] = team.players || [];
+  const positionFilters = getPositionFilters(sport);
 
   const handleDeleteCustomPlayer = async (p: any) => {
     try {
@@ -268,16 +272,30 @@ export default function TeamRosterScreen() {
       ) : null}
 
       <Text style={styles.sectionLabel}>ROSTER ({players.length})</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.posFilterScroll}>
+        <View style={styles.posFilters}>
+          {positionFilters.map(pos => (
+            <TouchableOpacity
+              key={pos}
+              style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
+              onPress={() => setPosFilter(pos)}
+            >
+              <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
 
       {players.length === 0 ? (
         <Text style={styles.empty}>No players on this roster.</Text>
       ) : (() => {
         // For MLB/NFL, order by position group so the roster reads like a depth chart.
         const groups = getPositionGroups(sport);
-        const displayPlayers = groups
-          ? [...players].sort((a: any, b: any) =>
-              groupForPosition(sport, a.position).index - groupForPosition(sport, b.position).index)
-          : players;
+        const displayPlayers = [...players]
+          .filter((p: any) => matchesRosterPosition(p, posFilter))
+          .sort((a: any, b: any) => groups
+            ? groupForPosition(sport, a.position).index - groupForPosition(sport, b.position).index || compareRosterPlayersByValue(a, b)
+            : compareRosterPlayersByValue(a, b));
         return displayPlayers.map((p: any, i: number) => {
         const grpLabel = groups ? groupForPosition(sport, p.position).label : '';
         const showHeader = !!groups && (i === 0 || grpLabel !== groupForPosition(sport, displayPlayers[i - 1].position).label);
@@ -371,6 +389,12 @@ const styles = StyleSheet.create({
   teamMeta: { color: '#ccc', fontSize: 13, marginTop: 2 },
   teamGm: { color: '#888', fontSize: 12, marginTop: 2 },
   sectionLabel: { color: '#666', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
+  posFilterScroll: { marginBottom: 10 },
+  posFilters: { flexDirection: 'row', gap: 6, paddingRight: 10 },
+  posBtn: { minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center' },
+  posBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
+  posBtnText: { color: '#777', fontSize: 11, fontWeight: '800' },
+  posBtnTextActive: { color: '#00ff87' },
   picksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   pickChip: { backgroundColor: '#101c14', borderWidth: 1, borderColor: '#1f5f3a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   pickChipText: { color: '#00ff87', fontSize: 12, fontWeight: '700' },

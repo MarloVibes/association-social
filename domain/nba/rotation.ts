@@ -79,27 +79,28 @@ const ERROR_MESSAGES: Record<string, string> = {
   closing_lineup_required: 'Choose exactly 5 active closing players.',
 };
 
-function playerKey(player: CpuRotationPlayer): string {
+export function rosterPlayerKey(player: CpuRotationPlayer): string {
   return String(player.playerId || player.player_id || player.id || player.bref_id || player.full_name || player.name || '');
 }
 
-function normalizedPosition(player: CpuRotationPlayer): string {
-  const value = String(player.position || '').toUpperCase();
-  if (value.includes('PG')) return 'PG';
-  if (value.includes('SG')) return 'SG';
-  if (value.includes('SF')) return 'SF';
-  if (value.includes('PF')) return 'PF';
-  if (value.includes('C')) return 'C';
+export function normalizedRosterPosition(player: CpuRotationPlayer): string {
+  const value = String(player.position || '').trim().toUpperCase();
+  if (value.includes('POINT GUARD') || /\bPG\b/.test(value)) return 'PG';
+  if (value.includes('SHOOTING GUARD') || /\bSG\b/.test(value)) return 'SG';
+  if (value.includes('SMALL FORWARD') || /\bSF\b/.test(value)) return 'SF';
+  if (value.includes('POWER FORWARD') || /\bPF\b/.test(value)) return 'PF';
+  if (value === 'CENTER' || /\bC\b/.test(value)) return 'C';
   if (value === 'G') return 'PG';
   if (value === 'F') return 'SF';
   return '';
 }
 
 function playerValue(player: CpuRotationPlayer): number {
+  const inferred = rosterPlayerValue(player);
   for (const value of [player.value, player.rating, player.overall]) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 50) return Math.max(value, inferred);
   }
-  return rotationValue(player);
+  return inferred;
 }
 
 function numberFrom(player: CpuRotationPlayer, keys: string[], fallback = 0): number {
@@ -110,12 +111,15 @@ function numberFrom(player: CpuRotationPlayer, keys: string[], fallback = 0): nu
     const hidden = player.hidden?.[key];
     if (typeof hidden === 'number' && Number.isFinite(hidden)) return hidden;
     if (typeof hidden === 'string' && hidden.trim() !== '' && Number.isFinite(Number(hidden))) return Number(hidden);
+    const identityHidden = (player as any).identity?.hidden?.[key] ?? (player as any).visibleIdentity?.hidden?.[key];
+    if (typeof identityHidden === 'number' && Number.isFinite(identityHidden)) return identityHidden;
+    if (typeof identityHidden === 'string' && identityHidden.trim() !== '' && Number.isFinite(Number(identityHidden))) return Number(identityHidden);
   }
   return fallback;
 }
 
 function gradeFrom(player: CpuRotationPlayer, keys: string[], fallback = 0): number {
-  const sources = [player.grades, player.skill_grades, player.visible?.grades];
+  const sources = [player.grades, player.skill_grades, player.visible?.grades, (player as any).identity?.grades, (player as any).visibleIdentity?.grades];
   for (const source of sources) {
     if (!source) continue;
     for (const key of keys) {
@@ -151,19 +155,19 @@ function tierBoost(player: CpuRotationPlayer): number {
   return 0;
 }
 
-function rotationValue(player: CpuRotationPlayer): number {
+export function rosterPlayerValue(player: CpuRotationPlayer): number {
   const scoring = skillValue(player, ['scoring', 'shooting', 'threePoint', 'midRange', 'closeShot', 'finishing'], 65);
   const creation = skillValue(player, ['playmaking', 'passing', 'ballHandle', 'offenseIq'], 62);
   const defense = skillValue(player, ['defense', 'perimeterDefense', 'postDefense', 'interiorDefense', 'defenseIq'], 62);
   const rebounding = skillValue(player, ['rebounding', 'offensiveRebound', 'defensiveRebound'], 58);
   const iq = skillValue(player, ['basketballIq', 'offenseIq', 'defenseIq', 'shotIq'], 64);
   const stamina = skillValue(player, ['stamina', 'durability'], 70);
-  const production = numberFrom(player, ['ppg'], 0) * 0.8
-    + numberFrom(player, ['apg'], 0) * 1.1
-    + numberFrom(player, ['rpg'], 0) * 0.75
-    + numberFrom(player, ['spg'], 0) * 1.8
-    + numberFrom(player, ['bpg'], 0) * 1.6;
-  const realMinutes = numberFrom(player, ['minutes', 'rotationMinutes', 'minutesPerGame', 'mpg'], 0);
+  const production = numberFrom(player, ['ppg', 'pointsPerGame', 'pts_per_g'], 0) * 0.8
+    + numberFrom(player, ['apg', 'assistsPerGame', 'ast_per_g'], 0) * 1.1
+    + numberFrom(player, ['rpg', 'reboundsPerGame', 'trb_per_g'], 0) * 0.75
+    + numberFrom(player, ['spg', 'stealsPerGame', 'stl_per_g'], 0) * 1.8
+    + numberFrom(player, ['bpg', 'blocksPerGame', 'blk_per_g'], 0) * 1.6;
+  const realMinutes = numberFrom(player, ['minutes', 'rotationMinutes', 'minutesPerGame', 'mpg', 'mp_per_g'], 0);
   return scoring * 0.28
     + creation * 0.2
     + defense * 0.22
@@ -176,7 +180,7 @@ function rotationValue(player: CpuRotationPlayer): number {
 }
 
 function minuteCap(player: CpuRotationPlayer): number {
-  const explicitMinutes = numberFrom(player, ['minutes', 'rotationMinutes', 'minutesPerGame', 'mpg'], 0);
+  const explicitMinutes = numberFrom(player, ['minutes', 'rotationMinutes', 'minutesPerGame', 'mpg', 'mp_per_g'], 0);
   if (explicitMinutes >= 34) return 40;
   if (explicitMinutes >= 30) return 38;
   if (explicitMinutes >= 24) return 34;
@@ -187,7 +191,9 @@ function minuteCap(player: CpuRotationPlayer): number {
   const creation = skillValue(player, ['playmaking', 'passing', 'ballHandle', 'offenseIq'], 62);
   const defense = skillValue(player, ['defense', 'perimeterDefense', 'postDefense', 'interiorDefense', 'defenseIq'], 62);
   const rebounding = skillValue(player, ['rebounding', 'offensiveRebound', 'defensiveRebound'], 58);
-  const production = numberFrom(player, ['ppg'], 0) + numberFrom(player, ['apg'], 0) + numberFrom(player, ['rpg'], 0);
+  const production = numberFrom(player, ['ppg', 'pointsPerGame', 'pts_per_g'], 0)
+    + numberFrom(player, ['apg', 'assistsPerGame', 'ast_per_g'], 0)
+    + numberFrom(player, ['rpg', 'reboundsPerGame', 'trb_per_g'], 0);
   const offensiveRole = scoring * 0.58 + creation * 0.42;
 
   if (offensiveRole < 55 && production < 12) return defense >= 80 || rebounding >= 80 ? 18 : 12;
@@ -243,10 +249,10 @@ function orderForLineup(players: CpuRotationPlayer[]): CpuRotationPlayer[] {
   const starters: CpuRotationPlayer[] = [];
 
   for (const position of ['PG', 'SG', 'SF', 'PF', 'C']) {
-    let index = remaining.findIndex(player => normalizedPosition(player) === position);
-    if (index < 0 && position === 'SG') index = remaining.findIndex(player => normalizedPosition(player) === 'PG');
-    if (index < 0 && position === 'SF') index = remaining.findIndex(player => ['SG', 'PF'].includes(normalizedPosition(player)));
-    if (index < 0 && position === 'PF') index = remaining.findIndex(player => ['SF', 'C'].includes(normalizedPosition(player)));
+    let index = remaining.findIndex(player => normalizedRosterPosition(player) === position);
+    if (index < 0 && position === 'SG') index = remaining.findIndex(player => normalizedRosterPosition(player) === 'PG');
+    if (index < 0 && position === 'SF') index = remaining.findIndex(player => ['SG', 'PF'].includes(normalizedRosterPosition(player)));
+    if (index < 0 && position === 'PF') index = remaining.findIndex(player => ['SF', 'C'].includes(normalizedRosterPosition(player)));
     if (index < 0) index = 0;
     const [player] = remaining.splice(index, 1);
     if (player) starters.push(player);
@@ -313,15 +319,31 @@ export function rotationValidationMessages(validation: RotationValidation): stri
   return validation.errors.map(error => ERROR_MESSAGES[error] || error);
 }
 
+export function compareRosterPlayersByValue(left: CpuRotationPlayer, right: CpuRotationPlayer): number {
+  return playerValue(right) - playerValue(left) || rosterPlayerKey(left).localeCompare(rosterPlayerKey(right));
+}
+
+export function matchesRosterPosition(player: CpuRotationPlayer, filter: string): boolean {
+  if (filter === 'ALL') return true;
+  const rawPosition = String(player.position || '').trim().toUpperCase();
+  const rawFilter = String(filter || '').trim().toUpperCase();
+  if (!rawFilter) return true;
+  if (rawPosition === rawFilter || rawPosition.split(/[,\s/|-]+/).includes(rawFilter)) return true;
+  const position = normalizedRosterPosition(player);
+  if (rawFilter === 'G') return position === 'PG' || position === 'SG';
+  if (rawFilter === 'F') return position === 'SF' || position === 'PF';
+  return position === rawFilter;
+}
+
 export function buildCpuRotation(players: CpuRotationPlayer[]): RotationSlot[] {
   const ordered = [...players]
-    .filter(player => playerKey(player))
-    .sort((left, right) => playerValue(right) - playerValue(left) || playerKey(left).localeCompare(playerKey(right)));
+    .filter(player => rosterPlayerKey(player))
+    .sort(compareRosterPlayersByValue);
   const selected = orderForLineup(ordered.slice(0, Math.max(10, Math.min(ordered.length, 15))));
   const minutes = rotationMinutesFor(selected);
 
   return selected.map((player, index): RotationSlot => ({
-    playerId: playerKey(player),
+    playerId: rosterPlayerKey(player),
     minutes: minutes[index] || 0,
     starter: index < 5,
     benchOrder: index >= 5 ? index - 4 : undefined,

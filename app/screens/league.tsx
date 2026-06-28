@@ -14,6 +14,7 @@ import LeagueAvatar from '@/components/LeagueAvatar';
 import { setLastLeagueId } from '@/utils/lastLeague';
 import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
 import { playerJerseyDisplay } from '@/domain/sports/playerDisplay';
+import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
 
 
 
@@ -87,6 +88,7 @@ export default function LeagueScreen() {
   const tintColor = teamTheme.tintColor;
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
   const teamNameColor = hexToLum(teamSecondary) < 0.35 || hexToLum(teamSecondary) > 0.95 ? '#ffffff' : teamSecondary;
+  const myTeamPlayersByValue = [...(myTeam?.players || [])].sort(compareRosterPlayersByValue);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -377,7 +379,7 @@ export default function LeagueScreen() {
             </View>
             {myTeam.players?.length > 0 && (
               <View style={styles.myTeamPlayers}>
-                {myTeam.players.slice(0, 3).map((p: any) => (
+                {myTeamPlayersByValue.slice(0, 3).map((p: any) => (
                   <View key={p.player_id} style={styles.myTeamPlayerRow}>
                     <Text style={[styles.myTeamPlayerPos, { color: teamText }]}>{p.position}</Text>
                     <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
@@ -386,8 +388,8 @@ export default function LeagueScreen() {
                     ) : null}
                   </View>
                 ))}
-                {myTeam.players.length > 3 && (
-                  <Text style={[styles.myTeamMorePlayers, { color: teamText }]}>+{myTeam.players.length - 3} more players →</Text>
+                {myTeamPlayersByValue.length > 3 && (
+                  <Text style={[styles.myTeamMorePlayers, { color: teamText }]}>+{myTeamPlayersByValue.length - 3} more players →</Text>
                 )}
               </View>
             )}

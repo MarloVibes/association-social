@@ -8,6 +8,8 @@ import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { getPositionFilters } from '@/domain/sports/playerFields';
+import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
@@ -91,6 +93,8 @@ export default function TradeRoomScreen() {
   const [voteDeadlineDays, setVoteDeadlineDays] = useState<number>(2);
   const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
+  const [myPickerPosFilter, setMyPickerPosFilter] = useState('ALL');
+  const [theirPickerPosFilter, setTheirPickerPosFilter] = useState('ALL');
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -106,6 +110,7 @@ export default function TradeRoomScreen() {
   const finalizeInFlightRef = useRef(false);
   const localFinalizeSuccessPendingRef = useRef(false);
   const snapshotFinalizeKeyRef = useRef('');
+  const positionFilters = getPositionFilters(leagueSport);
 
   const finalizeTradeRoom = async (_trade: any) => {
     if (finalizeInFlightRef.current) return { executed: false, inFlight: true };
@@ -140,10 +145,10 @@ export default function TradeRoomScreen() {
         if (cancelled) return;
         if (mine) {
           setMyTeam(mine);
-          setMyRoster(mine.players || []);
+          setMyRoster([...(mine.players || [])].sort(compareRosterPlayersByValue));
         }
         if (theirs) {
-          setOtherRoster(theirs.players || []);
+          setOtherRoster([...(theirs.players || [])].sort(compareRosterPlayersByValue));
           setOtherUntouchables(theirs.untouchables || []);
           setOtherTeamPicks(theirs.picks || []);
         }
@@ -1201,10 +1206,26 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add {otherTeamName} Player</Text>
             <View style={{ width: 50 }} />
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+            <View style={styles.positionFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.positionFilterBtn, theirPickerPosFilter === pos && styles.positionFilterBtnActive]}
+                  onPress={() => setTheirPickerPosFilter(pos)}
+                >
+                  <Text style={[styles.positionFilterText, theirPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
           <ScrollView contentContainerStyle={styles.modalBody}>
             {otherRoster.length === 0 ? (
               <Text style={styles.emptySide}>Opponent roster not loaded</Text>
-            ) : otherRoster.map((p: any, i: number) => {
+            ) : otherRoster
+              .filter((p: any) => matchesRosterPosition(p, theirPickerPosFilter))
+              .sort(compareRosterPlayersByValue)
+              .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = otherOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = theirLockedKeys.has(key);
@@ -1239,8 +1260,24 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add to Offer</Text>
             <View style={{ width: 50 }} />
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+            <View style={styles.positionFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.positionFilterBtn, myPickerPosFilter === pos && styles.positionFilterBtnActive]}
+                  onPress={() => setMyPickerPosFilter(pos)}
+                >
+                  <Text style={[styles.positionFilterText, myPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
           <ScrollView contentContainerStyle={styles.modalBody}>
-            {myRoster.map((p: any, i: number) => {
+            {myRoster
+              .filter((p: any) => matchesRosterPosition(p, myPickerPosFilter))
+              .sort(compareRosterPlayersByValue)
+              .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = myOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = lockedPlayerKeys.has(key);
@@ -1414,6 +1451,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   modalClose: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
   modalTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  positionFilterScroll: { backgroundColor: '#0a0a0a', borderBottomWidth: 1, borderBottomColor: '#141414' },
+  positionFilters: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
+  positionFilterBtn: { minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center' },
+  positionFilterBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
+  positionFilterText: { color: '#777', fontSize: 11, fontWeight: '800' },
+  positionFilterTextActive: { color: '#00ff87' },
   modalBody: { padding: 16, paddingBottom: 60 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 10 },
   pickerRowDisabled: { opacity: 0.4 },

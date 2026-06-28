@@ -10,6 +10,7 @@ import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
+import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 
 export default function RosterScreen() {
@@ -279,8 +280,10 @@ export default function RosterScreen() {
     } else {
       list = allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
     }
-    return [...list].sort(comparePlayersByTierForYear(profilesByName, currentYear));
-  }, [team, allEraPlayers, myPlayerIds]);
+    return [...list]
+      .filter(p => matchesRosterPosition(p, posFilter))
+      .sort(compareRosterPlayersByValue);
+  }, [team, allEraPlayers, myPlayerIds, posFilter]);
 
   const freeAgents = useMemo(() => {
     const isDraftMode = league?.mode === 'draft';
@@ -293,7 +296,7 @@ export default function RosterScreen() {
         || (p.first_name || '').toLowerCase().startsWith(q)
         || (p.last_name || '').toLowerCase().startsWith(q);
       const pos = p.position || '';
-      const matchesPos = posFilter === 'ALL' || pos.includes(posFilter);
+      const matchesPos = matchesRosterPosition(p, posFilter);
       // In draft mode - show ALL players not already on a roster
       if (isDraftMode) {
         const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
@@ -317,7 +320,7 @@ export default function RosterScreen() {
         const bLast = b.last_name || (b.full_name || '').split(' ').slice(-1)[0] || '';
         return aLast.localeCompare(bLast);
       }
-      return 0;
+      return compareRosterPlayersByValue(a, b);
     });
   }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter, sortBy]);
 
@@ -732,30 +735,34 @@ export default function RosterScreen() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'free_agents' && (
+      {(activeTab === 'my_team' || activeTab === 'free_agents') && (
         <>
-          <TouchableOpacity
-            style={styles.createPlayerBanner}
-            onPress={() => router.push({
-              pathname: '/screens/create-player',
-              params: { leagueId, era: league?.currentSeason || '', sport: authoritativeSport },
-            })}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.createPlayerBannerIcon}>+</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.createPlayerBannerTitle}>Create Player</Text>
-              <Text style={styles.createPlayerBannerSub}>Add a custom player to the free agent pool</Text>
-            </View>
-            <Text style={styles.createPlayerBannerArrow}>›</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.searchInput}
-            placeholder='Search free agents...'
-            placeholderTextColor='#555'
-            value={search}
-            onChangeText={setSearch}
-          />
+          {activeTab === 'free_agents' ? (
+            <>
+              <TouchableOpacity
+                style={styles.createPlayerBanner}
+                onPress={() => router.push({
+                  pathname: '/screens/create-player',
+                  params: { leagueId, era: league?.currentSeason || '', sport: authoritativeSport },
+                })}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.createPlayerBannerIcon}>+</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.createPlayerBannerTitle}>Create Player</Text>
+                  <Text style={styles.createPlayerBannerSub}>Add a custom player to the free agent pool</Text>
+                </View>
+                <Text style={styles.createPlayerBannerArrow}>›</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.searchInput}
+                placeholder='Search free agents...'
+                placeholderTextColor='#555'
+                value={search}
+                onChangeText={setSearch}
+              />
+            </>
+          ) : null}
           <View style={styles.posFilters}>
             {positionFilters.map(pos => (
               <TouchableOpacity

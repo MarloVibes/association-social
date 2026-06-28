@@ -250,6 +250,26 @@ describe('source safety regressions', () => {
     expect(result).toContain('Full Box Score');
   });
 
+  it('uses shared roster value ordering and position filters across team and trade screens', () => {
+    const roster = source('app/screens/roster.tsx');
+    const teamRoster = source('app/screens/team-roster.tsx');
+    const tradeRoom = source('app/screens/trade-room.tsx');
+    const cpuTrade = source('app/screens/cpu-trade.tsx');
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+    const league = source('app/screens/league.tsx');
+
+    for (const file of [roster, teamRoster, tradeRoom, cpuTrade, tradeChannel, league]) {
+      expect(file).toContain('compareRosterPlayersByValue');
+    }
+    for (const file of [roster, teamRoster, tradeRoom, cpuTrade, tradeChannel]) {
+      expect(file).toContain('matchesRosterPosition');
+      expect(file).toContain('getPositionFilters');
+    }
+    expect(tradeRoom).toContain('theirPickerPosFilter');
+    expect(cpuTrade).toContain('givePosFilter');
+    expect(cpuTrade).toContain('getPosFilter');
+  });
+
   it('exposes NBA live mode without in-game adjustment controls', () => {
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');

@@ -130,10 +130,10 @@ function RotationRow({
         </TouchableOpacity>
       </View>
       <TouchableOpacity onPress={() => onToggle(item.playerId, 'starter')} style={[styles.chip, item.starter && styles.chipActive]}>
-        <Text style={[styles.chipText, item.starter && styles.chipTextActive]}>S</Text>
+        <Text style={[styles.chipText, item.starter && styles.chipTextActive]}>Start</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => onToggle(item.playerId, 'closing')} style={[styles.chip, item.closing && styles.chipActive]}>
-        <Text style={[styles.chipText, item.closing && styles.chipTextActive]}>C</Text>
+        <Text style={[styles.chipText, item.closing && styles.chipTextActive]}>Close</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -319,8 +319,8 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   controlButton: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#222' },
   minutes: { color: '#fff', fontSize: 14, fontWeight: '900', minWidth: 24, textAlign: 'center' },
-  chip: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#191919', borderWidth: 1, borderColor: '#2a2a2a' },
+  chip: { minWidth: 48, height: 28, paddingHorizontal: 7, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#191919', borderWidth: 1, borderColor: '#2a2a2a' },
   chipActive: { backgroundColor: '#0a2a1a', borderColor: '#00e58b' },
-  chipText: { color: '#777', fontSize: 12, fontWeight: '900' },
+  chipText: { color: '#777', fontSize: 10, fontWeight: '900' },
   chipTextActive: { color: '#00e58b' },
 });
