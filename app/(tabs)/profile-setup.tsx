@@ -120,14 +120,18 @@ export default function ProfileSetupScreen() {
       } else {
         await setDoc(doc(db, 'users', user.uid), profileData);
       }
-      await setDoc(
-        doc(db, 'users', user.uid, 'private', 'preferences'),
-        {
-          preferredLanguage: privatePreferredLanguage,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
+      try {
+        await setDoc(
+          doc(db, 'users', user.uid, 'private', 'preferences'),
+          {
+            preferredLanguage: privatePreferredLanguage,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } catch (preferenceError) {
+        console.warn('Private language preference could not be saved yet.', preferenceError);
+      }
 
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
