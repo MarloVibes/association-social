@@ -10,6 +10,7 @@ import GlobalNav from '@/components/GlobalNav';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { validateTrade } from '@/domain/finance/validateTrade';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
@@ -415,6 +416,10 @@ export default function TradeRoomScreen() {
   const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + getEffectiveSalary(p, overridesMap), 0);
   const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
   const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
+  const withEffectiveSalaries = (players: any[]) => (players || []).map((player: any) => ({
+    ...player,
+    salary: getEffectiveSalary(player, overridesMap),
+  }));
 
   const checkSalaryBalance = () => {
     const hostOut = sumSalary(room?.hostOffer || []);
@@ -450,6 +455,31 @@ export default function TradeRoomScreen() {
   const anyConfirmed = myConfirmed || otherConfirmed;
   const canEditMySide = !isPushedByMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
   const canEditOtherSide = !isPushedByMe && !isPushedToMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
+  const hostRoster = withEffectiveSalaries(isHost ? myRoster : otherRoster);
+  const guestRoster = withEffectiveSalaries(isHost ? otherRoster : myRoster);
+  const tradeValidation = validateTrade({
+    sport: leagueSport,
+    teamA: { players: hostRoster, picks: isHost ? (myTeam?.picks || []) : otherTeamPicks },
+    teamB: { players: guestRoster, picks: isHost ? otherTeamPicks : (myTeam?.picks || []) },
+    offerA: room?.hostOffer || [],
+    offerB: room?.guestOffer || [],
+    pickOfferA: room?.hostPicks || [],
+    pickOfferB: room?.guestPicks || [],
+    teamALabel: room?.hostTeamName || 'Host team',
+    teamBLabel: room?.guestTeamName || 'Guest team',
+    teamACap: myTeam?.salaryCap,
+    teamBCap: undefined,
+    teamABudget: myTeam?.budget,
+    teamBBudget: undefined,
+    nbaMatchingTolerance: tradeApronTolerance,
+    nbaMatchingBuffer: 100000,
+    commissionerOverride: !!room?.salaryOverrideApplied || !!overrideAppliedLocal,
+  });
+  const userFacingTradeMessages = tradeValidation.messages.length > 0
+    ? tradeValidation.messages
+    : tradeValidation.valid
+      ? ['This trade is ready from a salary and roster view.']
+      : [];
 
   const updateRoom = async (patch: any) => {
     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
@@ -616,13 +646,16 @@ export default function TradeRoomScreen() {
   };
 
   const handleConfirm = async () => {
-    if (leagueSport === 'nba' && !salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
-      const myNeed = myShortfall;
-      const theirNeed = otherShortfall;
-      const messages = [];
-      if (myNeed > 0) messages.push('Your side needs ~$' + (myNeed / 1000000).toFixed(1) + 'M more outgoing');
-      if (theirNeed > 0) messages.push('Their side needs ~$' + (theirNeed / 1000000).toFixed(1) + 'M more outgoing');
-      const body = messages.join('\n') + '\n\n(Both sides must satisfy ' + (tradeApronTolerance * 100).toFixed(0) + '% rule.)';
+    const protectedErrors = tradeValidation.errors.filter(error => error !== 'nba_matching' && error !== 'financial_limit');
+    if (protectedErrors.length > 0) {
+      Alert.alert('Trade cannot be sent', tradeValidation.messages.join('\n') || 'Fix the trade issues and try again.');
+      return;
+    }
+    if (leagueSport === 'nba' && tradeValidation.errors.includes('nba_matching') && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
+      const body = (tradeValidation.messages.length > 0 ? tradeValidation.messages : [
+        myShortfall > 0 ? 'Your side needs ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : '',
+        otherShortfall > 0 ? 'Their side needs ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing' : '',
+      ].filter(Boolean)).join('\n') + '\n\n(Both sides must satisfy the NBA salary-matching rule.)';
 
       if (commissionerCanOverride) {
         if (room?.pendingOverrideReview) {
@@ -1087,14 +1120,18 @@ export default function TradeRoomScreen() {
             </View>
           ) : null}
           {leagueSport === 'nba' && !salaryCheck.skipped ? (
-            <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
-              <Text style={[styles.balanceText, { color: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
+            <View style={[styles.balanceRow, { backgroundColor: tradeValidation.valid ? '#0a2a1a' : '#2a0a0a', borderColor: tradeValidation.valid ? '#00ff87' : '#ff4444' }]}>
+              <Text style={[styles.balanceText, { color: tradeValidation.valid ? '#00ff87' : '#ff4444' }]}>
                 {room?.salaryOverrideApplied
+                  && tradeValidation.valid
                   ? '✓ Commissioner override approved — salary check bypassed'
-                  : salaryCheck.passes
+                  : tradeValidation.valid
                     ? '✓ Salary check OK (' + (tradeApronTolerance * 100).toFixed(0) + '% rule)'
-                    : '✗ Salary mismatch — ' + (myShortfall > 0 ? 'you need ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : 'they need ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing')}
+                    : '✗ ' + (userFacingTradeMessages[0] || 'Salary mismatch')}
               </Text>
+              {!tradeValidation.valid && userFacingTradeMessages.slice(1).map((message, index) => (
+                <Text key={index} style={styles.balanceHelpText}>{message}</Text>
+              ))}
               {room?.pendingOverrideReview && !room?.salaryOverrideApplied ? (
                 <Text style={styles.balanceOverrideText}>⏳ Pending commissioner review</Text>
               ) : null}
@@ -1382,6 +1419,7 @@ const styles = StyleSheet.create({
   totalValue: { color: '#00ff87', fontSize: 14, fontWeight: '900' },
   balanceRow: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1 },
   balanceText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  balanceHelpText: { color: '#ffb3b3', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   balanceOverrideText: { color: '#F5A623', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   overrideBtnRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
   overrideApproveBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },

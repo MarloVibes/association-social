@@ -172,6 +172,8 @@ function validationInput({
     offerB,
     pickOfferA,
     pickOfferB,
+    teamALabel: teamA.name || teamA.full_name || teamA.abbreviation || source.hostTeamName || 'Team A',
+    teamBLabel: teamB.name || teamB.full_name || teamB.abbreviation || source.guestTeamName || 'Team B',
     teamACap: limitA,
     teamBCap: limitB,
     teamABudget: limitA,

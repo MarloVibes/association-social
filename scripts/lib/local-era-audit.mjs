@@ -84,6 +84,15 @@ function numberFrom(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function positionIncludes(player, values) {
+  const position = String(player.position || '').toUpperCase();
+  return values.some(value => position.includes(value));
+}
+
+function isWing(player) {
+  return positionIncludes(player, ['SG', 'SF', 'G-F', 'F-G']);
+}
+
 export function parseEraRosters(source) {
   const eraBlocks = {};
   const eraRegex = /const\s+ERA_[A-Z_]+\s*=\s*\{[\s\S]*?era:\s*'([^']+)'[\s\S]*?teams:\s*\[([\s\S]*?)\n\s*\]\s*\};/g;
@@ -133,6 +142,7 @@ function buildProfileIndex(playersCsv) {
   const ppgIndex = column(headers, 'career_pts', 'ppg', 'points');
   const rpgIndex = column(headers, 'career_trb', 'rpg', 'rebounds');
   const apgIndex = column(headers, 'career_ast', 'apg', 'assists');
+  const fg3PctIndex = column(headers, 'career_fg3%', 'career_3p%', 'fg3%', '3p%');
   const winSharesIndex = column(headers, 'career_ws', 'winshares', 'win_shares');
   const perIndex = column(headers, 'career_per', 'per');
   const byName = {};
@@ -148,6 +158,7 @@ function buildProfileIndex(playersCsv) {
       ppg: numberFrom(row[ppgIndex]),
       rpg: numberFrom(row[rpgIndex]),
       apg: numberFrom(row[apgIndex]),
+      fg3Pct: numberFrom(row[fg3PctIndex]),
       career_WS: numberFrom(row[winSharesIndex]),
       career_PER: numberFrom(row[perIndex]),
     };
@@ -230,6 +241,38 @@ function evidenceFor(player) {
   return evidence.join(', ') || '-';
 }
 
+function suggestedGradeReviewFor(player) {
+  const suggestions = [];
+  const salary = numberFrom(player.salary);
+  const winShares = numberFrom(player.career_WS);
+  const per = numberFrom(player.career_PER);
+  const ppg = numberFrom(player.ppg);
+  const rpg = numberFrom(player.rpg);
+  const apg = numberFrom(player.apg);
+  const spg = numberFrom(player.spg);
+  const mpg = numberFrom(player.mpg || player.minutes || player.minutesPerGame);
+
+  if (isWing(player) && mpg >= 32 && ppg >= 11 && rpg >= 4 && spg >= 0.7) {
+    suggestions.push('Perimeter D -> B+');
+    suggestions.push('Defense IQ -> B');
+    suggestions.push('Help Defense -> B-');
+  } else if (isWing(player) && salary >= 8_000_000 && winShares >= 40 && ppg >= 12 && rpg >= 4) {
+    suggestions.push('Perimeter D -> B');
+    suggestions.push('Defense IQ -> B-');
+  }
+
+  if (mpg >= 36) suggestions.push('Stamina -> A-');
+  else if (mpg >= 32) suggestions.push('Stamina -> B+');
+
+  if (ppg >= 14 && apg >= 2) suggestions.push('Offense IQ -> B-');
+  if (ppg >= 15) suggestions.push('Mid Range -> B-');
+  if (rpg >= 5 && isWing(player)) suggestions.push('Rebounding -> C+');
+  if (spg >= 1) suggestions.push('Steals -> B-');
+  if (salary >= 8_000_000 && winShares >= 40 && per >= 14) suggestions.push('Core-role review');
+
+  return [...new Set(suggestions)].join('; ') || '-';
+}
+
 export function buildLocalEraAuditReport(era, players) {
   const teamsByPlayer = new Map();
   for (const player of players) {
@@ -264,6 +307,7 @@ export function buildLocalEraAuditReport(era, players) {
       String(numberFrom(player.career_PER)),
       `${numberFrom(player.ppg)}/${numberFrom(player.rpg)}/${numberFrom(player.apg)}`,
       evidenceFor(player),
+      suggestedGradeReviewFor(player),
     ]);
 
   return [
@@ -273,8 +317,8 @@ export function buildLocalEraAuditReport(era, players) {
     '',
     'Read-only report built from local seeded rosters, player profiles, and salary history.',
     '',
-    '| Player | Team | Pos | Priority | Salary | Career WS | Career PER | Career P/R/A | Evidence |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Player | Team | Pos | Priority | Salary | Career WS | Career PER | Career P/R/A | Evidence | Suggested Grade Review |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...rows.map(row => `| ${row.join(' | ')} |`),
     '',
     ...(duplicateWarnings.length

@@ -26,6 +26,23 @@ function sumPayroll(players) {
   return players.reduce((total, player) => total + salary(player), 0);
 }
 
+function teamLabel(value, fallback) {
+  const label = String(value || '').trim();
+  return label || fallback;
+}
+
+function money(value) {
+  return `$${(Math.max(0, value) / 1000000).toFixed(1)}M`;
+}
+
+function limitMessage(label, kind, payroll, limit) {
+  if (!Number.isFinite(limit)) {
+    return `${label} needs a valid ${kind === 'budget' ? 'team budget' : 'salary cap'} before this trade can be checked.`;
+  }
+  const excess = payroll - limit;
+  return `${label} will exceed the ${kind === 'budget' ? 'team budget' : 'salary cap'} by about ${money(excess)} after this trade.`;
+}
+
 function ownedAssets(owned, offered, keyOf) {
   const ownedKeys = new Set(owned.map(keyOf).filter(Boolean));
   return offered.every((asset) => {
@@ -66,6 +83,9 @@ function validateTrade(input) {
   const pickOfferA = input.pickOfferA || [];
   const pickOfferB = input.pickOfferB || [];
   const errors = new Set();
+  const messages = [];
+  const labelA = teamLabel(input.teamALabel, 'Team A');
+  const labelB = teamLabel(input.teamBLabel, 'Team B');
 
   if (
     !ownedAssets(playersA, offerA, playerKey)
@@ -78,10 +98,12 @@ function validateTrade(input) {
     || !uniqueAssets(pickOfferB, pickKey)
   ) {
     errors.add('ownership');
+    messages.push('One side includes a player or pick that is not on that roster, or the same asset was added twice.');
   }
 
   if (!offeredSalariesValid(playersA, offerA) || !offeredSalariesValid(playersB, offerB)) {
     errors.add('invalid_salary');
+    messages.push('One offered player has a missing or invalid contract. Refresh the room or check salary overrides.');
   }
 
   const outgoingA = offeredSalary(playersA, offerA);
@@ -96,20 +118,26 @@ function validateTrade(input) {
   };
 
   const rosterLimit = sport === 'madden' ? 53 : sport === 'mlb' ? 40 : 15;
-  if (rosterAfter.teamA > rosterLimit || rosterAfter.teamB > rosterLimit) {
+  if (rosterAfter.teamA > rosterLimit) {
     errors.add('roster_limit');
+    messages.push(`${labelA} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamA} players after this trade.`);
+  }
+  if (rosterAfter.teamB > rosterLimit) {
+    errors.add('roster_limit');
+    messages.push(`${labelB} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamB} players after this trade.`);
   }
 
   if (sport !== 'nba') {
     const limitA = sport === 'mlb' ? input.teamABudget : input.teamACap;
     const limitB = sport === 'mlb' ? input.teamBBudget : input.teamBCap;
-    if (
-      !Number.isFinite(limitA)
-      || !Number.isFinite(limitB)
-      || payrollAfter.teamA > Number(limitA)
-      || payrollAfter.teamB > Number(limitB)
-    ) {
+    const kind = sport === 'mlb' ? 'budget' : 'cap';
+    if (!Number.isFinite(limitA) || payrollAfter.teamA > Number(limitA)) {
       errors.add('financial_limit');
+      messages.push(limitMessage(labelA, kind, payrollAfter.teamA, Number(limitA)));
+    }
+    if (!Number.isFinite(limitB) || payrollAfter.teamB > Number(limitB)) {
+      errors.add('financial_limit');
+      messages.push(limitMessage(labelB, kind, payrollAfter.teamB, Number(limitB)));
     }
   }
 
@@ -120,23 +148,31 @@ function validateTrade(input) {
     const buffer = Number.isFinite(input.nbaMatchingBuffer)
       ? Number(input.nbaMatchingBuffer)
       : 100000;
-    if (
-      outgoingB > outgoingA * tolerance + buffer
-      || outgoingA > outgoingB * tolerance + buffer
-    ) {
+    if (outgoingB > outgoingA * tolerance + buffer) {
       errors.add('nba_matching');
+      const shortfall = Math.ceil((outgoingB - buffer) / tolerance - outgoingA);
+      messages.push(`${labelA} needs to add about ${money(shortfall)} more outgoing salary for NBA matching.`);
+    }
+    if (outgoingA > outgoingB * tolerance + buffer) {
+      errors.add('nba_matching');
+      const shortfall = Math.ceil((outgoingA - buffer) / tolerance - outgoingB);
+      messages.push(`${labelB} needs to add about ${money(shortfall)} more outgoing salary for NBA matching.`);
     }
   }
 
   if (input.commissionerOverride) {
-    errors.delete('financial_limit');
-    errors.delete('nba_matching');
+    const removedFinancial = errors.delete('financial_limit');
+    const removedMatching = errors.delete('nba_matching');
+    if (removedFinancial || removedMatching) {
+      messages.push('Commissioner override can bypass salary matching or finance limits, but roster and ownership checks still apply.');
+    }
   }
 
   const errorList = Array.from(errors);
   return {
     valid: errorList.length === 0,
     errors: errorList,
+    messages: errorList.length === 0 ? [] : [...new Set(messages)],
     payrollAfter,
     rosterAfter,
   };

@@ -39,6 +39,7 @@ describe('validateTrade', () => {
     expect(result).toEqual({
       valid: true,
       errors: [],
+      messages: [],
       payrollAfter: { teamA: 40, teamB: 30 },
       rosterAfter: { teamA: 3, teamB: 2 },
     });
@@ -126,6 +127,68 @@ describe('validateTrade', () => {
     expect(result.errors).toContain('roster_limit');
     expect(result.errors).not.toContain('financial_limit');
     expect(result.errors).toContain('nba_matching');
+  });
+
+  it('explains NBA salary matching and roster failures in plain language', () => {
+    const teamA = {
+      players: [
+        { player_id: 'tor-0', salary: 18_000_000 },
+        ...team('tor', 14, 132_000_000).players.map((player, index) => ({ ...player, player_id: `tor-${index + 1}` })),
+      ],
+    };
+    const teamB = {
+      players: [
+        { player_id: 'mia-0', salary: 5_000_000 },
+        { player_id: 'mia-1', salary: 0 },
+        ...team('mia', 13, 145_000_000).players.map((player, index) => ({ ...player, player_id: `mia-${index + 2}` })),
+      ],
+    };
+
+    const result = validateTrade({
+      sport: 'nba',
+      teamA,
+      teamB,
+      teamALabel: 'Toronto',
+      teamBLabel: 'Miami',
+      offerA: [{ player_id: 'tor-0' }],
+      offerB: [{ player_id: 'mia-0' }, { player_id: 'mia-1' }],
+      nbaMatchingTolerance: 1.25,
+      nbaMatchingBuffer: 0,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.messages).toEqual(expect.arrayContaining([
+      'Miami needs to add about $9.4M more outgoing salary for NBA matching.',
+      'Toronto will exceed the 15-player roster limit with 16 players after this trade.',
+    ]));
+  });
+
+  it('keeps server and app trade explanations equivalent', () => {
+    const teamA = {
+      players: [
+        { player_id: 'a-0', salary: 18_000_000 },
+        ...team('a', 14, 132_000_000).players.map((player, index) => ({ ...player, player_id: `a-${index + 1}` })),
+      ],
+    };
+    const teamB = {
+      players: [
+        { player_id: 'b-0', salary: 5_000_000 },
+        ...team('b', 14, 145_000_000).players.map((player, index) => ({ ...player, player_id: `b-${index + 1}` })),
+      ],
+    };
+    const input = {
+      sport: 'nba',
+      teamA,
+      teamB,
+      teamALabel: 'Atlanta',
+      teamBLabel: 'Boston',
+      offerA: [{ player_id: 'a-0' }],
+      offerB: [{ player_id: 'b-0' }],
+      nbaMatchingTolerance: 1.25,
+      nbaMatchingBuffer: 0,
+    };
+
+    expect(validateTradeJs(input).messages).toEqual(validateTrade(input).messages);
   });
 
   it('rejects duplicate player and pick keys as ownership errors', () => {

@@ -420,6 +420,8 @@ describe('local NBA era audit data builder', () => {
         ppg: 14.8,
         rpg: 6.1,
         apg: 2.3,
+        mpg: 39,
+        spg: 1,
       },
       {
         full_name: 'Luol Deng',
@@ -444,9 +446,33 @@ describe('local NBA era audit data builder', () => {
     expect(report).toContain('Luol Deng');
     expect(report).toContain('11345000');
     expect(report).toContain('74');
+    expect(report).toContain('Suggested Grade Review');
+    expect(report).toContain('Perimeter D -> B+');
+    expect(report).toContain('Stamina -> A-');
     expect(report).toContain('Duplicate Player Warnings');
     expect(report).toContain('Luol Deng: CHI, CLE');
     expect(report).toContain('No Local Profile Match Warnings');
     expect(report).toContain('Missing Match: CLE');
+  });
+
+  it('does not upgrade career three-point grade from percentage alone', () => {
+    const report = buildLocalEraAuditReport('lebron', [
+      {
+        full_name: 'Low Volume Shooter',
+        team: 'TST',
+        position: 'SG',
+        salary: 9000000,
+        career_WS: 35,
+        career_PER: 13,
+        ppg: 9,
+        rpg: 2,
+        apg: 1,
+        fg3Pct: 0.42,
+      },
+    ]);
+
+    expect(report).not.toContain('3PT -> A');
+    expect(report).not.toContain('3PT -> A+');
+    expect(report).not.toContain('3PT -> S');
   });
 });

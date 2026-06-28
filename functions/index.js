@@ -939,6 +939,7 @@ exports.finalizeTrade = onCall({ secrets: [tradeAuthSecret] }, async (request) =
         'Trade validation failed.',
         {
           errors: validation.errors,
+          messages: validation.messages,
           payrollAfter: validation.payrollAfter,
           rosterAfter: validation.rosterAfter,
         },
