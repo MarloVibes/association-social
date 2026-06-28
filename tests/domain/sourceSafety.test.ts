@@ -11,8 +11,8 @@ describe('source safety regressions', () => {
     const select = source('app/screens/team-select.tsx');
 
     expect(roster).toContain('getTeamColors(abbr, currentYear)');
-    expect(roster).toContain('getTeamLogoLocal(abbr, currentYear)');
-    expect(roster).toContain('getTeamLogoUrl(abbr, currentYear)');
+    expect(roster).toContain('<SportTeamLogo');
+    expect(roster).toContain('era={currentYear}');
     expect(select).toContain('currentYear={currentYear}');
   });
 

@@ -106,7 +106,7 @@ describe('contract orchestration', () => {
       set: vi.fn((ref, data) => sets.push({ ref, data })),
       update: vi.fn((ref, data) => updates.push({ ref, data })),
     };
-    const db = {
+    const db: any = {
       collection: (name: string) => name === 'leagues'
         ? { doc: () => leagueRef }
         : { doc: (id: string) => ({ kind: `${name}-doc`, id }) },
@@ -197,7 +197,7 @@ describe('contract orchestration', () => {
       set: vi.fn((ref, data) => offerWrites.push({ ref, data })),
       update: vi.fn(),
     };
-    const db = {
+    const db: any = {
       collection: (name: string) => name === 'leagues'
         ? { doc: () => leagueRef }
         : { doc: (id: string) => ({ kind: `${name}-doc`, id }) },
@@ -316,7 +316,7 @@ describe('contract orchestration', () => {
       update: vi.fn((ref, data) => updates.push({ ref, data })),
       set: vi.fn((ref, data) => sets.push({ ref, data })),
     };
-    const db = {
+    const db: any = {
       collection: (name: string) => name === 'leagues'
         ? {
             get: vi.fn(async () => ({
@@ -483,7 +483,7 @@ describe('contract orchestration', () => {
       data: () => ({ sport: 'nba', name: 'NBA Test', currentYear: 2027, scheduleId: '2027' }),
     };
     const scheduleRef = { kind: 'schedule-doc', id: '2027' };
-    const db = {
+    const db: any = {
       collection: (name: string) => {
         if (name === 'leagues') {
           return {

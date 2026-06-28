@@ -46,10 +46,10 @@ function routeNotification(n: any) {
   } else if (type === 'injury_update') {
     router.push({ pathname: '/screens/season/injuries', params: { leagueId } });
   } else if (type === 'extension_interest' || type === 'extension_offer_submitted') {
-    router.push({ pathname: '/screens/season/contracts', params: { leagueId } });
+    router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
   } else if (type === 'contract_deadline') {
     if (n.deadlineKind === 'trade') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
-    else router.push({ pathname: '/screens/season/contracts', params: { leagueId } });
+    else router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
   } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
     if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
     else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });

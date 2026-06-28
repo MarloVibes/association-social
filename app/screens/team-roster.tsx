@@ -3,21 +3,82 @@ import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
+import { comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
+import { gradeRank } from '@/domain/nba/gradeScale';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
-import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
+import { getTeamColors } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { pickLabel } from '@/constants/draftPicks';
 
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
+
+const ROSTER_GRADE_PREVIEW: { key: ScoutingGradeKey; label: string }[] = [
+  { key: 'closeShot', label: 'Fin' },
+  { key: 'midRange', label: 'Mid' },
+  { key: 'threePoint', label: '3PT' },
+  { key: 'dunking', label: 'Dunk' },
+  { key: 'passing', label: 'Pass' },
+  { key: 'ballHandle', label: 'Handle' },
+  { key: 'offenseIq', label: 'Off IQ' },
+  { key: 'perimeterDefense', label: 'Per D' },
+  { key: 'postDefense', label: 'Post D' },
+  { key: 'blocking', label: 'Block' },
+  { key: 'defenseIq', label: 'Def IQ' },
+  { key: 'speed', label: 'Speed' },
+  { key: 'rebounding', label: 'Reb' },
+  { key: 'postOffense', label: 'Post' },
+  { key: 'potential', label: 'Pot' },
+];
+
+function rosterGradePreview(player: any, profile: any) {
+  const grades = buildScoutingGrades(player || {}, profile || null);
+  return ROSTER_GRADE_PREVIEW
+    .map(item => ({
+      ...item,
+      grade: grades[item.key],
+      colors: gradeColors(grades[item.key]),
+    }))
+    .sort((left, right) => (
+      gradeRank(right.grade) - gradeRank(left.grade)
+      || left.label.localeCompare(right.label)
+    ))
+    .slice(0, 3);
+}
+
+function formatRosterMoney(value: any) {
+  const salary = Number(value);
+  if (!Number.isFinite(salary) || salary <= 0) return '';
+  if (salary <= 1_500_000) return '$Min';
+  return '$' + (salary / 1_000_000).toFixed(salary >= 10_000_000 ? 0 : 1) + 'M';
+}
+
+function contractSummary(player: any) {
+  const salary = formatRosterMoney(player?.salary || player?.contract?.salary || player?.currentSalary);
+  const years = Number(player?.contractYears ?? player?.contract?.years);
+  const role = String(player?.contractRole || player?.contract?.role || '').replace(/_/g, ' ');
+  const parts = [
+    salary,
+    Number.isFinite(years) && years > 0 ? `${years}Y` : '',
+    role ? role.replace(/\b\w/g, char => char.toUpperCase()) : '',
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : 'Contract not listed';
+}
+
+function rosterStatusBadges({ isUntouchable, isOnBlock, isLocked }: { isUntouchable: boolean; isOnBlock: boolean; isLocked: boolean }) {
+  if (isUntouchable) return [{ label: 'Untouchable', color: '#ff6464' }];
+  if (isLocked) return [{ label: 'In Trade', color: '#F5A623' }];
+  if (isOnBlock) return [{ label: 'Block Feed', color: '#5b9bff' }];
+  return [];
+}
 
 export default function TeamRosterScreen() {
   const { leagueId, teamId, eraTeamId, abbr: cpuAbbr, isCpu } = useLocalSearchParams<{ leagueId: string; teamId: string; eraTeamId?: string; abbr?: string; isCpu?: string }>();
@@ -154,8 +215,6 @@ export default function TeamRosterScreen() {
   const isNBARoster = !sport || sport === 'nba';
   const sportTheme = getSportTeamTheme(sport || 'nba', abbr);
   const colors = isNBARoster ? getTeamColors(abbr, currentYear) : [sportTheme.tintColor, sportTheme.titleColor];
-  const logoLocal = isNBARoster ? getTeamLogoLocal(abbr, currentYear) : null;
-  const logoUri = isNBARoster ? getTeamLogoUrl(abbr, currentYear) : '';
   const isOwned = !!team.gmId;
   const isMyTeam = team.gmId === myUid;
   const untouchables: string[] = team.untouchables || [];
@@ -312,46 +371,78 @@ export default function TeamRosterScreen() {
             }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         const canCpuTrade = !team.gmId && !isMyTeam;
+        const playerProfile = profilesByName[p.full_name];
+        const archetype = getSportArchetypeForYear(p, playerProfile, currentYear, sport);
+        const gradePreview = isNBARoster ? rosterGradePreview(p, playerProfile) : [];
+        const topGrade = gradePreview[0];
+        const statuses = rosterStatusBadges({ isUntouchable, isOnBlock, isLocked });
+        const accentColor = topGrade?.colors.borderColor || colors[0] || '#00ff87';
         return (
           <Fragment key={pid + i}>
             {showHeader ? <Text style={styles.posGroupHeader}>{grpLabel}</Text> : null}
-          <TouchableOpacity style={[styles.playerRow, isUntouchable && styles.playerRowUntouchable, !isUntouchable && isOnBlock && styles.playerRowOnBlock, isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked]} onPress={() => setSelectedPlayer(p)} activeOpacity={0.7}>
-            <PlayerHeadshot
-              player={p}
-              sport={sport || 'nba'}
-              imageStyle={styles.photo}
-              fallback={<View style={styles.photoFallback}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>}
-            />
-            <View style={styles.playerInfo}>
-              <View style={styles.playerHeaderRow}>
-                <Text style={styles.playerPos}>{p.position || '?'}</Text>
-                {(() => {
-                  const ps = getSportArchetypeForYear(p, profilesByName[p.full_name], currentYear, sport);
-                  return (
-                    <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
-                      <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>
-                    </View>
-                  );
-                })()}
+            <TouchableOpacity
+              style={[
+                styles.playerRow,
+                isUntouchable && styles.playerRowUntouchable,
+                !isUntouchable && isOnBlock && styles.playerRowOnBlock,
+                isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked,
+              ]}
+              onPress={() => setSelectedPlayer(p)}
+              activeOpacity={0.78}
+            >
+              <View style={[styles.playerAccent, { backgroundColor: accentColor }]} />
+              <View style={styles.playerRankBadge}>
+                <Text style={styles.playerRankText}>{i + 1}</Text>
               </View>
-              <Text style={styles.playerName}>{p.full_name}</Text>
-              {p.salary && leagueEra === 'current' ? (
-                <Text style={styles.playerSalary}>{p.salary <= 1272870 ? '$Min' : '$' + (p.salary / 1000000).toFixed(1) + 'M'}</Text>
-              ) : null}
-              {isUntouchable ? <Text style={styles.lockReason}>🔒 Untouchable</Text> : null}
-              {isOnBlock && !isUntouchable ? <Text style={styles.onBlockReason}>💼 On Block</Text> : null}
-              {isLocked && !isUntouchable && !isOnBlock ? <Text style={styles.lockReason}>⏳ In active trade</Text> : null}
-            </View>
-            {canTrade ? (
-              <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
-                <Text style={styles.tradeBtnText}>Trade</Text>
-              </TouchableOpacity>
-            ) : canCpuTrade ? (
-              <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
-                <Text style={styles.tradeBtnText}>Trade</Text>
-              </TouchableOpacity>
-            ) : null}
-          </TouchableOpacity>
+              <PlayerHeadshot
+                player={p}
+                sport={sport || 'nba'}
+                imageStyle={[styles.photo, { borderColor: accentColor }]}
+                fallback={<View style={[styles.photoFallback, { borderColor: accentColor }]}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>}
+              />
+              <View style={styles.playerInfo}>
+                <View style={styles.playerHeaderRow}>
+                  <Text style={[styles.playerPos, { color: accentColor }]}>{p.position || '?'}</Text>
+                  <View style={[styles.tierBadge, { borderColor: archetype.color + '88', backgroundColor: archetype.color + '18' }]}>
+                    <Text style={[styles.tierBadgeText, { color: archetype.color }]} numberOfLines={1}>{archetype.label}</Text>
+                  </View>
+                </View>
+                <Text style={styles.playerName} numberOfLines={1}>{p.full_name}</Text>
+                <Text style={styles.playerSalary} numberOfLines={1}>{contractSummary(p)}</Text>
+                {gradePreview.length > 0 ? (
+                  <View style={styles.gradePreviewRow}>
+                    {gradePreview.map(item => (
+                      <View
+                        key={item.key}
+                        style={[
+                          styles.gradePill,
+                          { borderColor: item.colors.borderColor, backgroundColor: item.colors.backgroundColor },
+                        ]}
+                      >
+                        <Text style={[styles.gradePillLabel, { color: item.colors.textColor }]}>{item.label}</Text>
+                        <Text style={[styles.gradePillValue, { color: item.colors.textColor }]}>{item.grade}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {statuses.length > 0 ? (
+                  <View style={styles.statusRow}>
+                    {statuses.map(status => (
+                      <Text key={status.label} style={[styles.statusText, { color: status.color }]}>
+                        {status.label}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+              {(canTrade || canCpuTrade) ? (
+                <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
+                  <Text style={styles.tradeBtnText}>Trade</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.openCardHint}>›</Text>
+              )}
+            </TouchableOpacity>
           </Fragment>
         );
       });
@@ -401,22 +492,31 @@ const styles = StyleSheet.create({
   pickChipOrigin: { color: '#6a6a6a', fontSize: 10, marginTop: 2 },
   posGroupHeader: { color: '#00ff87', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
   empty: { color: '#666', textAlign: 'center', padding: 20 },
-  playerRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 6, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a' },
+  playerRow: { position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', padding: 12, paddingLeft: 14, borderRadius: 12, marginBottom: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#242424', gap: 10 },
+  playerAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   playerRowUntouchable: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
   playerRowLocked: { borderColor: '#F5A623', backgroundColor: '#1a1306' },
   playerRowOnBlock: { borderColor: '#3B82F6', backgroundColor: '#0a1530' },
-  onBlockReason: { color: '#3B82F6', fontSize: 10, fontWeight: '700', marginTop: 2 },
-  photo: { width: 44, height: 44, borderRadius: 22, marginRight: 10 },
-  photoFallback: { width: 44, height: 44, borderRadius: 22, marginRight: 10, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
+  playerRankBadge: { width: 28, height: 34, borderRadius: 8, backgroundColor: '#1d1d1d', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2d2d2d' },
+  playerRankText: { color: '#777', fontSize: 12, fontWeight: '900' },
+  photo: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, backgroundColor: '#171717' },
+  photoFallback: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
   photoInitial: { color: '#888', fontSize: 18, fontWeight: '700' },
   playerInfo: { flex: 1 },
-  playerPos: { color: '#888', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  playerPos: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   playerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tierBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 0 },
-  tierBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  playerName: { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 1 },
-  playerSalary: { color: '#00ff87', fontSize: 11, fontWeight: '700', marginTop: 1 },
+  tierBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, maxWidth: 132 },
+  tierBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
+  playerName: { color: '#fff', fontSize: 16, fontWeight: '900', marginTop: 2 },
+  playerSalary: { color: '#9a9a9a', fontSize: 11, fontWeight: '700', marginTop: 2, textTransform: 'capitalize' },
+  gradePreviewRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 8 },
+  gradePill: { minWidth: 58, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5 },
+  gradePillLabel: { fontSize: 9, fontWeight: '900' },
+  gradePillValue: { fontSize: 10, fontWeight: '900' },
+  statusRow: { flexDirection: 'row', gap: 8, marginTop: 7 },
+  statusText: { fontSize: 10, fontWeight: '900' },
   lockReason: { color: '#ff4444', fontSize: 10, fontWeight: '700', marginTop: 2 },
-  tradeBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  tradeBtnText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
+  tradeBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8 },
+  tradeBtnText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  openCardHint: { color: '#555', fontSize: 26, fontWeight: '300', paddingHorizontal: 2 },
 });

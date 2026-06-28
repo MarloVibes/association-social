@@ -690,7 +690,7 @@ export default function ContractStageScreen({ stage }: Props) {
       </Modal>
       <PlayerCard
         player={selectedPlayerCard?.player || null}
-        era={league?.era}
+        era={league?.era || 'current'}
         sport={league?.sport || 'nba'}
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}

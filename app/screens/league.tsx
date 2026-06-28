@@ -321,7 +321,7 @@ export default function LeagueScreen() {
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
             <View>
               <Text style={[styles.channelsTabLabel, { color: titleColor }]}>{channelLabel}</Text>
-              <Text style={styles.channelsTabSub}>League Chat · Trade Center · Polls · and more</Text>
+              <Text style={styles.channelsTabSub}>League News · Trade Center · Coaching · Front Office</Text>
             </View>
           </View>
           <Text style={styles.channelsTabChevron}>›</Text>
