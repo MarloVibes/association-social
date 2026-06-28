@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   derivePlayerContractPreferences,
+  contractDeadlinePlan,
+  contractDeadlineWarning,
+  expectedExtensionAsk,
+  extensionInterestScore,
   expectedAnnualSalary,
+  selectInSeasonExtensionCandidates,
   scoreContractOffer,
   selectContractCandidates,
   validateContractOfferFinance,
@@ -178,6 +183,113 @@ describe('contract candidate selection', () => {
       ],
       freeAgents: [],
     }).map(player => player.player_id)).toEqual(['deng']);
+  });
+});
+
+describe('in-season extension interest', () => {
+  it('invites happy loyal expiring players and lets unhappy low-loyalty players test free agency', () => {
+    const loyalStar = {
+      player_id: 'loyal-star',
+      full_name: 'Loyal Star',
+      contractYears: 1,
+      loyalty: 0.9,
+      morale: 0.86,
+      minutes: 36,
+      expectedMinutes: 34,
+      overall: 90,
+      playoffAppearances: 5,
+    };
+    const unhappyWing = {
+      player_id: 'unhappy-wing',
+      full_name: 'Unhappy Wing',
+      contractYears: 1,
+      loyalty: 0.18,
+      morale: 0.28,
+      minutes: 18,
+      expectedMinutes: 30,
+      overall: 82,
+    };
+
+    expect(extensionInterestScore({
+      player: loyalStar,
+      team: { contender: 0.82, reputation: 0.75 },
+      seed: 'stable',
+    }).interested).toBe(true);
+    expect(extensionInterestScore({
+      player: unhappyWing,
+      team: { contender: 0.35, reputation: 0.45 },
+      seed: 'stable',
+    }).interested).toBe(false);
+  });
+
+  it('selects only one fresh in-season extension candidate per team cycle', () => {
+    const candidates = selectInSeasonExtensionCandidates({
+      seasonYear: 2027,
+      team: {
+        id: 'CHI',
+        contender: 0.8,
+        reputation: 0.7,
+        players: [
+          { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, loyalty: 0.9, morale: 0.9, overall: 92 },
+          { player_id: 'deng', full_name: 'Luol Deng', contractYears: 1, loyalty: 0.72, morale: 0.76, overall: 84 },
+          { player_id: 'boozer', full_name: 'Carlos Boozer', contractYears: 2, loyalty: 0.9, morale: 0.9, overall: 83 },
+        ],
+      },
+      existingWindowPlayerIds: ['deng'],
+      seed: 'league:CHI',
+    });
+
+    expect(candidates.map(item => item.player.player_id)).toEqual(['rose']);
+  });
+
+  it('builds a player ask that GMs can use as an adjustable preset', () => {
+    const ask = expectedExtensionAsk({
+      player: {
+        player_id: 'rose',
+        full_name: 'Derrick Rose',
+        age: 22,
+        salary: 5_500_000,
+        overall: 92,
+        label: 'Superstar',
+        loyalty: 0.85,
+        morale: 0.9,
+      },
+      team: { contender: 0.88, reputation: 0.8 },
+      eraSalaryBaseline: { median: 3_500_000, p75: 7_500_000, p90: 14_000_000 },
+    });
+
+    expect(ask.role).toBe('franchise');
+    expect(ask.years).toBeGreaterThanOrEqual(4);
+    expect(ask.salary).toBeGreaterThan(ask.currentSalary);
+    expect(ask.acceptanceFloor).toBeLessThan(ask.salary);
+  });
+});
+
+describe('contract deadline planning', () => {
+  it('scales NBA trade and extension deadlines from real season game counts', () => {
+    expect(contractDeadlinePlan({ gamesPerTeam: 82 })).toMatchObject({
+      gamesPerTeam: 82,
+      tradeDeadlineGame: 55,
+      extensionDeadlineGame: 50,
+    });
+    expect(contractDeadlinePlan({ gamesPerTeam: 29 })).toMatchObject({
+      gamesPerTeam: 29,
+      tradeDeadlineGame: 19,
+      extensionDeadlineGame: 18,
+    });
+  });
+
+  it('warns GMs at 25 games remaining, 10 games remaining, and the deadline', () => {
+    const plan = contractDeadlinePlan({ gamesPerTeam: 82 });
+
+    expect(contractDeadlineWarning({ gamesPlayed: 30, deadlineGame: plan.tradeDeadlineGame }))
+      .toBe('25_games_remaining');
+    expect(contractDeadlineWarning({ gamesPlayed: 45, deadlineGame: plan.tradeDeadlineGame }))
+      .toBe('10_games_remaining');
+    expect(contractDeadlineWarning({ gamesPlayed: 55, deadlineGame: plan.tradeDeadlineGame }))
+      .toBe('deadline_reached');
+    expect(contractDeadlineWarning({ gamesPlayed: 40, deadlineGame: plan.tradeDeadlineGame }))
+      .toBe(null);
   });
 });
 

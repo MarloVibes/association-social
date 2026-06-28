@@ -6,6 +6,10 @@ const {
   contractOfferId,
   contractResolutionId,
   buildCpuContractOffers,
+  contractDeadlineWarning,
+  createContractDeadlineWarningsHandler,
+  createInSeasonExtensionInterestHandler,
+  createSubmitInSeasonExtensionHandler,
   createSubmitContractOfferHandler,
   deriveCpuNeeds,
   materializeFreeAgencyPool,
@@ -65,6 +69,279 @@ describe('contract orchestration', () => {
     ]);
     expect(result.teams.find((team: any) => team.id === 'CHI').players.map((item: any) => item.player_id))
       .toEqual(['rose', 'noah']);
+  });
+
+  it('creates an in-season extension interest window without expiring the request before the extension deadline', async () => {
+    const now = Date.parse('2027-01-01T12:00:00.000Z');
+    const leagueRef: any = {
+      collection: (name: string) => ({
+        kind: `${name}-query`,
+        doc: (id: string) => ({ kind: `${name}-doc`, id }),
+      }),
+    };
+    const teamDoc = {
+      id: 'CHI',
+      ref: { kind: 'team-doc', id: 'CHI' },
+      data: () => ({
+        name: 'Chicago Bulls',
+        gmId: 'gm-1',
+        contender: 0.88,
+        reputation: 0.8,
+        players: [
+          { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000, overall: 92, label: 'Superstar', loyalty: 0.88, morale: 0.9 },
+        ],
+      }),
+    };
+    const sets: any[] = [];
+    const updates: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) return { exists: true, data: () => ({ sport: 'nba', currentYear: 2027, name: 'NBA Test' }) };
+        if (ref.kind === 'teams-query') return { docs: [teamDoc] };
+        if (ref.kind === 'extension_windows-query') return { docs: [] };
+        return { exists: false, data: () => ({}) };
+      }),
+      set: vi.fn((ref, data) => sets.push({ ref, data })),
+      update: vi.fn((ref, data) => updates.push({ ref, data })),
+    };
+    const db = {
+      collection: (name: string) => name === 'leagues'
+        ? { doc: () => leagueRef }
+        : { doc: (id: string) => ({ kind: `${name}-doc`, id }) },
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createInSeasonExtensionInterestHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      now: () => now,
+      HttpsError: FakeHttpsError,
+      FieldValue: { arrayUnion: (...values: any[]) => ({ op: 'arrayUnion', values }) },
+    });
+
+    const result = await handler({ auth: { uid: 'gm-1' }, data: { leagueId: 'league-1', teamId: 'CHI' } });
+
+    expect(result.window.playerId).toBe('rose');
+    expect(sets).toContainEqual({
+      ref: { kind: 'extension_windows-doc', id: '2027__CHI__rose' },
+      data: expect.objectContaining({
+        playerId: 'rose',
+        status: 'open',
+        ask: expect.objectContaining({ role: 'franchise' }),
+      }),
+    });
+    expect(sets[0].data.expiresAt).toBeUndefined();
+    expect(updates).toContainEqual({
+      ref: { kind: 'users-doc', id: 'gm-1' },
+      data: {
+        notifications: {
+          op: 'arrayUnion',
+          values: [expect.objectContaining({
+            type: 'extension_interest',
+            playerId: 'rose',
+          })],
+        },
+      },
+    });
+  });
+
+  it('puts a submitted extension offer on a two-hour player response clock', async () => {
+    const now = Date.parse('2027-01-01T12:00:00.000Z');
+    const leagueRef: any = {
+      collection: (name: string) => ({
+        kind: `${name}-query`,
+        doc: (id: string) => ({ kind: `${name}-doc`, id }),
+      }),
+    };
+    const teamRef = { kind: 'teams-doc', id: 'CHI' };
+    const offerWrites: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) {
+          return {
+            exists: true,
+            data: () => ({
+              sport: 'nba',
+              currentYear: 2027,
+              extensionDeadlineAt: '2027-02-01T00:00:00.000Z',
+            }),
+          };
+        }
+        if (ref === teamRef || (ref.kind === 'teams-doc' && ref.id === 'CHI')) {
+          return {
+            exists: true,
+            id: 'CHI',
+            data: () => ({
+              id: 'CHI',
+              gmId: 'gm-1',
+              players: [
+                { player_id: 'rose', full_name: 'Derrick Rose', contractYears: 1, salary: 5_500_000, overall: 92, label: 'Superstar', loyalty: 0.88, morale: 0.9 },
+              ],
+            }),
+          };
+        }
+        if (ref.kind === 'extension_windows-doc') {
+          return {
+            exists: true,
+            data: () => ({
+              playerId: 'rose',
+              teamId: 'CHI',
+              status: 'open',
+              ask: { salary: 16_000_000, years: 5, role: 'franchise', acceptanceFloor: 14_000_000 },
+            }),
+          };
+        }
+        return { exists: false, data: () => ({}) };
+      }),
+      set: vi.fn((ref, data) => offerWrites.push({ ref, data })),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: (name: string) => name === 'leagues'
+        ? { doc: () => leagueRef }
+        : { doc: (id: string) => ({ kind: `${name}-doc`, id }) },
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createSubmitInSeasonExtensionHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      now: () => now,
+      HttpsError: FakeHttpsError,
+    });
+
+    const result = await handler({
+      auth: { uid: 'gm-1' },
+      data: {
+        leagueId: 'league-1',
+        teamId: 'CHI',
+        playerId: 'rose',
+        salary: 16_000_000,
+        years: 5,
+        role: 'franchise',
+      },
+    });
+
+    expect(result.offer.responseDueAt).toBe('2027-01-01T14:00:00.000Z');
+    expect(offerWrites).toContainEqual({
+      ref: { kind: 'extension_offers-doc', id: '2027__CHI__rose' },
+      data: expect.objectContaining({
+        playerId: 'rose',
+        status: 'pending',
+        responseDueAt: '2027-01-01T14:00:00.000Z',
+      }),
+    });
+  });
+
+  it('builds deadline warnings for 25 games remaining, 10 games remaining, and deadline day', () => {
+    expect(contractDeadlineWarning({ gamesPlayed: 30, deadlineGame: 55 })).toBe('25_games_remaining');
+    expect(contractDeadlineWarning({ gamesPlayed: 45, deadlineGame: 55 })).toBe('10_games_remaining');
+    expect(contractDeadlineWarning({ gamesPlayed: 55, deadlineGame: 55 })).toBe('deadline_reached');
+    expect(contractDeadlineWarning({ gamesPlayed: 40, deadlineGame: 55 })).toBe(null);
+  });
+
+  it('notifies GMs once when a contract or trade deadline warning is reached', async () => {
+    const userWrites: any[] = [];
+    const scheduleUpdates: any[] = [];
+    const leagueDoc = {
+      id: 'league-1',
+      ref: { kind: 'league-doc', id: 'league-1' },
+      data: () => ({ sport: 'nba', name: 'NBA Test', currentYear: 2027, scheduleId: '2027' }),
+    };
+    const scheduleRef = { kind: 'schedule-doc', id: '2027' };
+    const db = {
+      collection: (name: string) => {
+        if (name === 'leagues') {
+          return {
+            get: vi.fn(async () => ({ docs: [leagueDoc] })),
+            doc: () => leagueDoc.ref,
+          };
+        }
+        if (name === 'users') {
+          return {
+            doc: (id: string) => ({ kind: 'users-doc', id }),
+          };
+        }
+        return { doc: (id: string) => ({ kind: `${name}-doc`, id }) };
+      },
+    };
+    const leagueRef: any = {
+      collection: (name: string) => ({
+        doc: () => scheduleRef,
+        get: vi.fn(async () => ({
+          docs: [
+            {
+              id: 'CHI',
+              data: () => ({
+                name: 'Chicago Bulls',
+                gmId: 'gm-1',
+              }),
+            },
+          ],
+        })),
+      }),
+    };
+    const handler = createContractDeadlineWarningsHandler({
+      getFirestore: () => ({
+        ...db,
+        collection: (name: string) => name === 'leagues'
+          ? { get: vi.fn(async () => ({ docs: [{ ...leagueDoc, ref: leagueRef }] })) }
+          : db.collection(name),
+      }),
+      FieldValue: { arrayUnion: (...values: any[]) => ({ op: 'arrayUnion', values }) },
+      now: () => Date.parse('2027-01-01T12:00:00.000Z'),
+    });
+    leagueRef.collection = (name: string) => {
+      if (name === 'schedules') {
+        return {
+          doc: () => ({
+            ...scheduleRef,
+            get: vi.fn(async () => ({
+              exists: true,
+              data: () => ({
+                gamesPerTeam: 82,
+                deadlineNotificationsSent: {},
+                games: Array.from({ length: 30 }, (_, index) => ({
+                  id: `g-${index}`,
+                  status: 'final',
+                  homeTeamId: 'CHI',
+                  awayTeamId: 'OPP',
+                })),
+              }),
+            })),
+            update: vi.fn((data) => scheduleUpdates.push(data)),
+          }),
+        };
+      }
+      if (name === 'teams') {
+        return {
+          get: vi.fn(async () => ({
+            docs: [
+              {
+                id: 'CHI',
+                data: () => ({ name: 'Chicago Bulls', gmId: 'gm-1' }),
+              },
+            ],
+          })),
+        };
+      }
+      return { get: vi.fn(async () => ({ docs: [] })) };
+    };
+    db.collection = (name: string) => name === 'users'
+      ? { doc: (id: string) => ({ update: vi.fn((data) => userWrites.push({ id, data })) }) }
+      : { get: vi.fn(async () => ({ docs: [{ ...leagueDoc, ref: leagueRef }] })) };
+
+    const result = await handler();
+
+    expect(result.sent).toBeGreaterThan(0);
+    expect(userWrites[0]).toMatchObject({
+      id: 'gm-1',
+      data: {
+        notifications: {
+          op: 'arrayUnion',
+          values: [expect.objectContaining({ type: 'contract_deadline' })],
+        },
+      },
+    });
+    expect(scheduleUpdates[0]).toHaveProperty('deadlineNotificationsSent');
   });
 
   it('uses one deterministic offer id per stage, team, and player', () => {

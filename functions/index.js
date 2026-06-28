@@ -29,7 +29,10 @@ const {
 } = require('./franchise/offseasonCallable');
 const {
   createCompleteOffseasonActionHandler,
+  createContractDeadlineWarningsHandler,
+  createInSeasonExtensionInterestHandler,
   createResolveContractRoundHandler,
+  createSubmitInSeasonExtensionHandler,
   createSubmitContractOfferHandler,
 } = require('./franchise/contracts');
 const {
@@ -59,6 +62,7 @@ const {
   createReportGameScoreHandler,
   createRequestMatchupHandler,
   createResetScheduledGameHandler,
+  createSimScheduleBatchHandler,
   createSimulateScheduledGameHandler,
 } = require('./franchise/matchups');
 const {
@@ -122,6 +126,9 @@ function titleFor(type) {
     case 'draft_turn': return '⏳ You Are On The Clock';
     case 'draft_class_ready': return '📋 Draft Class Ready';
     case 'contract_round': return '💼 Contract Round';
+    case 'extension_interest': return '💼 Extension Interest';
+    case 'extension_offer_submitted': return '💼 Extension Offer';
+    case 'contract_deadline': return '⏳ Deadline Warning';
     case 'free_agency': return '📝 Free Agency';
     case 'offseason_stage': return '🏛️ Offseason Update';
     case 'roster_compliance':
@@ -353,6 +360,27 @@ exports.submitContractOffer = onCall(createSubmitContractOfferHandler({
   FieldValue,
 }));
 
+exports.createInSeasonExtensionInterest = onCall(createInSeasonExtensionInterestHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  now: () => Date.now(),
+  HttpsError,
+  FieldValue,
+}));
+
+exports.submitInSeasonExtension = onCall(createSubmitInSeasonExtensionHandler({
+  getFirestore,
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.sendContractDeadlineWarnings = onSchedule('every 60 minutes', createContractDeadlineWarningsHandler({
+  getFirestore,
+  now: () => Date.now(),
+  FieldValue,
+}));
+
 exports.resolveFreeAgencyRound = onCall(createResolveContractRoundHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
@@ -445,6 +473,12 @@ exports.acceptMatchup = onCall(createAcceptMatchupHandler({
 }));
 
 exports.simulateScheduledGame = onCall(createSimulateScheduledGameHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.simScheduleBatch = onCall(createSimScheduleBatchHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,

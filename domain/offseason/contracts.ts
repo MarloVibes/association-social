@@ -41,6 +41,8 @@ export type ContractPreferenceInput = {
     team?: string;
     teamHistory?: string[];
     playoffAppearances?: number;
+    loyalty?: number;
+    morale?: number;
   };
   eraSalaryBaseline?: EraSalaryBaseline;
 };
@@ -80,6 +82,18 @@ export type ContractCandidatePlayer = {
   freeAgent?: boolean;
   isFreeAgent?: boolean;
   retired?: boolean;
+  age?: number;
+  salary?: number;
+  overall?: number;
+  label?: string;
+  tier?: string;
+  loyalty?: number;
+  morale?: number;
+  minutes?: number;
+  expectedMinutes?: number;
+  playoffAppearances?: number;
+  extensionInterestSeason?: number;
+  extensionDeclinedSeason?: number;
   contract?: {
     years?: number;
   };
@@ -96,6 +110,68 @@ export type SelectContractCandidatesInput<T extends ContractCandidatePlayer = Co
   freeAgents: T[];
   myTeamId?: string | null;
 };
+
+export type ExtensionInterestTeam<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  id?: string;
+  players?: T[];
+  contender?: number;
+  reputation?: number;
+};
+
+export type ExtensionInterestInput<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  player: T;
+  team?: ExtensionInterestTeam<T>;
+  seed?: string;
+};
+
+export type ExtensionInterestResult = {
+  score: number;
+  interested: boolean;
+  reason: 'happy' | 'not_expiring' | 'unhappy' | 'testing_market';
+};
+
+export type SelectInSeasonExtensionCandidatesInput<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  seasonYear: number;
+  team: ExtensionInterestTeam<T>;
+  existingWindowPlayerIds?: string[];
+  seed?: string;
+  limit?: number;
+};
+
+export type ExtensionAskInput<T extends ContractCandidatePlayer = ContractCandidatePlayer> = {
+  player: T;
+  team?: ExtensionInterestTeam<T>;
+  eraSalaryBaseline?: EraSalaryBaseline;
+};
+
+export type ExtensionAsk = {
+  salary: number;
+  currentSalary: number;
+  years: number;
+  role: ContractRole;
+  acceptanceFloor: number;
+};
+
+export type ContractDeadlinePlanInput = {
+  gamesPerTeam?: number | null;
+};
+
+export type ContractDeadlinePlan = {
+  gamesPerTeam: number;
+  extensionDeadlineGame: number;
+  tradeDeadlineGame: number;
+};
+
+export type ContractDeadlineWarningInput = {
+  gamesPlayed: number;
+  deadlineGame: number;
+};
+
+export type ContractDeadlineWarning =
+  | '25_games_remaining'
+  | '10_games_remaining'
+  | 'deadline_reached'
+  | null;
 
 const ROLE_SCORE: Readonly<Record<ContractRole, number>> = Object.freeze({
   franchise: 18,
@@ -157,6 +233,35 @@ function openMarketCandidate(player: ContractCandidatePlayer): boolean {
   return Number.isFinite(contractYears) && contractYears <= 0;
 }
 
+function inSeasonExtensionCandidate(player: ContractCandidatePlayer): boolean {
+  if (!player || player.retired || player.freeAgent || player.isFreeAgent || player.contractExpired) return false;
+  if (Number.isFinite(player.contractYears)) return Number(player.contractYears) === 1;
+  const contractYears = Number(player.contract?.years);
+  return Number.isFinite(contractYears) && contractYears === 1;
+}
+
+export function contractDeadlinePlan(input: ContractDeadlinePlanInput = {}): ContractDeadlinePlan {
+  const gamesPerTeam = Number.isFinite(input.gamesPerTeam)
+    ? Math.max(1, Math.round(Number(input.gamesPerTeam)))
+    : 82;
+  const scale = gamesPerTeam / 82;
+  return {
+    gamesPerTeam,
+    extensionDeadlineGame: Math.max(1, Math.round(50 * scale)),
+    tradeDeadlineGame: Math.max(1, Math.round(55 * scale)),
+  };
+}
+
+export function contractDeadlineWarning(input: ContractDeadlineWarningInput): ContractDeadlineWarning {
+  const gamesPlayed = Math.max(0, Math.round(Number(input.gamesPlayed) || 0));
+  const deadlineGame = Math.max(1, Math.round(Number(input.deadlineGame) || 0));
+  const gamesRemaining = deadlineGame - gamesPlayed;
+  if (gamesRemaining === 25) return '25_games_remaining';
+  if (gamesRemaining === 10) return '10_games_remaining';
+  if (gamesRemaining === 0) return 'deadline_reached';
+  return null;
+}
+
 function uniqueCandidates<T extends ContractCandidatePlayer>(players: T[]): T[] {
   const seen = new Set<string>();
   return players.filter(player => {
@@ -188,6 +293,103 @@ export function selectContractCandidates<T extends ContractCandidatePlayer>(
         }))
     )) as T[],
   );
+}
+
+export function extensionInterestScore<T extends ContractCandidatePlayer>(
+  input: ExtensionInterestInput<T>,
+): ExtensionInterestResult {
+  const player = input.player;
+  if (!inSeasonExtensionCandidate(player)) {
+    return { score: 0, interested: false, reason: 'not_expiring' };
+  }
+  const loyalty = clampUnit(Number(player.loyalty ?? 0.5));
+  const morale = clampUnit(Number(player.morale ?? 0.55));
+  const contender = clampUnit(Number(input.team?.contender ?? 0.5));
+  const reputation = clampUnit(Number(input.team?.reputation ?? 0.5));
+  const minutes = Number(player.minutes);
+  const expectedMinutes = Number(player.expectedMinutes);
+  const roleSatisfaction = Number.isFinite(minutes) && Number.isFinite(expectedMinutes) && expectedMinutes > 0
+    ? clampUnit(minutes / expectedMinutes)
+    : 0.65;
+  const variance = seededUnit(input.seed || candidateId(player)) * 0.08;
+  const score = Math.round((
+    morale * 0.34
+    + loyalty * 0.26
+    + contender * 0.15
+    + roleSatisfaction * 0.13
+    + reputation * 0.08
+    + variance
+  ) * 1000) / 1000;
+
+  if (morale < 0.42 || loyalty < 0.22) {
+    return { score, interested: false, reason: 'unhappy' };
+  }
+  const preferences = derivePlayerContractPreferences({ player });
+  if (preferences.money >= 0.36 && morale < 0.78 && loyalty < 0.58) {
+    return { score, interested: false, reason: 'testing_market' };
+  }
+  return { score, interested: score >= 0.64, reason: score >= 0.64 ? 'happy' : 'testing_market' };
+}
+
+function roleForExtension(player: ContractCandidatePlayer): ContractRole {
+  const tier = String(player.label || player.tier || '').toLowerCase();
+  const overall = Number(player.overall || 0);
+  if (tier.includes('legend') || tier.includes('superstar') || overall >= 90) return 'franchise';
+  if (tier.includes('star') || overall >= 80) return 'starter';
+  if (overall >= 72) return 'rotation';
+  return 'depth';
+}
+
+export function expectedExtensionAsk<T extends ContractCandidatePlayer>(
+  input: ExtensionAskInput<T>,
+): ExtensionAsk {
+  const role = roleForExtension(input.player);
+  const baseSalary = expectedAnnualSalary({
+    player: input.player,
+    role,
+    eraSalaryBaseline: input.eraSalaryBaseline,
+  });
+  const loyalty = clampUnit(Number(input.player.loyalty ?? 0.5));
+  const morale = clampUnit(Number(input.player.morale ?? 0.55));
+  const contender = clampUnit(Number(input.team?.contender ?? 0.5));
+  const happyDiscount = loyalty >= 0.75 && morale >= 0.75 ? 0.93 : 1;
+  const winningDiscount = contender >= 0.75 && morale >= 0.7 ? 0.97 : 1;
+  const leveragePremium = Number(input.player.overall || 0) >= 88 ? 1.08 : 1;
+  const salary = Math.round(baseSalary * happyDiscount * winningDiscount * leveragePremium);
+  const age = Number(input.player.age || 27);
+  const years = role === 'franchise'
+    ? age <= 30 ? 5 : 4
+    : role === 'starter'
+      ? age <= 29 ? 4 : 3
+      : role === 'rotation' ? 2 : 1;
+  return {
+    salary,
+    currentSalary: Number(input.player.salary || 0),
+    years,
+    role,
+    acceptanceFloor: Math.round(salary * (loyalty >= 0.75 && morale >= 0.75 ? 0.88 : 0.94)),
+  };
+}
+
+export function selectInSeasonExtensionCandidates<T extends ContractCandidatePlayer>(
+  input: SelectInSeasonExtensionCandidatesInput<T>,
+) {
+  const existing = new Set((input.existingWindowPlayerIds || []).map(String));
+  const players = (input.team.players || [])
+    .filter(player => !existing.has(candidateId(player)))
+    .filter(player => player.extensionInterestSeason !== input.seasonYear)
+    .filter(player => player.extensionDeclinedSeason !== input.seasonYear)
+    .map(player => ({
+      player,
+      interest: extensionInterestScore({
+        player,
+        team: input.team,
+        seed: `${input.seed || input.team.id || 'team'}:${input.seasonYear}:${candidateId(player)}`,
+      }),
+    }))
+    .filter(item => item.interest.interested)
+    .sort((left, right) => right.interest.score - left.interest.score);
+  return players.slice(0, Math.max(1, input.limit || 1));
 }
 
 export function scoreContractOffer(input: ContractOfferScoreInput): number {

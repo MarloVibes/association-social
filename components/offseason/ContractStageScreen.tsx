@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
+import PlayerCard from '@/components/PlayerCard';
 import { auth, db, functions } from '@/constants/firebase';
 import {
   derivePlayerContractPreferences,
@@ -27,7 +28,7 @@ import {
 } from '@/domain/offseason/contracts';
 import type { OffseasonState } from '@/domain/offseason/types';
 
-type Stage = 're_signing' | 'free_agency';
+type Stage = 're_signing' | 'free_agency' | 'extension';
 
 type Props = {
   stage: Stage;
@@ -54,6 +55,12 @@ type Player = {
   teamHistory?: string[];
   playoffAppearances?: number;
   loyalty?: number;
+  extensionAsk?: {
+    salary?: number;
+    years?: number;
+    role?: ContractRole;
+    acceptanceFloor?: number;
+  };
 };
 
 type Team = {
@@ -168,9 +175,11 @@ export default function ContractStageScreen({ stage }: Props) {
   const [vaultFreeAgents, setVaultFreeAgents] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Player | null>(null);
+  const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: Player; teamId: string } | null>(null);
   const [tab, setTab] = useState<Tab>('available');
   const [offers, setOffers] = useState<ContractOffer[]>([]);
   const [resolutions, setResolutions] = useState<ContractResolution[]>([]);
+  const [extensionWindows, setExtensionWindows] = useState<any[]>([]);
   const [salary, setSalary] = useState('');
   const [years, setYears] = useState('1');
   const [role, setRole] = useState<ContractRole>('starter');
@@ -205,8 +214,15 @@ export default function ContractStageScreen({ stage }: Props) {
         error => Alert.alert('Unable to load free agents', error.message),
       );
     }
+    let unsubscribeExtensionWindows: (() => void) | undefined;
+    if (stage === 'extension') {
+      unsubscribeExtensionWindows = onSnapshot(
+        collection(db, 'leagues', leagueId, 'extension_windows'),
+        snapshot => setExtensionWindows(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))),
+      );
+    }
     const unsubscribeOffers = onSnapshot(
-      collection(db, 'leagues', leagueId, 'contract_offers'),
+      collection(db, 'leagues', leagueId, stage === 'extension' ? 'extension_offers' : 'contract_offers'),
       snapshot => setOffers(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as ContractOffer))),
     );
     const unsubscribeResolutions = onSnapshot(
@@ -217,6 +233,7 @@ export default function ContractStageScreen({ stage }: Props) {
       unsubscribeLeague();
       unsubscribeTeams();
       if (unsubscribeFreeAgents) unsubscribeFreeAgents();
+      if (unsubscribeExtensionWindows) unsubscribeExtensionWindows();
       unsubscribeOffers();
       unsubscribeResolutions();
     };
@@ -261,12 +278,22 @@ export default function ContractStageScreen({ stage }: Props) {
   }, [leagueFreeAgents, vaultFreeAgents]);
 
   const myTeam = teams.find(team => team.gmId === uid);
-  const candidates = useMemo(() => selectContractCandidates({
-    stage,
-    teams,
-    freeAgents,
-    myTeamId: myTeam?.id,
-  }), [freeAgents, myTeam?.id, stage, teams]);
+  const candidates = useMemo(() => {
+    if (stage === 'extension') {
+      return extensionWindows
+        .filter(window => window.status === 'open' && window.teamId === myTeam?.id)
+        .map(window => ({
+          ...(window.player || {}),
+          extensionAsk: window.ask,
+        } as Player));
+    }
+    return selectContractCandidates({
+      stage,
+      teams,
+      freeAgents,
+      myTeamId: myTeam?.id,
+    });
+  }, [extensionWindows, freeAgents, myTeam?.id, stage, teams]);
   const allVisiblePlayers = useMemo(
     () => [...teams.flatMap(team => team.players || []), ...freeAgents],
     [freeAgents, teams],
@@ -285,7 +312,7 @@ export default function ContractStageScreen({ stage }: Props) {
     [myOffers],
   );
   const offseason = league?.offseason;
-  const stageIsCurrent = offseason?.stage === stage;
+  const stageIsCurrent = stage === 'extension' ? !offseason || offseason.stage === 'regular_season' : offseason?.stage === stage;
   const isCommissioner = Boolean(
     uid
     && (
@@ -299,9 +326,13 @@ export default function ContractStageScreen({ stage }: Props) {
 
   const openOffer = (player: Player) => {
     setSelected(player);
-    setSalary(String(player.salary || player.contract?.salary || expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline })));
-    setYears(String(Math.max(1, player.contractYears || 1)));
-    setRole('starter');
+    setSalary(String(player.extensionAsk?.salary || player.salary || player.contract?.salary || expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline })));
+    setYears(String(Math.max(1, player.extensionAsk?.years || player.contractYears || 1)));
+    setRole(player.extensionAsk?.role || 'starter');
+  };
+
+  const openPlayerCard = (player: Player, teamId?: string) => {
+    setSelectedPlayerCard({ player, teamId: teamId || myTeam?.id || '' });
   };
 
   const selectedPreferences = selected
@@ -325,7 +356,7 @@ export default function ContractStageScreen({ stage }: Props) {
     : 0;
 
   const submitOffer = async () => {
-    if (!leagueId || !myTeam || !selected || !offseason) return;
+    if (!leagueId || !myTeam || !selected || (stage !== 'extension' && !offseason)) return;
     const salaryNumber = Number(salary.replace(/[$,\s]/g, ''));
     const yearsNumber = Number(years);
     if (!Number.isFinite(salaryNumber) || salaryNumber < 0) {
@@ -338,20 +369,34 @@ export default function ContractStageScreen({ stage }: Props) {
     }
     setWorking(true);
     try {
-      const submit = httpsCallable(functions, 'submitContractOffer');
-      await submit({
-        leagueId,
-        teamId: myTeam.id,
-        playerId: playerId(selected),
-        player: selected,
-        salary: salaryNumber,
-        years: yearsNumber,
-        role,
-        expectedStage: stage,
-        expectedVersion: offseason.version,
-      });
+      if (stage === 'extension') {
+        const submit = httpsCallable(functions, 'submitInSeasonExtension');
+        await submit({
+          leagueId,
+          teamId: myTeam.id,
+          playerId: playerId(selected),
+          salary: salaryNumber,
+          years: yearsNumber,
+          role,
+        });
+      } else {
+        const submit = httpsCallable(functions, 'submitContractOffer');
+        await submit({
+          leagueId,
+          teamId: myTeam.id,
+          playerId: playerId(selected),
+          player: selected,
+          salary: salaryNumber,
+          years: yearsNumber,
+          role,
+          expectedStage: stage,
+          expectedVersion: offseason?.version,
+        });
+      }
       setSelected(null);
-      Alert.alert('Offer submitted', `${playerName(selected)} received your offer.`);
+      Alert.alert('Offer submitted', stage === 'extension'
+        ? `${playerName(selected)} will respond within 2 hours.`
+        : `${playerName(selected)} received your offer.`);
     } catch (error: any) {
       Alert.alert('Offer rejected', error.message || 'The offer could not be submitted.');
     } finally {
@@ -407,7 +452,7 @@ export default function ContractStageScreen({ stage }: Props) {
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>{league?.name || 'League'}</Text>
-          <Text style={styles.title}>{stage === 're_signing' ? 'Re-Signing' : 'Free Agency'}</Text>
+          <Text style={styles.title}>{stage === 'extension' ? 'Extensions' : stage === 're_signing' ? 'Re-Signing' : 'Free Agency'}</Text>
         </View>
         <View style={styles.iconButton} />
       </View>
@@ -422,7 +467,7 @@ export default function ContractStageScreen({ stage }: Props) {
 
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>
-            {stage === 're_signing' ? 'Contract Decisions' : 'Free Agency Hub'}
+            {stage === 'extension' ? 'Extension Talks' : stage === 're_signing' ? 'Contract Decisions' : 'Free Agency Hub'}
           </Text>
           <Text style={styles.summaryText}>
             {myTeam
@@ -468,7 +513,7 @@ export default function ContractStageScreen({ stage }: Props) {
             const id = playerId(player);
             const preferences = derivePlayerContractPreferences({ player, eraSalaryBaseline: eraBaseline });
             const badges = preferenceBadges(preferences);
-            const ask = expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline });
+            const ask = player.extensionAsk?.salary || expectedAnnualSalary({ player, role: 'starter', eraSalaryBaseline: eraBaseline });
             const existingOffer = offerByPlayer.get(id);
             return (
               <TouchableOpacity
@@ -491,6 +536,15 @@ export default function ContractStageScreen({ stage }: Props) {
                     <Text style={styles.askLabel}>Ask</Text>
                     <Text style={styles.askValue}>{formatMoney(ask)}</Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openPlayerCard(player, stage === 'free_agency' ? '' : myTeam?.id);
+                    }}
+                    style={styles.cardIconButton}
+                  >
+                    <Ionicons color="#00e58b" name="person-circle-outline" size={22} />
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.badgeRow}>
                   {badges.map(badge => <Text key={badge} style={styles.badge}>{badge}</Text>)}
@@ -507,7 +561,13 @@ export default function ContractStageScreen({ stage }: Props) {
           ) : myOffers.map(offer => (
             <View key={offer.id} style={styles.offerCard}>
               <View style={styles.offerCardTop}>
-                <Text style={styles.playerName}>{offer.player ? playerName(offer.player) : offer.playerId}</Text>
+                <TouchableOpacity
+                  disabled={!offer.player}
+                  onPress={() => offer.player && openPlayerCard(offer.player, offer.teamId)}
+                  style={styles.offerPlayerTap}
+                >
+                  <Text style={styles.playerName}>{offer.player ? playerName(offer.player) : offer.playerId}</Text>
+                </TouchableOpacity>
                 <Text style={styles.offerStatus}>{offerStatusLabel(offer.status)}</Text>
               </View>
               <Text style={styles.playerMeta}>
@@ -526,7 +586,13 @@ export default function ContractStageScreen({ stage }: Props) {
             return (
               <View key={resolution.id} style={styles.offerCard}>
                 <View style={styles.offerCardTop}>
-                  <Text style={styles.playerName}>{offer?.player ? playerName(offer.player) : resolution.playerId}</Text>
+                  <TouchableOpacity
+                    disabled={!offer?.player}
+                    onPress={() => offer?.player && openPlayerCard(offer.player, resolution.winnerTeamId)}
+                    style={styles.offerPlayerTap}
+                  >
+                    <Text style={styles.playerName}>{offer?.player ? playerName(offer.player) : resolution.playerId}</Text>
+                  </TouchableOpacity>
                   <Text style={styles.offerStatus}>Signed</Text>
                 </View>
                 <Text style={styles.playerMeta}>{winner?.name || resolution.winnerTeamId || 'Team'} won the decision.</Text>
@@ -535,7 +601,7 @@ export default function ContractStageScreen({ stage }: Props) {
           })
         )}
 
-        {myTeam && stageIsCurrent && (
+        {myTeam && stageIsCurrent && stage !== 'extension' && (
           <TouchableOpacity
             disabled={working || myTeamComplete}
             onPress={completeAction}
@@ -552,7 +618,7 @@ export default function ContractStageScreen({ stage }: Props) {
           </TouchableOpacity>
         )}
 
-        {isCommissioner && stageIsCurrent && (
+        {isCommissioner && stageIsCurrent && stage !== 'extension' && (
           <TouchableOpacity disabled={working} onPress={resolveRound} style={styles.resolveButton}>
             <Text style={styles.resolveText}>Resolve submitted offers</Text>
           </TouchableOpacity>
@@ -622,6 +688,15 @@ export default function ContractStageScreen({ stage }: Props) {
           </ScrollView>
         </View>
       </Modal>
+      <PlayerCard
+        player={selectedPlayerCard?.player || null}
+        era={league?.era}
+        sport={league?.sport || 'nba'}
+        leagueId={leagueId}
+        teamId={selectedPlayerCard?.teamId || ''}
+        visible={Boolean(selectedPlayerCard)}
+        onClose={() => setSelectedPlayerCard(null)}
+      />
       <GlobalNav />
     </View>
   );
@@ -700,6 +775,8 @@ const styles = StyleSheet.create({
   playerName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   playerMeta: { color: '#69706b', fontSize: 12, marginTop: 3 },
   askBox: { alignItems: 'flex-end', justifyContent: 'center', minWidth: 74 },
+  cardIconButton: { width: 34, height: 34, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b1f15', borderWidth: 1, borderColor: '#00e58b44' },
+  offerPlayerTap: { flex: 1, minWidth: 0 },
   askLabel: { color: '#747c76', fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
   askValue: { color: '#ffffff', fontSize: 12, fontWeight: '900', marginTop: 3 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },

@@ -17,6 +17,7 @@ const {
   resetScheduledGame,
   scheduleAliases,
   scheduleCompetition,
+  selectSimBatch,
   simulateScheduledGame,
   simulateScheduledGameResult,
   teamPersistencePayload,
@@ -68,6 +69,36 @@ function seedRoster(prefix: string, skill = 78) {
 }
 
 describe('matchup request state helpers', () => {
+  it('selects the next cancellable regular-season sim batch', () => {
+    const batch = selectSimBatch({
+      competition: 'regular',
+      batchSize: 2,
+      games: [
+        seedAvailableGame({ id: 'g1', sequence: 3 }),
+        seedAvailableGame({ id: 'g2', sequence: 1, status: 'final' }),
+        seedAvailableGame({ id: 'g3', sequence: 2, status: 'preparing' }),
+        seedAvailableGame({ id: 'g4', sequence: 4 }),
+      ],
+    });
+
+    expect(batch.map((game: any) => game.id)).toEqual(['g3', 'g1']);
+  });
+
+  it('selects only the current unfinished playoff round when simming one round', () => {
+    const batch = selectSimBatch({
+      competition: 'playoffs',
+      scope: 'round',
+      batchSize: 10,
+      games: [
+        seedAvailableGame({ id: 'r1-g1', round: 'first_round', sequence: 1 }),
+        seedAvailableGame({ id: 'r1-g2', round: 'first_round', sequence: 2, status: 'final' }),
+        seedAvailableGame({ id: 'r2-g1', round: 'second_round', sequence: 100 }),
+      ],
+    });
+
+    expect(batch.map((game: any) => game.id)).toEqual(['r1-g1']);
+  });
+
   it('aliases era-suffixed schedule ids back to their team abbreviation', () => {
     expect(scheduleAliases('SAS_2011')).toEqual(['SAS_2011', 'SAS']);
     expect(scheduleAliases('NOH_2011')).toEqual(['NOH_2011', 'NOH', 'NOK', 'NOP']);

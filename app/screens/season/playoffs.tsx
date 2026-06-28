@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
@@ -50,9 +50,11 @@ export default function PlayoffsScreen() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [simmingPlayoffs, setSimmingPlayoffs] = useState<'all' | 'round' | ''>('');
   const [startingOffseason, setStartingOffseason] = useState(false);
   const [advancingSeries, setAdvancingSeries] = useState('');
   const [format, setFormat] = useState<PlayoffFormat>('short_8');
+  const cancelPlayoffSimRef = useRef(false);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -176,6 +178,45 @@ export default function PlayoffsScreen() {
       Alert.alert('Playoffs not synced', error.message || 'Please try again.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const runPlayoffSim = async (scope: 'all' | 'round') => {
+    if (!leagueId || !isLeagueAdmin || !bracket || simmingPlayoffs) return;
+    cancelPlayoffSimRef.current = false;
+    setSimmingPlayoffs(scope);
+    try {
+      const simBatch = httpsCallable(functions, 'simScheduleBatch');
+      let action = 'start';
+      for (let step = 0; step < 60 && !cancelPlayoffSimRef.current; step += 1) {
+        const result: any = await simBatch({
+          leagueId,
+          action,
+          competition: 'playoffs',
+          scope,
+          batchSize: scope === 'round' ? 14 : 28,
+        });
+        const control = result.data || {};
+        if (control.status === 'complete' || control.status === 'cancelled') break;
+        if (scope === 'round') break;
+        action = 'step';
+      }
+    } catch (error: any) {
+      Alert.alert('Playoff sim stopped', error.message || 'Please try again.');
+    } finally {
+      setSimmingPlayoffs('');
+      cancelPlayoffSimRef.current = false;
+    }
+  };
+
+  const cancelPlayoffSim = async () => {
+    if (!leagueId) return;
+    cancelPlayoffSimRef.current = true;
+    try {
+      const simBatch = httpsCallable(functions, 'simScheduleBatch');
+      await simBatch({ leagueId, action: 'cancel', competition: 'playoffs' });
+    } catch (error: any) {
+      Alert.alert('Cancel not sent', error.message || 'Please try again.');
     }
   };
 
@@ -305,9 +346,33 @@ export default function PlayoffsScreen() {
               </View>
             ) : null}
             {bracket && isLeagueAdmin ? (
-              <TouchableOpacity disabled={syncing} style={[styles.syncButton, syncing && styles.disabled]} onPress={syncCompletedGames}>
-                {syncing ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>Sync Completed Games</Text>}
-              </TouchableOpacity>
+              <>
+                <View style={styles.simControl}>
+                  <TouchableOpacity
+                    disabled={Boolean(simmingPlayoffs) || Boolean(championTeamId)}
+                    style={[styles.simButton, (Boolean(simmingPlayoffs) || Boolean(championTeamId)) && styles.disabled]}
+                    onPress={() => runPlayoffSim('all')}
+                  >
+                    {simmingPlayoffs === 'all' ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>{championTeamId ? 'Playoffs Complete' : 'Sim Playoffs'}</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled={Boolean(simmingPlayoffs) || Boolean(championTeamId)}
+                    style={[styles.roundSimButton, (Boolean(simmingPlayoffs) || Boolean(championTeamId)) && styles.disabled]}
+                    onPress={() => runPlayoffSim('round')}
+                  >
+                    {simmingPlayoffs === 'round' ? <ActivityIndicator color="#00e58b" /> : <Text style={styles.roundSimText}>Sim Round</Text>}
+                  </TouchableOpacity>
+                </View>
+                {simmingPlayoffs ? (
+                  <TouchableOpacity style={styles.cancelSimButton} onPress={cancelPlayoffSim}>
+                    <Ionicons color="#ff5a6f" name="stop-circle-outline" size={16} />
+                    <Text style={styles.cancelSimText}>Cancel Sim</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity disabled={syncing} style={[styles.syncButton, syncing && styles.disabled]} onPress={syncCompletedGames}>
+                  {syncing ? <ActivityIndicator color="#06130c" /> : <Text style={styles.startText}>Sync Completed Games</Text>}
+                </TouchableOpacity>
+              </>
             ) : null}
             {bracket && championTeamId && isLeagueAdmin ? (
               <View style={styles.offseasonCard}>
@@ -420,6 +485,12 @@ const styles = StyleSheet.create({
   startButton: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
   syncButton: { minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   startText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
+  simControl: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  simButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
+  roundSimButton: { flex: 1, minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', backgroundColor: '#0a1d14', alignItems: 'center', justifyContent: 'center' },
+  roundSimText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
+  cancelSimButton: { minHeight: 40, borderRadius: 8, borderWidth: 1, borderColor: '#ff5a6f66', backgroundColor: '#1d080c', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, marginBottom: 8 },
+  cancelSimText: { color: '#ff5a6f', fontSize: 12, fontWeight: '900' },
   disabled: { opacity: 0.5 },
   offseasonCard: { backgroundColor: '#171006', borderRadius: 8, borderWidth: 1, borderColor: '#ffaa00', padding: 12, marginBottom: 14, gap: 10 },
   offseasonTitle: { color: '#ffffff', fontSize: 15, fontWeight: '900' },

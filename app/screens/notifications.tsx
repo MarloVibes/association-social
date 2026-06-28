@@ -45,6 +45,11 @@ function routeNotification(n: any) {
     router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition } });
   } else if (type === 'injury_update') {
     router.push({ pathname: '/screens/season/injuries', params: { leagueId } });
+  } else if (type === 'extension_interest' || type === 'extension_offer_submitted') {
+    router.push({ pathname: '/screens/season/contracts', params: { leagueId } });
+  } else if (type === 'contract_deadline') {
+    if (n.deadlineKind === 'trade') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
+    else router.push({ pathname: '/screens/season/contracts', params: { leagueId } });
   } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
     if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
     else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
@@ -78,7 +83,7 @@ function notificationIcon(type: string) {
   if (['schedule_created', 'schedule_updated', 'game_reset'].includes(type)) return '📅';
   if (['nba_cup', 'nba_cup_advanced', 'season_awards', 'awards_finalized'].includes(type)) return '🏆';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn', 'draft_class_ready'].includes(type)) return '🎙️';
-  if (['contract_round', 'free_agency', 'offseason_stage'].includes(type)) return '💼';
+  if (['contract_round', 'free_agency', 'offseason_stage', 'extension_interest', 'extension_offer_submitted', 'contract_deadline'].includes(type)) return '💼';
   if (type === 'roster_compliance' || type === 'roster_cuts') return '✂️';
   if (type === 'expansion' || type === 'expansion_draft') return '🌆';
   if (type === 'upgrade_points') return '⬆️';
@@ -102,6 +107,8 @@ function notificationActionLabel(type: string) {
   if (type === 'announcement') return 'View League News →';
   if (['game_simulated', 'game_final', 'score_reported'].includes(type)) return 'View Result →';
   if (type === 'injury_update') return 'View Injuries →';
+  if (type === 'extension_interest' || type === 'extension_offer_submitted') return 'View Contract →';
+  if (type === 'contract_deadline') return 'Review Deadline →';
   if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) return 'View Matchup →';
   if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) return 'View Calendar →';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) return 'View Draft →';
