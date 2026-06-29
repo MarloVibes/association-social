@@ -4,6 +4,7 @@ import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, Touc
 import { db } from '@/constants/firebase';
 import type { VisibleNbaIdentity } from '@/domain/nba/identity';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
+import { playerProfileWithLeagueDateAge } from '@/domain/nba/ratingProfile';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
 import {
   buildScoutingGrades,
@@ -21,6 +22,7 @@ type Props = {
   sport?: string;
   leagueId: string;
   teamId: string;
+  leagueDate?: string | Date | null;
   visible: boolean;
   onClose: () => void;
   isOwned?: boolean;       // true = my player, false = opponent's player, undefined = free agent
@@ -250,7 +252,11 @@ function searchMatches(player: any, query: string) {
   return text.includes(query.trim().toLowerCase());
 }
 
-export default function PlayerCard({ player, era, sport, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
+export function leagueDateFromRecord(league: any): string | Date | null {
+  return league?.leagueDate || league?.currentDate || league?.seasonDate || league?.calendarDate || null;
+}
+
+export default function PlayerCard({ player, era, sport, leagueId, teamId, leagueDate, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [onTradeBlock, setOnTradeBlock] = useState(false);
@@ -386,7 +392,8 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   if (!player) return null;
 
   const name = player.full_name || player.name || '';
-  const resolvedProfile = profile || resolveBaselineRatingProfile(player, { era });
+  const resolvedProfile: any = playerProfileWithLeagueDateAge(profile, leagueDate)
+    || resolveBaselineRatingProfile(player, { era, leagueDate });
   const pos = resolvedProfile?.position || player.position || '?';
   const posLabel = cleanPositionLabel(pos);
   const posColor = POSITION_COLORS[posLabel.split(/[/-]/)[0]?.trim()] || '#888';
@@ -415,7 +422,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, resolvedProfile) : [];
   const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, resolvedProfile) : null;
   const playerGrades = isNBAPlayer ? buildScoutingGrades(player, resolvedProfile) : null;
-  const resolvedCompareProfile = selectedCompareProfile || (selectedComparePlayer ? resolveBaselineRatingProfile(selectedComparePlayer, { era }) : null);
+  const resolvedCompareProfile = selectedCompareProfile || (selectedComparePlayer ? resolveBaselineRatingProfile(selectedComparePlayer, { era, leagueDate }) : null);
   const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, resolvedCompareProfile) : null;
   const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
   const filteredCompareCandidates = compareQuery.trim()

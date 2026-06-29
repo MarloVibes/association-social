@@ -6,7 +6,7 @@ import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { gradeFromNumeric } from '@/domain/nba/gradeScale';
@@ -1008,6 +1008,7 @@ export default function RosterScreen() {
         sport={authoritativeSport}
         leagueId={leagueId}
         teamId={teamId}
+        leagueDate={leagueDateFromRecord(league)}
         visible={!!selectedPlayer}
         onClose={() => setSelectedPlayer(null)}
         isOwned={selectedPlayer ? (() => {

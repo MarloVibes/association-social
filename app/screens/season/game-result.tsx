@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
@@ -514,6 +514,7 @@ export default function GameResultScreen() {
         sport="nba"
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
+        leagueDate={leagueDateFromRecord(league)}
         visible={!!selectedPlayerCard}
         onClose={() => setSelectedPlayerCard(null)}
       />

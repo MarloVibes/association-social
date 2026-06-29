@@ -7,6 +7,8 @@ export type PublicStatLine = {
   team: string;
   position: string;
   age?: number;
+  birthDate?: string;
+  birth_date?: string;
   games?: number;
   minutesPerGame?: number;
   pointsPerGame?: number;
@@ -45,6 +47,7 @@ export type PublicStatLine = {
 
 export type LeagueContext = {
   season: number;
+  leagueDate?: string | Date | null;
   pace: number;
   leagueThreePointPct: number;
   leagueFreeThrowPct: number;

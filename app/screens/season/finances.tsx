@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
@@ -242,6 +242,7 @@ export default function FinancesScreen() {
         sport="nba"
         leagueId={leagueId}
         teamId={selectedTeam?.id || ''}
+        leagueDate={leagueDateFromRecord(league)}
         visible={!!selectedPlayer}
         onClose={() => setSelectedPlayer(null)}
       />

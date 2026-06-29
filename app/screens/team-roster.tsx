@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
@@ -86,6 +86,7 @@ export default function TeamRosterScreen() {
   const [team, setTeam] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
+  const [leagueDate, setLeagueDate] = useState<string | Date | null>(null);
   const [leagueEra, setLeagueEra] = useState<string>('');
   const [sport, setSport] = useState<string>('nba');
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
@@ -108,6 +109,7 @@ export default function TeamRosterScreen() {
           if (d.currentYear) setCurrentYear(d.currentYear);
           setLeagueEra(d.era || 'current');
           setSport(d.sport || 'nba');
+          setLeagueDate(leagueDateFromRecord(d));
           const myUid_ = auth.currentUser?.uid;
           const commUids_ = [d.commissionerId, ...(d.coCommissioners || [])].filter(Boolean);
           setIsLeagueCommissioner(!!myUid_ && commUids_.includes(myUid_));
@@ -456,6 +458,7 @@ export default function TeamRosterScreen() {
         sport={sport || 'nba'}
         leagueId={leagueId}
         teamId={team?.id || ''}
+        leagueDate={leagueDate}
         visible={!!selectedPlayer}
         onClose={() => setSelectedPlayer(null)}
         isOwned={selectedPlayer ? (team?.gmId === myUid) : undefined}

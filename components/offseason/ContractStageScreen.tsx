@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import { auth, db, functions } from '@/constants/firebase';
 import {
   derivePlayerContractPreferences,
@@ -694,6 +694,7 @@ export default function ContractStageScreen({ stage }: Props) {
         sport={league?.sport || 'nba'}
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
+        leagueDate={leagueDateFromRecord(league)}
         visible={Boolean(selectedPlayerCard)}
         onClose={() => setSelectedPlayerCard(null)}
       />

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getPlaystyle } from '@/constants/playstyle';
@@ -58,6 +58,7 @@ export default function TradeChannelScreen() {
   const { leagueId, channelId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
   const [activeTab, setActiveTab] = useState<'block' | 'available' | 'propose'>('block');
   const [myTeam, setMyTeam] = useState<any>(null);
+  const [league, setLeague] = useState<any>(null);
   const [sport, setSport] = useState<string>('nba');
   const [myTeamId, setMyTeamId] = useState('');
   const [myRoster, setMyRoster] = useState<any[]>([]);
@@ -149,7 +150,11 @@ export default function TradeChannelScreen() {
       let leagueSport = 'nba';
       try {
         const lSnap = await getDoc(doc(db, 'leagues', leagueId));
-        leagueSport = (lSnap.exists() && (lSnap.data() as any).sport) || 'nba';
+        if (lSnap.exists()) {
+          const leagueData = lSnap.data() as any;
+          setLeague({ id: lSnap.id, ...leagueData });
+          leagueSport = leagueData.sport || 'nba';
+        }
       } catch {}
       setSport(leagueSport);
       const isNBA = leagueSport === 'nba';
@@ -630,6 +635,7 @@ export default function TradeChannelScreen() {
         sport={sport}
         leagueId={leagueId}
         teamId={selectedAvailPlayer?.teamId || ''}
+        leagueDate={leagueDateFromRecord(league)}
         visible={!!selectedAvailPlayer}
         onClose={() => setSelectedAvailPlayer(null)}
         isOwned={selectedAvailPlayer ? false : undefined}

@@ -32,6 +32,7 @@ const seeds: BaselineSeed[] = [
       team: 'MIA',
       position: 'SF',
       age: 26,
+      birthDate: '1984-12-30',
       games: 79,
       minutesPerGame: 38.8,
       pointsPerGame: 26.7,
@@ -82,6 +83,7 @@ const seeds: BaselineSeed[] = [
       team: 'CHI',
       position: 'PG',
       age: 22,
+      birthDate: '1988-10-04',
       games: 81,
       minutesPerGame: 37.4,
       pointsPerGame: 25,
@@ -132,6 +134,7 @@ const seeds: BaselineSeed[] = [
       team: 'LAL',
       position: 'SF',
       age: 41,
+      birthDate: '1984-12-30',
       games: 70,
       minutesPerGame: 34,
       pointsPerGame: 24,
@@ -162,11 +165,17 @@ const seeds: BaselineSeed[] = [
   },
 ];
 
-export function buildBaselineRatingProfiles(generated_at_ms = 1): PlayerRatingProfile[] {
+export function buildBaselineRatingProfiles(
+  generated_at_ms = 1,
+  options: { leagueDate?: string | Date | null } = {},
+): PlayerRatingProfile[] {
   return seeds.map(seed => buildPlayerRatingProfile({
     source: seed.source,
     source_snapshot_id: seed.snapshotId,
-    leagueContext: seed.leagueContext,
+    leagueContext: {
+      ...seed.leagueContext,
+      leagueDate: options.leagueDate ?? seed.leagueContext.leagueDate,
+    },
     eraContext: seed.eraContext,
     generated_at_ms,
   }));

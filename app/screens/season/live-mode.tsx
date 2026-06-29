@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import PlayerCard from '@/components/PlayerCard';
+import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
@@ -477,6 +477,7 @@ export default function LiveModeScreen() {
         sport="nba"
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
+        leagueDate={leagueDateFromRecord(league)}
         visible={!!selectedPlayerCard}
         onClose={() => setSelectedPlayerCard(null)}
       />

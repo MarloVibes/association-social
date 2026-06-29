@@ -52,6 +52,10 @@ export type PlayerRatingProfile = {
   team: string;
   position: string;
   age?: number;
+  season_age?: number;
+  display_age?: number;
+  exact_age?: number;
+  birth_date?: string;
   jersey_number?: string;
   injury_state?: string;
   roster_status?: string;
@@ -145,6 +149,108 @@ function shotVolumeModifier(source: PublicStatLine) {
   return Math.max(50, Math.min(96, 58 + attempts * 5));
 }
 
+function parseBirthDate(value: unknown): { year: number; month: number; day: number } | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return {
+      year: value.getUTCFullYear(),
+      month: value.getUTCMonth() + 1,
+      day: value.getUTCDate(),
+    };
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) return { year, month, day };
+  }
+
+  const parsed = new Date(`${raw} UTC`);
+  if (!Number.isNaN(parsed.getTime())) {
+    return {
+      year: parsed.getUTCFullYear(),
+      month: parsed.getUTCMonth() + 1,
+      day: parsed.getUTCDate(),
+    };
+  }
+
+  return null;
+}
+
+function parseLeagueDate(value: unknown): { year: number; month: number; day: number } | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return {
+      year: value.getUTCFullYear(),
+      month: value.getUTCMonth() + 1,
+      day: value.getUTCDate(),
+    };
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const parsed = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    const fallback = new Date(`${raw} UTC`);
+    if (Number.isNaN(fallback.getTime())) return null;
+    return {
+      year: fallback.getUTCFullYear(),
+      month: fallback.getUTCMonth() + 1,
+      day: fallback.getUTCDate(),
+    };
+  }
+  return {
+    year: parsed.getUTCFullYear(),
+    month: parsed.getUTCMonth() + 1,
+    day: parsed.getUTCDate(),
+  };
+}
+
+export function calculatePlayerAgeForDate(
+  birthDate: unknown,
+  _seasonStartYear: number,
+  leagueDate: unknown,
+): number | null {
+  const birth = parseBirthDate(birthDate);
+  const date = parseLeagueDate(leagueDate);
+  if (!birth || !date) return null;
+  let age = date.year - birth.year;
+  const birthdayPassed = date.month > birth.month || (date.month === birth.month && date.day >= birth.day);
+  if (!birthdayPassed) age -= 1;
+  return age >= 0 && age < 80 ? age : null;
+}
+
+function seasonAgeFromSource(source: PublicStatLine, season: number, birthDate: unknown): number | undefined {
+  const listedAge = Number(source.age);
+  if (Number.isFinite(listedAge) && listedAge > 0) return listedAge;
+  const calculated = calculatePlayerAgeForDate(birthDate, season - 1, `${season}-02-01`);
+  return calculated ?? undefined;
+}
+
+export function playerProfileWithLeagueDateAge(
+  profile: PlayerRatingProfile | null | undefined,
+  leagueDate: string | Date | null | undefined,
+): PlayerRatingProfile | null {
+  if (!profile) return null;
+  if (!leagueDate || !profile.birth_date) return profile;
+  const exactAge = calculatePlayerAgeForDate(profile.birth_date, profile.season - 1, leagueDate);
+  if (!exactAge) return profile;
+  return {
+    ...profile,
+    age: exactAge,
+    display_age: exactAge,
+    exact_age: exactAge,
+    season_age: profile.season_age ?? profile.age,
+    source_stat_line: {
+      ...profile.source_stat_line,
+      age: exactAge,
+    },
+  };
+}
+
 export function buildPlayerRatingProfile({
   source,
   source_snapshot_id,
@@ -161,8 +267,17 @@ export function buildPlayerRatingProfile({
   generated_at_ms?: number;
 }): PlayerRatingProfile {
   const resolvedSource = patchedSource(source, patch);
-  const attribute_model = buildAttributeModel({ source: resolvedSource, leagueContext });
-  const era = applyEraAdjustment({ source: resolvedSource, attribute_model, context: eraContext });
+  const birthDate = resolvedSource.birthDate || resolvedSource.birth_date;
+  const season_age = seasonAgeFromSource(resolvedSource, leagueContext.season, birthDate);
+  const exact_age = birthDate && leagueContext.leagueDate
+    ? calculatePlayerAgeForDate(birthDate, leagueContext.season - 1, leagueContext.leagueDate) ?? season_age
+    : season_age;
+  const display_age = exact_age ?? season_age;
+  const sourceWithAge = display_age && display_age !== resolvedSource.age
+    ? { ...resolvedSource, age: display_age }
+    : resolvedSource;
+  const attribute_model = buildAttributeModel({ source: sourceWithAge, leagueContext });
+  const era = applyEraAdjustment({ source: sourceWithAge, attribute_model, context: eraContext });
   const validation_warnings = patch?.skill_grades
     ? validateSkillGrades(era.era_adjusted_profiles, patch.skill_grades)
     : [];
@@ -170,7 +285,7 @@ export function buildPlayerRatingProfile({
   const category_skill_grades = buildSkillGrades(era.era_adjusted_profiles, {
     shotVolumeModifier: shotVolumeModifier(resolvedSource),
   });
-  const tendencies = buildPlayerTendencies(resolvedSource);
+  const tendencies = buildPlayerTendencies(sourceWithAge);
 
   return {
     collection: 'player_ratings',
@@ -179,7 +294,11 @@ export function buildPlayerRatingProfile({
     season: leagueContext.season,
     team: resolvedSource.team,
     position: resolvedSource.position,
-    age: resolvedSource.age,
+    age: display_age,
+    season_age,
+    display_age,
+    exact_age,
+    birth_date: birthDate ? String(birthDate) : undefined,
     jersey_number: patch?.jersey_number,
     injury_state: patch?.injury_state,
     roster_status: patch?.roster_status,
@@ -189,10 +308,10 @@ export function buildPlayerRatingProfile({
     skill_grades,
     category_skill_grades,
     tendencies,
-    archetypes: archetypesFor(era.era_adjusted_profiles, resolvedSource),
+    archetypes: archetypesFor(era.era_adjusted_profiles, sourceWithAge),
     traits: traitsFor(era.era_adjusted_profiles),
-    source_stat_line: resolvedSource,
-    development_curve: developmentCurve(era.era_adjusted_profiles, resolvedSource),
+    source_stat_line: sourceWithAge,
+    development_curve: developmentCurve(era.era_adjusted_profiles, sourceWithAge),
     era_notes: era.era_notes,
     validation_warnings,
     model_version: 'original-attribute-model-v1',

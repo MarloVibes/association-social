@@ -4,6 +4,7 @@ import type { PlayerRatingProfile } from './ratingProfile';
 type ResolveContext = {
   era?: string | null;
   currentYear?: number | string | null;
+  leagueDate?: string | Date | null;
 };
 
 const baselineProfiles = buildBaselineRatingProfiles(1);
@@ -41,7 +42,10 @@ export function resolveBaselineRatingProfile(
   if (!name) return null;
   const team = normalizeTeam(player?.team || player?.teamAbbr || player?.abbreviation);
   const targetSeason = seasonFromContext(context);
-  const candidates = baselineProfiles.filter(profile => normalizeName(profile.full_name) === name);
+  const profilePool = context.leagueDate
+    ? buildBaselineRatingProfiles(1, { leagueDate: context.leagueDate })
+    : baselineProfiles;
+  const candidates = profilePool.filter(profile => normalizeName(profile.full_name) === name);
   if (candidates.length === 0) return null;
 
   const seasonMatches = targetSeason
