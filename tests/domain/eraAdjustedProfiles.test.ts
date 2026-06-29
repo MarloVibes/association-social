@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEraAdjustment, type EraAdjustmentContext } from '@/domain/nba/eraAdjustedProfiles';
-import type { AttributeModel, PublicStatLine } from '@/domain/nba/attributeModel';
+import { ATTRIBUTE_KEYS, type AttributeModel, type PublicStatLine } from '@/domain/nba/attributeModel';
 
 const context2011: EraAdjustmentContext = {
   season: 2011,
@@ -37,6 +37,7 @@ const baseSource: PublicStatLine = {
 };
 
 const baseModel: AttributeModel = {
+  ...Object.fromEntries(ATTRIBUTE_KEYS.map(key => [key, 74])) as AttributeModel,
   closeShot: 78,
   midRange: 77,
   threePoint: 75,

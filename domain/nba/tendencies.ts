@@ -35,15 +35,15 @@ function rate(value: unknown, fallback = 0): number {
   return numeric > 1 ? numeric / 100 : numeric;
 }
 
-function position(source: Pick<PublicStatLine, 'position'>): string {
+function position(source: Pick<Partial<PublicStatLine>, 'position'>): string {
   return String(source.position || '').toUpperCase();
 }
 
-function isGuard(source: Pick<PublicStatLine, 'position'>): boolean {
+function isGuard(source: Pick<Partial<PublicStatLine>, 'position'>): boolean {
   return ['PG', 'SG', 'G'].some(value => position(source).includes(value));
 }
 
-function isBig(source: Pick<PublicStatLine, 'position'>): boolean {
+function isBig(source: Pick<Partial<PublicStatLine>, 'position'>): boolean {
   return ['PF', 'C'].some(value => position(source).includes(value));
 }
 

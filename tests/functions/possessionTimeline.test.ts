@@ -8,6 +8,12 @@ const {
   totalsFromPossessionEvents,
 } = require('../../functions/franchise/possessionTimeline.js');
 
+type BoxScorePlayer = {
+  name: string;
+  threePointersAttempted: number;
+  freeThrowsAttempted: number;
+};
+
 function team(teamId: string, skill: number) {
   return {
     teamId,
@@ -185,8 +191,12 @@ describe('possession timeline engine', () => {
     });
 
     const boxScore = boxScoreFromPossessionTimeline(timeline);
-    const lines = new Map(boxScore.home.players.map((player: any) => [player.name, player]));
-    expect(lines.get('Category Shooter').threePointersAttempted).toBeGreaterThan(lines.get('Category Driver').threePointersAttempted);
-    expect(lines.get('Category Driver').freeThrowsAttempted).toBeGreaterThanOrEqual(lines.get('Category Shooter').freeThrowsAttempted);
+    const lines = new Map<string, BoxScorePlayer>(boxScore.home.players.map((player: BoxScorePlayer) => [player.name, player]));
+    const shooter = lines.get('Category Shooter');
+    const driver = lines.get('Category Driver');
+    expect(shooter).toBeDefined();
+    expect(driver).toBeDefined();
+    expect(shooter!.threePointersAttempted).toBeGreaterThan(driver!.threePointersAttempted);
+    expect(driver!.freeThrowsAttempted).toBeGreaterThanOrEqual(shooter!.freeThrowsAttempted);
   });
 });
