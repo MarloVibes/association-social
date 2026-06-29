@@ -37,6 +37,27 @@ export type SimPlayerInput = {
   chemistry?: number;
   fatigue?: number;
   hidden?: Record<string, number>;
+  category_skill_grades?: Record<string, { rating?: number; grade?: string } | number>;
+  tendencies?: Partial<Record<
+    | 'paintAttack'
+    | 'rimFinishFrequency'
+    | 'dunkFrequency'
+    | 'drawFoulPressure'
+    | 'midRangeFrequency'
+    | 'threePointFrequency'
+    | 'catchAndShootFrequency'
+    | 'pullUpFrequency'
+    | 'postTouchFrequency'
+    | 'transitionFrequency'
+    | 'passFirst'
+    | 'isolationFrequency'
+    | 'pickAndRollBallHandler'
+    | 'pickAndRollRollMan'
+    | 'defensivePlaymaking'
+    | 'foulRisk'
+    | 'reboundCrash',
+    number
+  >>;
 };
 
 export type SimTeamInput = {
@@ -118,12 +139,30 @@ function skill(player: SimPlayerInput, key: keyof SimPlayerInput, fallback = 60)
   return Number.isFinite(value) ? value : fallback;
 }
 
+function categoryRating(player: SimPlayerInput, key: string, fallback: number) {
+  const entry = player.category_skill_grades?.[key];
+  const value = typeof entry === 'number' ? entry : entry?.rating;
+  return clamp(Number.isFinite(Number(value)) ? Number(value) : fallback, 0, 100);
+}
+
+function tendency(player: SimPlayerInput, key: keyof NonNullable<SimPlayerInput['tendencies']>, fallback: number) {
+  const value = Number(player.tendencies?.[key]);
+  return clamp(Number.isFinite(value) ? value : fallback, 0, 100);
+}
+
 function playerValue(player: SimPlayerInput) {
   const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
-  return sim.offensiveImpact * 0.42
-    + sim.defensiveImpact * 0.24
-    + skill(player, 'playmaking') * 0.12
-    + skill(player, 'basketballIq') * 0.1
+  const offense = categoryRating(player, 'overallOffense', sim.offensiveImpact);
+  const defense = Math.max(
+    categoryRating(player, 'perimeterDefense', sim.defensiveImpact),
+    categoryRating(player, 'interiorDefense', sim.defensiveImpact),
+  );
+  const playmaking = categoryRating(player, 'playmaking', skill(player, 'playmaking'));
+  const iq = categoryRating(player, 'basketballIq', skill(player, 'basketballIq'));
+  return offense * 0.42
+    + defense * 0.24
+    + playmaking * 0.12
+    + iq * 0.1
     + sim.formMultiplier * 10
     + (player.minutes || 0) * 0.1;
 }
@@ -166,14 +205,22 @@ function normalizeMinutes(players: SimPlayerInput[]): Array<SimPlayerInput & { m
 function distributePoints(players: Array<SimPlayerInput & { minutes: number }>, teamPoints: number, seed: string) {
   const weights = players.map((player) => {
     const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
-    const scorerProfile = sim.closeShot * 0.2
-      + sim.midRange * 0.16
-      + sim.threePoint * 0.2
-      + sim.dunking * 0.12
-      + sim.postOffense * 0.12
+    const finishing = categoryRating(player, 'finishing', (sim.closeShot + sim.dunking + sim.postOffense) / 3);
+    const midRange = categoryRating(player, 'midRange', sim.midRange);
+    const threePoint = categoryRating(player, 'threePoint', sim.threePoint);
+    const playmaking = categoryRating(player, 'playmaking', sim.passing);
+    const paintAttack = tendency(player, 'paintAttack', 58);
+    const threeFrequency = tendency(player, 'threePointFrequency', 58);
+    const scorerProfile = finishing * 0.22
+      + midRange * 0.14
+      + threePoint * 0.2
+      + playmaking * 0.07
+      + sim.dunking * 0.06
+      + sim.postOffense * 0.08
       + sim.shotIq * 0.1
-      + sim.passing * 0.05
-      + sim.offenseIq * 0.05;
+      + sim.offenseIq * 0.05
+      + paintAttack * 0.04
+      + threeFrequency * 0.04;
     return Math.max(1, player.minutes * scorerProfile * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
   });
   const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
@@ -222,19 +269,22 @@ function weightedTeamSkill(players: Array<SimPlayerInput & { minutes: number }>,
 
 function targetTeamRebounds(players: Array<SimPlayerInput & { minutes: number }>, seed: string) {
   const rebounding = weightedTeamSkill(players, player => (
-    simSkillsFromEvaluation(player as Record<string, unknown>).rebounding * 0.62
-    + simSkillsFromEvaluation(player as Record<string, unknown>).postDefense * 0.22
-    + simSkillsFromEvaluation(player as Record<string, unknown>).strength * 0.16
+    categoryRating(player, 'rebounding', simSkillsFromEvaluation(player as Record<string, unknown>).rebounding) * 0.62
+    + categoryRating(player, 'interiorDefense', simSkillsFromEvaluation(player as Record<string, unknown>).postDefense) * 0.18
+    + simSkillsFromEvaluation(player as Record<string, unknown>).strength * 0.12
+    + tendency(player, 'reboundCrash', 55) * 0.08
   ));
   return clamp(Math.round(40 + ((rebounding - 60) / 3.4) + (hash(`${seed}:team-rebounds`) % 5)), 34, 58);
 }
 
 function targetTeamAssists(players: Array<SimPlayerInput & { minutes: number }>, fieldGoalsMade: number, seed: string) {
   const creation = weightedTeamSkill(players, player => (
-    simSkillsFromEvaluation(player as Record<string, unknown>).passing * 0.5
-    + simSkillsFromEvaluation(player as Record<string, unknown>).ballHandle * 0.2
-    + simSkillsFromEvaluation(player as Record<string, unknown>).offenseIq * 0.22
-    + simSkillsFromEvaluation(player as Record<string, unknown>).shotIq * 0.08
+    categoryRating(player, 'playmaking', simSkillsFromEvaluation(player as Record<string, unknown>).passing) * 0.44
+    + simSkillsFromEvaluation(player as Record<string, unknown>).ballHandle * 0.16
+    + categoryRating(player, 'basketballIq', simSkillsFromEvaluation(player as Record<string, unknown>).offenseIq) * 0.18
+    + simSkillsFromEvaluation(player as Record<string, unknown>).shotIq * 0.07
+    + tendency(player, 'passFirst', 50) * 0.1
+    + tendency(player, 'pickAndRollBallHandler', 45) * 0.05
   ));
   const assistedRate = clamp(0.48 + ((creation - 60) / 155) + ((hash(`${seed}:team-assists`) % 7) - 3) / 100, 0.42, 0.76);
   return clamp(Math.round(fieldGoalsMade * assistedRate), 12, Math.min(34, Math.max(12, fieldGoalsMade)));
@@ -242,24 +292,35 @@ function targetTeamAssists(players: Array<SimPlayerInput & { minutes: number }>,
 
 function shootingLine(points: number, variance: number, player: SimPlayerInput) {
   const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
-  const perimeterProfile = sim.threePoint + sim.shotIq * 0.35;
-  const interiorProfile = sim.closeShot * 0.45 + sim.dunking * 0.35 + sim.postOffense * 0.2;
-  const threeRate = clamp(0.08 + (perimeterProfile - interiorProfile + 40) / 210, 0.05, 0.48);
+  const threePoint = categoryRating(player, 'threePoint', sim.threePoint);
+  const midRange = categoryRating(player, 'midRange', sim.midRange);
+  const finishing = categoryRating(player, 'finishing', (sim.closeShot + sim.dunking + sim.postOffense) / 3);
+  const threeFrequency = tendency(player, 'threePointFrequency', 58);
+  const catchAndShoot = tendency(player, 'catchAndShootFrequency', 55);
+  const pullUp = tendency(player, 'pullUpFrequency', 50);
+  const paintAttack = tendency(player, 'paintAttack', 58);
+  const rimFinish = tendency(player, 'rimFinishFrequency', 55);
+  const foulPressure = tendency(player, 'drawFoulPressure', (sim.freeThrow + finishing + paintAttack) / 3);
+  const perimeterProfile = threePoint * 0.56 + sim.shotIq * 0.18 + threeFrequency * 0.18 + catchAndShoot * 0.05 + pullUp * 0.03;
+  const interiorProfile = finishing * 0.45 + sim.closeShot * 0.18 + sim.dunking * 0.14 + sim.postOffense * 0.08 + paintAttack * 0.1 + rimFinish * 0.05;
+  const threeRate = clamp(0.08 + (perimeterProfile - interiorProfile + 52) / 170, 0.04, 0.62);
   const threePointersMade = Math.min(Math.floor(points / 3), Math.floor(points * threeRate / 3));
   let remaining = points - (threePointersMade * 3);
-  let freeThrowsMade = Math.min(remaining, Math.round(((sim.freeThrow + sim.dunking + sim.closeShot) / 240) * (variance % 7)));
+  const freeThrowPressure = clamp(foulPressure * 0.45 + paintAttack * 0.24 + finishing * 0.22 + sim.freeThrow * 0.09, 35, 99);
+  let freeThrowsMade = Math.min(remaining, Math.round((freeThrowPressure / 100) * (variance % 7)));
   if ((remaining - freeThrowsMade) % 2 !== 0 && freeThrowsMade > 0) freeThrowsMade -= 1;
   remaining -= freeThrowsMade;
   const twoPointersMade = Math.max(0, Math.floor(remaining / 2));
   const fieldGoalsMade = twoPointersMade + threePointersMade;
   const shotQuality = clamp((sim.shotIq + sim.confidenceMultiplier * 80 + sim.formMultiplier * 80) / 240, 0.48, 0.9);
+  const extraFreeThrowAttempts = Math.max(variance % 3, Math.round((freeThrowPressure - 62) / 14));
   return {
     fieldGoalsMade,
     fieldGoalsAttempted: fieldGoalsMade + 2 + Math.max(0, Math.round((variance % 7) * (1.04 - shotQuality))),
     threePointersMade,
     threePointersAttempted: threePointersMade + Math.max(1, Math.round(threeRate * 8) + (variance % 3)),
     freeThrowsMade,
-    freeThrowsAttempted: freeThrowsMade + (variance % 3),
+    freeThrowsAttempted: freeThrowsMade + extraFreeThrowAttempts,
   };
 }
 
@@ -271,13 +332,25 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
   const rebounds = distributeStatTotal(players, targetTeamRebounds(players, seed), `${seed}:rebounds`, (player, index) => (
     player.minutes
     * positionFactor(player, 'rebound')
-    * (simSkillsFromEvaluation(player as Record<string, unknown>).rebounding * 0.64 + simSkillsFromEvaluation(player as Record<string, unknown>).postDefense * 0.22 + simSkillsFromEvaluation(player as Record<string, unknown>).strength * 0.14)
+    * (
+      categoryRating(player, 'rebounding', simSkillsFromEvaluation(player as Record<string, unknown>).rebounding) * 0.62
+      + categoryRating(player, 'interiorDefense', simSkillsFromEvaluation(player as Record<string, unknown>).postDefense) * 0.2
+      + simSkillsFromEvaluation(player as Record<string, unknown>).strength * 0.12
+      + tendency(player, 'reboundCrash', 55) * 0.06
+    )
     * (0.95 + (hash(`${seed}:${index}:rebound-variance`) % 15) / 100)
   ));
   const assists = distributeStatTotal(players, targetTeamAssists(players, fieldGoalsMade, seed), `${seed}:assists`, (player, index) => (
     player.minutes
     * positionFactor(player, 'assist')
-    * (simSkillsFromEvaluation(player as Record<string, unknown>).passing * 0.58 + simSkillsFromEvaluation(player as Record<string, unknown>).ballHandle * 0.18 + simSkillsFromEvaluation(player as Record<string, unknown>).offenseIq * 0.18 + simSkillsFromEvaluation(player as Record<string, unknown>).shotIq * 0.06)
+    * (
+      categoryRating(player, 'playmaking', simSkillsFromEvaluation(player as Record<string, unknown>).passing) * 0.5
+      + simSkillsFromEvaluation(player as Record<string, unknown>).ballHandle * 0.16
+      + categoryRating(player, 'basketballIq', simSkillsFromEvaluation(player as Record<string, unknown>).offenseIq) * 0.16
+      + simSkillsFromEvaluation(player as Record<string, unknown>).shotIq * 0.06
+      + tendency(player, 'passFirst', 50) * 0.08
+      + tendency(player, 'pickAndRollBallHandler', 45) * 0.04
+    )
     * (0.95 + (hash(`${seed}:${index}:assist-variance`) % 15) / 100)
   ));
   const boxPlayers = players.map((player, index): PlayerBoxScore => {
@@ -293,8 +366,8 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       points: points[index],
       rebounds: playerRebounds,
       assists: assists[index],
-      steals: Math.min(5, Math.floor((sim.stealsSkill - 55) / 18) + (variance % 2)),
-      blocks: Math.min(5, Math.floor((sim.blocking - 55) / 18) + Math.floor((variance / 7) % 2)),
+      steals: Math.min(5, Math.floor((sim.stealsSkill + tendency(player, 'defensivePlaymaking', sim.stealsSkill) - 110) / 34) + (variance % 2)),
+      blocks: Math.min(5, Math.floor((sim.blocking + categoryRating(player, 'interiorDefense', sim.blocking) - 110) / 34) + Math.floor((variance / 7) % 2)),
       turnovers: Math.max(0, Math.floor((variance / 11) % 4) - Math.floor((sim.ballHandle + sim.offenseIq - 140) / 32)),
       ...line,
       offensiveRebounds,

@@ -129,6 +129,65 @@ describe('NBA game simulation', () => {
     expect(result.home.points).toBeGreaterThan(result.away.points - 8);
   });
 
+  it('uses rating-engine category grades and tendencies to shape player production', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'ENGINE',
+        players: [
+          {
+            playerId: 'category-shooter',
+            name: 'Category Shooter',
+            position: 'SG',
+            minutes: 36,
+            shooting: 70,
+            playmaking: 66,
+            defense: 68,
+            category_skill_grades: {
+              threePoint: { rating: 96, grade: 'A+' },
+              finishing: { rating: 62, grade: 'C-' },
+              playmaking: { rating: 72, grade: 'C+' },
+            },
+            tendencies: {
+              threePointFrequency: 96,
+              catchAndShootFrequency: 94,
+              paintAttack: 42,
+              rimFinishFrequency: 45,
+            },
+          },
+          {
+            playerId: 'category-driver',
+            name: 'Category Driver',
+            position: 'SF',
+            minutes: 36,
+            shooting: 70,
+            playmaking: 66,
+            defense: 68,
+            category_skill_grades: {
+              threePoint: { rating: 66, grade: 'C' },
+              finishing: { rating: 94, grade: 'A' },
+              playmaking: { rating: 74, grade: 'C+' },
+            },
+            tendencies: {
+              threePointFrequency: 34,
+              catchAndShootFrequency: 38,
+              paintAttack: 94,
+              rimFinishFrequency: 92,
+            },
+          },
+          { playerId: 'engine-pg', name: 'Engine PG', position: 'PG', minutes: 32, shooting: 76, playmaking: 84, defense: 72 },
+          { playerId: 'engine-pf', name: 'Engine PF', position: 'PF', minutes: 30, shooting: 72, playmaking: 60, defense: 78, rebounding: 82 },
+          { playerId: 'engine-c', name: 'Engine C', position: 'C', minutes: 28, shooting: 68, playmaking: 54, defense: 82, rebounding: 88 },
+        ],
+      },
+      away: fixture.away,
+    }, 'rating-engine-sim-seed');
+
+    const lines = new Map(result.home.players.map(player => [player.name, player]));
+    expect(lines.get('Category Shooter')!.threePointersAttempted).toBeGreaterThan(lines.get('Category Driver')!.threePointersAttempted);
+    expect(lines.get('Category Shooter')!.points).toBeGreaterThan(0);
+    expect(lines.get('Category Driver')!.freeThrowsAttempted).toBeGreaterThanOrEqual(lines.get('Category Shooter')!.freeThrowsAttempted);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },
