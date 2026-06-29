@@ -8,6 +8,7 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { gradeFromNumeric } from '@/domain/nba/gradeScale';
 import type { NbaGrade } from '@/domain/nba/identity';
 import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
@@ -909,7 +910,11 @@ export default function RosterScreen() {
           const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
           const isUntouchable = isMine && myUntouchables.includes(pid);
           const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
-          const profile = profilesByName[normalizePlayerName(item)] || profilesByName[item.full_name] || profilesByName[item.name] || null;
+          const profile = profilesByName[normalizePlayerName(item)]
+            || profilesByName[item.full_name]
+            || profilesByName[item.name]
+            || resolveBaselineRatingProfile(item, { era: eraKey, currentYear })
+            || null;
           const gradeChips = rosterGradeChips(item, profile);
           const bestGrade = strongestGrade(item, profile);
           const archetype = getSportArchetypeForYear(item, profile, currentYear, authoritativeSport);

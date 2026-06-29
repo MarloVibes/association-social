@@ -347,6 +347,14 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['agility', 'vertical'], weight: 10 },
       ]);
     case 'potential':
+      {
+        const curvePotential = numberFrom(
+          player?.development_curve?.potential
+          ?? profile?.development_curve?.potential
+          ?? player?.baselineRatingProfile?.development_curve?.potential,
+        );
+        if (curvePotential !== null) return curvePotential;
+      }
       return potentialRating(player, profile);
     case 'role':
       return roleRating(player, profile);

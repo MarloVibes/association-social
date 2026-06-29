@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
 import type { VisibleNbaIdentity } from '@/domain/nba/identity';
+import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
 import {
   buildScoutingGrades,
@@ -35,6 +36,25 @@ const POSITION_COLORS: Record<string, string> = {
   PG: '#00ff87', SG: '#00ccff', SF: '#ff9900', PF: '#ff4444', C: '#aa44ff',
   G: '#00ccff', F: '#ff9900', 'G-F': '#88ddaa', 'F-G': '#88ddaa', 'F-C': '#cc7744', 'C-F': '#cc7744',
 };
+
+const POSITION_NAME_TO_ABBR: Record<string, string> = {
+  'point guard': 'PG',
+  'shooting guard': 'SG',
+  'small forward': 'SF',
+  'power forward': 'PF',
+  center: 'C',
+};
+
+function cleanPositionLabel(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '?';
+  const parts = raw
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => POSITION_NAME_TO_ABBR[part.toLowerCase()] || part.toUpperCase());
+  return [...new Set(parts)].join(' / ') || '?';
+}
 
 
 
@@ -366,18 +386,20 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   if (!player) return null;
 
   const name = player.full_name || player.name || '';
-  const pos = profile?.position || player.position || '?';
-  const posColor = POSITION_COLORS[pos.split('-')[0]] || '#888';
-  const seasons = profile?.seasons || [];
-  const profileAccolades = Array.isArray(profile?.accolades) ? profile.accolades : [];
+  const resolvedProfile = profile || resolveBaselineRatingProfile(player, { era });
+  const pos = resolvedProfile?.position || player.position || '?';
+  const posLabel = cleanPositionLabel(pos);
+  const posColor = POSITION_COLORS[posLabel.split(/[/-]/)[0]?.trim()] || '#888';
+  const seasons = resolvedProfile?.seasons || [];
+  const profileAccolades = Array.isArray(resolvedProfile?.accolades) ? resolvedProfile.accolades : [];
   const playerAccolades = Array.isArray(player?.accolades) ? player.accolades : [];
   const accolades = [...new Set([...profileAccolades, ...playerAccolades])];
   // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
   const brefId = extractBrefId(player);
   // Origin line: college if known, else high school (prep-to-pro), else country (overseas)
-  const origCollege = profile?.college || player.college || '';
-  const origHS = profile?.high_school || player.high_school || '';
-  const origCountry = player.country || profile?.country || '';
+  const origCollege = resolvedProfile?.college || player.college || '';
+  const origHS = resolvedProfile?.high_school || player.high_school || '';
+  const origCountry = player.country || resolvedProfile?.country || '';
   const originValue = origCollege || origHS || origCountry;
   const originLabel = origCollege ? 'College' : (origHS ? 'High School' : 'From');
 
@@ -388,12 +410,13 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
     : (player.passing_yards != null || player.rushing_yards != null || player.receiving_yards != null || player.sacks != null) ? 'madden'
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
-  const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
-  const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, profile) : null;
-  const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, profile) : [];
-  const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, profile) : null;
-  const playerGrades = isNBAPlayer ? buildScoutingGrades(player, profile) : null;
-  const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, selectedCompareProfile) : null;
+  const identity = isNBAPlayer ? getVisibleIdentity(player, resolvedProfile) : null;
+  const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, resolvedProfile) : null;
+  const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, resolvedProfile) : [];
+  const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, resolvedProfile) : null;
+  const playerGrades = isNBAPlayer ? buildScoutingGrades(player, resolvedProfile) : null;
+  const resolvedCompareProfile = selectedCompareProfile || (selectedComparePlayer ? resolveBaselineRatingProfile(selectedComparePlayer, { era }) : null);
+  const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, resolvedCompareProfile) : null;
   const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
   const filteredCompareCandidates = compareQuery.trim()
     ? compareCandidates.filter(candidate => searchMatches(candidate, compareQuery)).slice(0, 10)
@@ -462,15 +485,15 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                   <Text style={styles.heroName}>{name}</Text>
                   <View style={styles.heroMeta}>
                     <View style={[styles.posBadge, { backgroundColor: posColor + '22', borderColor: posColor }]}>
-                      <Text style={[styles.posBadgeText, { color: posColor }]}>{pos}</Text>
+                      <Text style={[styles.posBadgeText, { color: posColor }]}>{posLabel}</Text>
                     </View>
                     {player.team ? <Text style={styles.heroTeam}>{player.team}</Text> : null}
                   </View>
-                  {(profile?.height || profile?.weight) ? (
-                    <Text style={styles.physical}>{[profile.height, profile.weight ? profile.weight + ' lbs' : ''].filter(Boolean).join(' · ')}</Text>
+                  {(resolvedProfile?.height || resolvedProfile?.weight) ? (
+                    <Text style={styles.physical}>{[resolvedProfile.height, resolvedProfile.weight ? resolvedProfile.weight + ' lbs' : ''].filter(Boolean).join(' · ')}</Text>
                   ) : null}
-                  {profile?.birth_date ? (
-                    <Text style={styles.birthDate}>Born: {profile.birth_date}</Text>
+                  {resolvedProfile?.birth_date ? (
+                    <Text style={styles.birthDate}>Born: {resolvedProfile.birth_date}</Text>
                   ) : null}
                   {originValue ? (
                     <Text style={styles.birthDate}>{originLabel}: {originValue}</Text>

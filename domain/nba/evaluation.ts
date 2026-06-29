@@ -76,12 +76,28 @@ function sourceObject(player: Record<string, any>, profile: Record<string, any> 
   return candidates.find(value => value && typeof value === 'object') || {};
 }
 
+function ratingModelValue(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: string): number | null {
+  const candidates = [
+    profile?.era_adjusted_profiles?.[key],
+    profile?.attribute_model?.[key],
+    player?.baselineRatingProfile?.era_adjusted_profiles?.[key],
+    player?.baselineRatingProfile?.attribute_model?.[key],
+    player?.era_adjusted_profiles?.[key],
+    player?.attribute_model?.[key],
+  ];
+  for (const value of candidates) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return clamp(numeric, 0, 100);
+  }
+  return null;
+}
+
 function hiddenValue(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: string, fallback = DEFAULT_SCORE) {
   const hidden = {
     ...sourceObject(profile || {}, null, 'hidden'),
     ...sourceObject(player, profile, 'hidden'),
   };
-  const direct = player?.[key] ?? profile?.[key];
+  const direct = ratingModelValue(player, profile, key) ?? player?.[key] ?? profile?.[key];
   return clamp(numberFrom(hidden[key] ?? direct, fallback), 0, 100);
 }
 
@@ -90,7 +106,7 @@ function optionalHiddenValue(player: Record<string, any>, profile: Record<string
     ...sourceObject(profile || {}, null, 'hidden'),
     ...sourceObject(player, profile, 'hidden'),
   };
-  const direct = player?.[key] ?? profile?.[key];
+  const direct = ratingModelValue(player, profile, key) ?? player?.[key] ?? profile?.[key];
   const numeric = numberFrom(hidden[key] ?? direct, Number.NaN);
   return Number.isFinite(numeric) ? clamp(numeric, 0, 100) : null;
 }
@@ -122,14 +138,30 @@ export function gradeSummary(score: unknown): VisibleEvaluationGrade {
 }
 
 function overallTalentScore(player: Record<string, any>, profile?: Record<string, any> | null) {
-  const knownValues = [
+  const detailedValues = [
+    optionalHiddenValue(player, profile, 'closeShot'),
+    optionalHiddenValue(player, profile, 'midRange'),
+    optionalHiddenValue(player, profile, 'threePoint'),
+    optionalHiddenValue(player, profile, 'passing'),
+    optionalHiddenValue(player, profile, 'ballHandle'),
+    optionalHiddenValue(player, profile, 'offenseIq'),
+    optionalHiddenValue(player, profile, 'perimeterDefense'),
+    optionalHiddenValue(player, profile, 'defenseIq'),
+    optionalHiddenValue(player, profile, 'rebounding'),
+    optionalHiddenValue(player, profile, 'speed'),
+    optionalHiddenValue(player, profile, 'acceleration'),
+    optionalHiddenValue(player, profile, 'stamina'),
+  ].filter((value): value is number => value !== null);
+
+  const broadValues = [
     optionalHiddenValue(player, profile, 'shooting'),
     optionalHiddenValue(player, profile, 'playmaking'),
     optionalHiddenValue(player, profile, 'defense'),
-    optionalHiddenValue(player, profile, 'rebounding'),
     optionalHiddenValue(player, profile, 'athleticism'),
     optionalHiddenValue(player, profile, 'basketballIq'),
   ].filter((value): value is number => value !== null);
+
+  const knownValues = detailedValues.length > 0 ? detailedValues : broadValues;
   if (knownValues.length === 0) return DEFAULT_SCORE;
   const base = average(knownValues);
   const highEnd = Math.max(...knownValues);
@@ -178,7 +210,11 @@ export function buildEvaluationLayers(player: Record<string, any>, profile?: Rec
   return {
     overallTalent: gradeSummary(overallTalentScore(player, profile)),
     currentForm: gradeSummary(currentFormScore(player, profile)),
-    potential: gradeSummary(hiddenValue(player, profile, 'potential', overallTalentScore(player, profile))),
+    potential: gradeSummary(
+      player?.development_curve?.potential
+      ?? profile?.development_curve?.potential
+      ?? hiddenValue(player, profile, 'potential', overallTalentScore(player, profile)),
+    ),
     confidence: { state: confidenceState(confidence) },
     chemistry: { state: chemistryState(chemistry) },
     health: { state: injured ? 'Injured' : limited ? 'Limited' : 'Healthy' },
