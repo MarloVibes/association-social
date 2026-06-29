@@ -1,303 +1,509 @@
-# Original Basketball Rating Import Design
+# Original Basketball Rating Engine Design
 
 ## Purpose
 
-Build an original basketball simulation rating model that imports public player statistics, creates internal numeric attributes, applies era context, and exposes only letter grades to users. The system must never copy commercial-game ratings, traits, descriptions, formulas, naming, layouts, or branding.
+Build the core NBA Franchise rating engine. This system creates the trusted starting point for every era league, fantasy draft, free agent pool, draft class, player card, trade screen, scouting screen, rotation screen, progression period, and game simulation.
 
-The first version focuses on NBA Franchise. The data and naming cleanup should also prepare the app to present the other sport modes as NFL Franchise and MLB Franchise.
+The goal is not to patch individual players after users notice mistakes. The goal is to produce a believable basketball universe where 2011 LeBron James, 2011 Derrick Rose, 2026 LeBron James, free agents, rookies, and role players all start with ratings that make basketball sense.
 
-## Compliance Rules
+The model is an original basketball simulation rating model built from public statistics, public context, internal scouting logic, and era-adjusted performance. It must not copy commercial-game ratings, proprietary trait systems, proprietary formulas, proprietary descriptions, proprietary layouts, or official game branding.
 
-- All source data must come from public basketball statistics, manually supplied roster patches, or internally generated scouting logic.
-- Public-facing app text must use neutral franchise labels: NBA Franchise, NFL Franchise, and MLB Franchise.
-- No commercial-game names, publisher names, studio names, branded attribute names, branded trait systems, or branded database labels may appear in app UI, source comments, docs, filenames, marketing copy, or database field names.
-- The model may use familiar basketball concepts such as shooting, passing, defense, rebounding, athleticism, role, workload, efficiency, age, and development curve.
-- The model must describe itself as an original basketball simulation rating model inspired by public statistics, scouting logic, and era-adjusted performance.
+## Core Principles
 
-## Source Inputs
+- Every player starts from a trusted global era snapshot.
+- Every league receives its own copy of those ratings at league creation.
+- Global snapshots are never mutated by league play.
+- League player ratings evolve based on that league's timeline.
+- Numeric attributes are generated first.
+- Visible grades are generated from numeric attributes.
+- Screens never manually calculate their own grades.
+- Current ability and potential are separate.
+- Role, usage, impact, trade value, and development phase are separate.
+- Fantasy drafts, free agency, trades, scouting, player cards, simulation, and upgrades all read from the same rating source.
 
-### Public Stats Import
+## Data Layers
 
-The importer reads public season-level and career-level basketball data:
+### Global Era Snapshots
 
-- player identity: name, position, team, height, weight, age, draft year when available
-- per-game stats: points, rebounds, assists, steals, blocks, minutes
-- shooting profile: field goal attempts, three-point attempts, free throw attempts, percentages
-- advanced stats when available: usage, efficiency, win contribution, turnover rate, rebound rates, assist rate, steal rate, block rate
-- season context: pace, league averages, team offensive/defensive environment
+Global snapshots are read-only baseline profiles. They power new league creation, fantasy drafts, era rosters, free agent pools, and draft class previews.
 
-The importer must save raw public-stat snapshots separately from generated ratings so future model changes can regenerate profiles without re-scraping.
-
-### Manual Patch Import
-
-The system supports CSV or JSON patches for roster moves and missing public fields. Patch files can add:
-
-- current team
-- jersey number
-- position correction
-- injury state
-- roster status
-- manually reviewed scouting notes
-
-Manual patches cannot directly assign elite visible grades. They can only adjust source facts or request a model rerun.
-
-## Data Model
-
-Use neutral collection and field names:
-
-- `player_ratings`
-- `attribute_model`
-- `era_adjusted_profiles`
-- `skill_grades`
-- `archetypes`
-- `traits`
-- `development_curve`
-
-Each generated player profile should contain:
+Collection shape:
 
 ```ts
-type PlayerRatingProfile = {
+type GlobalPlayerRatingSnapshot = {
+  collection: 'global_player_rating_snapshots';
+  snapshot_id: string;
   player_id: string;
   full_name: string;
-  season: number;
-  team: string;
-  position: string;
+  era_key: string;
+  season_year: number;
+  team_abbr: string | null;
+  roster_status: 'active' | 'free_agent' | 'draft_prospect' | 'draft_rights' | 'retired_era_pool';
+  position_primary: string;
+  position_secondary?: string;
   source_snapshot_id: string;
-  attribute_model: Record<string, number>;
-  era_adjusted_profiles: Record<string, number>;
-  skill_grades: Record<string, string>;
+  source_confidence: 'high' | 'medium' | 'low';
+  attribute_model: AttributeModel;
+  skill_grades: SkillGrades;
+  role_profile: RoleProfile;
+  impact_profile: ImpactProfile;
+  development_curve: DevelopmentCurve;
+  tendencies: PlayerTendencies;
   archetypes: string[];
   traits: string[];
-  development_curve: {
-    potential: number;
-    peak_start_age: number;
-    peak_end_age: number;
-    aging_resistance: number;
-  };
+  audit_flags: string[];
   model_version: string;
   generated_at_ms: number;
 };
 ```
 
-Numeric attributes are internal simulation values. User-facing screens display grades, tiers, archetypes, traits, and descriptions without showing the hidden numbers.
+### League Player Ratings
+
+League ratings are copied from global snapshots when the league is created. These records evolve forever inside that league.
+
+Collection shape:
+
+```ts
+type LeaguePlayerRating = GlobalPlayerRatingSnapshot & {
+  collection: 'league_player_ratings';
+  league_id: string;
+  copied_from_snapshot_id: string;
+  league_season_year: number;
+  progression_history: ProgressionEvent[];
+  upgrade_history: UpgradeEvent[];
+  injury_adjustments: RatingAdjustment[];
+  morale_adjustments: RatingAdjustment[];
+  coaching_fit_adjustments: RatingAdjustment[];
+};
+```
+
+This prevents one user's 2011 LeBron from changing every other league. Two users can start the same era and produce different basketball histories.
 
 ## Attribute Model
 
-The model generates internal values from public statistics and scouting logic. Attributes include:
+The hidden numeric model uses 0-100 values. These numbers are not shown to users unless a future product decision explicitly enables it.
 
-- closeShot
-- midRange
-- threePoint
-- freeThrow
-- dunking
-- shotIq
-- passing
-- ballHandle
-- offenseIq
-- clutch
-- perimeterDefense
-- postDefense
-- blocking
-- steals
-- defenseIq
-- helpDefense
-- speed
-- acceleration
-- strength
-- rebounding
-- postOffense
-- stamina
-- potential
+```ts
+type AttributeModel = {
+  closeShot: number;
+  drivingLayup: number;
+  drivingDunk: number;
+  standingDunk: number;
+  drawFoul: number;
+  hands: number;
+  midRange: number;
+  threePoint: number;
+  freeThrow: number;
+  shotIq: number;
+  shotConsistency: number;
+  passing: number;
+  passIq: number;
+  passVision: number;
+  ballHandle: number;
+  speedWithBall: number;
+  offenseIq: number;
+  clutch: number;
+  perimeterDefense: number;
+  lateralQuickness: number;
+  postDefense: number;
+  blocking: number;
+  steals: number;
+  defenseIq: number;
+  helpDefense: number;
+  speed: number;
+  acceleration: number;
+  vertical: number;
+  agility: number;
+  strength: number;
+  stamina: number;
+  hustle: number;
+  offensiveRebound: number;
+  defensiveRebound: number;
+  postOffense: number;
+  durability: number;
+  potential: number;
+};
+```
 
-Each attribute is calculated from several public indicators. Examples:
+The current app model already has several of these fields. Implementation should migrate carefully rather than breaking existing player cards, rotations, upgrades, and simulation.
 
-- threePoint: attempt rate, accuracy, role volume, era average, assisted creation context
-- midRange: scoring volume, shot diet proxy, free throw touch, role context
-- dunking: position, rim scoring profile, free throw rate, age, size, public scouting notes when available
-- passing: assists, assist rate, turnover context, usage, position
-- defenseIq: minutes, team defensive role, steal/block signals, defensive workload, playoff role, size-position match
-- stamina: minutes, games played, role consistency, injury availability
-- potential: age, production relative to age, draft status when available, development curve, role growth
+## Visible Skill Grades
 
-No single statistic should fully determine a rating. The model should blend volume, efficiency, role, age, and era context.
+Visible grades are generated from weighted category formulas, not from one raw attribute.
 
-## Upgrade Categories
+```ts
+type SkillGrades = {
+  finishing: string;
+  midRange: string;
+  threePoint: string;
+  playmaking: string;
+  perimeterDefense: string;
+  interiorDefense: string;
+  athleticism: string;
+  rebounding: string;
+  basketballIq: string;
+  postOffense: string;
+  durability: string;
+  potential: string;
+};
+```
 
-Every flexible attribute must be assigned to a GM-upgrade category. If an attribute does not naturally fit an existing category, the model must create a new neutral category instead of leaving it disconnected from the upgrade system.
+Example category formulas:
 
-Initial categories:
+- Finishing: closeShot, drivingLayup, drivingDunk, standingDunk, drawFoul, hands
+- Three-point: threePoint, shotIq, shotConsistency, offenseIq, shot volume modifier
+- Mid-range: midRange, shotIq, shotConsistency, offenseIq, self-creation modifier
+- Playmaking: passing, passIq, passVision, ballHandle, speedWithBall, turnover protection
+- Perimeter defense: perimeterDefense, lateralQuickness, steals, defenseIq, helpDefense
+- Interior defense: postDefense, blocking, strength, defenseIq, helpDefense
+- Athleticism: speed, acceleration, vertical, agility, stamina, hustle
+- Rebounding: offensiveRebound, defensiveRebound, vertical, strength, hustle
+- Basketball IQ: offenseIq, defenseIq, shotIq, passIq, helpDefense
+- Potential: age curve, current ability, production relative to age, draft status, hidden development, performance trend, injury history, minutes opportunity
 
-- Finishing: closeShot, dunking
-- Shooting: midRange, threePoint, freeThrow, shotIq
-- Playmaking: passing, ballHandle, offenseIq
-- Defense: perimeterDefense, postDefense, blocking, steals, defenseIq, helpDefense
-- Rebounding: rebounding
-- Athleticism: speed, acceleration, strength, stamina
-- Post: postOffense
-- Intangibles: clutch
-- Development: potential
+Skill grades should reward true skills. Role players can have elite skills without being elite overall players.
 
-GM upgrade points can target category grades or direct attributes. Category upgrades should resolve to the attributes assigned to that category, and direct attribute upgrades should still update the owning category grade. The implementation must include a coverage test proving every attribute in the model maps to one category.
+Example:
 
-## Grade Gate
+- A bench shooter can have `threePoint: A-`
+- The same player can have `usageGrade: C+`
+- The same player can have `overallImpactGrade: B-`
 
-Visible grades must always come from internal numeric attributes. A manual review can request a rerun or change source facts, but cannot bypass the numeric gate.
+This prevents limited-minute specialists from becoming fake superstars while still preserving their real value.
 
-The grade ladder:
+## Grade Scale
 
-- S: numeric value 99 or above
-- A+: numeric value 95-98
-- A: numeric value 92-94
-- A-: numeric value 89-91
-- B+: numeric value 86-88
-- B: numeric value 83-85
-- B-: numeric value 80-82
-- C+: numeric value 77-79
-- C: numeric value 74-76
-- C-: numeric value 71-73
-- D+: numeric value 68-70
-- D: numeric value 65-67
-- D-: numeric value 60-64
-- F: numeric value below 60
+The shared grade conversion function must be used everywhere.
 
-The implementation must include tests proving that A, A+, and S cannot be assigned unless the underlying numeric value qualifies.
+- S: 99-100
+- A+: 95-98
+- A: 92-94
+- A-: 89-91
+- B+: 85-88
+- B: 80-84
+- B-: 75-79
+- C+: 70-74
+- C: 65-69
+- C-: 60-64
+- D: 50-59
+- F: 0-49
+
+No screen may assign `S`, `A+`, `A`, or any other grade directly. It must call the shared conversion function.
+
+## Current Ability, Potential, And Development Phase
+
+Potential means future growth room, not current role.
+
+Examples:
+
+- 2011 LeBron James should have elite current ability and `A+` potential because he is age 26 and still in his prime runway.
+- 2011 Derrick Rose should have elite current ability and `A+` potential because he is age 22 and playing at MVP level.
+- 2026 LeBron James can still have high current ability in passing, IQ, strength, finishing, and clutch while having lower potential such as `B-` because he has already peaked.
+
+Development labels explain the potential grade:
+
+- High Upside
+- Breakout Candidate
+- Rising Star
+- Prime Star
+- Near Peak
+- Stable Veteran
+- Legacy Star
+- Declining
+- Sharp Decline Risk
+
+Scouting screens must not label a `C` potential as "Contributor." Role labels and potential labels are different ideas.
+
+## Role, Usage, Impact, And Trade Value
+
+The model separates skill from influence.
+
+```ts
+type RoleProfile = {
+  minutesGrade: string;
+  usageGrade: string;
+  offensiveRole: 'primary_creator' | 'secondary_creator' | 'spot_up' | 'rim_runner' | 'post_hub' | 'connector' | 'defense_first' | 'bench_scorer';
+  defensiveRole: 'point_of_attack' | 'wing_stopper' | 'help_defender' | 'rim_protector' | 'post_defender' | 'team_defender';
+  roleStability: number;
+};
+
+type ImpactProfile = {
+  overallImpactGrade: string;
+  starPowerGrade: string;
+  tradeValueGrade: string;
+  contractValueGrade: string;
+  playoffReliabilityGrade: string;
+};
+```
+
+This gives users better roster-building information. A player can be an elite shooter, a poor defender, a low-usage bench piece, a high-value young prospect, or an expensive declining star without those ideas collapsing into one vague grade.
+
+## Tendencies
+
+Tendencies are essential because box-score stats alone do not describe how a player plays.
+
+```ts
+type PlayerTendencies = {
+  paintAttack: number;
+  rimFinishFrequency: number;
+  dunkFrequency: number;
+  drawFoulPressure: number;
+  midRangeFrequency: number;
+  threePointFrequency: number;
+  catchAndShootFrequency: number;
+  pullUpFrequency: number;
+  postTouchFrequency: number;
+  transitionFrequency: number;
+  passFirst: number;
+  isolationFrequency: number;
+  pickAndRollBallHandler: number;
+  pickAndRollRollMan: number;
+  defensivePlaymaking: number;
+  foulRisk: number;
+  reboundCrash: number;
+};
+```
+
+Tendencies are derived from all available public indicators:
+
+- shot attempts by zone when available
+- shooting volume and efficiency
+- free throw rate
+- assist rate
+- turnover rate
+- usage
+- position
+- height and weight
+- age and athletic curve
+- offensive rebound and defensive rebound rates
+- steal and block rates
+- minutes role
+- public scouting notes supplied by internal patch files
+
+When a stat source cannot explain a known basketball behavior, the model can use a neutral manual scouting tag. The tag should describe observable basketball style, not copy a proprietary tendency or badge.
+
+Examples:
+
+- `elite_rim_pressure`
+- `vertical_lob_threat`
+- `low_volume_shooter`
+- `high_usage_creator`
+- `defensive_wing_assignment`
+- `post_touch_big`
+
+## Source Inputs
+
+The source pipeline should prefer public, auditable inputs:
+
+- player identity and biographical data
+- season per-game stats
+- per-minute stats
+- shooting splits
+- advanced stats
+- play-by-play derived stats when available
+- public tracking-style data when available
+- salary and contract context
+- awards and honors
+- playoff role
+- draft position
+- team context
+- era league averages
+- neutral manual scouting tags for missing style information
+
+The system must keep raw source snapshots separate from generated ratings. If formulas improve, the app can regenerate ratings without losing source evidence.
 
 ## Era Adjustment
 
-Era adjustment compares players to their actual season environment before creating final grades.
+Era adjustment compares players to their actual basketball environment.
 
-The era pass should account for:
+The model should account for:
 
 - league pace
-- league shooting environment
+- league shot profile
+- league three-point rate
 - position norms
-- minutes and role context
-- team offensive and defensive context
-- playoff workload when available
+- role norms
+- minutes norms
+- playoff context
+- salary context within that era
+- team style
 - age and career stage
-- known role archetypes from public performance indicators
 
-Example: a defensive wing with heavy minutes, strong salary/workload signal, playoff defensive assignments, and above-average all-around production should not be reduced to a generic average role label just because their box score is not superstar-level.
+Example: a 2011 wing who guarded elite scorers, played heavy playoff minutes, rebounded well, and carried real two-way responsibility should not be treated as an average role player because his scoring average was not superstar-level.
 
-Era adjustment should create a normalized context score per attribute, then blend that score with raw production and scouting logic.
+## Free Agents
 
-## Archetypes And Traits
+Free agents need the same rating quality as rostered players.
 
-Archetypes and traits are original labels derived from generated attributes:
+Free agent snapshots should include:
 
-- Two-Way Wing
-- Floor General
-- Stretch Big
-- Rim Protector
-- Slashing Creator
-- Movement Shooter
-- Glass Cleaner
-- Point Forward
-- Defensive Anchor
-- Bench Spark
+- last known team
+- last known season
+- contract expectation
+- role expectation
+- morale/loyalty/finance tendencies
+- current ability
+- potential
+- durability and decline risk
 
-Traits are plain basketball descriptors, not branded systems:
+Free agency screens, CPU signing logic, extension logic, and trade value must all use these profiles.
 
-- high motor
-- reliable shooter
-- defensive communicator
-- transition threat
-- foul pressure
-- low mistake rate
-- late-game poise
+## Draft Classes
 
-Traits should influence simulation lightly and explain player identity clearly.
+Draft class prospects need baseline ratings before the draft starts.
 
-## Import Pipeline
+Prospect profiles should include:
 
-1. Pull public current roster and season data.
-2. Apply manual roster patches.
-3. Store raw source snapshots.
-4. Generate base internal attributes from source stats.
-5. Run era-adjustment pass.
-6. Generate visible skill grades from internal values.
-7. Generate archetypes, traits, and development curve.
-8. Write rating profiles to neutral fields.
-9. Update player vault references without overwriting custom user-created players.
-10. Produce an audit report for outliers and missing source data.
+- projected pick
+- position
+- archetype
+- height and weight when available
+- age when available
+- school or source league
+- current ability range
+- potential grade
+- development curve
+- scouting strengths
+- scouting weaknesses
+- bust risk
+- NBA readiness
+- hidden numeric attributes
+- visible grades
 
-## Current Roster Updates
+Historic era draft classes should be fixed source classes, not randomly generated unless the league has advanced beyond known real draft classes or the commissioner explicitly chooses generated prospects.
 
-The importer should support quick updates for the 2026-2027 season setup:
+Fantasy drafts and live drafts must show enough information for users to make informed decisions.
 
-- add rookies from the latest draft class already stored in the vault source
-- update team rights and current team fields
-- support unsigned, traded, waived, and draft-rights statuses
-- avoid deleting prior season player history
+## Player Vault Relationship
 
-Current-season imports should create a new snapshot rather than mutating old era data in place.
+The player vault should store stable identity and history. Ratings should live in rating snapshots.
 
-## UI And App Label Cleanup
+Identity:
 
-App-visible sport labels must be:
+- player_id
+- name
+- birth date
+- height
+- weight
+- handedness if known
+- photo/avatar reference if available
+- real-world history references
 
-- NBA Franchise
-- NFL Franchise
-- MLB Franchise
+Ratings:
 
-Existing mode labels, onboarding preferences, dashboard labels, create-league labels, and docs should be renamed to neutral franchise labels.
+- global era snapshots
+- league-evolved copies
+- season stat history
+- progression and upgrade history
 
-Legacy league sport keys can remain internally only where they are already required for routing or backward compatibility. New public labels and new model fields must use neutral names.
+This prevents identity fields from being duplicated across eras while still allowing each era to have different ratings.
 
-## Safety Scanner
+## Simulation Relationship
 
-Add a source-safety test that prevents banned commercial-game branding from appearing in:
+Game simulation must use league player ratings, not display-only roster fields.
 
-- app labels
-- docs
-- code comments
-- filenames added for this system
-- database schema names created for this system
+Simulation should consider:
 
-To keep source files clean, the scanner should not store raw banned names in plain text. It can compare normalized hashes or segmented literals that do not appear as final source terms.
+- current league attributes
+- tendencies
+- coaching first-half preset
+- coaching second-half preset
+- rotation minutes
+- position fit
+- fatigue
+- injuries
+- morale
+- home arena context
+- player role and usage
 
-## Testing
+The live game feed, final box score, awards, standings, and player season stats should all come from this same simulation result.
 
-Tests must cover:
+## Upgrade Relationship
 
-- grade gate boundaries for S, A+, A, and A-
-- no elite grade without qualifying numeric value
-- public stats to attribute conversion for shooter, passer, defender, rebounder, and athletic finisher profiles
-- era-adjusted wing defender audit
-- manual patch cannot override the grade gate
-- generated profiles use neutral field names
-- app mode labels use neutral franchise labels
-- source safety scanner blocks banned branding terms
+Upgrade points modify league player ratings only. They do not modify global snapshots.
 
-## Rollout
+Every upgradeable attribute must belong to an upgrade category. If an attribute is added later, tests must fail until it is assigned to a category.
 
-Phase 1:
+Upgrade UI should be able to show:
 
-- neutral label cleanup
-- grade gate enforcement tests
-- pure attribute model module
-- era adjustment module
-- source safety scanner
+- current visible grade
+- whether the grade can be upgraded
+- next grade target
+- point cost
+- locked reason if not eligible
+- season limit if star/superstar rules apply
 
-Phase 2:
+The detailed upgrade-points design will be handled after this rating engine design.
 
-- importer CLI for public stats snapshots and manual patches
-- rating profile writer
-- vault update script
-- outlier audit report
+## UI Consumers
 
-Phase 3:
+These screens must read from the same rating source:
 
-- commissioner import/review UI
-- full current-season refresh workflow
-- expanded manual patch templates
+- league home team preview
+- roster
+- player card
+- player compare
+- trade center
+- fantasy draft
+- live draft
+- free agency
+- scouting
+- coaching/rotation fit
+- live mode matchup display
+- box score player links
+- player upgrades
+
+If a player is presented anywhere, the player should be tappable into the same player card.
 
 ## Acceptance Criteria
 
-- The app no longer shows commercial-game labels for NBA, NFL, or MLB modes.
-- The rating system uses only public statistics, manual source facts, and original formulas.
-- Generated database fields use neutral names.
-- Visible grades are always derived from qualifying internal numeric values.
-- Manual review cannot assign elite grades unless the internal numeric value qualifies.
-- The system can regenerate a player profile after source stats or formulas change.
-- Tests pass for grade gates, era adjustment, import schema, and source safety.
+- 2011 LeBron James starts as an elite current player with `A+` potential.
+- 2011 Derrick Rose starts as an elite current player with `A+` potential.
+- 2026 LeBron James keeps strong current skill grades but has lower future-growth potential, around `B-`, explained as a late-career or legacy phase.
+- Fantasy draft uses global rating snapshots.
+- League play uses league-copied ratings.
+- Free agents and draft prospects use the same rating profile structure as rostered players.
+- Every visible grade comes from hidden numeric values.
+- Every screen uses the shared grade conversion function.
+- No commercial-game rating source, naming, branding, formulas, badges, tendencies, or layouts are copied.
+- Manual scouting tags can fill public-stat gaps, but they must use original neutral basketball language.
+- Simulated games use current league ratings, tendencies, coaching, rotations, injuries, and morale.
+- Tests prove that elite grades cannot be shown unless the hidden numeric value qualifies.
+
+## Rollout
+
+Phase 1: Schema and grade source of truth.
+
+- Expand attribute model.
+- Add global snapshot and league rating types.
+- Add shared category grade calculations.
+- Add strict grade conversion tests.
+- Add upgrade category coverage tests.
+
+Phase 2: Source snapshot importer.
+
+- Store raw public stat snapshots.
+- Add manual neutral scouting tags.
+- Generate model profiles from source data.
+- Produce audit reports for outliers and missing fields.
+
+Phase 3: Era baselines.
+
+- Build 2011 sample with LeBron, Derrick Rose, Heat, Bulls, and obvious stars.
+- Build current-era sample with 2026 LeBron and current stars.
+- Add free agent baseline profiles.
+- Add draft class baseline profiles.
+
+Phase 4: App integration.
+
+- Make fantasy draft read global snapshots.
+- Copy snapshots into league ratings on league creation.
+- Make roster, compare, trade, scouting, free agency, and simulation read league ratings.
+- Remove screen-local grade fallbacks where possible.
+
+Phase 5: Full audit and tuning.
+
+- Run star/core-player audits by era.
+- Tune tendencies and potential curves.
+- Validate simulation output against plausible player roles.
+- Add missing source patches where public stats under-explain player style.
