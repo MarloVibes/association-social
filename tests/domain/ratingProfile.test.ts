@@ -70,10 +70,12 @@ describe('neutral player rating profile', () => {
     expect(profile.category_skill_grades.playmaking.rating).toBeGreaterThan(80);
     expect(profile.tendencies.pickAndRollBallHandler).toBeGreaterThan(70);
     expect(profile.tendencies.threePointFrequency).toBeGreaterThan(70);
+    expect(profile.development_curve.phase).toBeTruthy();
+    expect(profile.development_curve.potential_grade).toBeTruthy();
     expect(profile.archetypes.length).toBeGreaterThan(0);
     expect(profile.archetypes.join(' ')).not.toContain('Contributor');
     expect(profile.traits.length).toBeGreaterThan(0);
-    expect(profile.development_curve.potential).toBe(profile.era_adjusted_profiles.potential);
+    expect(profile.development_curve.potential).toBeGreaterThanOrEqual(profile.era_adjusted_profiles.potential);
   });
 
   it('applies manual source facts but does not allow manual elite grade overrides', () => {

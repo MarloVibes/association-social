@@ -10,6 +10,7 @@ import type { NbaGrade } from './identity';
 import { applyEraAdjustment, type EraAdjustmentContext } from './eraAdjustedProfiles';
 import { buildSkillGrades, type SkillGrades } from './skillGrades';
 import { buildPlayerTendencies, type PlayerTendencies } from './tendencies';
+import { buildDevelopmentCurve, type DevelopmentPhase } from './development';
 
 export type RatingPatch = Partial<Pick<
   PublicStatLine,
@@ -63,9 +64,13 @@ export type PlayerRatingProfile = {
   traits: string[];
   development_curve: {
     potential: number;
+    potential_grade: NbaGrade;
+    phase: DevelopmentPhase;
     peak_start_age: number;
     peak_end_age: number;
     aging_resistance: number;
+    growth_score: number;
+    decline_risk: number;
   };
   era_notes: string[];
   validation_warnings: string[];
@@ -109,18 +114,26 @@ function traitsFor(model: AttributeModel) {
 
 function developmentCurve(model: AttributeModel, source: PublicStatLine) {
   const age = Number(source.age || 25);
-  const aging_resistance = model.stamina >= 88 && model.offenseIq >= 84
-    ? 3
-    : model.potential >= 89
-      ? 2
-      : model.potential >= 82
-        ? 1
-        : 0;
+  const curve = buildDevelopmentCurve({
+    age,
+    currentImpactRating: Math.round((model.offenseIq + model.defenseIq + model.stamina + model.potential) / 4),
+    awardWeight: source.awardWeight,
+    draftPick: source.draftPick,
+    hiddenDevelopmentRating: model.potential,
+    injuryRisk: Math.max(5, 100 - model.durability),
+    minutesOpportunity: model.stamina,
+    performanceTrend: Number(source.winShares || 0) >= 8 ? 4 : 0,
+    scoutingTags: source.scoutingTags,
+  });
   return {
-    potential: model.potential,
-    peak_start_age: age <= 23 ? 25 : age <= 28 ? age + 1 : age,
-    peak_end_age: aging_resistance >= 2 ? 34 : 32,
-    aging_resistance,
+    potential: curve.potentialRating,
+    potential_grade: curve.potentialGrade,
+    phase: curve.phase,
+    peak_start_age: curve.peakStartAge,
+    peak_end_age: curve.peakEndAge,
+    aging_resistance: curve.agingResistance,
+    growth_score: curve.growthScore,
+    decline_risk: curve.declineRisk,
   };
 }
 
