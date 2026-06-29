@@ -8,6 +8,7 @@ import {
 } from './attributeModel';
 import type { NbaGrade } from './identity';
 import { applyEraAdjustment, type EraAdjustmentContext } from './eraAdjustedProfiles';
+import { buildSkillGrades, type SkillGrades } from './skillGrades';
 
 export type RatingPatch = Partial<Pick<
   PublicStatLine,
@@ -55,6 +56,7 @@ export type PlayerRatingProfile = {
   attribute_model: AttributeModel;
   era_adjusted_profiles: AttributeModel;
   skill_grades: Partial<Record<keyof AttributeModel, NbaGrade>>;
+  category_skill_grades: SkillGrades;
   archetypes: string[];
   traits: string[];
   development_curve: {
@@ -120,6 +122,12 @@ function developmentCurve(model: AttributeModel, source: PublicStatLine) {
   };
 }
 
+function shotVolumeModifier(source: PublicStatLine) {
+  const attempts = Number(source.threePointAttemptsPerGame || 0);
+  if (!Number.isFinite(attempts)) return 60;
+  return Math.max(50, Math.min(96, 58 + attempts * 5));
+}
+
 export function buildPlayerRatingProfile({
   source,
   source_snapshot_id,
@@ -142,6 +150,9 @@ export function buildPlayerRatingProfile({
     ? validateSkillGrades(era.era_adjusted_profiles, patch.skill_grades)
     : [];
   const skill_grades = skillGradesFromAttributes(era.era_adjusted_profiles);
+  const category_skill_grades = buildSkillGrades(era.era_adjusted_profiles, {
+    shotVolumeModifier: shotVolumeModifier(resolvedSource),
+  });
 
   return {
     collection: 'player_ratings',
@@ -157,6 +168,7 @@ export function buildPlayerRatingProfile({
     attribute_model,
     era_adjusted_profiles: era.era_adjusted_profiles,
     skill_grades,
+    category_skill_grades,
     archetypes: archetypesFor(era.era_adjusted_profiles, resolvedSource),
     traits: traitsFor(era.era_adjusted_profiles),
     development_curve: developmentCurve(era.era_adjusted_profiles, resolvedSource),

@@ -66,6 +66,8 @@ describe('neutral player rating profile', () => {
     expect(profile.attribute_model.passing).toBeGreaterThan(80);
     expect(profile.era_adjusted_profiles.threePoint).toBeGreaterThanOrEqual(profile.attribute_model.threePoint);
     expect(profile.skill_grades.passing).toBeTruthy();
+    expect(profile.category_skill_grades.threePoint.grade).toMatch(/A|B/);
+    expect(profile.category_skill_grades.playmaking.rating).toBeGreaterThan(80);
     expect(profile.archetypes.length).toBeGreaterThan(0);
     expect(profile.archetypes.join(' ')).not.toContain('Contributor');
     expect(profile.traits.length).toBeGreaterThan(0);
