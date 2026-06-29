@@ -143,6 +143,7 @@ function createSaveTeamCoachingPresetHandler({ getFirestore, serverTimestamp, Ht
     if (!result.valid) {
       throw callableError(HttpsError, 'invalid-argument', 'Coaching preset needs work before saving.', { errors: result.errors });
     }
+    const secondHalfPresetId = cleanText(request.data && request.data.secondHalfPresetId, result.preset.id);
     const presets = Array.isArray(team.data.coachingPresets) ? team.data.coachingPresets : [];
     await team.ref.update({
       coachingPresets: [
@@ -150,9 +151,10 @@ function createSaveTeamCoachingPresetHandler({ getFirestore, serverTimestamp, Ht
         result.preset,
       ],
       defaultCoachingPresetId: result.preset.id,
+      defaultSecondHalfCoachingPresetId: secondHalfPresetId,
       coachingUpdatedAt: serverTimestamp(),
     });
-    return { saved: true, teamId: team.id, presetId: result.preset.id };
+    return { saved: true, teamId: team.id, presetId: result.preset.id, secondHalfPresetId };
   };
 }
 

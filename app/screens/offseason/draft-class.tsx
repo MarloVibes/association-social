@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { auth, db, functions } from '@/constants/firebase';
 import {
   FIRST_GENERATED_NBA_DRAFT_YEAR,
@@ -54,6 +55,19 @@ type DraftClass = {
   published?: boolean;
   version?: number;
 };
+
+function prospectName(prospect: Prospect) {
+  return prospect.full_name || prospect.name || 'Unnamed prospect';
+}
+
+function prospectInitials(prospect: Prospect) {
+  return prospectName(prospect)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || '?';
+}
 
 export default function DraftClassScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -357,8 +371,11 @@ export default function DraftClassScreen() {
               ? 'This era uses a sourced NBA draft class. No generated class will be created for this year.'
               : 'No draft class has been generated yet.'}
           </Text>
-        ) : players.map(rawProspect => {
+        ) : players.map((rawProspect, index) => {
           const prospect = rawProspect as Prospect;
+          const projectedOverall = Number(prospect.draft_pick || (index + 1));
+          const projectedRound = Number(prospect.projectedRound || prospect.draft_round || Math.floor(index / Math.max(1, teamCount)) + 1);
+          const projectedPick = ((projectedOverall - 1) % Math.max(1, teamCount)) + 1;
           return (
           <View key={prospect.id || prospect.player_id || prospect.full_name} style={styles.prospectRow}>
             <TouchableOpacity
@@ -366,13 +383,23 @@ export default function DraftClassScreen() {
               onPress={() => canEditRows && openEdit(prospect)}
               style={styles.prospectMain}
             >
-              <View style={styles.roundBadge}>
-                <Text style={styles.roundLabel}>R{prospect.projectedRound || prospect.draft_round || '?'}</Text>
+              <View style={styles.prospectAvatar}>
+                <PlayerHeadshot
+                  fallback={<Text style={styles.prospectInitials}>{prospectInitials(prospect)}</Text>}
+                  imageStyle={styles.prospectHeadshot}
+                  player={prospect}
+                  sport={league?.sport || 'nba'}
+                />
               </View>
               <View style={styles.prospectCopy}>
-                <Text style={styles.prospectName}>{prospect.full_name || prospect.name || 'Unnamed prospect'}</Text>
+                <View style={styles.prospectTopLine}>
+                  <Text style={styles.prospectName} numberOfLines={1}>{prospectName(prospect)}</Text>
+                  <View style={styles.projectionBadge}>
+                    <Text style={styles.projectionText}>Projected #{projectedOverall}</Text>
+                  </View>
+                </View>
                 <Text style={styles.prospectMeta}>
-                  {[prospect.position, prospect.archetype, prospect.age ? `Age ${prospect.age}` : null]
+                  {[prospect.position || 'POS', `Round ${projectedRound}`, `Pick ${projectedPick}`, prospect.archetype, prospect.age ? `Age ${prospect.age}` : null]
                     .filter(Boolean).join(' · ')}
                 </Text>
               </View>
@@ -511,17 +538,24 @@ const styles = StyleSheet.create({
   },
   prospectMain: { flex: 1, minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 12 },
   deleteButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  roundBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 6,
+  prospectAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#18251e',
+    borderWidth: 1,
+    borderColor: '#284133',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  roundLabel: { color: '#00e58b', fontSize: 11, fontWeight: '800' },
+  prospectHeadshot: { width: 46, height: 46, borderRadius: 23 },
+  prospectInitials: { color: '#00e58b', fontSize: 13, fontWeight: '900' },
   prospectCopy: { flex: 1 },
+  prospectTopLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   prospectName: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  projectionBadge: { borderRadius: 6, backgroundColor: '#102018', borderWidth: 1, borderColor: '#00e58b33', paddingHorizontal: 8, paddingVertical: 4 },
+  projectionText: { color: '#00e58b', fontSize: 10, fontWeight: '900' },
   prospectMeta: { color: '#69706b', fontSize: 12, marginTop: 3 },
   modal: { flex: 1, backgroundColor: '#090b0a' },
   modalHeader: {

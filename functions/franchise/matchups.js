@@ -1739,9 +1739,11 @@ async function coachingPlanForTeam({ tx, scheduleRef, game, team }) {
     return { firstHalf, secondHalf };
   }
   const presets = Array.isArray(team.coachingPresets) ? team.coachingPresets : [];
-  const preset = presets.find(item => item && item.id === team.defaultCoachingPresetId) || null;
-  const fallback = safeCoachingSnapshot(preset);
-  return { firstHalf: fallback, secondHalf: fallback };
+  const firstPreset = presets.find(item => item && item.id === team.defaultCoachingPresetId) || null;
+  const secondPreset = presets.find(item => item && item.id === team.defaultSecondHalfCoachingPresetId) || firstPreset;
+  const firstHalf = safeCoachingSnapshot(firstPreset);
+  const secondHalf = safeCoachingSnapshot(secondPreset) || firstHalf;
+  return { firstHalf, secondHalf };
 }
 
 function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {

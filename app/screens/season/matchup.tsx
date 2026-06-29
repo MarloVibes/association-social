@@ -21,6 +21,7 @@ type Team = {
   secondaryColor?: string | null;
   coachingPresets?: CoachingPreset[];
   defaultCoachingPresetId?: string;
+  defaultSecondHalfCoachingPresetId?: string;
 };
 
 type ScheduleDoc = {
@@ -242,9 +243,9 @@ export default function MatchupScreen() {
   useEffect(() => {
     if (myTeam?.defaultCoachingPresetId) {
       setFirstHalfPresetId(myTeam.defaultCoachingPresetId);
-      setSecondHalfPresetId(myTeam.defaultCoachingPresetId);
+      setSecondHalfPresetId(myTeam.defaultSecondHalfCoachingPresetId || myTeam.defaultCoachingPresetId);
     }
-  }, [myTeam?.defaultCoachingPresetId]);
+  }, [myTeam?.defaultCoachingPresetId, myTeam?.defaultSecondHalfCoachingPresetId]);
 
   const call = async (name: string) => {
     if (!leagueId || !gameId) return;

@@ -123,16 +123,17 @@ describe('team settings callables', () => {
 
     const result = await handler({
       auth: { uid: 'gm-1' },
-      data: { leagueId: 'league-1', preset },
+      data: { leagueId: 'league-1', preset, secondHalfPresetId: 'old' },
     });
 
-    expect(result).toEqual({ saved: true, teamId: 'team-1', presetId: 'custom_gameplan' });
+    expect(result).toEqual({ saved: true, teamId: 'team-1', presetId: 'custom_gameplan', secondHalfPresetId: 'old' });
     expect(teamUpdate).toHaveBeenCalledWith({
       coachingPresets: [
         { id: 'old', name: 'Old Plan' },
         preset,
       ],
       defaultCoachingPresetId: 'custom_gameplan',
+      defaultSecondHalfCoachingPresetId: 'old',
       coachingUpdatedAt: 'SERVER_TIME',
     });
   });

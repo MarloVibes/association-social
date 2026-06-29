@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
+import { buildConferencePlayoffPicture, buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import type { StandingsRow } from '@/domain/nba/standings';
 
@@ -15,6 +15,15 @@ function row(seed: number): StandingsRow {
     pointsAgainst: 900 + seed,
     pointDiff: 100 - seed,
     pct: (30 - seed) / 30,
+  };
+}
+
+function conferenceRow(seed: number, abbreviation: string, name = abbreviation): StandingsRow {
+  return {
+    ...row(seed),
+    teamId: abbreviation,
+    abbreviation,
+    name,
   };
 }
 
@@ -86,5 +95,28 @@ describe('NBA playoff picture', () => {
 
     expect(picture.readyToStartPostseason).toBe(false);
     expect(picture.bracketLocked).toBe(true);
+  });
+
+  it('splits NBA playoff picture into Eastern and Western conferences', () => {
+    const picture = buildConferencePlayoffPicture({
+      standings: [
+        conferenceRow(1, 'MIA', 'Miami Heat'),
+        conferenceRow(2, 'BOS', 'Boston Celtics'),
+        conferenceRow(3, 'LAL', 'Los Angeles Lakers'),
+        conferenceRow(4, 'DEN', 'Denver Nuggets'),
+      ],
+      teams: [
+        { id: 'MIA', abbreviation: 'MIA', conference: 'East' },
+        { id: 'BOS', abbreviation: 'BOS', conference: 'East' },
+        { id: 'LAL', abbreviation: 'LAL', conference: 'West' },
+        { id: 'DEN', abbreviation: 'DEN', conference: 'West' },
+      ],
+      format: 'short_8',
+      completion: { totalGames: 82, finalGames: 2, remainingGames: 80, complete: false },
+    });
+
+    expect(picture.conferences.map(group => group.label)).toEqual(['Eastern Conference', 'Western Conference']);
+    expect(picture.conferences[0].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['MIA', 'BOS']);
+    expect(picture.conferences[1].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['LAL', 'DEN']);
   });
 });

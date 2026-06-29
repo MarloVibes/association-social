@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
-import { buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
+import { buildConferencePlayoffPicture, buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
 import { displayScheduleAbbr } from '@/domain/nba/scheduleView';
@@ -18,6 +18,7 @@ type Team = {
   abbreviation?: string;
   name?: string;
   gmId?: string;
+  conference?: string | null;
 };
 
 type ScheduleDoc = {
@@ -107,6 +108,14 @@ export default function PlayoffsScreen() {
     completion,
     bracketExists: Boolean(bracket),
   }), [standings, format, completion, bracket]);
+  const conferencePictures = useMemo(() => buildConferencePlayoffPicture({
+    standings,
+    teams,
+    format,
+    completion,
+    bracketExists: Boolean(bracket),
+  }), [standings, teams, format, completion, bracket]);
+  const conferenceLabels = ['Eastern Conference', 'Western Conference'];
   const series = useMemo(() => (
     bracket?.rounds.flatMap(round => round.series.map(item => ({ ...item, roundLabel: round.label }))) || []
   ), [bracket?.rounds]);
@@ -284,40 +293,45 @@ export default function PlayoffsScreen() {
               </Text>
             </View>
             {!bracket ? (
-              <View style={styles.pictureCard}>
-                <Text style={styles.pictureTitle}>Playoff Field</Text>
-                {picture.playoffSeeds.map(seed => (
-                  <View key={seed.teamId} style={styles.pictureRow}>
-                    <Text style={styles.pictureSeed}>{seed.seed}</Text>
-                    <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
-                    <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
-                  </View>
-                ))}
-                {picture.playInSeeds.length > 0 ? (
-                  <>
-                    <Text style={styles.pictureTitle}>Play-In</Text>
-                    {picture.playInSeeds.map(seed => (
-                      <View key={seed.teamId} style={styles.pictureRow}>
-                        <Text style={styles.pictureSeed}>{seed.seed}</Text>
-                        <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
-                        <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
-                      </View>
-                    ))}
-                  </>
-                ) : null}
-                {picture.bubble.length > 0 ? (
-                  <>
-                    <Text style={styles.pictureTitle}>Outside Looking In</Text>
-                    {picture.bubble.map(seed => (
-                      <View key={seed.teamId} style={styles.pictureRowMuted}>
-                        <Text style={styles.pictureSeed}>{seed.seed}</Text>
-                        <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
-                        <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
-                      </View>
-                    ))}
-                  </>
-                ) : null}
-              </View>
+              conferencePictures.conferences.map(group => (
+                <View key={group.label} style={styles.pictureCard}>
+                  <Text style={styles.conferenceTitle}>
+                    {conferenceLabels.includes(group.label) ? group.label : 'League'}
+                  </Text>
+                  <Text style={styles.pictureTitle}>Projected Seeds</Text>
+                  {group.picture.playoffSeeds.map(seed => (
+                    <View key={seed.teamId} style={styles.pictureRow}>
+                      <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                      <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                      <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                    </View>
+                  ))}
+                  {group.picture.playInSeeds.length > 0 ? (
+                    <>
+                      <Text style={styles.pictureTitle}>Play-In</Text>
+                      {group.picture.playInSeeds.map(seed => (
+                        <View key={seed.teamId} style={styles.pictureRow}>
+                          <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                          <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                          <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
+                  {group.picture.bubble.length > 0 ? (
+                    <>
+                      <Text style={styles.pictureTitle}>Outside Looking In</Text>
+                      {group.picture.bubble.map(seed => (
+                        <View key={seed.teamId} style={styles.pictureRowMuted}>
+                          <Text style={styles.pictureSeed}>{seed.seed}</Text>
+                          <Text style={styles.pictureTeam} numberOfLines={1}>{seed.name}</Text>
+                          <Text style={styles.pictureRecord}>{seed.wins}-{seed.losses}</Text>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
+                </View>
+              ))
             ) : null}
             {!bracket && isLeagueAdmin ? (
               <View style={styles.startCard}>
@@ -470,6 +484,7 @@ const styles = StyleSheet.create({
   summaryText: { color: '#fff', fontSize: 17, fontWeight: '900' },
   summaryMeta: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 4 },
   pictureCard: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 14 },
+  conferenceTitle: { color: '#fff', fontSize: 16, fontWeight: '900', marginBottom: 6 },
   pictureTitle: { color: '#00e58b', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginTop: 8, marginBottom: 8 },
   pictureRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#1d1d1d' },
   pictureRowMuted: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: 0.65, borderBottomWidth: 1, borderBottomColor: '#1d1d1d' },

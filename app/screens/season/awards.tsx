@@ -331,8 +331,10 @@ export default function AwardsScreen() {
           <View style={[styles.awardCard, item.kind === 'championship' && styles.ringCard]}>
               <View style={styles.awardTop}>
                 <View style={[styles.awardMark, item.kind === 'championship' && styles.ringMark]}>
-                  <Ionicons color="#f5d58a" name={awardIconName(item)} size={24} />
-                  <Text style={styles.awardMarkText}>{item.shortTitle}</Text>
+                  <View style={styles.awardMarkIconWrap}>
+                    <Ionicons color="#f5d58a" name={awardIconName(item)} size={22} />
+                  </View>
+                  <Text style={styles.awardMarkText} numberOfLines={2}>{item.shortTitle}</Text>
                 </View>
               <View style={styles.awardCopy}>
                 <Text style={styles.awardTitle}>{item.title}</Text>
@@ -384,9 +386,10 @@ const styles = StyleSheet.create({
   awardCard: { borderRadius: 8, borderWidth: 1, borderColor: '#222', backgroundColor: '#111', padding: 12, marginBottom: 10 },
   ringCard: { borderColor: '#6f5420', backgroundColor: '#130f07' },
   awardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  awardMark: { width: 48, height: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2c2c2c' },
+  awardMark: { width: 58, height: 58, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2c2c2c', paddingHorizontal: 5, paddingVertical: 5 },
   ringMark: { backgroundColor: '#211805', borderColor: '#8a6a28' },
-  awardMarkText: { color: '#f5d58a', fontSize: 10, fontWeight: '900' },
+  awardMarkIconWrap: { height: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  awardMarkText: { color: '#f5d58a', fontSize: 9, lineHeight: 10, fontWeight: '900', textAlign: 'center' },
   awardCopy: { flex: 1, minWidth: 0 },
   awardTitle: { color: '#fff', fontSize: 14, fontWeight: '900' },
   awardDesc: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3, lineHeight: 15 },

@@ -3,69 +3,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
-import { COACHING_PRESETS, coachingPresetInfoText, validateCoachingPreset, type CoachingModifiers, type CoachingPreset, type DefensiveStyle, type OffensiveStyle } from '@/domain/nba/coaching';
+import { COACHING_PRESETS, coachingPresetInfoText, validateCoachingPreset, type CoachingPreset } from '@/domain/nba/coaching';
 
 type Team = {
   id: string;
   name?: string;
   coachingPresets?: CoachingPreset[];
   defaultCoachingPresetId?: string;
+  defaultSecondHalfCoachingPresetId?: string;
 };
-
-const OFFENSE_OPTIONS: Array<{ value: OffensiveStyle; label: string }> = [
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'pace_and_space', label: 'Pace' },
-  { value: 'post_heavy', label: 'Post' },
-  { value: 'pick_and_roll', label: 'Pick Roll' },
-  { value: 'isolation', label: 'Iso' },
-];
-
-const DEFENSE_OPTIONS: Array<{ value: DefensiveStyle; label: string }> = [
-  { value: 'drop', label: 'Drop' },
-  { value: 'switch_heavy', label: 'Switch' },
-  { value: 'zone', label: 'Zone' },
-  { value: 'pressure', label: 'Pressure' },
-  { value: 'protect_paint', label: 'Paint' },
-];
-
-const MODIFIER_LABELS: Record<keyof CoachingModifiers, string> = {
-  pace: 'Pace',
-  threePointRate: '3PT',
-  rimPressure: 'Rim',
-  midrangeRate: 'Mid',
-  turnovers: 'TO',
-  fouls: 'Fouls',
-  rebounding: 'Boards',
-  fatigue: 'Fatigue',
-};
-
-function baseCustomPreset(): CoachingPreset {
-  return {
-    id: 'custom_gameplan',
-    name: 'Custom Gameplan',
-    description: 'Your custom game plan uses the exact offensive, defensive, and modifier settings you tune here.',
-    boostSummary: 'Custom plans apply your modifier sliders. Built-in plans add roster-fit grade boosts on top of their style identity.',
-    offense: 'balanced',
-    defense: 'drop',
-    modifiers: {
-      pace: 0,
-      threePointRate: 0,
-      rimPressure: 0,
-      midrangeRate: 0,
-      turnovers: 0,
-      fouls: 0,
-      rebounding: 0,
-      fatigue: 0,
-    },
-    counters: ['pressure'],
-  };
-}
-
-function clampModifier(value: number) {
-  return Math.max(-10, Math.min(10, value));
-}
 
 function tendencyRows(preset: CoachingPreset) {
   return [
@@ -90,7 +38,8 @@ export default function CoachingPresetsScreen() {
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [customPreset, setCustomPreset] = useState<CoachingPreset>(baseCustomPreset);
+  const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
+  const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
 
   useEffect(() => {
     if (!leagueId) return;
@@ -114,31 +63,21 @@ export default function CoachingPresetsScreen() {
     return [...byId.values()];
   }, [team?.coachingPresets]);
   const selectedPreset = useMemo(() => (
-    presets.find(preset => preset.id === team?.defaultCoachingPresetId) || presets[0] || customPreset
-  ), [customPreset, presets, team?.defaultCoachingPresetId]);
+    presets.find(preset => preset.id === firstHalfPresetId) || presets.find(preset => preset.id === team?.defaultCoachingPresetId) || presets[0]
+  ), [firstHalfPresetId, presets, team?.defaultCoachingPresetId]);
+  const secondHalfPreset = useMemo(() => (
+    presets.find(preset => preset.id === secondHalfPresetId) || selectedPreset
+  ), [presets, secondHalfPresetId, selectedPreset]);
+
+  const defaultFirstHalfPresetId = team?.defaultCoachingPresetId;
+  const defaultSecondHalfPresetId = team?.defaultSecondHalfCoachingPresetId;
 
   useEffect(() => {
-    const savedCustom = team?.coachingPresets?.find(preset => preset.id === 'custom_gameplan');
-    if (savedCustom) setCustomPreset({ ...savedCustom, modifiers: { ...savedCustom.modifiers }, counters: [...savedCustom.counters] });
-  }, [team?.coachingPresets]);
-
-  const updateCustomStyle = (field: 'offense' | 'defense', value: OffensiveStyle | DefensiveStyle) => {
-    setCustomPreset(current => ({
-      ...current,
-      [field]: value,
-      counters: field === 'defense' ? [value as DefensiveStyle] : current.counters,
-    }));
-  };
-
-  const updateModifier = (key: keyof CoachingModifiers, delta: number) => {
-    setCustomPreset(current => ({
-      ...current,
-      modifiers: {
-        ...current.modifiers,
-        [key]: clampModifier(current.modifiers[key] + delta),
-      },
-    }));
-  };
+    if (!team) return;
+    const first = defaultFirstHalfPresetId || 'balanced';
+    setFirstHalfPresetId(first);
+    setSecondHalfPresetId(defaultSecondHalfPresetId || first);
+  }, [team, defaultFirstHalfPresetId, defaultSecondHalfPresetId]);
 
   const savePreset = async (preset: CoachingPreset) => {
     if (!leagueId || !team) return;
@@ -149,8 +88,8 @@ export default function CoachingPresetsScreen() {
     }
     setSavingId(preset.id);
     try {
-      await httpsCallable(functions, 'saveTeamCoachingPreset')({ leagueId, preset });
-      Alert.alert('Saved', `${preset.name} is now your default coaching preset.`);
+      await httpsCallable(functions, 'saveTeamCoachingPreset')({ leagueId, preset, secondHalfPresetId });
+      Alert.alert('Saved', `${preset.name} will open games. ${secondHalfPreset?.name || preset.name} is saved as the halftime adjustment.`);
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -199,12 +138,17 @@ export default function CoachingPresetsScreen() {
                     </TouchableOpacity>
                   </View>
                   <View style={styles.courtPanel}>
-                    <View style={styles.courtArc} />
-                    <View style={[styles.courtNode, styles.courtNodeOne]} />
-                    <View style={[styles.courtNode, styles.courtNodeTwo]} />
-                    <View style={[styles.courtNode, styles.courtNodeThree]} />
-                    <View style={[styles.courtNode, styles.courtNodeFour]} />
-                    <View style={[styles.courtNode, styles.courtNodeFive]} />
+                    <View style={styles.halfCourtPreview}>
+                      <View style={styles.courtThreeArc} />
+                      <View style={styles.courtPaint} />
+                      <View style={styles.courtFreeThrowCircle} />
+                      <View style={styles.courtRim} />
+                      <View style={[styles.courtNode, styles.courtNodeOne]} />
+                      <View style={[styles.courtNode, styles.courtNodeTwo]} />
+                      <View style={[styles.courtNode, styles.courtNodeThree]} />
+                      <View style={[styles.courtNode, styles.courtNodeFour]} />
+                      <View style={[styles.courtNode, styles.courtNodeFive]} />
+                    </View>
                   </View>
                   <View style={styles.tendencyList}>
                     {tendencyRows(selectedPreset).map(row => (
@@ -224,55 +168,38 @@ export default function CoachingPresetsScreen() {
                 </View>
 
                 <View style={styles.builder}>
-                  <View style={styles.builderTop}>
-                    <TextInput
-                      style={styles.nameInput}
-                      value={customPreset.name}
-                      onChangeText={name => setCustomPreset(current => ({ ...current, name }))}
-                      placeholder="Custom Gameplan"
-                      placeholderTextColor="#555"
-                    />
-                    <TouchableOpacity disabled={savingId === customPreset.id} onPress={() => savePreset(customPreset)} style={styles.customSave}>
+                  <View style={styles.gamePlanHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gamePlanTitle}>Game Plan</Text>
+                      <Text style={styles.gamePlanMeta}>Pick a starting identity and a halftime adjustment.</Text>
+                    </View>
+                    <TouchableOpacity disabled={savingId === firstHalfPresetId || !selectedPreset} onPress={() => selectedPreset && savePreset(selectedPreset)} style={styles.customSave}>
                       <Ionicons color="#06130c" name="save-outline" size={15} />
-                      <Text style={styles.customSaveText}>Save</Text>
+                      <Text style={styles.customSaveText}>Save Game Plan</Text>
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.halfLabel}>First Half System</Text>
                   <View style={styles.optionStrip}>
-                    {OFFENSE_OPTIONS.map(option => (
+                    {presets.map(preset => (
                       <TouchableOpacity
-                        key={option.value}
-                        onPress={() => updateCustomStyle('offense', option.value)}
-                        style={[styles.optionChip, customPreset.offense === option.value && styles.optionChipActive]}
+                        key={`first-${preset.id}`}
+                        onPress={() => setFirstHalfPresetId(preset.id)}
+                        style={[styles.optionChip, firstHalfPresetId === preset.id && styles.optionChipActive]}
                       >
-                        <Text style={[styles.optionText, customPreset.offense === option.value && styles.optionTextActive]}>{option.label}</Text>
+                        <Text style={[styles.optionText, firstHalfPresetId === preset.id && styles.optionTextActive]}>{preset.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
+                  <Text style={styles.halfLabel}>Second Half System</Text>
                   <View style={styles.optionStrip}>
-                    {DEFENSE_OPTIONS.map(option => (
+                    {presets.map(preset => (
                       <TouchableOpacity
-                        key={option.value}
-                        onPress={() => updateCustomStyle('defense', option.value)}
-                        style={[styles.optionChip, customPreset.defense === option.value && styles.optionChipActive]}
+                        key={`second-${preset.id}`}
+                        onPress={() => setSecondHalfPresetId(preset.id)}
+                        style={[styles.optionChip, secondHalfPresetId === preset.id && styles.optionChipActive]}
                       >
-                        <Text style={[styles.optionText, customPreset.defense === option.value && styles.optionTextActive]}>{option.label}</Text>
+                        <Text style={[styles.optionText, secondHalfPresetId === preset.id && styles.optionTextActive]}>{preset.name}</Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-                  <View style={styles.tunerGrid}>
-                    {(Object.keys(customPreset.modifiers) as Array<keyof CoachingModifiers>).map(key => (
-                      <View key={key} style={styles.tuner}>
-                        <Text style={styles.tunerLabel}>{MODIFIER_LABELS[key]}</Text>
-                        <View style={styles.tunerControls}>
-                          <TouchableOpacity onPress={() => updateModifier(key, -1)} style={styles.tunerButton}>
-                            <Ionicons color="#fff" name="remove" size={14} />
-                          </TouchableOpacity>
-                          <Text style={styles.tunerValue}>{customPreset.modifiers[key] > 0 ? `+${customPreset.modifiers[key]}` : customPreset.modifiers[key]}</Text>
-                          <TouchableOpacity onPress={() => updateModifier(key, 1)} style={styles.tunerButton}>
-                            <Ionicons color="#fff" name="add" size={14} />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
                     ))}
                   </View>
                 </View>
@@ -346,7 +273,11 @@ const styles = StyleSheet.create({
   systemMeta: { color: '#777', fontSize: 11, fontWeight: '800', marginTop: 3, textTransform: 'capitalize' },
   systemInfoButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#122018' },
   courtPanel: { height: 128, borderRadius: 8, borderWidth: 2, borderColor: '#d8e0dc44', backgroundColor: '#16221c', overflow: 'hidden', marginBottom: 12 },
-  courtArc: { position: 'absolute', top: 25, left: '28%', width: '44%', height: 78, borderRadius: 80, borderWidth: 2, borderColor: '#d8e0dc44' },
+  halfCourtPreview: { flex: 1, position: 'relative' },
+  courtPaint: { position: 'absolute', top: 0, left: '34%', width: '32%', height: 64, borderWidth: 2, borderTopWidth: 0, borderColor: '#d8e0dc55' },
+  courtFreeThrowCircle: { position: 'absolute', top: 44, left: '38%', width: '24%', height: 46, borderRadius: 50, borderWidth: 2, borderColor: '#d8e0dc44' },
+  courtRim: { position: 'absolute', top: 9, left: '47%', width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#d8e0dc77' },
+  courtThreeArc: { position: 'absolute', top: 18, left: '11%', width: '78%', height: 144, borderTopLeftRadius: 160, borderTopRightRadius: 160, borderWidth: 2, borderBottomWidth: 0, borderColor: '#d8e0dc33' },
   courtNode: { position: 'absolute', width: 25, height: 25, borderRadius: 13, backgroundColor: '#00e58b', borderWidth: 3, borderColor: '#f4c542' },
   courtNodeOne: { left: '46%', bottom: 16 },
   courtNodeTwo: { left: '22%', top: 35 },
@@ -361,21 +292,17 @@ const styles = StyleSheet.create({
   tendencyFillNegative: { backgroundColor: '#ff6b6b' },
   tendencyValue: { width: 32, color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'right' },
   builder: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 12, marginBottom: 16 },
-  builderTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  nameInput: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a', color: '#fff', paddingHorizontal: 12, fontSize: 14, fontWeight: '800' },
+  gamePlanHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  gamePlanTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  gamePlanMeta: { color: '#7d897f', fontSize: 11, fontWeight: '800', lineHeight: 15, marginTop: 2 },
   customSave: { minHeight: 42, borderRadius: 8, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#00e58b' },
   customSaveText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
+  halfLabel: { color: '#d9e5dd', fontSize: 11, fontWeight: '900', marginBottom: 8, textTransform: 'uppercase' },
   optionStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 9 },
   optionChip: { minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818' },
   optionChipActive: { borderColor: '#00e58b', backgroundColor: '#0a2a1a' },
   optionText: { color: '#888', fontSize: 11, fontWeight: '900' },
   optionTextActive: { color: '#00e58b' },
-  tunerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tuner: { width: '48%', borderRadius: 8, backgroundColor: '#181818', borderWidth: 1, borderColor: '#242424', padding: 8 },
-  tunerLabel: { color: '#888', fontSize: 10, fontWeight: '900', marginBottom: 7, textTransform: 'uppercase' },
-  tunerControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
-  tunerButton: { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: '#242424' },
-  tunerValue: { color: '#fff', fontSize: 13, fontWeight: '900', minWidth: 28, textAlign: 'center' },
   card: { backgroundColor: '#111', borderRadius: 8, padding: 14, borderWidth: 1, borderColor: '#202020', marginBottom: 12 },
   cardSelected: { borderColor: '#00e58b', backgroundColor: '#0a1d14' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },

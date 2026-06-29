@@ -654,6 +654,47 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
   });
 
+  it('keeps coaching game plans to first-half and second-half preset selection', () => {
+    const coaching = source('app/screens/season/coaching-presets.tsx');
+
+    expect(coaching).toContain('First Half System');
+    expect(coaching).toContain('Second Half System');
+    expect(coaching).toContain('Save Game Plan');
+    expect(coaching).toContain('halfCourtPreview');
+    expect(coaching).not.toContain('tunerGrid');
+    expect(coaching).not.toContain('updateModifier');
+    expect(coaching).not.toContain('Custom Gameplan');
+  });
+
+  it('shows conference-aware playoff picture sections', () => {
+    const playoffs = source('app/screens/season/playoffs.tsx');
+
+    expect(playoffs).toContain('conferencePictures');
+    expect(playoffs).toContain('Eastern Conference');
+    expect(playoffs).toContain('Western Conference');
+    expect(playoffs).not.toContain('<Text style={styles.pictureTitle}>Playoff Field</Text>');
+  });
+
+  it('adds finance definition bubbles and clearer draft prospect cards', () => {
+    const finances = source('app/screens/season/finances.tsx');
+    const draftClass = source('app/screens/offseason/draft-class.tsx');
+
+    expect(finances).toContain('FINANCE_DEFINITIONS');
+    expect(finances).toContain('activeFinanceHelp');
+    expect(finances).toContain('definitionBubble');
+    expect(draftClass).toContain('Projected #');
+    expect(draftClass).toContain('PlayerHeadshot');
+    expect(draftClass).not.toContain('>R{prospect.projectedRound || prospect.draft_round ||');
+  });
+
+  it('centers compact award marks in the trophy case', () => {
+    const awards = source('app/screens/season/awards.tsx');
+
+    expect(awards).toContain('awardMarkIconWrap');
+    expect(awards).toContain('numberOfLines={2}');
+    expect(awards).toContain('textAlign:');
+  });
+
   it('keeps prohibited commercial-game branding out of app source and docs', () => {
     const banned = [
       ['N', 'BA', ' ', '2', 'K'].join(''),

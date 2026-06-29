@@ -9,6 +9,7 @@ export type StandingsTeam = {
   name?: string | null;
   full_name?: string | null;
   gmId?: string | null;
+  conference?: string | null;
 };
 
 export type StandingsParticipant = {

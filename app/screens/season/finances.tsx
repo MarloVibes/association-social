@@ -37,6 +37,15 @@ type Team = {
   players?: Player[];
 };
 
+const FINANCE_DEFINITIONS = {
+  payroll: 'Total salary currently committed to players on this roster.',
+  capRoom: 'How much room this team has below the salary cap. Red means the team is already over the cap.',
+  salaryCap: 'The league spending line for the current era season.',
+  taxRoom: 'How much room remains before this team crosses the luxury tax line.',
+} as const;
+
+type FinanceDefinitionKey = keyof typeof FINANCE_DEFINITIONS;
+
 function money(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '$0';
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`;
@@ -64,6 +73,7 @@ export default function FinancesScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [activeFinanceHelp, setActiveFinanceHelp] = useState<FinanceDefinitionKey | ''>('');
 
   useEffect(() => {
     if (!leagueId) return;
@@ -97,6 +107,34 @@ export default function FinancesScreen() {
   const taxLine = Math.round(cap * 1.22);
   const taxRoom = taxLine - payroll;
   const largestContracts = players.slice(0, 3);
+
+  const renderFinanceTile = (
+    key: FinanceDefinitionKey,
+    label: string,
+    value: string,
+    hint?: string,
+    negative = false,
+  ) => (
+    <View style={styles.financeTile}>
+      <View style={styles.tileHeader}>
+        <Text style={styles.tileLabel}>{label}</Text>
+        <TouchableOpacity
+          accessibilityLabel={`${label} info`}
+          onPress={() => setActiveFinanceHelp(current => (current === key ? '' : key))}
+          style={styles.infoDot}
+        >
+          <Ionicons color="#00e58b" name="information-circle-outline" size={17} />
+        </TouchableOpacity>
+      </View>
+      <Text style={[styles.tileValue, negative && styles.negativeValue]}>{value}</Text>
+      {hint ? <Text style={styles.tileHint}>{hint}</Text> : null}
+      {activeFinanceHelp === key ? (
+        <View style={styles.definitionBubble}>
+          <Text style={styles.definitionText}>{FINANCE_DEFINITIONS[key]}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
   if (loading) {
     return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
@@ -149,24 +187,10 @@ export default function FinancesScreen() {
             </View>
 
             <View style={styles.financeGrid}>
-              <View style={styles.financeTile}>
-                <Text style={styles.tileLabel}>Payroll</Text>
-                <Text style={styles.tileValue}>{money(payroll)}</Text>
-              </View>
-              <View style={styles.financeTile}>
-                <Text style={styles.tileLabel}>Cap Room</Text>
-                <Text style={[styles.tileValue, capRoom < 0 && styles.negativeValue]}>{money(Math.abs(capRoom))}</Text>
-                <Text style={styles.tileHint}>{capRoom >= 0 ? 'Available' : 'Over cap'}</Text>
-              </View>
-              <View style={styles.financeTile}>
-                <Text style={styles.tileLabel}>Salary Cap</Text>
-                <Text style={styles.tileValue}>{money(cap)}</Text>
-              </View>
-              <View style={styles.financeTile}>
-                <Text style={styles.tileLabel}>Tax Room</Text>
-                <Text style={[styles.tileValue, taxRoom < 0 && styles.negativeValue]}>{money(Math.abs(taxRoom))}</Text>
-                <Text style={styles.tileHint}>{taxRoom >= 0 ? 'Before tax' : 'Over tax'}</Text>
-              </View>
+              {renderFinanceTile('payroll', 'Payroll', money(payroll))}
+              {renderFinanceTile('capRoom', 'Cap Room', money(Math.abs(capRoom)), capRoom >= 0 ? 'Available' : 'Over cap', capRoom < 0)}
+              {renderFinanceTile('salaryCap', 'Salary Cap', money(cap))}
+              {renderFinanceTile('taxRoom', 'Tax Room', money(Math.abs(taxRoom)), taxRoom >= 0 ? 'Before tax' : 'Over tax', taxRoom < 0)}
             </View>
 
             <View style={styles.capBar}>
@@ -247,10 +271,14 @@ const styles = StyleSheet.create({
   teamMeta: { color: '#777', fontSize: 12, fontWeight: '800', marginTop: 3 },
   financeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   financeTile: { width: '48.7%', minHeight: 88, borderRadius: 8, backgroundColor: '#111', borderWidth: 1, borderColor: '#202020', padding: 12, justifyContent: 'center' },
+  tileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   tileLabel: { color: '#777', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  infoDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#102018' },
   tileValue: { color: '#00e58b', fontSize: 21, fontWeight: '900', marginTop: 5 },
   negativeValue: { color: '#ff6b6b' },
   tileHint: { color: '#666', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  definitionBubble: { marginTop: 8, borderRadius: 7, borderWidth: 1, borderColor: '#00e58b33', backgroundColor: '#07140d', padding: 8 },
+  definitionText: { color: '#b8cfc2', fontSize: 10, lineHeight: 14, fontWeight: '800' },
   capBar: { height: 9, borderRadius: 999, backgroundColor: '#202020', overflow: 'hidden', marginBottom: 16 },
   capFill: { height: 9, borderRadius: 999, backgroundColor: '#00e58b' },
   section: { borderRadius: 8, borderWidth: 1, borderColor: '#202020', backgroundColor: '#101010', padding: 14, marginBottom: 14 },
