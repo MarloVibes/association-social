@@ -3,13 +3,15 @@ import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase
 import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { normalizeAccountLanguage } from '@/constants/accountLanguages';
 import { auth, db, functions } from '@/constants/firebase';
 
 export default function ProfileSetupScreen() {
-  const { initialUsername, promoCode } = useLocalSearchParams<{
-    initialUsername?: string; promoCode?: string;
+  const { initialUsername, promoCode, preferredLanguage } = useLocalSearchParams<{
+    initialUsername?: string; promoCode?: string; preferredLanguage?: string;
   }>();
   const hasPromo = !!promoCode?.trim();
+  const privatePreferredLanguage = normalizeAccountLanguage(preferredLanguage);
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState(String(initialUsername || ''));
   const [age, setAge] = useState('');
@@ -25,9 +27,10 @@ export default function ProfileSetupScreen() {
   const genders = ['Male', 'Female', 'Other'];
   const consoles = ['PS5', 'Xbox', 'PC'];
   const sports = [
-    'NBA 2K', 'Madden NFL', 'MLB The Show', 'EA FC (FIFA)',
-    'NHL', 'UFC', 'WWE 2K', 'F1', 'College Football',
-    'Rocket League', 'Tony Hawk', 'Golf PGA Tour',
+    'NBA Franchise', 'NFL Franchise', 'MLB Franchise',
+    'Soccer Franchise', 'Hockey Franchise', 'Combat Sports',
+    'Motorsports Franchise', 'College Football',
+    'Rocket League', 'Skateboarding', 'Golf Franchise',
   ];
 
   const handleSave = async () => {
@@ -116,6 +119,18 @@ export default function ProfileSetupScreen() {
         await redeem({ code: String(promoCode).trim(), profile: profileData });
       } else {
         await setDoc(doc(db, 'users', user.uid), profileData);
+      }
+      try {
+        await setDoc(
+          doc(db, 'users', user.uid, 'private', 'preferences'),
+          {
+            preferredLanguage: privatePreferredLanguage,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } catch (preferenceError) {
+        console.warn('Private language preference could not be saved yet.', preferenceError);
       }
 
       router.replace('/(tabs)/dashboard');

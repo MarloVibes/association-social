@@ -2,19 +2,12 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeams, getSportTeamTheme, getSportLogoUrl } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
-  projectId: "association-social",
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
+import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
 
 // Adjust hex color brightness by percentage. Negative = darker, positive = lighter.
 function adjustColor(hex: string, percent: number): string {
@@ -28,8 +21,6 @@ function adjustColor(hex: string, percent: number): string {
   b = Math.max(0, Math.min(255, b + amt));
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
-
-const auth = getAuth();
 
 export default function LeagueRostersScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -165,6 +156,7 @@ export default function LeagueRostersScreen() {
         const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         const textColor = lum < 0.5 ? '#ffffff' : '#0a0a0a';
         const subColor = lum < 0.5 ? '#ffffffcc' : '#0a0a0acc';
+        const topPlayers = [...(team.players || [])].sort(compareRosterPlayersByValue).slice(0, 3);
         return (
           <TouchableOpacity
             key={team.id || team.eraTeamId || team.abbreviation}
@@ -200,9 +192,19 @@ export default function LeagueRostersScreen() {
                   ) : null}
                 </View>
                 <Text style={[styles.teamMeta, { color: subColor }]}>
-                  {team.wins || 0}–{team.losses || 0} · {isOwned ? '🧑 ' + (team.gmName || 'GM') : '🤖 Unowned'}
+                  {team.wins || 0}–{team.losses || 0} · {isOwned ? (team.gmName || 'GM') : 'Unowned'}
                 </Text>
                 <Text style={[styles.rosterCount, { color: subColor }]}>{(team.players || []).length} players</Text>
+                {topPlayers.length > 0 ? (
+                  <View style={styles.playerPreview}>
+                    {topPlayers.map((player: any) => (
+                      <View key={player.player_id || player.id || player.full_name || player.name} style={styles.playerPreviewRow}>
+                        <Text style={[styles.playerPreviewPos, { color: textColor }]}>{player.position || '-'}</Text>
+                        <Text style={[styles.playerPreviewName, { color: subColor }]} numberOfLines={1}>{player.full_name || player.name || 'Player'}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
               <Text style={[styles.chevron, { color: textColor }]}>›</Text>
             </LinearGradient>
@@ -243,5 +245,9 @@ const styles = StyleSheet.create({
   yourTeamBadgeText: { color: '#00ff87', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   teamMeta: { color: '#ccc', fontSize: 12, marginTop: 2 },
   rosterCount: { color: '#888', fontSize: 11, marginTop: 1 },
+  playerPreview: { marginTop: 8, gap: 4 },
+  playerPreviewRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  playerPreviewPos: { width: 24, fontSize: 10, fontWeight: '900', opacity: 0.9 },
+  playerPreviewName: { flex: 1, fontSize: 11, fontWeight: '800' },
   chevron: { color: '#666', fontSize: 22, fontWeight: '400' },
 });

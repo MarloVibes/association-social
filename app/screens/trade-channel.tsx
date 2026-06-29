@@ -1,13 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard from '@/components/PlayerCard';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getPlaystyle } from '@/constants/playstyle';
 import { getSportArchetype } from '@/constants/sportArchetype';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import { getPositionFilters } from '@/domain/sports/playerFields';
+import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 
 
 function PlaystyleBadge({ player, eraKey, sport }: { player: any; eraKey?: string; sport?: string }) {
@@ -32,20 +35,15 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?:
       </TouchableOpacity>
     );
   }
-  const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
+  const fallback = (
+    <View style={styles.playerSlotPhotoPlaceholder}>
+      <Text style={styles.playerSlotInitial}>{(player?.full_name || '?')[0]}</Text>
+    </View>
+  );
   return (
     <TouchableOpacity style={[styles.playerSlot, style]} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.playerSlotInner}>
-        {brefId ? (
-          <Image
-            source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }}
-            style={styles.playerSlotPhoto}
-          />
-        ) : (
-          <View style={styles.playerSlotPhotoPlaceholder}>
-            <Text style={styles.playerSlotInitial}>{(player?.full_name || '?')[0]}</Text>
-          </View>
-        )}
+        <PlayerHeadshot player={player} sport={sport} imageStyle={styles.playerSlotPhoto} fallback={fallback} />
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
@@ -58,7 +56,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?:
 
 export default function TradeChannelScreen() {
   const { leagueId, channelId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
-  const [activeTab, setActiveTab] = useState<'block' | 'available'>('block');
+  const [activeTab, setActiveTab] = useState<'block' | 'available' | 'propose'>('block');
   const [myTeam, setMyTeam] = useState<any>(null);
   const [sport, setSport] = useState<string>('nba');
   const [myTeamId, setMyTeamId] = useState('');
@@ -75,6 +73,8 @@ export default function TradeChannelScreen() {
   const [targetPosFilter, setTargetPosFilter] = useState('ALL');
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const user = auth.currentUser;
+  const positionFilters = getPositionFilters(sport);
+  const tradePositionFilters = positionFilters.filter(position => position !== 'ALL');
 
   useEffect(() => { loadData(); }, []);
 
@@ -139,8 +139,12 @@ export default function TradeChannelScreen() {
     setLoading(true);
     try {
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAllTeams(teams);
+      const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const teamsByRosterValue = teams.map((team: any) => ({
+        ...team,
+        players: [...(team.players || [])].sort(compareRosterPlayersByValue),
+      }));
+      setAllTeams(teamsByRosterValue);
       // League sport drives archetype labels (NBA playstyle vs MLB/NFL archetypes).
       let leagueSport = 'nba';
       try {
@@ -150,7 +154,7 @@ export default function TradeChannelScreen() {
       setSport(leagueSport);
       const isNBA = leagueSport === 'nba';
       // Note: allTeams are used for tradeBlock display - they get enriched inline
-      const mine = teams.find((t: any) => t.gmId === user?.uid);
+      const mine = teamsByRosterValue.find((t: any) => t.gmId === user?.uid);
       if (mine) {
         setMyTeam(mine);
         setMyTeamId(mine.id);
@@ -173,7 +177,7 @@ export default function TradeChannelScreen() {
           ...p,
           ...(statsMap[p.full_name] || {}),
         }));
-        setMyRoster(enrichedRoster);
+        setMyRoster(enrichedRoster.sort(compareRosterPlayersByValue));
       }
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -187,12 +191,15 @@ export default function TradeChannelScreen() {
     await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
   };
 
-  const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean);
-  const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean);
+  const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
+  const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
   const allTradeBlockAcrossLeague = allTeams.flatMap((t: any) => {
     const tb = t.tradeBlock || [];
     return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({ ...p, teamName: t.name, teamId: t.id, gmId: t.gmId }));
-  });
+  }).sort((a: any, b: any) => (a.teamName || '').localeCompare(b.teamName || '') || compareRosterPlayersByValue(a, b));
+  const claimedTradeTeams = allTeams
+    .filter((t: any) => t.gmId && t.gmId !== user?.uid)
+    .sort((a: any, b: any) => (a.name || a.abbreviation || '').localeCompare(b.name || b.abbreviation || ''));
 
   if (loading) return <View style={styles.container}><ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 100 }} /></View>;
 
@@ -285,10 +292,13 @@ export default function TradeChannelScreen() {
       {/* Tabs */}
       <View style={styles.tabRow}>
         <TouchableOpacity style={[styles.tab, activeTab === 'block' && styles.tabActive]} onPress={() => setActiveTab('block')}>
-          <Text style={[styles.tabText, activeTab === 'block' && styles.tabTextActive]}>MY TRADE BLOCK</Text>
+          <Text style={[styles.tabText, activeTab === 'block' && styles.tabTextActive]}>MY TEAM</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'available' && styles.tabActive]} onPress={() => setActiveTab('available')}>
-          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>ON THE BLOCK ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
+          <Text style={[styles.tabText, activeTab === 'available' && styles.tabTextActive]}>BLOCK FEED ({listings.filter((l: any) => l.fromUid !== user?.uid).length + allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'propose' && styles.tabActive]} onPress={() => setActiveTab('propose')}>
+          <Text style={[styles.tabText, activeTab === 'propose' && styles.tabTextActive]}>TRADE</Text>
         </TouchableOpacity>
       </View>
 
@@ -344,7 +354,7 @@ export default function TradeChannelScreen() {
             </View>
           </View>
         </ScrollView>
-      ) : (
+      ) : activeTab === 'available' ? (
         <>
         {/* Filter Controls */}
         <View style={styles.sortRow}>
@@ -358,7 +368,7 @@ export default function TradeChannelScreen() {
               ))}
               <View style={{ width: 1, backgroundColor: '#333', marginHorizontal: 4 }} />
               <Text style={styles.sortLabel}>Pos:</Text>
-              {['PG','SG','SF','PF','C'].map(pos => (
+              {tradePositionFilters.map(pos => (
                 <TouchableOpacity key={pos} style={[styles.sortBtn, blockSort === pos && styles.sortBtnActive]} onPress={() => setBlockSort(blockSort === pos ? 'team' : pos)}>
                   <Text style={[styles.sortBtnText, blockSort === pos && styles.sortBtnTextActive]}>{pos}</Text>
                 </TouchableOpacity>
@@ -371,21 +381,20 @@ export default function TradeChannelScreen() {
           {(() => {
             const allAvail = [
               ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
-                key: l.id, teamName: l.fromTeamName, player: l.player, uid: l.fromUid,
+                key: l.id, teamName: l.fromTeamName, teamId: l.fromTeamId, player: l.player, uid: l.fromUid,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '', prefillPlayer: JSON.stringify(l.player || {}) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
               })),
               ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
-                key: 'tb_' + i, teamName: p.teamName, player: p, uid: p.gmId,
+                key: 'tb_' + i, teamName: p.teamName, teamId: p.teamId, player: p, uid: p.gmId,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '', prefillPlayer: JSON.stringify(p) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
             ];
-            const POSITIONS = ['PG','SG','SF','PF','C'];
-            const isPositionFilter = POSITIONS.includes(blockSort);
+            const isPositionFilter = tradePositionFilters.includes(blockSort);
             const isTeamFilter = !isPositionFilter && blockSort !== 'team';
             const filtered = allAvail.filter(item => {
-              if (isPositionFilter) return (item.player?.position || '').includes(blockSort);
+              if (isPositionFilter) return matchesRosterPosition(item.player || {}, blockSort);
               if (isTeamFilter) {
                 const abbr = item.teamName?.slice(0,3).toUpperCase();
                 const fullMatch = item.teamName?.toUpperCase().includes(blockSort.toUpperCase());
@@ -393,7 +402,10 @@ export default function TradeChannelScreen() {
               }
               return true;
             });
-            const sorted = [...filtered].sort((a, b) => (a.teamName || '').localeCompare(b.teamName || ''));
+            const sorted = [...filtered].sort((a, b) => (
+              compareRosterPlayersByValue(a.player || {}, b.player || {})
+              || (a.teamName || '').localeCompare(b.teamName || '')
+            ));
             return sorted.map(item => (
               <View key={item.key} style={styles.listingCard}>
                 <Text style={styles.listingTeam}>{item.teamName}</Text>
@@ -402,7 +414,7 @@ export default function TradeChannelScreen() {
                     player={item.player}
                     eraKey={myTeam?.era} sport={sport}
                     style={{ flex: 1 }}
-                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: (item.player?.teamId || ''), teamName: item.teamName || '' })}
+                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
                   />
                   <View style={styles.listingBtns}>
                     <TouchableOpacity style={styles.proposeBtn} onPress={item.onOffer}>
@@ -424,6 +436,45 @@ export default function TradeChannelScreen() {
           )}
         </ScrollView>
         </>
+      ) : (
+        <ScrollView contentContainerStyle={styles.proposeContent}>
+          {!myTeam ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🏆</Text>
+              <Text style={styles.emptyText}>Claim a team before opening trade rooms</Text>
+            </View>
+          ) : claimedTradeTeams.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🤝</Text>
+              <Text style={styles.emptyText}>No other managers have claimed a team yet</Text>
+            </View>
+          ) : (
+            claimedTradeTeams.map((team: any) => (
+              <TouchableOpacity
+                key={team.id}
+                style={styles.proposeTeamCard}
+                onPress={() => router.push({
+                  pathname: '/screens/trade-room',
+                  params: {
+                    leagueId,
+                    otherUid: team.gmId,
+                    otherTeamId: team.id,
+                    otherTeamName: team.name || team.abbreviation || '',
+                  },
+                })}
+              >
+                <View style={styles.proposeTeamAvatar}>
+                  <Text style={styles.proposeTeamAvatarText}>{(team.abbreviation || team.name || '?').slice(0, 3).toUpperCase()}</Text>
+                </View>
+                <View style={styles.proposeTeamInfo}>
+                  <Text style={styles.proposeTeamName}>{team.name || team.abbreviation || 'Team'}</Text>
+                  <Text style={styles.proposeTeamMeta}>{(team.players || []).length} players · Start trade room</Text>
+                </View>
+                <Text style={styles.proposeTeamChevron}>›</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       )}
 
       {/* Roster Picker Modal for Trade Block / Untouchables */}
@@ -449,7 +500,7 @@ export default function TradeChannelScreen() {
                 />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
                   <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 8 }}>
-                    {['ALL','PG','SG','SF','PF','C'].map(p => (
+                    {positionFilters.map(p => (
                       <TouchableOpacity key={p} style={[styles.sortBtn, targetPosFilter === p && styles.sortBtnActive]} onPress={() => setTargetPosFilter(p)}>
                         <Text style={[styles.sortBtnText, targetPosFilter === p && styles.sortBtnTextActive]}>{p}</Text>
                       </TouchableOpacity>
@@ -464,10 +515,11 @@ export default function TradeChannelScreen() {
                 ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
                     .filter((p: any) => {
                       const matchSearch = !targetSearch || (p.full_name || '').toLowerCase().includes(targetSearch.toLowerCase());
-                      const matchPos = targetPosFilter === 'ALL' || (p.position || '').includes(targetPosFilter);
+                      const matchPos = matchesRosterPosition(p, targetPosFilter);
                       return matchSearch && matchPos;
                     })
-                : myRoster;
+                    .sort((a: any, b: any) => compareRosterPlayersByValue(a, b) || (a.teamName || '').localeCompare(b.teamName || ''))
+                : [...myRoster].sort(compareRosterPlayersByValue);
               return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
               const isSelected = rosterModal === 'block' ? tradeBlock.includes(pid) : rosterModal === 'target' ? (myTeam?.targetList || []).includes(pid) : untouchables.includes(pid);
@@ -588,7 +640,7 @@ export default function TradeChannelScreen() {
         } : undefined}
       />
 
-      {/* Propose Trade Modal */}
+      {/* Trade Modal */}
       <GlobalNav />
     </View>
   );
@@ -617,6 +669,7 @@ const styles = StyleSheet.create({
   col: { flex: 1, gap: 6 },
   colTitle: { color: '#888', fontSize: 9, fontWeight: '800', letterSpacing: 1, textAlign: 'center', marginBottom: 4, textTransform: 'uppercase' },
   playerSlot: { backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden', marginBottom: 4, minHeight: 80 },
+  blockSlot: { minHeight: 80 },
   playerSlotEmpty: { borderStyle: 'dashed', borderColor: '#333', alignItems: 'center', justifyContent: 'center', height: 80 },
   addItemText: { color: '#333', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   playerSlotInner: { flexDirection: 'row', alignItems: 'center', padding: 6, gap: 6 },
@@ -630,6 +683,7 @@ const styles = StyleSheet.create({
   untouchableSlot: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
   targetSlot: { borderColor: '#4444ff', backgroundColor: '#0a0a1a' },
   availableContent: { padding: 16, paddingBottom: 100 },
+  proposeContent: { padding: 16, paddingBottom: 100 },
   listingCard: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#222' },
   listingTeam: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
   listingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -638,6 +692,13 @@ const styles = StyleSheet.create({
   proposeBtnText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   dmBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', alignItems: 'center' },
   dmBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
+  proposeTeamCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#222', gap: 12 },
+  proposeTeamAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#00ff8755', alignItems: 'center', justifyContent: 'center' },
+  proposeTeamAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  proposeTeamInfo: { flex: 1 },
+  proposeTeamName: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  proposeTeamMeta: { color: '#666', fontSize: 12, marginTop: 3, fontWeight: '700' },
+  proposeTeamChevron: { color: '#555', fontSize: 24, fontWeight: '700' },
   emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptySubtext: { color: '#333', fontSize: 12, textAlign: 'center' },
   teamTradeCard: { backgroundColor: '#111', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#1e1e1e' },

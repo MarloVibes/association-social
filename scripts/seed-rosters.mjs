@@ -13,7 +13,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Known 2K/Madden/MLB legend full names — matched against Sleeper data
+// Known franchise-sim legend full names matched against Sleeper data.
 const NBA_LEGENDS = new Set([
   'Michael Jordan','Kobe Bryant','LeBron James','Magic Johnson','Larry Bird',
   'Shaquille O\'Neal','Tim Duncan','Kevin Garnett','Allen Iverson','Dirk Nowitzki',
@@ -107,7 +107,7 @@ async function main() {
 
   // MLB — Sleeper has limited MLB data so we seed what we can
   // For MLB we pull all positions since rosters are smaller
-  await seedSport('nfl', [
+  await seedSport('mlb', [
     'P','C','1B','2B','3B','SS','LF','CF','RF','DH','SP','RP','CP'
   ], MLB_LEGENDS).catch(() => {
     console.log('  MLB via Sleeper limited — seeding legends only');

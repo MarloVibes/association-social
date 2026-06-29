@@ -1,0 +1,44 @@
+{
+  "snapshot_id": "fixture-current-2027",
+  "leagueContext": {
+    "season": 2027,
+    "pace": 100,
+    "leagueThreePointPct": 0.36,
+    "leagueFreeThrowPct": 0.78
+  },
+  "eraContext": {
+    "season": 2027,
+    "era": "current",
+    "pace": 100,
+    "leaguePace": 100,
+    "leagueThreePointPct": 0.36,
+    "positionMinutesBaseline": 30
+  },
+  "players": [
+    {
+      "player_id": "fixture-1",
+      "full_name": "Fixture Creator",
+      "team": "TST",
+      "position": "PG",
+      "age": 23,
+      "games": 72,
+      "minutesPerGame": 34,
+      "pointsPerGame": 22,
+      "reboundsPerGame": 4,
+      "assistsPerGame": 8,
+      "stealsPerGame": 1.5,
+      "blocksPerGame": 0.2,
+      "fieldGoalPct": 0.47,
+      "threePointPct": 0.39,
+      "threePointAttemptsPerGame": 7,
+      "freeThrowPct": 0.88,
+      "freeThrowAttemptsPerGame": 5,
+      "usagePct": 28,
+      "assistPct": 40,
+      "turnoverPct": 12,
+      "defensiveWinShares": 3,
+      "winShares": 8,
+      "draftPick": 3
+    }
+  ]
+}

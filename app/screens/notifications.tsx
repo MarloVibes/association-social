@@ -7,6 +7,119 @@ import { auth, db } from '@/constants/firebase';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 import GlobalNav from '@/components/GlobalNav';
 
+function routeNotification(n: any) {
+  if (!n?.leagueId) return;
+  const type = String(n.type || '');
+  const leagueId = n.leagueId;
+  const gameId = n.gameId || n.scheduleGameId || n.matchupId || '';
+  const competition = n.competition || n.scheduleCompetition || 'regular';
+
+  if (
+    type === 'trade_offer'
+    || type === 'trade_executed'
+    || type === 'trade_declined'
+    || type === 'trade_cancelled'
+    || type === 'trade_room_opened'
+    || type === 'trade_override_review'
+    || type === 'trade_override_approved'
+    || type === 'trade_override_denied'
+  ) {
+    router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: n.otherUid || n.fromUid || '', otherTeamId: n.otherTeamId || '', otherTeamName: n.otherTeamName || n.fromTeamName || '' } });
+  } else if (type === 'custom_player_submitted') {
+    router.push({ pathname: '/screens/pending-players', params: { leagueId } });
+  } else if (type === 'custom_player_approved' || type === 'custom_player_denied') {
+    router.push({ pathname: '/screens/league', params: { leagueId } });
+  } else if (type === 'tradeblock' || type === 'trade_listing') {
+    router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
+  } else if (type === 'mention') {
+    router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: n.leagueName || '', channelId: n.channelId || 'league-chat', channelLabel: n.channelLabel || 'League Chat', channelIcon: n.channelIcon || '💬', commissionerId: '', coCommissioners: '[]' } });
+  } else if (type === 'cpu_trade_request') {
+    router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId } });
+  } else if (type === 'cpu_trade_result') {
+    router.push({ pathname: '/screens/league-rosters', params: { leagueId } });
+  } else if (type === 'reset_request' || type === 'reset_request_opponent' || type === 'reset_disputed') {
+    router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: n.leagueName || '', channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: '', coCommissioners: '[]' } });
+  } else if (type === 'announcement') {
+    router.push({ pathname: '/screens/channel', params: { leagueId, leagueName: n.leagueName || '', channelId: 'announcements', channelLabel: 'League News', channelIcon: '📰', commissionerId: '', coCommissioners: '[]' } });
+  } else if (['game_simulated', 'game_final', 'score_reported'].includes(type) && gameId) {
+    router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition } });
+  } else if (type === 'injury_update') {
+    router.push({ pathname: '/screens/season/injuries', params: { leagueId } });
+  } else if (type === 'extension_interest' || type === 'extension_offer_submitted') {
+    router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
+  } else if (type === 'contract_deadline') {
+    if (n.deadlineKind === 'trade') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
+    else router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
+  } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
+    if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
+    else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
+  } else if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) {
+    router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
+  } else if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) {
+    router.push({ pathname: '/screens/offseason/live-draft', params: { leagueId } });
+  } else if (['draft_class_ready', 'contract_round', 'free_agency', 'offseason_stage'].includes(type)) {
+    router.push({ pathname: '/screens/offseason', params: { leagueId } });
+  } else if (type === 'roster_compliance' || type === 'roster_cuts') {
+    router.push({ pathname: '/screens/offseason/roster-cuts', params: { leagueId } });
+  } else if (type === 'expansion' || type === 'expansion_draft') {
+    router.push({ pathname: '/screens/offseason/expansion', params: { leagueId } });
+  } else if (type === 'season_awards' || type === 'awards_finalized') {
+    router.push({ pathname: '/screens/season/awards', params: { leagueId } });
+  } else if (type === 'upgrade_points') {
+    router.push({ pathname: '/screens/season/player-upgrades', params: { leagueId } });
+  } else {
+    router.push({ pathname: '/screens/league', params: { leagueId } });
+  }
+}
+
+function notificationIcon(type: string) {
+  if (type === 'join_accepted' || type === 'trade_executed' || type === 'trade_override_approved' || type === 'custom_player_approved') return '✅';
+  if (type === 'join_denied' || type === 'trade_declined' || type === 'trade_cancelled' || type === 'trade_override_denied' || type === 'custom_player_denied') return '❌';
+  if (type === 'trade_offer' || type === 'trade_room_opened') return '🤝';
+  if (type === 'trade_override_review') return '🔓';
+  if (type === 'custom_player_submitted') return '📝';
+  if (type === 'mention') return '📣';
+  if (['matchup_request', 'matchup_accepted', 'game_ready', 'game_simulated', 'game_final', 'score_reported'].includes(type)) return '🏀';
+  if (['schedule_created', 'schedule_updated', 'game_reset'].includes(type)) return '📅';
+  if (['nba_cup', 'nba_cup_advanced', 'season_awards', 'awards_finalized'].includes(type)) return '🏆';
+  if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn', 'draft_class_ready'].includes(type)) return '🎙️';
+  if (['contract_round', 'free_agency', 'offseason_stage', 'extension_interest', 'extension_offer_submitted', 'contract_deadline'].includes(type)) return '💼';
+  if (type === 'roster_compliance' || type === 'roster_cuts') return '✂️';
+  if (type === 'expansion' || type === 'expansion_draft') return '🌆';
+  if (type === 'upgrade_points') return '⬆️';
+  if (type === 'injury_update') return '🩺';
+  return '🔔';
+}
+
+function notificationActionLabel(type: string) {
+  if (type === 'trade_offer') return 'Review Offer →';
+  if (type === 'trade_executed') return 'View Trade →';
+  if (type === 'trade_declined' || type === 'trade_cancelled') return 'View Room →';
+  if (type === 'trade_room_opened') return 'Join Negotiation →';
+  if (type === 'trade_override_review') return 'Review Trade →';
+  if (type === 'trade_override_approved') return 'View Trade →';
+  if (type === 'trade_override_denied') return 'View Room →';
+  if (type === 'tradeblock') return 'View Trade Center →';
+  if (type === 'reset_request' || type === 'reset_request_opponent') return 'View Reset Requests →';
+  if (type === 'cpu_trade_request') return 'Review CPU Trade →';
+  if (type === 'cpu_trade_result') return 'View Rosters →';
+  if (type === 'mention') return 'View Message →';
+  if (type === 'announcement') return 'View League News →';
+  if (['game_simulated', 'game_final', 'score_reported'].includes(type)) return 'View Result →';
+  if (type === 'injury_update') return 'View Injuries →';
+  if (type === 'extension_interest' || type === 'extension_offer_submitted') return 'View Contract →';
+  if (type === 'contract_deadline') return 'Review Deadline →';
+  if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) return 'View Matchup →';
+  if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) return 'View Calendar →';
+  if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) return 'View Draft →';
+  if (['draft_class_ready', 'contract_round', 'free_agency', 'offseason_stage'].includes(type)) return 'View Offseason →';
+  if (type === 'roster_compliance' || type === 'roster_cuts') return 'View Roster Cuts →';
+  if (type === 'expansion' || type === 'expansion_draft') return 'View Expansion →';
+  if (type === 'season_awards' || type === 'awards_finalized') return 'View Trophy Case →';
+  if (type === 'upgrade_points') return 'View Upgrade Points →';
+  return 'View League →';
+}
+
 export default function NotificationsScreen() {
   const [invites, setInvites] = useState<any[]>([]);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
@@ -292,7 +405,7 @@ export default function NotificationsScreen() {
                 >
                 <View style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
-                    {n.type === 'join_accepted' ? '✅' : n.type === 'join_denied' ? '❌' : n.type === 'trade_offer' ? '🤝' : n.type === 'trade_executed' ? '✅' : n.type === 'trade_declined' || n.type === 'trade_cancelled' ? '❌' : n.type === 'trade_override_review' ? '🔓' : n.type === 'trade_override_approved' ? '✅' : n.type === 'trade_override_denied' ? '❌' : n.type === 'custom_player_submitted' ? '📝' : n.type === 'custom_player_approved' ? '✅' : n.type === 'custom_player_denied' ? '❌' : n.type === 'mention' ? '📣' : '🔔'}
+                    {notificationIcon(n.type)}
                   </Text>
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}
@@ -307,44 +420,10 @@ export default function NotificationsScreen() {
                       </TouchableOpacity>
                     )}
                     {n.type !== 'join_accepted' && n.type !== 'join_denied' && n.type !== 'trade_listing' && (
-                      <TouchableOpacity onPress={() => {
-                        if (!n.leagueId) return;
-                        if (n.type === 'trade_offer' || n.type === 'trade_executed' || n.type === 'trade_declined' || n.type === 'trade_cancelled' || n.type === 'trade_room_opened' || n.type === 'trade_override_review' || n.type === 'trade_override_approved' || n.type === 'trade_override_denied')
-                          router.push({ pathname: '/screens/trade-room', params: { leagueId: n.leagueId, otherUid: n.otherUid || n.fromUid || '', otherTeamId: n.otherTeamId || '', otherTeamName: n.otherTeamName || n.fromTeamName || '' } });
-                        else if (n.type === 'custom_player_submitted')
-                          router.push({ pathname: '/screens/pending-players', params: { leagueId: n.leagueId } });
-                        else if (n.type === 'custom_player_approved' || n.type === 'custom_player_denied')
-                          router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
-                        else if (n.type === 'tradeblock' || n.type === 'trade_listing')
-                          router.push({ pathname: '/screens/trade-channel', params: { leagueId: n.leagueId, channelId: 'trade-center' } });
-                        else if (n.type === 'mention')
-                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: n.channelId || 'league-chat', channelLabel: n.channelLabel || 'League Chat', channelIcon: n.channelIcon || '💬', commissionerId: '', coCommissioners: '[]' } });
-                        else if (n.type === 'cpu_trade_request')
-                          router.push({ pathname: '/screens/cpu-trade-requests', params: { leagueId: n.leagueId } });
-                        else if (n.type === 'cpu_trade_result')
-                          router.push({ pathname: '/screens/league-rosters', params: { leagueId: n.leagueId } });
-                        else if (n.type === 'reset_request' || n.type === 'reset_request_opponent' || n.type === 'reset_disputed')
-                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'reset-requests', channelLabel: 'Game Resets', channelIcon: '🔁', commissionerId: '', coCommissioners: '[]' } });
-                        else if (n.type === 'announcement')
-                          router.push({ pathname: '/screens/channel', params: { leagueId: n.leagueId, leagueName: n.leagueName || '', channelId: 'announcements', channelLabel: 'League News', channelIcon: '📰', commissionerId: '', coCommissioners: '[]' } });
-                        else
-                          router.push({ pathname: '/screens/league', params: { leagueId: n.leagueId } });
-                      }}>
+                      <TouchableOpacity onPress={() => routeNotification(n)}>
                         <Text style={styles.notifText}>{n.message || n.type}</Text>
                         {n.leagueId && <Text style={styles.notifLink}>
-                          {n.type === 'trade_offer' ? 'Review Offer →' :
-                           n.type === 'trade_executed' ? 'View Trade →' :
-                           n.type === 'trade_declined' || n.type === 'trade_cancelled' ? 'View Room →' :
-                           n.type === 'trade_room_opened' ? 'Join Negotiation →' :
-                           n.type === 'trade_override_review' ? 'Review Trade →' :
-                           n.type === 'trade_override_approved' ? 'View Trade →' :
-                           n.type === 'trade_override_denied' ? 'View Room →' :
-                           n.type === 'tradeblock' ? 'View Trade Center →' :
-                           n.type === 'reset_request' || n.type === 'reset_request_opponent' ? 'View Reset Requests →' :
-                           n.type === 'cpu_trade_request' ? 'Review CPU Trade →' :
-                           n.type === 'cpu_trade_result' ? 'View Rosters →' :
-                           n.type === 'mention' ? 'View message →' :
-                           n.type === 'announcement' ? 'View League News →' : 'View League →'}
+                          {notificationActionLabel(n.type)}
                         </Text>}
                       </TouchableOpacity>
                     )}

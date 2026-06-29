@@ -39,9 +39,10 @@ export default function ProfileScreen() {
   const [eaId, setEaId] = useState('');
 
   const ALL_SPORTS = [
-    'NBA 2K', 'Madden NFL', 'MLB The Show', 'EA FC (FIFA)',
-    'NHL', 'UFC', 'WWE 2K', 'F1', 'College Football',
-    'Rocket League', 'Tony Hawk', 'Golf PGA Tour',
+    'NBA Franchise', 'NFL Franchise', 'MLB Franchise',
+    'Soccer Franchise', 'Hockey Franchise', 'Combat Sports',
+    'Motorsports Franchise', 'College Football',
+    'Rocket League', 'Skateboarding', 'Golf Franchise',
   ];
   const CONSOLES = ['PS5', 'Xbox Series X', 'Xbox Series S', 'ROG Xbox Ally', 'PC', 'Nintendo Switch 2', 'Nintendo Switch', 'Steam Deck'];
 
@@ -131,10 +132,10 @@ export default function ProfileScreen() {
   };
 
   const saveProfile = async () => {
-    if (!profileUid) return;
+    if (!user?.uid || profileUid !== user.uid) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateDoc(doc(db, 'users', profileUid), {
         bio,
         gamerTag,
         dmEnabled,

@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 const POS_COLORS: Record<string, string> = {
   PG: '#1d4ed8', SG: '#0891b2', SF: '#16a34a', PF: '#ca8a04', C: '#dc2626',

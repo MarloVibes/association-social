@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, getDocs, writeBatch } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 
 // Recursively delete all messages in a group chat's messages subcollection.

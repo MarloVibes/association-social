@@ -1,0 +1,11 @@
+{
+  "players": {
+    "fixture-1": {
+      "team": "NEW",
+      "jersey_number": "4",
+      "skill_grades": {
+        "threePoint": "S"
+      }
+    }
+  }
+}

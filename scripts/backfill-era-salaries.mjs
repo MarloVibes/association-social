@@ -9,8 +9,8 @@
 //   Salaries are scaled from each player's real per-game production (points,
 //   with a small minutes weight) into that era's real salary cap. The top
 //   scorer in an era lands near a max contract (~32% of the era cap); role
-//   players sit near the era minimum. This mirrors NBA 2K's MyNBA Eras, where
-//   the cap economy is scaled per era so trade value stays proportional.
+//   players sit near the era minimum. The cap economy is scaled per era so
+//   trade value stays proportional.
 //
 //   This is NOT a database of exact historical contracts (those aren't
 //   reliably available per-player for these seasons). It's a production-based

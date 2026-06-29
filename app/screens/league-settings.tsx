@@ -7,7 +7,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
+import { suppressDeletedLeagueAlert } from '@/utils/deletedLeagueAlert';
+import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
 
 const PRIVACY_OPTIONS = [
   { value: 'public', label: 'Public', desc: 'Anyone can find and join your league' },
@@ -44,7 +47,7 @@ export default function LeagueSettingsScreen() {
   const [maxMembers, setMaxMembers] = useState('30');
   const [paused, setPaused] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [salaryCap, setSalaryCap] = useState('154647000');
+  const [salaryCap, setSalaryCap] = useState('');
   const [tradeApronTolerance, setTradeApronTolerance] = useState('1.25');
   const [votePassThreshold, setVotePassThreshold] = useState('majority');
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
@@ -52,6 +55,8 @@ export default function LeagueSettingsScreen() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
+  const [draftTimerSeconds, setDraftTimerSeconds] = useState('120');
 
   useEffect(() => { loadData(); }, [leagueId]);
 
@@ -79,14 +84,25 @@ export default function LeagueSettingsScreen() {
       setInviteCode(data.inviteCode || '');
       setTradeApprovalMode(data.tradeApprovalMode || 'instant');
       setMaxPlayersPerTrade(String(data.maxPlayersPerTrade || 6));
-      setMaxMembers(String(data.maxMembers || 30));
+      setMaxMembers(String(
+        typeof data.maxMembers === 'number'
+          ? data.maxMembers
+          : getSportRules(data.sport).teamCount
+      ));
       setPaused(!!data.paused);
       setArchived(!!data.archived);
-      setSalaryCap(String(data.salaryCap || getEraCap(data.era)));
+      const loadedFinanceMode = getSportRules(data.sport).financeMode;
+      const financeValue = loadedFinanceMode === 'team_budget'
+        ? (data.teamBudget ?? data.salaryCap)
+        : data.salaryCap;
+      const financeDefault = loadedFinanceMode === 'nba_cap' ? getEraCap(data.era) : null;
+      setSalaryCap(financeValue == null ? (financeDefault == null ? '' : String(financeDefault)) : String(financeValue));
       setTradeApronTolerance(String(data.tradeApronTolerance || 1.25));
       setVotePassThreshold(data.votePassThreshold || 'majority');
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
+      setScheduleGamesPerTeam(String(data.gamesPerTeam || 29));
+      setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
   };
@@ -94,6 +110,9 @@ export default function LeagueSettingsScreen() {
   const isFounder = league?.commissionerId === user?.uid;
   const [pendingCount, setPendingCount] = useState(0);
   const isCommissioner = isFounder || (league?.coCommissioners || []).includes(user?.uid || '');
+  const sportRules = getSportRules(league?.sport);
+  const teamLimit = sportRules.teamCount;
+  const financeMode = sportRules.financeMode;
 
   if (loading) {
     return (
@@ -131,6 +150,35 @@ export default function LeagueSettingsScreen() {
     setSaving(false);
   };
 
+  const generateSchedule = async () => {
+    if (!leagueId) return;
+    setSaving(true);
+    try {
+      const createSchedule = httpsCallable(functions, 'generateNbaSchedule');
+      let data: any;
+      try {
+        const result = await createSchedule({
+          leagueId,
+          gamesPerTeam: Number(scheduleGamesPerTeam),
+        });
+        data = result.data as any;
+      } catch (error: any) {
+        if (!isMissingCallable(error)) throw error;
+        data = await createNbaScheduleLocally({
+          leagueId,
+          gamesPerTeam: Number(scheduleGamesPerTeam),
+          createdBy: user?.uid,
+        });
+      }
+      Alert.alert('Schedule created', `${data.games || 0} games locked for this season.`);
+      await loadData();
+    } catch (error: any) {
+      Alert.alert('Schedule failed', error.message || 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const pickLeaguePhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission needed', 'Please allow photo library access.'); return; }
@@ -158,13 +206,32 @@ export default function LeagueSettingsScreen() {
     if (!name.trim()) { Alert.alert('Name required', 'League name cannot be empty.'); return; }
     const max = parseInt(maxPlayersPerTrade, 10);
     if (isNaN(max) || max < 1 || max > 15) { Alert.alert('Invalid', 'Max players per trade must be between 1 and 15.'); return; }
-    const capNum = parseInt(salaryCap.replace(/[^0-9]/g, ''), 10) || 154647000;
+    const normalizedFinance = salaryCap.trim().replace(/[$,\s]/g, '');
+    const capNum = Number(normalizedFinance);
+    if (!normalizedFinance || !Number.isFinite(capNum) || capNum <= 0) {
+      Alert.alert(
+        'Invalid',
+        financeMode === 'team_budget'
+          ? 'Team budget must be greater than zero.'
+          : 'Salary cap must be greater than zero.'
+      );
+      return;
+    }
     const tolNum = parseFloat(tradeApronTolerance) || 1.25;
-    if (tolNum < 1.0 || tolNum > 2.0) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
+    if (financeMode === 'nba_cap' && (tolNum < 1.0 || tolNum > 2.0)) { Alert.alert('Invalid', 'Trade tolerance must be between 1.0 and 2.0.'); return; }
     const mm = parseInt(maxMembers, 10);
     const currentMembers = league?.members?.length || 1;
-    if (isNaN(mm) || mm < 1 || mm > 30) { Alert.alert('Invalid', 'Max GMs must be between 1 and 30.'); return; }
+    if (isNaN(mm) || mm < 1 || mm > teamLimit) { Alert.alert('Invalid', 'Max GMs must be between 1 and ' + teamLimit + '.'); return; }
     if (mm < currentMembers) { Alert.alert('Too low', 'This league already has ' + currentMembers + ' GMs, so the max can\'t be set below that. Remove members first if you want a smaller cap.'); return; }
+    const draftTimer = parseInt(draftTimerSeconds, 10);
+    if (isNaN(draftTimer) || draftTimer < 30 || draftTimer > 600) {
+      Alert.alert('Invalid', 'Draft timer must be between 30 and 600 seconds.');
+      return;
+    }
+    const financePatch = financeMode === 'team_budget'
+      ? { teamBudget: capNum, salaryCap: capNum }
+      : { salaryCap: capNum };
+    const offseasonTimerPatch = league?.offseason ? { 'offseason.draftTimerSeconds': draftTimer } : {};
     await saveField({
       name: name.trim(),
       description: description.trim(),
@@ -173,8 +240,14 @@ export default function LeagueSettingsScreen() {
       tradeApprovalMode,
       maxPlayersPerTrade: max,
       maxMembers: mm,
-      salaryCap: capNum,
-      tradeApronTolerance: tolNum,
+      rosterLimit: sportRules.standardRosterLimit,
+      twoWayLimit: sportRules.twoWayLimit,
+      draftRounds: sportRules.draftRounds,
+      draftTimerSeconds: draftTimer,
+      financeMode: sportRules.financeMode,
+      ...offseasonTimerPatch,
+      ...financePatch,
+      ...(financeMode === 'nba_cap' ? { tradeApronTolerance: tolNum } : {}),
       votePassThreshold,
       voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
       commissionerCanOverride,
@@ -226,6 +299,7 @@ export default function LeagueSettingsScreen() {
           setSaving(true);
           try {
             const deleteLeague = httpsCallable(functions, 'deleteLeague');
+            suppressDeletedLeagueAlert(leagueId);
             await deleteLeague({ leagueId });
             Alert.alert('Deleted', 'The league has been deleted.');
             router.replace('/(tabs)/dashboard');
@@ -355,7 +429,7 @@ export default function LeagueSettingsScreen() {
                 placeholder='2'
                 placeholderTextColor='#555'
               />
-              <Text style={styles.helper}>Days GMs have to vote before a trade auto-resolves (1-14). The two GMs in the trade don't vote.</Text>
+              <Text style={styles.helper}>{"Days GMs have to vote before a trade auto-resolves (1-14). The two GMs in the trade don't vote."}</Text>
             </>
           )}
 
@@ -365,36 +439,61 @@ export default function LeagueSettingsScreen() {
             value={maxMembers}
             onChangeText={setMaxMembers}
             keyboardType='number-pad'
-            placeholder='30'
+            placeholder={String(teamLimit)}
             placeholderTextColor='#555'
           />
-          <Text style={styles.helper}>How many GMs can be in this league (1-30). Once full, new applicants join a waitlist.</Text>
+          <Text style={styles.helper}>How many GMs can be in this league (1-{teamLimit}). Once full, new applicants join a waitlist.</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Draft Timer (seconds)</Text>
+          <TextInput
+            style={styles.input}
+            value={draftTimerSeconds}
+            onChangeText={setDraftTimerSeconds}
+            keyboardType='number-pad'
+            placeholder={String(sportRules.defaultDraftTimerSeconds)}
+            placeholderTextColor='#555'
+          />
+          <Text style={styles.helper}>How long each team has to make a live draft pick (30-600 seconds).</Text>
         </View>
 
-        {/* Salary Cap */}
-        <Text style={styles.sectionLabel}>SALARY CAP (CURRENT ERA ONLY)</Text>
+        {/* League finances */}
+        <Text style={styles.sectionLabel}>
+          {financeMode === 'team_budget' ? 'TEAM BUDGET' : financeMode === 'hard_cap' ? 'HARD SALARY CAP' : 'SALARY CAP (CURRENT ERA ONLY)'}
+        </Text>
         <View style={styles.card}>
-          <Text style={styles.fieldLabel}>League Salary Cap (USD)</Text>
+          <Text style={styles.fieldLabel}>
+            {financeMode === 'team_budget' ? 'Team Budget (USD)' : financeMode === 'hard_cap' ? 'Hard Salary Cap (USD)' : 'League Salary Cap (USD)'}
+          </Text>
           <TextInput
             style={styles.input}
             value={salaryCap}
             onChangeText={setSalaryCap}
             keyboardType='number-pad'
-            placeholder='154647000'
+            placeholder={financeMode === 'nba_cap' ? '154647000' : 'Required'}
             placeholderTextColor='#555'
           />
-          <Text style={styles.helper}>2025-26 NBA cap is $154.6M. Change for custom leagues.</Text>
+          <Text style={styles.helper}>
+            {financeMode === 'team_budget'
+              ? 'Sets the default team payroll budget for this league.'
+              : financeMode === 'hard_cap'
+                ? 'Sets the hard payroll limit for teams in this league.'
+                : '2025-26 NBA cap is $154.6M. Change for custom leagues.'}
+          </Text>
 
-          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Trade Tolerance Multiplier</Text>
-          <TextInput
-            style={styles.input}
-            value={tradeApronTolerance}
-            onChangeText={setTradeApronTolerance}
-            keyboardType='decimal-pad'
-            placeholder='1.25'
-            placeholderTextColor='#555'
-          />
-          <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
+          {financeMode === 'nba_cap' && (
+            <>
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Trade Tolerance Multiplier</Text>
+              <TextInput
+                style={styles.input}
+                value={tradeApronTolerance}
+                onChangeText={setTradeApronTolerance}
+                keyboardType='decimal-pad'
+                placeholder='1.25'
+                placeholderTextColor='#555'
+              />
+              <Text style={styles.helper}>NBA standard is 1.25 (the 125% rule). Loosen up to 2.0 for casual leagues.</Text>
+            </>
+          )}
 
           <TouchableOpacity
             style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }]}
@@ -406,7 +505,11 @@ export default function LeagueSettingsScreen() {
           <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.toggleLabel}>Allow Commissioner Override</Text>
-              <Text style={styles.toggleDesc}>Lets commissioners force-execute trades that fail the salary check</Text>
+              <Text style={styles.toggleDesc}>
+                {financeMode === 'nba_cap'
+                  ? 'Lets commissioners force-execute trades that fail the salary check'
+                  : 'Lets commissioners approve trades that fail financial checks'}
+              </Text>
             </View>
             <Switch
               value={commissionerCanOverride}
@@ -416,6 +519,44 @@ export default function LeagueSettingsScreen() {
             />
           </View>
         </View>
+
+        {league?.sport === 'nba' && (
+          <>
+            <Text style={styles.sectionLabel}>NBA SCHEDULE</Text>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Games Per Team</Text>
+              {['14', '29', '58', '82'].map(value => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.optionRow, scheduleGamesPerTeam === value && styles.optionRowActive]}
+                  onPress={() => setScheduleGamesPerTeam(value)}
+                  disabled={league?.scheduleLocked === true}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionLabel, scheduleGamesPerTeam === value && styles.optionLabelActive]}>{value} games</Text>
+                    <Text style={styles.optionDesc}>{value === '82' ? 'Full-length season' : 'Condensed league season'}</Text>
+                  </View>
+                  {scheduleGamesPerTeam === value && <Text style={styles.check}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }, league?.scheduleLocked && { opacity: 0.45 }]}
+                onPress={generateSchedule}
+                disabled={saving || league?.scheduleLocked === true}
+              >
+                <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>
+                  {league?.scheduleLocked ? 'SCHEDULE LOCKED' : 'CREATE AND LOCK SCHEDULE'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteBtn, { backgroundColor: '#101410', borderColor: '#00ff87', borderWidth: 1, marginTop: 12 }]}
+                onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+              >
+                <Text style={[styles.deleteBtnText, { color: '#00ff87' }]}>VIEW CALENDAR</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveBasics} disabled={saving}>
           {saving ? <ActivityIndicator color='#000' /> : <Text style={styles.saveBtnText}>SAVE CHANGES</Text>}

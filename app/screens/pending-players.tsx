@@ -1,17 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+function statSummary(player: any, sport: string) {
+  const season = player.seasons?.[0] || {};
+  if (sport === 'madden' || sport === 'nfl') {
+    const position = player.position || '';
+    let fields: string[][];
+    if (position === 'QB') {
+      fields = [['passing_yards', 'PASS YDS'], ['passing_tds', 'PASS TD'], ['interceptions_thrown', 'INT']];
+    } else if (['HB', 'RB', 'FB'].includes(position)) {
+      fields = [['rushing_yards', 'RUSH YDS'], ['rushing_tds', 'RUSH TD'], ['receptions', 'REC']];
+    } else if (['WR', 'TE'].includes(position)) {
+      fields = [['receiving_yards', 'REC YDS'], ['receptions', 'REC'], ['receiving_tds', 'REC TD']];
+    } else if (position === 'K') {
+      fields = [['field_goal_pct', 'FG%'], ['gp', 'GP']];
+    } else if (position === 'P') {
+      fields = [['punt_average', 'PUNT AVG'], ['gp', 'GP']];
+    } else {
+      fields = [['tackles', 'TACKLES'], ['sacks', 'SACKS'], ['interceptions', 'INT']];
+    }
+    return fields.map(([key, label]) => `${season[key] || 0} ${label}`).join(' · ');
+  }
+  if (sport === 'mlb') {
+    const pitcher = ['SP', 'RP', 'CP', 'P', 'TWP'].includes(player.position)
+      || ['era', 'whip', 'wins', 'saves'].some(key => season[key] !== undefined);
+    return pitcher
+      ? `${season.era || 0} ERA · ${season.whip || 0} WHIP · ${season.so || 0} SO`
+      : `${season.avg || 0} AVG · ${season.hr || 0} HR · ${season.rbi || 0} RBI`;
+  }
+  return `${season.ppg || 0} PPG · ${season.rpg || 0} RPG · ${season.apg || 0} APG`;
+}
 
 export default function PendingPlayersScreen() {
   const params = useLocalSearchParams<{ leagueId: string }>();
@@ -20,6 +41,7 @@ export default function PendingPlayersScreen() {
   const [pending, setPending] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCommissioner, setIsCommissioner] = useState(false);
+  const [leagueSport, setLeagueSport] = useState('nba');
 
   async function load() {
     setLoading(true);
@@ -27,6 +49,7 @@ export default function PendingPlayersScreen() {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
       if (leagueSnap.exists()) {
         const ld = leagueSnap.data() as any;
+        setLeagueSport(ld.sport || 'nba');
         const myUid = auth.currentUser?.uid;
         const commUids = [ld.commissionerId, ...(ld.coCommissioners || [])].filter(Boolean);
         setIsCommissioner(myUid ? commUids.includes(myUid) : false);
@@ -51,6 +74,7 @@ export default function PendingPlayersScreen() {
             // Phase 4: write approved custom players to vault
             await setDoc(doc(db, 'players', id), {
               ...rest,
+              sport: p.sport || leagueSport,
               bref_id: id,
               is_custom: true,
               created_by_league: leagueId,
@@ -98,7 +122,10 @@ export default function PendingPlayersScreen() {
   }
 
   function edit(p: any) {
-    router.push({ pathname: '/screens/create-player', params: { leagueId, era: p.seasons?.[0]?.season || '2024-25', pendingId: p.id } });
+    router.push({
+      pathname: '/screens/create-player',
+      params: { leagueId, era: p.seasons?.[0]?.season || '2024-25', sport: leagueSport, pendingId: p.id },
+    });
   }
 
   if (loading) {
@@ -124,19 +151,18 @@ export default function PendingPlayersScreen() {
           <Text style={styles.emptyText}>No pending submissions.</Text>
         ) : (
           pending.map(p => {
-            const s = p.seasons?.[0] || {};
             return (
               <View key={p.id} style={styles.card}>
                 <View style={styles.cardRow}>
-                  {p.photoUrl ? (
-                    <Image source={{ uri: p.photoUrl }} style={styles.photo} />
+                  {p.photo_url || p.photoUrl ? (
+                    <Image source={{ uri: p.photo_url || p.photoUrl }} style={styles.photo} />
                   ) : (
                     <View style={styles.photoPlaceholder}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>
                   )}
                   <View style={styles.cardInfo}>
                     <Text style={styles.playerName}>{p.full_name}</Text>
                     <Text style={styles.playerMeta}>{p.position} · Age {p.age} · {p.height}</Text>
-                    <Text style={styles.statsLine}>{s.ppg || 0} PPG · {s.rpg || 0} RPG · {s.apg || 0} APG</Text>
+                    <Text style={styles.statsLine}>{statSummary(p, leagueSport)}</Text>
                   </View>
                 </View>
                 <View style={styles.actionRow}>

@@ -3,17 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, query, where, getDocs } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY',
-  projectId: 'association-social',
-};
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 const CONSOLES = [
   { key: 'ps', name: 'PlayStation', icon: '🎮', colors: ['#003791', '#0070d1'] as const },

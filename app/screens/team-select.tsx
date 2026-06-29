@@ -1,16 +1,18 @@
-import { getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
 import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import { generateTeamPicks } from '@/constants/draftPicks';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ActivityIndicator, Alert, Dimensions, Easing, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, ActivityIndicator, Alert, Dimensions, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
+import { getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
+import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const ERA_LABELS: Record<string, string> = {
   magic_bird: 'Magic vs Bird Era',
@@ -41,33 +43,6 @@ const TEAM_COLORS: Record<string, string[]> = {
   UTA: ['#002B5C', '#F9A01B'], WAS: ['#002B5C', '#E31837'],
 };
 
-const NBA_TEAM_IDS: Record<string, string> = {
-  ATL: '1610612737', BOS: '1610612738', BKN: '1610612751', NJN: '1610612751',
-  CHA: '1610612766', CHI: '1610612741', CLE: '1610612739', DAL: '1610612742',
-  DEN: '1610612743', DET: '1610612765', GSW: '1610612744', HOU: '1610612745',
-  IND: '1610612754', LAC: '1610612746', LAL: '1610612747', MEM: '1610612763',
-  MIA: '1610612748', MIL: '1610612749', MIN: '1610612750', NOH: '1610612740',
-  NOK: '1610612740', NOP: '1610612740', NYK: '1610612752', OKC: '1610612760',
-  ORL: '1610612753', PHI: '1610612755', PHX: '1610612756', POR: '1610612757',
-  SAC: '1610612758', SAS: '1610612759', SEA: '1610612760', TOR: '1610612761',
-  UTA: '1610612762', WAS: '1610612764',
-};
-
-const DEFUNCT_LOGOS: Record<string, string> = {
-  SEA: 'https://i.logocdn.com/nba/1992/seattle-supersonics@3x.png',
-  NJN: 'https://i.logocdn.com/nba/1992/new-jersey-nets@3x.png',
-  NOK: 'https://i.logocdn.com/nba/2003/new-orleans-hornets@3x.png',
-  NOH: 'https://i.logocdn.com/nba/2003/new-orleans-hornets@3x.png',
-  KCK: 'https://i.logocdn.com/nba/1984/sacramento-kings@3x.png',
-  WAS: 'https://i.logocdn.com/nba/1992/washington-bullets@3x.png',
-};
-
-const getLogoUrl = (abbr: string, era?: string) => {
-  if (!abbr) return null;
-  if (DEFUNCT_LOGOS[abbr]) return DEFUNCT_LOGOS[abbr];
-  return 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/' + abbr.toLowerCase() + '.png';
-};
-
 // Lighten/darken a hex color by amt (-255..255) — mirrors league-rosters gradients.
 function adjustColor(hex: string, amt: number): string {
   const c = (hex || '#1a1a2a').replace('#', '');
@@ -79,8 +54,8 @@ function adjustColor(hex: string, amt: number): string {
 }
 
 // Reusable team card matching the League Rosters layout. Optionally face-down (flip).
-function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
-  team: any; eraKey: string; sport?: string; faceDown?: boolean; flipAnim?: Animated.Value;
+function RosterTeamCard({ team, currentYear, sport, faceDown, flipAnim }: {
+  team: any; currentYear?: number; sport?: string; faceDown?: boolean; flipAnim?: Animated.Value;
 }) {
   const isNBA = !sport || sport === 'nba';
   const base = isNBA
@@ -100,7 +75,7 @@ function RosterTeamCard({ team, eraKey, sport, faceDown, flipAnim }: {
       <SportTeamLogo
         sport={sport}
         abbr={team.abbreviation}
-        era={eraKey}
+        era={currentYear}
         style={styles.rosterLogo}
         textColor="#ffffff"
         fontSize={15}
@@ -155,6 +130,7 @@ export default function TeamSelectScreen() {
   const [flippedId, setFlippedId] = useState<string | null>(null);
   const [spinChoices, setSpinChoices] = useState(1);
   const [spunResults, setSpunResults] = useState<any[]>([]);
+  const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
   const spinY = useRef(new Animated.Value(0)).current;
   const flipAnims = useRef<Record<string, Animated.Value>>({});
 
@@ -191,6 +167,7 @@ export default function TeamSelectScreen() {
       const ld = lSnap.data() || {};
       const sportVal = ld.sport || sport || 'nba';
       setSportResolved(sportVal);
+      setCurrentYear(typeof ld.currentYear === 'number' ? ld.currentYear : undefined);
       const isNBALocal = sportVal === 'nba';
       const poolKeyLocal = isNBALocal ? eraKey : sportVal;
 
@@ -331,6 +308,8 @@ export default function TeamSelectScreen() {
       const teamDocId = leagueId + '_' + user.uid;
       const leagueRef = doc(db, 'leagues', leagueId);
       const teamRef = doc(db, 'leagues', leagueId, 'teams', teamDocId);
+      let shouldGenerateSchedule = false;
+      let selectedGamesPerTeam = 29;
       await runTransaction(db, async (tx) => {
         const leagueTxnSnap = await tx.get(leagueRef);
         const existingTeamSnap = await tx.get(teamRef);
@@ -338,7 +317,13 @@ export default function TeamSelectScreen() {
         const currentLeague = leagueTxnSnap.data() || {};
         const currentTaken: string[] = currentLeague.takenTeams || [];
         const currentMembers: string[] = currentLeague.members || [];
-        const maxMembers = typeof currentLeague.maxMembers === 'number' ? currentLeague.maxMembers : 30;
+        const maxMembers = typeof currentLeague.maxMembers === 'number'
+          ? currentLeague.maxMembers
+          : getSportRules(currentLeague.sport).teamCount;
+        shouldGenerateSchedule = currentLeague.sport === 'nba'
+          && currentLeague.scheduleLocked !== true
+          && currentLeague.mode !== 'draft';
+        selectedGamesPerTeam = Number(currentLeague.gamesPerTeam || 29);
 
         if (currentTaken.includes(team.id)) {
           throw new Error((team.full_name || 'That team') + ' was just claimed by another GM.');
@@ -373,8 +358,44 @@ export default function TeamSelectScreen() {
       } catch (e) {
         console.warn('Failed to add league to user profile', e);
       }
+      if (shouldGenerateSchedule) {
+        let scheduleCreationFailed = false;
+        try {
+          const createSchedule = httpsCallable(functions, 'generateNbaSchedule');
+          await createSchedule({
+            leagueId,
+            gamesPerTeam: selectedGamesPerTeam,
+          });
+        } catch (e: any) {
+          if (isMissingCallable(e)) {
+            try {
+              await createNbaScheduleLocally({
+                leagueId,
+                gamesPerTeam: selectedGamesPerTeam,
+                createdBy: user.uid,
+              });
+            } catch (fallbackError) {
+              scheduleCreationFailed = true;
+              console.warn('Failed to create NBA schedule locally after team claim', fallbackError);
+            }
+          } else {
+            scheduleCreationFailed = true;
+            console.warn('Failed to create NBA schedule after team claim', e);
+          }
+        }
+        if (scheduleCreationFailed) {
+          Alert.alert(
+            'Team claimed',
+            'The team was claimed, but the schedule did not lock. Open League Settings > NBA Schedule to create and lock it.'
+          );
+        }
+      }
       router.dismissAll();
-      router.replace({ pathname: '/screens/league', params: { leagueId } });
+      if (isDraft) {
+        router.replace({ pathname: '/screens/offseason/live-draft', params: { leagueId } });
+      } else {
+        router.replace({ pathname: '/screens/league', params: { leagueId } });
+      }
     } catch (e: any) {
       Alert.alert('Error', e?.message || String(e));
       setSaving(false);
@@ -433,7 +454,7 @@ export default function TeamSelectScreen() {
                       disabled={!!flippedId && flippedId !== team.id}
                       style={[styles.faceDownItem, !!flippedId && flippedId !== team.id && { opacity: 0.4 }]}
                     >
-                      <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} faceDown flipAnim={getFlipAnim(team.id)} />
+                      <RosterTeamCard team={team} currentYear={currentYear} sport={sportResolved} faceDown flipAnim={getFlipAnim(team.id)} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -445,7 +466,7 @@ export default function TeamSelectScreen() {
                   <Animated.View style={{ transform: [{ translateY: spinY }] }}>
                     {reel.map((team, i) => (
                       <View key={team.id + '_' + i} style={styles.reelCard}>
-                        <RosterTeamCard team={team} eraKey={eraKey} sport={sportResolved} />
+                        <RosterTeamCard team={team} currentYear={currentYear} sport={sportResolved} />
                       </View>
                     ))}
                   </Animated.View>
@@ -482,7 +503,7 @@ export default function TeamSelectScreen() {
                           onPress={() => setSelectedTeam(t)}
                           style={[styles.resultItem, sel && styles.resultItemSel]}
                         >
-                          <View style={{ flex: 1 }}><RosterTeamCard team={t} eraKey={eraKey} sport={sportResolved} /></View>
+                          <View style={{ flex: 1 }}><RosterTeamCard team={t} currentYear={currentYear} sport={sportResolved} /></View>
                           {sel && <Text style={styles.resultCheck}>✓</Text>}
                         </TouchableOpacity>
                       );
@@ -532,10 +553,13 @@ export default function TeamSelectScreen() {
                   disabled={taken}
                 >
                   <View style={[styles.teamColorBar, { backgroundColor: colors[0] }]} />
-                  <Image
-                    source={getTeamLogoLocal(team.abbreviation, eraKey) || { uri: getTeamLogoUrl(team.abbreviation, eraKey) }}
+                  <SportTeamLogo
+                    sport={sportResolved}
+                    abbr={team.abbreviation}
+                    era={currentYear}
                     style={styles.teamRowLogo}
-                    resizeMode='contain'
+                    textColor="#ffffff"
+                    fontSize={13}
                   />
                   <View style={styles.teamRowInfo}>
                     <Text style={[styles.teamRowName, taken && styles.teamRowNameTaken]}>{team.full_name}</Text>

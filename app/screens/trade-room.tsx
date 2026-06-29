@@ -1,11 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, query, where } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
+import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
+import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { getPositionFilters } from '@/domain/sports/playerFields';
+import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { validateTrade } from '@/domain/finance/validateTrade';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
@@ -31,149 +36,18 @@ function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
 }
 
-// Execute a trade that's sitting in 'pending_veto' — runs the swap, sets it
-// 'executed', and notifies both GMs. Self-contained (reads everything fresh),
-// so it's safe to call from the commissioner's Approve button OR opportunistically
-// when the veto window has elapsed. Concurrency-safe: the transaction re-checks
-// status === 'pending_veto', so a second caller no-ops.
-async function finalizeVetoTradeTx(leagueId: string, roomId: string) {
-  try {
-    const result: any = await runTransaction(db, async (tx) => {
-      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return { done: false };
-      const data = snap.data() as any;
-      if (data.status !== 'pending_veto' && data.status !== 'vote_passed') return { done: false };
-      const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
-      const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
-      const [hostSnap, guestSnap] = await Promise.all([tx.get(hostTeamRef), tx.get(guestTeamRef)]);
-      if (!hostSnap.exists() || !guestSnap.exists()) return { done: false };
-      const host = hostSnap.data() as any;
-      const guest = guestSnap.data() as any;
-      const hostOffered = data.hostOffer || [];
-      const guestOffered = data.guestOffer || [];
-      const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
-      const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
-      const hostPicks = data.hostPicks || [];
-      const guestPicks = data.guestPicks || [];
-      const hostPickIds = new Set(hostPicks.map((pk: any) => pk.id));
-      const guestPickIds = new Set(guestPicks.map((pk: any) => pk.id));
-      // Verify both sides still own everything they're sending (players AND picks);
-      // another trade could have moved an asset since this one was agreed.
-      const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
-      const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-      const hostOwnsPicks = hostPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
-      const guestOwnsPicks = guestPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
-      if (!allHostStillOwns || !allGuestStillOwns || !hostOwnsPicks || !guestOwnsPicks) {
-        tx.update(ref, { status: 'cancelled', cancelReason: 'roster_changed', updatedAt: serverTimestamp() });
-        return { done: false, cancelled: true };
-      }
-      const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
-      const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-      const newHostPicks = (host.picks || []).filter((pk: any) => !hostPickIds.has(pk.id)).concat(guestPicks);
-      const newGuestPicks = (guest.picks || []).filter((pk: any) => !guestPickIds.has(pk.id)).concat(hostPicks);
-      tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
-      tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
-      tx.update(ref, { status: 'executed', executedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      return { done: true, data, hostOffered, guestOffered };
-    });
-
-    if (result?.done && result.data) {
-      const d = result.data;
-      const note = {
-        type: 'trade_executed', leagueId, roomId,
-        createdAt: new Date().toISOString(),
-        message: 'Your trade was approved and has been completed.',
-      };
-      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
-        try { await updateDoc(doc(db, 'users', uid), { notifications: arrayUnion(note) }); } catch {}
-      }
-      try {
-        const hostAssets = [...((result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.hostPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
-        const guestAssets = [...((result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean)), ...((d.guestPicks || []).map((pk: any) => pickLabel(pk)))].join(', ') || 'assets';
-        await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-          type: 'trade_executed',
-          message: (d.hostTeamName || 'Team A') + ' traded ' + hostAssets + ' to ' + (d.guestTeamName || 'Team B') + ' for ' + guestAssets,
-          hostTeamId: d.hostTeamId, guestTeamId: d.guestTeamId, hostName: d.hostTeamName, guestName: d.guestTeamName,
-          createdAt: serverTimestamp(),
-        });
-      } catch {}
-    }
-    return result;
-  } catch (e) {
-    return { done: false, error: e };
-  }
-}
-
-// Tally a 'pending_vote' trade against the league's threshold. Sets status to
-// 'vote_passed' (the swap then runs via finalizeVetoTradeTx) or 'rejected'.
-// Eligible voters = all GMs except the two in the trade. Returns early/pending
-// if not yet decided, unless `force` (deadline) is set. Concurrency-safe.
-async function resolveVoteTradeTx(leagueId: string, roomId: string, force?: boolean) {
-  try {
-    const result: any = await runTransaction(db, async (tx) => {
-      const ref = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return { done: false };
-      const data = snap.data() as any;
-      if (data.status !== 'pending_vote') return { done: false };
-      const leagueSnap = await tx.get(doc(db, 'leagues', leagueId));
-      const league = (leagueSnap.data() || {}) as any;
-      const members: string[] = league.members || [];
-      const threshold: string = league.votePassThreshold || 'majority';
-      const participants = [data.hostUid, data.guestUid];
-      const eligible = members.filter(m => !participants.includes(m));
-      const E = eligible.length;
-      const votes = data.tradeVotes || {};
-      let approve = 0, reject = 0;
-      for (const uid of eligible) {
-        if (votes[uid] === 'approve') approve++;
-        else if (votes[uid] === 'reject') reject++;
-      }
-      let needToPass: number;
-      if (threshold === 'unanimous') needToPass = E;
-      else if (threshold === 'two_thirds') needToPass = Math.ceil((E * 2) / 3);
-      else needToPass = Math.floor(E / 2) + 1; // majority
-      const passed = E === 0 ? true : approve >= needToPass;
-      const cannotPass = E > 0 && reject > (E - needToPass);
-      if (passed) {
-        tx.update(ref, { status: 'vote_passed', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return { done: true, decided: 'passed' };
-      }
-      if (force || cannotPass) {
-        tx.update(ref, { status: 'rejected', voteResolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return { done: true, decided: 'rejected', data };
-      }
-      return { done: false, pending: true };
-    });
-
-    if (result?.decided === 'rejected' && result.data) {
-      const d = result.data;
-      const note = {
-        type: 'trade_rejected', leagueId, roomId,
-        createdAt: new Date().toISOString(),
-        message: 'The league voted down the trade between ' + (d.hostTeamName || 'Team A') + ' and ' + (d.guestTeamName || 'Team B') + '.',
-      };
-      for (const uid of [d.hostUid, d.guestUid].filter(Boolean)) {
-        try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
-      }
-    }
-    return result;
-  } catch (e) {
-    return { done: false, error: e };
-  }
-}
-
-function PlayerChip({ player, onRemove, locked, overrides }: { player: any; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
+function PlayerChip({ player, sport, onRemove, locked, overrides }: { player: any; sport: string; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
   const effSalary = overrides && (player?.player_id || player?.id) && overrides[player?.player_id || player?.id] !== undefined ? overrides[player?.player_id || player?.id] : (player?.salary || 0);
-  const brefId = player?.bref_id || player?.player_id?.split('_').slice(2).join('_') || '';
   return (
     <View style={[styles.chip, locked && styles.chipLocked]}>
-      {brefId ? (
-        <Image source={{ uri: 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' }} style={styles.chipPhoto} />
-      ) : (
+      <PlayerHeadshot
+        player={player}
+        sport={sport}
+        imageStyle={styles.chipPhoto}
+        fallback={
         <View style={styles.chipPhotoFallback}><Text style={styles.chipInitial}>{(player?.full_name || '?')[0]}</Text></View>
-      )}
+        }
+      />
       <View style={styles.chipInfo}>
         <Text style={styles.chipPos}>{player?.position || '?'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{player?.full_name}</Text>
@@ -210,6 +84,7 @@ export default function TradeRoomScreen() {
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [leagueEra, setLeagueEra] = useState<string>('');
+  const [leagueSport, setLeagueSport] = useState<string>('nba');
   const [tradeApronTolerance, setTradeApronTolerance] = useState<number>(1.25);
   const [commissionerCanOverride, setCommissionerCanOverride] = useState<boolean>(false);
   const [leagueCommUids, setLeagueCommUids] = useState<string[]>([]);
@@ -219,6 +94,8 @@ export default function TradeRoomScreen() {
   const [voteDeadlineDays, setVoteDeadlineDays] = useState<number>(2);
   const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
+  const [myPickerPosFilter, setMyPickerPosFilter] = useState('ALL');
+  const [theirPickerPosFilter, setTheirPickerPosFilter] = useState('ALL');
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -231,6 +108,29 @@ export default function TradeRoomScreen() {
   const [stepienRule, setStepienRule] = useState(false);
   const [draftBaseYear, setDraftBaseYear] = useState<number>(new Date().getFullYear() + 1);
   const presenceTimerRef = useRef<any>(null);
+  const finalizeInFlightRef = useRef(false);
+  const localFinalizeSuccessPendingRef = useRef(false);
+  const snapshotFinalizeKeyRef = useRef('');
+  const positionFilters = getPositionFilters(leagueSport);
+
+  const finalizeTradeRoom = async (_trade: any) => {
+    if (finalizeInFlightRef.current) return { executed: false, inFlight: true };
+    finalizeInFlightRef.current = true;
+    try {
+      const callable = httpsCallable(functions, 'finalizeTrade');
+      const response: any = await callable({ leagueId, roomId });
+      const result = response?.data || {};
+      return result;
+    } catch (e: any) {
+      const validationErrors = e?.details?.errors;
+      if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+        throw new Error(validationErrors.join('\n'));
+      }
+      throw e;
+    } finally {
+      finalizeInFlightRef.current = false;
+    }
+  };
 
   // Initial load + room creation
   useEffect(() => {
@@ -246,10 +146,10 @@ export default function TradeRoomScreen() {
         if (cancelled) return;
         if (mine) {
           setMyTeam(mine);
-          setMyRoster(mine.players || []);
+          setMyRoster([...(mine.players || [])].sort(compareRosterPlayersByValue));
         }
         if (theirs) {
-          setOtherRoster(theirs.players || []);
+          setOtherRoster([...(theirs.players || [])].sort(compareRosterPlayersByValue));
           setOtherUntouchables(theirs.untouchables || []);
           setOtherTeamPicks(theirs.picks || []);
         }
@@ -366,6 +266,7 @@ export default function TradeRoomScreen() {
       if (snap.exists()) {
         const data = snap.data() as any;
         setLeagueEra(data.era || 'current');
+        setLeagueSport(data.sport || 'nba');
         setTradeApronTolerance(typeof data.tradeApronTolerance === 'number' ? data.tradeApronTolerance : 1.25);
         setCommissionerCanOverride(!!data.commissionerCanOverride);
         const comms: string[] = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
@@ -373,7 +274,7 @@ export default function TradeRoomScreen() {
         setTradeApprovalMode(data.tradeApprovalMode || 'instant');
         setLeagueMembers(data.members || []);
         setVotePassThreshold(data.votePassThreshold || 'majority');
-        setStepienRule(!!data.stepienRule);
+        setStepienRule((data.sport || 'nba') === 'nba' && !!data.stepienRule);
         setDraftBaseYear(data.draftBaseYear || (new Date().getFullYear() + 1));
         setVoteDeadlineDays(typeof data.voteDeadlineDays === 'number' ? data.voteDeadlineDays : 2);
       }
@@ -395,8 +296,11 @@ export default function TradeRoomScreen() {
     const unsub = onSnapshot(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), snap => {
       const snapData = snap.data() as any;
       if (snapData?.status === 'executed' && prevStatus && prevStatus !== 'executed') {
-        // Trade executed remotely — show alert and route back
-        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
+        const localFinalizeWillAlert = finalizeInFlightRef.current || localFinalizeSuccessPendingRef.current;
+        if (!localFinalizeWillAlert) {
+          // Trade executed remotely — show alert and route back
+          Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => router.back() }]);
+        }
       }
       if (snapData?.status === 'cancelled' && snapData?.cancelReason === 'roster_changed' && prevStatus && prevStatus !== 'cancelled') {
         // Trade voided because a player in it was traded elsewhere first
@@ -409,14 +313,23 @@ export default function TradeRoomScreen() {
       if (snap.exists()) setRoom({ id: snap.id, ...snap.data() });
       // Opportunistic finalize: if the veto window has elapsed with no veto, execute now.
       if (snapData?.status === 'pending_veto' && snapData?.vetoDeadline && Date.now() > snapData.vetoDeadline) {
-        finalizeVetoTradeTx(leagueId, roomId);
+        const finalizeKey = 'pending_veto:' + snapData.vetoDeadline;
+        if (snapshotFinalizeKeyRef.current !== finalizeKey) {
+          snapshotFinalizeKeyRef.current = finalizeKey;
+          finalizeTradeRoom(snapData).catch(() => {});
+        }
       }
       // League vote: resolve at deadline; once passed, a participant runs the swap.
       if (snapData?.status === 'pending_vote' && snapData?.voteDeadline && Date.now() > snapData.voteDeadline) {
-        resolveVoteTradeTx(leagueId, roomId, true);
+        const callable = httpsCallable(functions, 'updateTradeDecision');
+        callable({ leagueId, roomId, action: 'cast_vote', forceResolve: true }).catch(() => {});
       }
       if (snapData?.status === 'vote_passed' && (myUid === snapData?.hostUid || myUid === snapData?.guestUid)) {
-        finalizeVetoTradeTx(leagueId, roomId);
+        const finalizeKey = 'vote_passed:' + (snapData.voteResolvedAt?.toMillis?.() || '');
+        if (snapshotFinalizeKeyRef.current !== finalizeKey) {
+          snapshotFinalizeKeyRef.current = finalizeKey;
+          finalizeTradeRoom(snapData).catch(() => {});
+        }
       }
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
     return () => unsub();
@@ -503,6 +416,10 @@ export default function TradeRoomScreen() {
   const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + getEffectiveSalary(p, overridesMap), 0);
   const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
   const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
+  const withEffectiveSalaries = (players: any[]) => (players || []).map((player: any) => ({
+    ...player,
+    salary: getEffectiveSalary(player, overridesMap),
+  }));
 
   const checkSalaryBalance = () => {
     const hostOut = sumSalary(room?.hostOffer || []);
@@ -538,6 +455,31 @@ export default function TradeRoomScreen() {
   const anyConfirmed = myConfirmed || otherConfirmed;
   const canEditMySide = !isPushedByMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
   const canEditOtherSide = !isPushedByMe && !isPushedToMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
+  const hostRoster = withEffectiveSalaries(isHost ? myRoster : otherRoster);
+  const guestRoster = withEffectiveSalaries(isHost ? otherRoster : myRoster);
+  const tradeValidation = validateTrade({
+    sport: leagueSport,
+    teamA: { players: hostRoster, picks: isHost ? (myTeam?.picks || []) : otherTeamPicks },
+    teamB: { players: guestRoster, picks: isHost ? otherTeamPicks : (myTeam?.picks || []) },
+    offerA: room?.hostOffer || [],
+    offerB: room?.guestOffer || [],
+    pickOfferA: room?.hostPicks || [],
+    pickOfferB: room?.guestPicks || [],
+    teamALabel: room?.hostTeamName || 'Host team',
+    teamBLabel: room?.guestTeamName || 'Guest team',
+    teamACap: myTeam?.salaryCap,
+    teamBCap: undefined,
+    teamABudget: myTeam?.budget,
+    teamBBudget: undefined,
+    nbaMatchingTolerance: tradeApronTolerance,
+    nbaMatchingBuffer: 100000,
+    commissionerOverride: !!room?.salaryOverrideApplied || !!overrideAppliedLocal,
+  });
+  const userFacingTradeMessages = tradeValidation.messages.length > 0
+    ? tradeValidation.messages
+    : tradeValidation.valid
+      ? ['This trade is ready from a salary and roster view.']
+      : [];
 
   const updateRoom = async (patch: any) => {
     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
@@ -581,7 +523,7 @@ export default function TradeRoomScreen() {
 
     // Stepien Rule: block offering a first-round pick if it would leave this team
     // without a first-rounder in back-to-back drafts.
-    if (stepienRule && pick.round === 1) {
+    if (leagueSport === 'nba' && stepienRule && pick.round === 1) {
       const owned = side === 'mine' ? (myTeam?.picks || []) : otherTeamPicks;
       const offeredFirstIds = new Set<string>([...current.filter((p: any) => p.round === 1).map((p: any) => p.id), pick.id]);
       const remainingFirstYears = owned.filter((p: any) => p.round === 1 && !offeredFirstIds.has(p.id)).map((p: any) => p.year);
@@ -650,30 +592,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Approve', onPress: async () => {
         try {
-          const requesterUid = room?.overrideRequestedBy || '';
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            salaryOverrideApplied: true,
-            pendingOverrideReview: false,
-            overrideApprovedBy: myUid,
-            overrideApprovedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          if (requesterUid) {
-            try {
-              await updateDoc(doc(db, 'users', requesterUid), {
-                notifications: arrayUnion({
-                  type: 'trade_override_approved',
-                  leagueId,
-                  roomId,
-                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
-                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
-                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
-                  createdAt: new Date().toISOString(),
-                  message: 'Commissioner approved your override. Both sides can confirm now.',
-                }),
-              });
-            } catch (e) {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'approve_override' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -684,29 +604,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Deny', style: 'destructive', onPress: async () => {
         try {
-          const requesterUid = room?.overrideRequestedBy || '';
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            pendingOverrideReview: false,
-            overrideDeniedBy: myUid,
-            overrideDeniedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          if (requesterUid) {
-            try {
-              await updateDoc(doc(db, 'users', requesterUid), {
-                notifications: arrayUnion({
-                  type: 'trade_override_denied',
-                  leagueId,
-                  roomId,
-                  otherUid: room?.hostUid === requesterUid ? room?.guestUid : room?.hostUid,
-                  otherTeamId: room?.hostUid === requesterUid ? room?.guestTeamId : room?.hostTeamId,
-                  otherTeamName: room?.hostUid === requesterUid ? room?.guestTeamName : room?.hostTeamName,
-                  createdAt: new Date().toISOString(),
-                  message: 'Commissioner denied your salary override request.',
-                }),
-              });
-            } catch (e) {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'deny_override' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -717,8 +616,11 @@ export default function TradeRoomScreen() {
     Alert.alert('Approve Trade?', 'This executes the trade now and swaps the players.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Approve', onPress: async () => {
-        const res: any = await finalizeVetoTradeTx(leagueId, roomId);
-        if (res?.error) Alert.alert('Error', 'Could not finalize the trade.');
+        try {
+          await finalizeTradeRoom(room);
+        } catch (e: any) {
+          Alert.alert('Error', e?.message || 'Could not finalize the trade.');
+        }
       } },
     ]);
   };
@@ -728,20 +630,8 @@ export default function TradeRoomScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Veto', style: 'destructive', onPress: async () => {
         try {
-          await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-            status: 'vetoed',
-            vetoedBy: myUid,
-            vetoedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          const note = {
-            type: 'trade_vetoed', leagueId, roomId,
-            createdAt: new Date().toISOString(),
-            message: 'A commissioner vetoed the trade between ' + (room?.hostTeamName || 'Team A') + ' and ' + (room?.guestTeamName || 'Team B') + '.',
-          };
-          for (const uid of [room?.hostUid, room?.guestUid].filter(Boolean)) {
-            try { await updateDoc(doc(db, 'users', uid as string), { notifications: arrayUnion(note) }); } catch {}
-          }
+          const callable = httpsCallable(functions, 'updateTradeDecision');
+          await callable({ leagueId, roomId, action: 'veto_trade' });
         } catch (e: any) { Alert.alert('Error', e.message); }
       } },
     ]);
@@ -750,24 +640,22 @@ export default function TradeRoomScreen() {
   // ── League-vote: an eligible GM casts their approve/reject vote ──
   const castTradeVote = async (choice: 'approve' | 'reject') => {
     try {
-      await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
-        ['tradeVotes.' + myUid]: choice,
-        updatedAt: serverTimestamp(),
-      });
-      // Check whether this vote decides the outcome.
-      await resolveVoteTradeTx(leagueId, roomId, false);
+      const callable = httpsCallable(functions, 'updateTradeDecision');
+      await callable({ leagueId, roomId, action: 'cast_vote', choice });
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   const handleConfirm = async () => {
-    console.log('[handleConfirm] called', { passes: salaryCheck.passes, overrideAppliedLocal, salaryOverrideApplied: room?.salaryOverrideApplied, myOfferLen: myOffer.length, otherOfferLen: otherOffer.length, anyConfirmed, myConfirmed });
-    if (!salaryCheck.passes && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
-      const myNeed = myShortfall;
-      const theirNeed = otherShortfall;
-      const messages = [];
-      if (myNeed > 0) messages.push('Your side needs ~$' + (myNeed / 1000000).toFixed(1) + 'M more outgoing');
-      if (theirNeed > 0) messages.push('Their side needs ~$' + (theirNeed / 1000000).toFixed(1) + 'M more outgoing');
-      const body = messages.join('\n') + '\n\n(Both sides must satisfy ' + (tradeApronTolerance * 100).toFixed(0) + '% rule.)';
+    const protectedErrors = tradeValidation.errors.filter(error => error !== 'nba_matching' && error !== 'financial_limit');
+    if (protectedErrors.length > 0) {
+      Alert.alert('Trade cannot be sent', tradeValidation.messages.join('\n') || 'Fix the trade issues and try again.');
+      return;
+    }
+    if (leagueSport === 'nba' && tradeValidation.errors.includes('nba_matching') && !overrideAppliedLocal && !(room?.salaryOverrideApplied)) {
+      const body = (tradeValidation.messages.length > 0 ? tradeValidation.messages : [
+        myShortfall > 0 ? 'Your side needs ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : '',
+        otherShortfall > 0 ? 'Their side needs ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing' : '',
+      ].filter(Boolean)).join('\n') + '\n\n(Both sides must satisfy the NBA salary-matching rule.)';
 
       if (commissionerCanOverride) {
         if (room?.pendingOverrideReview) {
@@ -825,52 +713,12 @@ export default function TradeRoomScreen() {
             });
             return { pendingVote: true };
           }
-          // Both confirmed — execute the trade
-          const hostTeamRef = doc(db, 'leagues', leagueId, 'teams', data.hostTeamId);
-          const guestTeamRef = doc(db, 'leagues', leagueId, 'teams', data.guestTeamId);
-          const [hostSnap, guestSnap] = await Promise.all([tx.get(hostTeamRef), tx.get(guestTeamRef)]);
-          if (!hostSnap.exists() || !guestSnap.exists()) throw new Error('Team missing');
-          const host = hostSnap.data() as any;
-          const guest = guestSnap.data() as any;
-
-          const hostOffered = data.hostOffer || [];
-          const guestOffered = data.guestOffer || [];
-          const hostOfferedKeys = new Set(hostOffered.map(getPlayerKey));
-          const guestOfferedKeys = new Set(guestOffered.map(getPlayerKey));
-
-          const allHostStillOwns = hostOffered.every((p: any) => (host.players || []).some((hp: any) => getPlayerKey(hp) === getPlayerKey(p)));
-          const allGuestStillOwns = guestOffered.every((p: any) => (guest.players || []).some((gp: any) => getPlayerKey(gp) === getPlayerKey(p)));
-
-          // Draft picks: verify ownership before swapping — another trade may have
-          // moved a pick since this offer was agreed.
-          const hPicks = data.hostPicks || [];
-          const gPicks = data.guestPicks || [];
-          const hPickIds = new Set(hPicks.map((pk: any) => pk.id));
-          const gPickIds = new Set(gPicks.map((pk: any) => pk.id));
-          const hOwnsPicks = hPicks.every((pk: any) => (host.picks || []).some((hp: any) => hp.id === pk.id));
-          const gOwnsPicks = gPicks.every((pk: any) => (guest.picks || []).some((gp: any) => gp.id === pk.id));
-
-          if (!allHostStillOwns || !allGuestStillOwns || !hOwnsPicks || !gOwnsPicks) {
-            tx.update(ref, { status: 'cancelled', updatedAt: serverTimestamp(), cancelReason: 'roster_changed' });
-            return { executed: false, cancelled: true };
-          }
-
-          const newHostPlayers = (host.players || []).filter((p: any) => !hostOfferedKeys.has(getPlayerKey(p))).concat(guestOffered);
-          const newGuestPlayers = (guest.players || []).filter((p: any) => !guestOfferedKeys.has(getPlayerKey(p))).concat(hostOffered);
-
-          const newHostPicks = (host.picks || []).filter((pk: any) => !hPickIds.has(pk.id)).concat(gPicks);
-          const newGuestPicks = (guest.picks || []).filter((pk: any) => !gPickIds.has(pk.id)).concat(hPicks);
-
-          tx.update(hostTeamRef, { players: newHostPlayers, picks: newHostPicks });
-          tx.update(guestTeamRef, { players: newGuestPlayers, picks: newGuestPicks });
           tx.update(ref, {
-            status: 'executed',
             hostConfirmed: true,
             guestConfirmed: true,
-            executedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
-          return { executed: true, hostOffered, guestOffered, hostPicks: data.hostPicks || [], guestPicks: data.guestPicks || [], hostName: data.hostTeamName, guestName: data.guestTeamName };
+          return { finalize: true, trade: data };
         } else {
           tx.update(ref, { [myConfirmKey]: true, updatedAt: serverTimestamp() });
           return { executed: false };
@@ -913,62 +761,22 @@ export default function TradeRoomScreen() {
         Alert.alert('Out for league vote', 'Both sides agreed. The league now votes — the trade goes through if it passes the threshold, or is rejected.', [{ text: 'OK', onPress: () => router.back() }]);
         return;
       }
-      if (result?.cancelled) {
-        // A player in this deal was traded elsewhere first. The in-room alert is
-        // handled by the room listener; also notify the other GM in case they left.
+      if (result?.finalize) {
+        localFinalizeSuccessPendingRef.current = true;
         try {
-          await updateDoc(doc(db, 'users', otherUid), {
-            notifications: arrayUnion({
-              type: 'trade_voided',
-              leagueId,
-              roomId,
-              otherUid: myUid,
-              otherTeamName: myTeam?.name || '',
-              createdAt: new Date().toISOString(),
-              message: 'Your trade with ' + (myTeam?.name || 'an opponent') + ' was voided — a player in it was traded to another team first.',
-            }),
-          });
-        } catch {}
-        return;
-      }
-      if (result?.executed) {
-        Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => { console.log('Trade OK pressed - calling router.back()'); router.back(); } }]);
-        // Notify other side
-        await updateDoc(doc(db, 'users', otherUid), {
-          notifications: arrayUnion({
-            type: 'trade_executed',
-            leagueId,
-            roomId,
-            otherUid: myUid,
-            otherTeamId: myTeam?.id || '',
-            otherTeamName: myTeam?.name || '',
-            createdAt: new Date().toISOString(),
-            message: 'Your trade with ' + (myTeam?.name || 'opponent') + ' has been completed.',
-          }),
-        });
-
-        // Log to league activity feed (visible on league screen + dashboard trade highlights)
-        try {
-          const hostPlayerNames = (result.hostOffered || []).map((p: any) => p.full_name).filter(Boolean);
-          const guestPlayerNames = (result.guestOffered || []).map((p: any) => p.full_name).filter(Boolean);
-          const hostPickTxt = (result.hostPicks || []).map((pk: any) => pickLabel(pk));
-          const guestPickTxt = (result.guestPicks || []).map((pk: any) => pickLabel(pk));
-          const hostAssets = [...hostPlayerNames, ...hostPickTxt].join(', ') || 'assets';
-          const guestAssets = [...guestPlayerNames, ...guestPickTxt].join(', ') || 'assets';
-          const activityMsg = (result.hostName || 'Team A') + ' traded ' + hostAssets + ' to ' + (result.guestName || 'Team B') + ' for ' + guestAssets;
-          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-            type: 'trade_executed',
-            message: activityMsg,
-            hostTeamId: room.hostTeamId,
-            guestTeamId: room.guestTeamId,
-            hostName: result.hostName,
-            guestName: result.guestName,
-            createdAt: serverTimestamp(),
-          });
+          const finalized: any = await finalizeTradeRoom(result.trade);
+          if (!finalized?.executed) {
+            localFinalizeSuccessPendingRef.current = false;
+            return;
+          }
+          Alert.alert('Trade executed!', 'Players have been swapped.', [{ text: 'OK', onPress: () => {
+            localFinalizeSuccessPendingRef.current = false;
+            router.back();
+          } }]);
         } catch (e) {
-          console.warn('Failed to log trade to activity', e);
+          localFinalizeSuccessPendingRef.current = false;
+          throw e;
         }
-
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -1173,7 +981,7 @@ export default function TradeRoomScreen() {
             </View>
           )}
           {isPendingVote && !isEligibleVoter && (
-            <Text style={styles.vetoBannerSub}>You're in this trade — the rest of the league decides.</Text>
+            <Text style={styles.vetoBannerSub}>{"You're in this trade — the rest of the league decides."}</Text>
           )}
         </View>
       )}
@@ -1189,6 +997,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
+                sport={leagueSport}
                 onRemove={canEditOtherSide ? () => removePlayerFromOffer(p, 'theirs') : undefined}
                 overrides={overridesMap}
               />
@@ -1298,6 +1107,7 @@ export default function TradeRoomScreen() {
               <PlayerChip
                 key={getPlayerKey(p) + i}
                 player={p}
+                sport={leagueSport}
                 onRemove={canEditMySide ? () => removePlayerFromOffer(p, 'mine') : undefined}
                 overrides={overridesMap}
               />
@@ -1309,15 +1119,19 @@ export default function TradeRoomScreen() {
               <Text style={styles.totalValue}>{fmtMoney(sumSalary(myOffer))}</Text>
             </View>
           ) : null}
-          {!salaryCheck.skipped ? (
-            <View style={[styles.balanceRow, { backgroundColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#0a2a1a' : '#2a0a0a', borderColor: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
-              <Text style={[styles.balanceText, { color: salaryCheck.passes || room?.salaryOverrideApplied ? '#00ff87' : '#ff4444' }]}>
+          {leagueSport === 'nba' && !salaryCheck.skipped ? (
+            <View style={[styles.balanceRow, { backgroundColor: tradeValidation.valid ? '#0a2a1a' : '#2a0a0a', borderColor: tradeValidation.valid ? '#00ff87' : '#ff4444' }]}>
+              <Text style={[styles.balanceText, { color: tradeValidation.valid ? '#00ff87' : '#ff4444' }]}>
                 {room?.salaryOverrideApplied
+                  && tradeValidation.valid
                   ? '✓ Commissioner override approved — salary check bypassed'
-                  : salaryCheck.passes
+                  : tradeValidation.valid
                     ? '✓ Salary check OK (' + (tradeApronTolerance * 100).toFixed(0) + '% rule)'
-                    : '✗ Salary mismatch — ' + (myShortfall > 0 ? 'you need ~$' + (myShortfall / 1000000).toFixed(1) + 'M more outgoing' : 'they need ~$' + (otherShortfall / 1000000).toFixed(1) + 'M more outgoing')}
+                    : '✗ ' + (userFacingTradeMessages[0] || 'Salary mismatch')}
               </Text>
+              {!tradeValidation.valid && userFacingTradeMessages.slice(1).map((message, index) => (
+                <Text key={index} style={styles.balanceHelpText}>{message}</Text>
+              ))}
               {room?.pendingOverrideReview && !room?.salaryOverrideApplied ? (
                 <Text style={styles.balanceOverrideText}>⏳ Pending commissioner review</Text>
               ) : null}
@@ -1427,10 +1241,26 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add {otherTeamName} Player</Text>
             <View style={{ width: 50 }} />
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+            <View style={styles.positionFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.positionFilterBtn, theirPickerPosFilter === pos && styles.positionFilterBtnActive]}
+                  onPress={() => setTheirPickerPosFilter(pos)}
+                >
+                  <Text style={[styles.positionFilterText, theirPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
           <ScrollView contentContainerStyle={styles.modalBody}>
             {otherRoster.length === 0 ? (
               <Text style={styles.emptySide}>Opponent roster not loaded</Text>
-            ) : otherRoster.map((p: any, i: number) => {
+            ) : otherRoster
+              .filter((p: any) => matchesRosterPosition(p, theirPickerPosFilter))
+              .sort(compareRosterPlayersByValue)
+              .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = otherOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = theirLockedKeys.has(key);
@@ -1465,8 +1295,24 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add to Offer</Text>
             <View style={{ width: 50 }} />
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+            <View style={styles.positionFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.positionFilterBtn, myPickerPosFilter === pos && styles.positionFilterBtnActive]}
+                  onPress={() => setMyPickerPosFilter(pos)}
+                >
+                  <Text style={[styles.positionFilterText, myPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
           <ScrollView contentContainerStyle={styles.modalBody}>
-            {myRoster.map((p: any, i: number) => {
+            {myRoster
+              .filter((p: any) => matchesRosterPosition(p, myPickerPosFilter))
+              .sort(compareRosterPlayersByValue)
+              .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = myOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = lockedPlayerKeys.has(key);
@@ -1499,7 +1345,7 @@ export default function TradeRoomScreen() {
           </View>
           <View style={styles.pickModalBody}>
             <Text style={styles.pickModalWho}>
-              {pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName}'s available picks
+              {`${pickModalSide === 'mine' ? (myTeam?.name || 'Your team') : otherTeamName}'s available picks`}
             </Text>
             {(() => {
               const owned = (pickModalSide === 'mine' ? (myTeam?.picks || []) : otherTeamPicks);
@@ -1573,6 +1419,7 @@ const styles = StyleSheet.create({
   totalValue: { color: '#00ff87', fontSize: 14, fontWeight: '900' },
   balanceRow: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1 },
   balanceText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  balanceHelpText: { color: '#ffb3b3', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   balanceOverrideText: { color: '#F5A623', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   overrideBtnRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
   overrideApproveBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
@@ -1640,6 +1487,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   modalClose: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
   modalTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  positionFilterScroll: { backgroundColor: '#0a0a0a', borderBottomWidth: 1, borderBottomColor: '#141414' },
+  positionFilters: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
+  positionFilterBtn: { minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center' },
+  positionFilterBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
+  positionFilterText: { color: '#777', fontSize: 11, fontWeight: '800' },
+  positionFilterTextActive: { color: '#00ff87' },
   modalBody: { padding: 16, paddingBottom: 60 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 10 },
   pickerRowDisabled: { opacity: 0.4 },

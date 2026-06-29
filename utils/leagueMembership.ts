@@ -1,6 +1,5 @@
 import { arrayRemove, arrayUnion, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
-
-const DEFAULT_MAX_MEMBERS = 30;
+import { getSportRules } from '@/domain/sports/rules';
 
 function leagueFullMessage(name?: string) {
   return (name || 'This league') + ' is full.';
@@ -29,7 +28,9 @@ export async function addLeagueMemberIfSpace(
     const league = leagueSnap.data() || {};
     const members: string[] = Array.isArray(league.members) ? league.members : [];
     const alreadyMember = members.includes(uid);
-    const maxMembers = typeof league.maxMembers === 'number' ? league.maxMembers : DEFAULT_MAX_MEMBERS;
+    const maxMembers = typeof league.maxMembers === 'number'
+      ? league.maxMembers
+      : getSportRules(league.sport).teamCount;
 
     if (!alreadyMember && members.length >= maxMembers) {
       throw new Error(leagueFullMessage(options.leagueName || league.name));

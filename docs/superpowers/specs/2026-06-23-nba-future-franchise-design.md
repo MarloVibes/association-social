@@ -8,17 +8,17 @@ The system must not depend on a visible player overall rating. It must use a dis
 
 ## Architecture
 
-Use one unified franchise engine for simulated games and the future mini-game.
+Use one unified franchise engine for the full in-app franchise game.
 
 Every completed game enters the same authoritative result pipeline:
 
 1. Validate the scheduled game and participating teams.
-2. Accept either a simulator-produced or mini-game-produced box score.
+2. Accept a server-generated or GM-entered box score from the in-app franchise flow.
 3. Finalize the game exactly once.
 4. Update standings, player statistics, fatigue, injuries, team history, tendencies, and notifications.
 5. Feed season results into playoffs, draft order, reputation, contracts, and progression.
 
-The future mini-game therefore replaces only game execution. It does not duplicate franchise state or calculations.
+Game execution, progression, awards, and offseason advancement all live inside this app. No separate mini-game result handoff is part of the design.
 
 ## Season Configuration
 
@@ -91,9 +91,9 @@ Each result contains:
 - New injuries
 - A short generated game story
 
-The result source is recorded as `simulation` or `mini_game`.
+The result source is recorded as `simulation` or `manual`.
 
-Finalization uses a transaction and a unique completion marker. Retried requests, concurrent clients, and delayed mini-game submissions cannot count a game twice.
+Finalization uses a transaction and a unique completion marker. Retried requests and concurrent clients cannot count a game twice.
 
 ## Player Identity Model
 
@@ -478,33 +478,6 @@ Notifications cover:
 
 Push notifications must remain deduplicated when notification read state changes.
 
-## Mini-Game Integration Contract
-
-The future mini-game receives:
-
-- Scheduled game identity
-- Team rosters
-- Legal rotations
-- Coaching presets
-- Player identity data
-- Pregame fatigue and injuries
-- Deterministic game seed
-
-It returns the same normalized result shape as the simulator.
-
-The server validates:
-
-- Game identity
-- Participating teams
-- Eligible players
-- Minutes
-- Statistical totals
-- Final score
-- Submission ownership
-- Unused completion marker
-
-The mini-game never writes standings or player season totals directly.
-
 ## Recovery and Concurrency
 
 - Server deadlines control every timed state.
@@ -542,7 +515,6 @@ Transaction and emulator tests cover:
 - Same-team concurrent fatigue updates
 - Standings and box-score atomicity
 - Simulation retries
-- Mini-game result validation
 - Draft auto-picks
 - Offseason transitions
 - Expansion draft ownership
@@ -577,4 +549,4 @@ End-to-end QA covers:
 - Teams support 15 standard and 3 two-way contracts.
 - Draft classes are generated, editable, publishable, and draftable.
 - The league remains at 30 teams unless the commissioner expands it, with a hard maximum of 36.
-- The future mini-game can submit results through the same result pipeline.
+- The app itself remains the full franchise game, including eras, team assignment, season simulation, awards, player upgrades, and offseason advancement.

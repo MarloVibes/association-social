@@ -1,7 +1,18 @@
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
+import type { VisibleNbaIdentity } from '@/domain/nba/identity';
+import { buildEvaluationLayers } from '@/domain/nba/evaluation';
+import {
+  buildScoutingGrades,
+  compareScoutingGrades,
+  getCompareRowModel,
+  getPotentialScoutingSummary,
+  getScoutingGradeSections,
+  gradeColors,
+} from '@/domain/nba/scoutingGrades';
+import { basketballSeasonAverageItems } from '@/domain/nba/seasonStats';
 
 type Props = {
   player: any;
@@ -109,24 +120,167 @@ function groupAccolades(accolades: string[]): { icon: string; label: string; yea
   }));
 }
 
+function getVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | null {
+  const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
+  if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
+  if (!identity.grades || typeof identity.grades !== 'object') return null;
+  return identity as VisibleNbaIdentity;
+}
+
+function firstStat(stats: any, keys: string[]) {
+  for (const key of keys) {
+    if (stats?.[key] !== undefined && stats?.[key] !== null && stats?.[key] !== '') return stats[key];
+  }
+  return null;
+}
+
+function extractBrefId(player: any): string {
+  if (player?.bref_id) return String(player.bref_id);
+  if (player?.brefId) return String(player.brefId);
+  const raw = String(player?.player_id || player?.id || '');
+  if (!raw) return '';
+  if (raw.startsWith('pool_')) return raw.split('_').slice(2).join('_');
+  if (raw.startsWith('current_')) return raw.replace(/^current_/, '');
+  return raw.includes('_') ? raw.split('_').pop() || '' : raw;
+}
+
+function playerKey(player: any): string {
+  return String(player?.player_id || player?.id || player?.bref_id || player?.full_name || player?.name || '').toLowerCase();
+}
+
+function playerName(player: any): string {
+  return String(player?.full_name || player?.name || 'Unknown Player');
+}
+
+function playerTeam(player: any): string {
+  return String(player?.team || player?.teamAbbr || player?.abbreviation || '');
+}
+
+function formatStatValue(value: any): string {
+  if (value === undefined || value === null || value === '') return '-';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(value < 1 ? 3 : 1);
+  return String(value);
+}
+
+function franchiseSeasonStats(stats: any, sport: string): { label: string; value: any }[] {
+  const common = [{ label: 'GP', value: firstStat(stats, ['games', 'gp']) }];
+  if (sport === 'mlb') {
+    return [
+      ...common,
+      { label: 'AVG', value: firstStat(stats, ['avg']) },
+      { label: 'HR', value: firstStat(stats, ['hr', 'homeRuns']) },
+      { label: 'RBI', value: firstStat(stats, ['rbi']) },
+      { label: 'SB', value: firstStat(stats, ['sb', 'stolenBases']) },
+      { label: 'ERA', value: firstStat(stats, ['era']) },
+      { label: 'SO', value: firstStat(stats, ['so', 'strikeouts']) },
+      { label: 'SV', value: firstStat(stats, ['saves', 'sv']) },
+    ].filter(stat => stat.value !== null);
+  }
+  if (sport === 'madden') {
+    return [
+      ...common,
+      { label: 'PASS', value: firstStat(stats, ['passing_yards', 'passingYards']) },
+      { label: 'PTD', value: firstStat(stats, ['passing_tds', 'passingTds']) },
+      { label: 'RUSH', value: firstStat(stats, ['rushing_yards', 'rushingYards']) },
+      { label: 'REC', value: firstStat(stats, ['receiving_yards', 'receivingYards']) },
+      { label: 'SACK', value: firstStat(stats, ['sacks']) },
+      { label: 'INT', value: firstStat(stats, ['interceptions']) },
+    ].filter(stat => stat.value !== null);
+  }
+  return [
+    ...common,
+    ...basketballSeasonAverageItems(stats),
+  ].filter(stat => stat.value !== null);
+}
+
+function buildFranchiseSeasons(player: any, sport: string) {
+  const statHistory = player?.statHistory && typeof player.statHistory === 'object' ? player.statHistory : {};
+  const activeStats = player?.seasonStats && typeof player.seasonStats === 'object' ? player.seasonStats : null;
+  const activeYear = String(player?.season || player?.currentSeason || player?.year || 'Current');
+  const archived = Object.entries(statHistory)
+    .sort(([left], [right]) => Number(right) - Number(left))
+    .map(([year, stats]: [string, any]) => ({
+      year,
+      stats,
+      statItems: franchiseSeasonStats(stats, sport),
+      awards: Array.isArray(stats?.awards) ? stats.awards : [],
+    }));
+  if (!activeStats) return archived;
+  const active = {
+    year: activeYear === 'Current' ? 'Current Season' : `Season ${activeYear}`,
+    stats: activeStats,
+    statItems: franchiseSeasonStats(activeStats, sport),
+    awards: Array.isArray(activeStats?.awards) ? activeStats.awards : [],
+  };
+  return [active, ...archived.filter(season => String(season.year) !== activeYear)];
+}
+
+function dedupePlayers(players: any[]) {
+  const seen = new Set<string>();
+  return players.filter(candidate => {
+    const key = playerKey(candidate);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function searchMatches(player: any, query: string) {
+  const text = `${playerName(player)} ${playerTeam(player)} ${player?.position || ''}`.toLowerCase();
+  return text.includes(query.trim().toLowerCase());
+}
+
 export default function PlayerCard({ player, era, sport, leagueId, teamId, visible, onClose, isOwned, onAddToTargetList, onOfferTrade, onDrop, onSign, onEditCustom, onDeleteCustom }: Props) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [onTradeBlock, setOnTradeBlock] = useState(false);
   const [expandedSeason, setExpandedSeason] = useState<string | null>(null);
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [activeStatsTab, setActiveStatsTab] = useState<'compare' | 'original'>('compare');
+  const [compareCandidates, setCompareCandidates] = useState<any[]>([]);
+  const [compareQuery, setCompareQuery] = useState('');
+  const [selectedComparePlayer, setSelectedComparePlayer] = useState<any>(null);
+  const [selectedCompareProfile, setSelectedCompareProfile] = useState<any>(null);
 
   useEffect(() => {
     if (visible && player) loadPlayerData();
   }, [visible, player]);
 
+  useEffect(() => {
+    if (!visible || !selectedComparePlayer) {
+      setSelectedCompareProfile(null);
+      return;
+    }
+    let active = true;
+    const loadSelectedCompareProfile = async () => {
+      setSelectedCompareProfile(null);
+      const brefId = extractBrefId(selectedComparePlayer);
+      if (!brefId) return;
+      try {
+        const vaultSnap = await getDoc(doc(db, 'players', brefId));
+        if (active && vaultSnap.exists()) {
+          setSelectedCompareProfile(vaultSnap.data());
+        }
+      } catch (e) {
+        console.warn('compare profile skipped', e);
+      }
+    };
+    loadSelectedCompareProfile();
+    return () => { active = false; };
+  }, [visible, selectedComparePlayer]);
+
   const loadPlayerData = async () => {
     setLoading(true);
     setProfile(null);
     setPhotoFailed(false);
+    setActiveStatsTab('compare');
+    setCompareQuery('');
+    setCompareCandidates([]);
+    setSelectedComparePlayer(null);
+    setSelectedCompareProfile(null);
     try {
       // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
-  const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
+      const brefId = extractBrefId(player);
       if (brefId) {
         // Vault is the canonical source of truth (Phase 6b complete)
         const vaultSnap = await getDoc(doc(db, 'players', brefId));
@@ -141,8 +295,36 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
           setOnTradeBlock(tb.includes(player.player_id || player.full_name));
         }
       }
+      await loadCompareCandidates();
     } catch (e) { console.error(e); }
     setLoading(false);
+  };
+
+  const loadCompareCandidates = async () => {
+    if (!leagueId) return;
+    const candidates: any[] = [];
+    try {
+      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+      const league = leagueSnap.exists() ? leagueSnap.data() as any : {};
+      const leagueSport = league.sport || sport || 'nba';
+      if (leagueSport !== 'nba') return;
+      const eraKey = league.era || era || 'current';
+      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      teamsSnap.docs.forEach(teamDoc => {
+        const team = teamDoc.data() as any;
+        (team.players || []).forEach((candidate: any) => candidates.push({
+          ...candidate,
+          team: candidate.team || team.abbreviation || team.name || team.id,
+        }));
+      });
+      const poolSnap = await getDoc(doc(db, 'era_player_pools', eraKey));
+      if (poolSnap.exists()) candidates.push(...((poolSnap.data() as any).players || []));
+    } catch (e) {
+      console.warn('compare candidates skipped', e);
+    }
+    const deduped = dedupePlayers(candidates).filter(candidate => playerKey(candidate) !== playerKey(player));
+    setCompareCandidates(deduped);
+    setSelectedComparePlayer(deduped[0] || null);
   };
 
   const [onUntouchable, setOnUntouchable] = useState(false);
@@ -187,9 +369,11 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
   const pos = profile?.position || player.position || '?';
   const posColor = POSITION_COLORS[pos.split('-')[0]] || '#888';
   const seasons = profile?.seasons || [];
-  const accolades = profile?.accolades || [];
+  const profileAccolades = Array.isArray(profile?.accolades) ? profile.accolades : [];
+  const playerAccolades = Array.isArray(player?.accolades) ? player.accolades : [];
+  const accolades = [...new Set([...profileAccolades, ...playerAccolades])];
   // Extract bref_id from player_id like "pool_2003_roseja01" or use direct bref_id
-  const brefId = player.bref_id || (player.player_id?.split('_').slice(2).join('_') || '');
+  const brefId = extractBrefId(player);
   // Origin line: college if known, else high school (prep-to-pro), else country (overseas)
   const origCollege = profile?.college || player.college || '';
   const origHS = profile?.high_school || player.high_school || '';
@@ -204,6 +388,17 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
     : (player.passing_yards != null || player.rushing_yards != null || player.receiving_yards != null || player.sacks != null) ? 'madden'
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
+  const identity = isNBAPlayer ? getVisibleIdentity(player, profile) : null;
+  const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, profile) : null;
+  const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, profile) : [];
+  const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, profile) : null;
+  const playerGrades = isNBAPlayer ? buildScoutingGrades(player, profile) : null;
+  const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, selectedCompareProfile) : null;
+  const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
+  const filteredCompareCandidates = compareQuery.trim()
+    ? compareCandidates.filter(candidate => searchMatches(candidate, compareQuery)).slice(0, 10)
+    : compareCandidates.slice(0, 10);
+  const franchiseSeasons = buildFranchiseSeasons(player, effectiveSport);
 
   // Headshot source per sport. MLB derives from the MLB person id; NFL uses a
   // stored photo url (from the roster seed); NBA uses basketball-reference.
@@ -283,6 +478,124 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                 </View>
               </View>
 
+              {isNBAPlayer && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Scouting Grades</Text>
+                  {identity && (
+                    <View style={styles.identityHeader}>
+                      <View style={styles.identityRoleBlock}>
+                        <Text style={styles.identityRole}>{identity.primaryRole}</Text>
+                        <Text style={styles.identitySubRole}>{identity.secondaryRole}</Text>
+                      </View>
+                      <View style={styles.reputationPill}>
+                        <Text style={styles.reputationText}>{identity.reputation}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {evaluationLayers && (
+                    <View style={styles.evaluationSummary}>
+                      {[
+                        { label: 'Overall Talent', value: evaluationLayers.overallTalent },
+                        { label: 'Current Form', value: evaluationLayers.currentForm },
+                        { label: 'Potential', value: { grade: playerGrades?.potential || evaluationLayers.potential.grade } },
+                      ].map(item => {
+                        const colors = gradeColors(item.value.grade);
+                        return (
+                          <View key={item.label} style={[styles.evaluationChip, { borderColor: colors.borderColor, backgroundColor: colors.backgroundColor }]}>
+                            <Text style={styles.evaluationLabel}>{item.label}</Text>
+                            <Text style={[styles.evaluationGrade, { color: colors.textColor }]}>{item.value.grade}</Text>
+                          </View>
+                        );
+                      })}
+                      {potentialSummary ? (
+                        <View style={styles.potentialSummary}>
+                          <Text style={styles.potentialSummaryLabel}>{potentialSummary.label}</Text>
+                          <Text style={styles.potentialSummaryText}>{potentialSummary.description}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.evaluationStateRow}>
+                        <Text style={styles.evaluationState}>Confidence: {evaluationLayers.confidence.state}</Text>
+                        <Text style={styles.evaluationState}>Chemistry: {evaluationLayers.chemistry.state}</Text>
+                        <Text style={styles.evaluationState}>Fatigue: {evaluationLayers.fatigue.state}</Text>
+                        <Text style={styles.evaluationState}>Health: {evaluationLayers.health.state}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {scoutingSections.map(section => (
+                    <View key={section.title} style={styles.gradeSection}>
+                      <Text style={styles.gradeSectionTitle}>{section.title}</Text>
+                      <View style={styles.gradeGrid}>
+                        {section.items.map(item => (
+                          <View key={item.key} style={[styles.gradeItem, { backgroundColor: item.colors.backgroundColor, borderColor: item.colors.borderColor }]}>
+                            <Text style={[styles.gradeValue, { color: item.colors.textColor }]}>{item.grade}</Text>
+                            <Text style={styles.gradeLabel}>{item.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                  {identity && (
+                    <>
+                      <View style={styles.traitRow}>
+                        <View style={styles.traitBlock}>
+                          <Text style={styles.traitLabel}>Consistency</Text>
+                          <Text style={styles.traitValue}>{identity.consistency}</Text>
+                        </View>
+                        <View style={styles.traitBlock}>
+                          <Text style={styles.traitLabel}>Chemistry</Text>
+                          <Text style={styles.traitValue}>{identity.chemistry}</Text>
+                        </View>
+                        <View style={styles.traitBlock}>
+                          <Text style={styles.traitLabel}>Development</Text>
+                          <Text style={styles.traitValue}>{identity.developmentTrait}</Text>
+                        </View>
+                      </View>
+                      {(identity.strengths.length > 0 || identity.weaknesses.length > 0) && (
+                        <View style={styles.identityLists}>
+                          {identity.strengths.length > 0 && (
+                            <View style={styles.identityList}>
+                              <Text style={styles.identityListTitle}>Strengths</Text>
+                              <Text style={styles.identityListText}>{identity.strengths.join(' / ')}</Text>
+                            </View>
+                          )}
+                          {identity.weaknesses.length > 0 && (
+                            <View style={styles.identityList}>
+                              <Text style={styles.identityListTitle}>Weaknesses</Text>
+                              <Text style={styles.identityListText}>{identity.weaknesses.join(' / ')}</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </>
+                  )}
+                  <View style={styles.franchiseStatsBlock}>
+                    <Text style={styles.franchiseStatsTitle}>Franchise Mobile Stats</Text>
+                    {franchiseSeasons.length > 0 ? (
+                      franchiseSeasons.map(season => (
+                        <View key={season.year} style={styles.franchiseSeasonRow}>
+                          <View style={styles.franchiseSeasonHeader}>
+                            <Text style={styles.franchiseSeasonYear}>{season.year}</Text>
+                            {season.awards.length > 0 ? (
+                              <Text style={styles.franchiseSeasonAwards} numberOfLines={1}>{season.awards.join(' / ')}</Text>
+                            ) : null}
+                          </View>
+                          <View style={styles.franchiseSeasonGrid}>
+                            {season.statItems.slice(0, 8).map(stat => (
+                              <View key={`${season.year}-${stat.label}`} style={styles.franchiseSeasonStat}>
+                                <Text style={styles.franchiseSeasonValue}>{formatStatValue(stat.value)}</Text>
+                                <Text style={styles.franchiseSeasonLabel}>{stat.label}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.noDataText}>No Franchise Mobile season stats yet.</Text>
+                    )}
+                  </View>
+                </View>
+              )}
+
               {/* Accolades */}
               {accolades.length > 0 && (
                 <View style={styles.section}>
@@ -319,60 +632,179 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                 </View>
               )}
 
-              {/* Career Stats by Season */}
-              {isNBAPlayer && seasons.length > 0 && (
+              {!isNBAPlayer && franchiseSeasons.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📊 Career Stats</Text>
-                  {/* Header */}
-                  <View style={styles.statsHeader}>
-                    {['Year', 'Team', 'PPG', 'RPG', 'APG', 'SPG', 'BPG', 'FG%'].map(h => (
-                      <Text key={h} style={[styles.statsHeaderCell, h === 'Year' && { flex: 1.5 }, h === 'Team' && { flex: 1 }]}>{h}</Text>
-                    ))}
-                  </View>
-                  {seasons.map((s: any, i: number) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={[styles.statsRow, i % 2 === 0 && styles.statsRowAlt]}
-                      onPress={() => setExpandedSeason(expandedSeason === s.year ? null : s.year)}
-                    >
-                      <Text style={[styles.statsCell, { flex: 1.5, color: '#00ff87' }]}>{s.year}</Text>
-                      <Text style={[styles.statsCell, { flex: 1 }]}>{s.team}</Text>
-                      <Text style={styles.statsCell}>{s.ppg || '—'}</Text>
-                      <Text style={styles.statsCell}>{s.rpg || '—'}</Text>
-                      <Text style={styles.statsCell}>{s.apg || '—'}</Text>
-                      <Text style={styles.statsCell}>{s.spg || '—'}</Text>
-                      <Text style={styles.statsCell}>{s.bpg || '—'}</Text>
-                      <Text style={styles.statsCell}>{s.fg_pct ? (parseFloat(s.fg_pct) * 100).toFixed(0) + '%' : '—'}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {expandedSeason && (() => {
-                    const s = seasons.find((s: any) => s.year === expandedSeason);
-                    if (!s) return null;
-                    return (
-                      <View style={styles.expandedStats}>
-                        <Text style={styles.expandedTitle}>{s.year} — {s.team}</Text>
-                        <View style={styles.expandedGrid}>
-                          {[
-                            { label: 'PPG', value: s.ppg },
-                            { label: 'RPG', value: s.rpg },
-                            { label: 'APG', value: s.apg },
-                            { label: 'SPG', value: s.spg },
-                            { label: 'BPG', value: s.bpg },
-                            { label: 'MPG', value: s.mpg },
-                            { label: 'FG%', value: s.fg_pct ? (parseFloat(s.fg_pct)*100).toFixed(1)+'%' : '' },
-                            { label: '3P%', value: s.fg3_pct ? (parseFloat(s.fg3_pct)*100).toFixed(1)+'%' : '' },
-                            { label: 'FT%', value: s.ft_pct ? (parseFloat(s.ft_pct)*100).toFixed(1)+'%' : '' },
-                            { label: 'GP', value: s.games },
-                          ].map(stat => (
-                            <View key={stat.label} style={styles.expandedStatItem}>
-                              <Text style={styles.expandedStatValue}>{stat.value || '—'}</Text>
-                              <Text style={styles.expandedStatLabel}>{stat.label}</Text>
-                            </View>
-                          ))}
-                        </View>
+                  <Text style={styles.sectionTitle}>Franchise Seasons</Text>
+                  {franchiseSeasons.map(season => (
+                    <View key={season.year} style={styles.franchiseSeasonRow}>
+                      <View style={styles.franchiseSeasonHeader}>
+                        <Text style={styles.franchiseSeasonYear}>{season.year}</Text>
+                        {season.awards.length > 0 ? (
+                          <Text style={styles.franchiseSeasonAwards} numberOfLines={1}>{season.awards.join(' / ')}</Text>
+                        ) : null}
                       </View>
-                    );
-                  })()}
+                      <View style={styles.franchiseSeasonGrid}>
+                        {season.statItems.slice(0, 8).map(stat => (
+                          <View key={`${season.year}-${stat.label}`} style={styles.franchiseSeasonStat}>
+                            <Text style={styles.franchiseSeasonValue}>{stat.value ?? '—'}</Text>
+                            <Text style={styles.franchiseSeasonLabel}>{stat.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {isNBAPlayer && (
+                <View style={styles.section}>
+                  <View style={styles.tabRow}>
+                    <TouchableOpacity
+                      style={[styles.tabBtn, activeStatsTab === 'compare' && styles.tabBtnActive]}
+                      onPress={() => setActiveStatsTab('compare')}
+                    >
+                      <Text style={[styles.tabBtnText, activeStatsTab === 'compare' && styles.tabBtnTextActive]}>Compare</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.tabBtn, activeStatsTab === 'original' && styles.tabBtnActive]}
+                      onPress={() => setActiveStatsTab('original')}
+                    >
+                      <Text style={[styles.tabBtnText, activeStatsTab === 'original' && styles.tabBtnTextActive]}>Original NBA Stats</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {activeStatsTab === 'compare' && (
+                    <View>
+                      <TextInput
+                        value={compareQuery}
+                        onChangeText={setCompareQuery}
+                        placeholder='Search any NBA player'
+                        placeholderTextColor='#666'
+                        autoCapitalize='none'
+                        style={styles.compareSearch}
+                      />
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.compareScroller}>
+                        {filteredCompareCandidates.map(candidate => {
+                          const active = playerKey(candidate) === playerKey(selectedComparePlayer);
+                          return (
+                            <TouchableOpacity
+                              key={playerKey(candidate)}
+                              style={[styles.compareChip, active && styles.compareChipActive]}
+                              onPress={() => setSelectedComparePlayer(candidate)}
+                            >
+                              <Text style={[styles.compareChipName, active && styles.compareChipNameActive]} numberOfLines={1}>{playerName(candidate)}</Text>
+                              <Text style={styles.compareChipTeam}>{playerTeam(candidate) || candidate.position || 'NBA'}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                      {selectedComparePlayer ? (
+                        <>
+                          <View style={styles.compareHeader}>
+                            <View style={styles.compareHeaderSide}>
+                              <Text style={styles.compareHeaderName} numberOfLines={1}>{name}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(player) || player.position || 'Player'}</Text>
+                            </View>
+                            <Text style={styles.compareVs}>VS</Text>
+                            <View style={styles.compareHeaderSide}>
+                              <Text style={styles.compareHeaderName} numberOfLines={1}>{playerName(selectedComparePlayer)}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'Player'}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.compareRows}>
+                            {compareRows.map(row => {
+                              const model = getCompareRowModel({
+                                leftName: name,
+                                rightName: playerName(selectedComparePlayer),
+                                row,
+                              });
+                              const leftColors = gradeColors(model.left.grade);
+                              const rightColors = gradeColors(model.right.grade);
+                              return (
+                                <View key={row.key} style={styles.compareRow} accessibilityLabel={model.accessibilityLabel}>
+                                  <View style={styles.compareSide}>
+                                    <Text style={[styles.compareSmallName, model.winner === 'left' && styles.compareWinnerText]} numberOfLines={1}>{model.left.name}</Text>
+                                    <View style={[styles.compareGradeBadge, { backgroundColor: leftColors.backgroundColor, borderColor: model.winner === 'left' ? leftColors.borderColor : '#333' }]}>
+                                      <Text style={[styles.compareGradeText, { color: leftColors.textColor }]}>{model.left.grade}</Text>
+                                    </View>
+                                  </View>
+                                  <Text style={styles.compareAbilityLabel}>{model.centerLabel}</Text>
+                                  <View style={[styles.compareSide, styles.compareSideRight]}>
+                                    <View style={[styles.compareGradeBadge, { backgroundColor: rightColors.backgroundColor, borderColor: model.winner === 'right' ? rightColors.borderColor : '#333' }]}>
+                                      <Text style={[styles.compareGradeText, { color: rightColors.textColor }]}>{model.right.grade}</Text>
+                                    </View>
+                                    <Text style={[styles.compareSmallName, model.winner === 'right' && styles.compareWinnerText]} numberOfLines={1}>{model.right.name}</Text>
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={styles.noDataText}>No compare players found yet.</Text>
+                      )}
+                    </View>
+                  )}
+
+                  {activeStatsTab === 'original' && (
+                    <View>
+                      {seasons.length > 0 ? (
+                        <>
+                          <View style={styles.statsHeader}>
+                            {['Year', 'Team', 'PPG', 'RPG', 'APG', 'SPG', 'BPG', 'FG%'].map(h => (
+                              <Text key={h} style={[styles.statsHeaderCell, h === 'Year' && { flex: 1.5 }, h === 'Team' && { flex: 1 }]}>{h}</Text>
+                            ))}
+                          </View>
+                          {seasons.map((s: any, i: number) => (
+                            <TouchableOpacity
+                              key={i}
+                              style={[styles.statsRow, i % 2 === 0 && styles.statsRowAlt]}
+                              onPress={() => setExpandedSeason(expandedSeason === s.year ? null : s.year)}
+                            >
+                              <Text style={[styles.statsCell, { flex: 1.5, color: '#00ff87' }]}>{s.year}</Text>
+                              <Text style={[styles.statsCell, { flex: 1 }]}>{s.team}</Text>
+                              <Text style={styles.statsCell}>{s.ppg || '-'}</Text>
+                              <Text style={styles.statsCell}>{s.rpg || '-'}</Text>
+                              <Text style={styles.statsCell}>{s.apg || '-'}</Text>
+                              <Text style={styles.statsCell}>{s.spg || '-'}</Text>
+                              <Text style={styles.statsCell}>{s.bpg || '-'}</Text>
+                              <Text style={styles.statsCell}>{s.fg_pct ? (parseFloat(s.fg_pct) * 100).toFixed(0) + '%' : '-'}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          {expandedSeason && (() => {
+                            const s = seasons.find((season: any) => season.year === expandedSeason);
+                            if (!s) return null;
+                            return (
+                              <View style={styles.expandedStats}>
+                                <Text style={styles.expandedTitle}>{s.year} - {s.team}</Text>
+                                <View style={styles.expandedGrid}>
+                                  {[
+                                    { label: 'PPG', value: s.ppg },
+                                    { label: 'RPG', value: s.rpg },
+                                    { label: 'APG', value: s.apg },
+                                    { label: 'SPG', value: s.spg },
+                                    { label: 'BPG', value: s.bpg },
+                                    { label: 'MPG', value: s.mpg },
+                                    { label: 'FG%', value: s.fg_pct ? (parseFloat(s.fg_pct)*100).toFixed(1)+'%' : '' },
+                                    { label: '3P%', value: s.fg3_pct ? (parseFloat(s.fg3_pct)*100).toFixed(1)+'%' : '' },
+                                    { label: 'FT%', value: s.ft_pct ? (parseFloat(s.ft_pct)*100).toFixed(1)+'%' : '' },
+                                    { label: 'GP', value: s.games },
+                                  ].map(stat => (
+                                    <View key={stat.label} style={styles.expandedStatItem}>
+                                      <Text style={styles.expandedStatValue}>{stat.value || '-'}</Text>
+                                      <Text style={styles.expandedStatLabel}>{stat.label}</Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              </View>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <Text style={styles.noDataText}>Original NBA stats are not available for this player yet.</Text>
+                      )}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -459,9 +891,6 @@ const styles = StyleSheet.create({
   photo: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#1a1a1a' },
   photoPlaceholder: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center' },
   photoInitial: { fontSize: 36, fontWeight: '900' },
-  ovrBadge: { position: 'absolute', bottom: -6, right: -6, width: 36, height: 36, borderRadius: 18, borderWidth: 2, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
-  ovrNum: { fontSize: 12, fontWeight: '900', lineHeight: 14 },
-  ovrLbl: { fontSize: 7, color: '#666', fontWeight: '700' },
   heroInfo: { flex: 1, paddingTop: 4 },
   heroName: { fontSize: 22, fontWeight: '900', color: '#ffffff', marginBottom: 8 },
   heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
@@ -479,6 +908,64 @@ const styles = StyleSheet.create({
   accoladeChipText: { color: '#ffffff', fontSize: 11, fontWeight: '500', flexShrink: 1 },
   accoladeIcon: { fontSize: 16, marginTop: 1 },
   accoladeText: { flex: 1, color: '#cccccc', fontSize: 13, lineHeight: 20 },
+  identityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  identityRoleBlock: { flex: 1 },
+  identityRole: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
+  identitySubRole: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  reputationPill: { borderRadius: 999, borderWidth: 1, borderColor: '#00ff8755', backgroundColor: '#0a2a1a', paddingHorizontal: 10, paddingVertical: 5 },
+  reputationText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  evaluationSummary: { gap: 8, marginBottom: 14 },
+  evaluationChip: { borderRadius: 8, borderWidth: 1, padding: 10 },
+  evaluationLabel: { color: '#9a9a9a', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 3 },
+  evaluationGrade: { fontSize: 16, fontWeight: '900' },
+  evaluationTier: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
+  potentialSummary: { borderWidth: 1, borderColor: '#242424', backgroundColor: '#0b0b0b', borderRadius: 8, padding: 10 },
+  potentialSummaryLabel: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  potentialSummaryText: { color: '#aaa', fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 4 },
+  evaluationStateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  evaluationState: { color: '#cfcfcf', fontSize: 10, fontWeight: '800', backgroundColor: '#171717', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#262626' },
+  gradeSection: { marginBottom: 14 },
+  gradeSectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 8 },
+  gradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gradeItem: { width: '30%', minHeight: 64, backgroundColor: '#181818', borderRadius: 8, borderWidth: 1, borderColor: '#252525', padding: 8, alignItems: 'center', justifyContent: 'center' },
+  gradeValue: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
+  gradeLabel: { color: '#d0d0d0', fontSize: 9, fontWeight: '800', marginTop: 4, textAlign: 'center' },
+  traitRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  traitBlock: { flex: 1, backgroundColor: '#101820', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: '#1c2a35' },
+  traitLabel: { color: '#667', fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
+  traitValue: { color: '#ffffff', fontSize: 12, fontWeight: '800', marginTop: 4 },
+  identityLists: { gap: 8, marginTop: 10 },
+  identityList: { backgroundColor: '#151515', borderRadius: 8, padding: 10 },
+  identityListTitle: { color: '#888', fontSize: 10, fontWeight: '900', marginBottom: 4, textTransform: 'uppercase' },
+  identityListText: { color: '#cccccc', fontSize: 12, fontWeight: '600' },
+  franchiseStatsBlock: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#242424' },
+  franchiseStatsTitle: { color: '#ffffff', fontSize: 13, fontWeight: '900', marginBottom: 10 },
+  tabRow: { flexDirection: 'row', backgroundColor: '#080808', borderRadius: 8, borderWidth: 1, borderColor: '#252525', padding: 4, marginBottom: 14 },
+  tabBtn: { flex: 1, minHeight: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  tabBtnActive: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87' },
+  tabBtnText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  tabBtnTextActive: { color: '#00ff87' },
+  compareSearch: { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: '#252525', backgroundColor: '#0a0a0a', color: '#ffffff', paddingHorizontal: 12, fontSize: 13, fontWeight: '700', marginBottom: 10 },
+  compareScroller: { marginBottom: 12 },
+  compareChip: { width: 120, minHeight: 54, borderRadius: 8, borderWidth: 1, borderColor: '#252525', backgroundColor: '#151515', padding: 9, marginRight: 8, justifyContent: 'center' },
+  compareChipActive: { borderColor: '#00ff87', backgroundColor: '#071f14' },
+  compareChipName: { color: '#eeeeee', fontSize: 12, fontWeight: '900' },
+  compareChipNameActive: { color: '#00ff87' },
+  compareChipTeam: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
+  compareHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0b0b0b', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 10, marginBottom: 10 },
+  compareHeaderSide: { flex: 1, alignItems: 'center' },
+  compareHeaderName: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  compareHeaderMeta: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  compareVs: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  compareRows: { gap: 7 },
+  compareRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 8, gap: 8 },
+  compareSide: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  compareSideRight: { justifyContent: 'flex-end' },
+  compareSmallName: { color: '#8a8a8a', fontSize: 9, fontWeight: '900', maxWidth: 78 },
+  compareWinnerText: { color: '#ffffff' },
+  compareGradeBadge: { minWidth: 42, height: 30, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  compareGradeText: { fontSize: 13, fontWeight: '900' },
+  compareAbilityLabel: { width: 88, color: '#ffffff', fontSize: 11, fontWeight: '900', textAlign: 'center' },
   statsHeader: { flexDirection: 'row', marginBottom: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
   statsHeaderCell: { flex: 1, color: '#555', fontSize: 10, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase' },
   statsRow: { flexDirection: 'row', paddingVertical: 7, borderRadius: 6 },
@@ -490,6 +977,14 @@ const styles = StyleSheet.create({
   expandedStatItem: { width: '18%', alignItems: 'center', backgroundColor: '#0a0a1a', borderRadius: 8, padding: 8 },
   expandedStatValue: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   expandedStatLabel: { color: '#555', fontSize: 9, fontWeight: '700', marginTop: 2 },
+  franchiseSeasonRow: { backgroundColor: '#151515', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#242424', marginBottom: 10 },
+  franchiseSeasonHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  franchiseSeasonYear: { color: '#00ff87', fontSize: 13, fontWeight: '900' },
+  franchiseSeasonAwards: { flex: 1, color: '#d7b56d', fontSize: 11, fontWeight: '800' },
+  franchiseSeasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  franchiseSeasonStat: { minWidth: 58, flex: 1, backgroundColor: '#0a0a0a', borderRadius: 8, padding: 7, alignItems: 'center' },
+  franchiseSeasonValue: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  franchiseSeasonLabel: { color: '#666', fontSize: 9, fontWeight: '800', marginTop: 2 },
   noData: { alignItems: 'center', padding: 40 },
   noDataText: { color: '#444', fontSize: 13, textAlign: 'center' },
   actionBtns: { paddingHorizontal: 20, paddingBottom: 30, gap: 10 },

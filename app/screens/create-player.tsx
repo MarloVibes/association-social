@@ -5,43 +5,50 @@ import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { useState, useEffect} from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { auth, db } from '@/constants/firebase';
+import { getPlayerEditorSchema } from '@/domain/sports/playerFields';
 
-const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
-
-const AWARDS = [
-  { key: 'mvp', label: 'MVP' },
-  { key: 'championship', label: 'Championship' },
-  { key: 'dpoy', label: 'DPOY' },
-  { key: 'all_nba_1st', label: 'All-NBA 1st Team' },
-  { key: 'all_nba_2nd', label: 'All-NBA 2nd Team' },
-  { key: 'all_nba_3rd', label: 'All-NBA 3rd Team' },
-  { key: 'sixth_man', label: 'Sixth Man of the Year' },
-  { key: 'mip', label: 'Most Improved Player' },
-  { key: 'roy', label: 'Rookie of the Year' },
-  { key: 'all_star', label: 'All-Star' },
-];
-
-type Season = {
+type EditorSeason = {
   season: string;
-  gp: string;
-  ppg: string;
-  apg: string;
-  rpg: string;
-  blk: string;
-  stl: string;
-  fg_pct: string;
-  three_pct: string;
+  [key: string]: string;
 };
 
-const emptySeason = (year: string): Season => ({
-  season: year,
-  gp: '', ppg: '', apg: '', rpg: '', blk: '', stl: '', fg_pct: '', three_pct: '',
-});
+const emptySeason = (year: string, sport?: string | null): EditorSeason => {
+  const season: EditorSeason = { season: year };
+  getPlayerEditorSchema(sport).stats.forEach(field => {
+    season[field.key] = '';
+  });
+  return season;
+};
+
+const normalizeSeasons = (seasons: any[], year: string, sport?: string | null): EditorSeason[] => {
+  if (!seasons?.length) return [emptySeason(year, sport)];
+  const schema = getPlayerEditorSchema(sport);
+  return seasons.map(source => {
+    const season = emptySeason(String(source.season || year), sport);
+    schema.stats.forEach(field => {
+      season[field.key] = source[field.key] === null || source[field.key] === undefined
+        ? ''
+        : String(source[field.key]);
+    });
+    return season;
+  });
+};
+
+const sanitizeEditableRatings = (ratings: Record<string, any>, sport?: string | null) => {
+  if (!ratings || typeof ratings !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(ratings).filter(([key]) => {
+      const normalized = key.toLowerCase();
+      if (normalized === 'overall' || normalized === 'ovr') return false;
+      return sport !== 'nba';
+    })
+  );
+};
 
 
 // Auto-format height on blur. User types digits, gets feet'inches".
 // Examples: "7" -> 7'0", "66" -> 6'6", "611" -> 6'11", "6-11" -> 6'11"
-function formatHeight(raw) {
+function formatHeight(raw: string) {
   if (!raw) return '';
   if (raw.includes("'") || raw.includes('"')) return raw;
   const digits = raw.replace(/\D/g, '');
@@ -53,8 +60,9 @@ function formatHeight(raw) {
 }
 
 export default function CreatePlayerScreen() {
-  const params = useLocalSearchParams<{ leagueId: string; era?: string; pendingId?: string; customId?: string }>();
+  const params = useLocalSearchParams<{ leagueId: string; era?: string; sport?: string; pendingId?: string; customId?: string }>();
   const [isCommissioner, setIsCommissioner] = useState(false);
+  const [leagueSport, setLeagueSport] = useState(params.sport || 'nba');
   const editingPendingId = params.pendingId || null;
   const editingCustomId = params.customId || null;
 
@@ -62,23 +70,36 @@ export default function CreatePlayerScreen() {
     (async () => {
       try {
         const leagueSnap = await getDoc(doc(db, 'leagues', params.leagueId));
+        let authoritativeSport = params.sport || 'nba';
         if (leagueSnap.exists()) {
           const ld = leagueSnap.data() as any;
+          authoritativeSport = ld.sport || 'nba';
+          setLeagueSport(authoritativeSport);
           const myUid = auth.currentUser?.uid;
           const commUids = [ld.commissionerId, ...(ld.coCommissioners || [])].filter(Boolean);
           setIsCommissioner(!!myUid && commUids.includes(myUid));
         }
+        const loadPlayerData = (data: any) => {
+          setName(data.full_name || '');
+          setPosition(data.position || getPlayerEditorSchema(authoritativeSport).positions[0] || '');
+          setJersey(data.jersey_number === null || data.jersey_number === undefined ? '' : String(data.jersey_number));
+          setAge(data.age === null || data.age === undefined ? '' : String(data.age));
+          setHeight(data.height || '');
+          setWeight(data.weight === null || data.weight === undefined ? '' : String(data.weight));
+          setSalary(data.salary === null || data.salary === undefined ? '' : String(data.salary));
+          setBio(data.bio || '');
+          setContractYears(data.contractYears === null || data.contractYears === undefined ? '' : String(data.contractYears));
+          setRole(data.role || '');
+          setRatings(data.ratings && typeof data.ratings === 'object' ? data.ratings : {});
+          setSeasons(normalizeSeasons(data.seasons, params.era || '2024-25', authoritativeSport));
+          setAwards(data.awards && typeof data.awards === 'object' ? data.awards : {});
+          const savedPhoto = data.photo_url || data.photoUrl;
+          if (savedPhoto) setPhotoUri(savedPhoto);
+        };
         if (editingPendingId) {
           const pSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'pending_players', editingPendingId));
           if (pSnap.exists()) {
-            const pd = pSnap.data() as any;
-            setName(pd.full_name || '');
-            setPosition(pd.position || 'PG');
-            setAge(String(pd.age || ''));
-            setHeight(pd.height || '');
-            setWeight(pd.weight || '');
-            if (pd.seasons && pd.seasons.length > 0) setSeasons(pd.seasons);
-            if (pd.photoUrl) setPhotoUri(pd.photoUrl);
+            loadPlayerData(pSnap.data() as any);
           }
         }
         if (editingCustomId) {
@@ -88,21 +109,19 @@ export default function CreatePlayerScreen() {
             cSnap = await getDoc(doc(db, 'leagues', params.leagueId, 'custom_players', editingCustomId));
           }
           if (cSnap.exists()) {
-            const cd = cSnap.data() as any;
-            setName(cd.full_name || '');
-            setPosition(cd.position || 'PG');
-            setAge(String(cd.age || ''));
-            setHeight(cd.height || '');
-            setWeight(cd.weight || '');
-            if (cd.seasons && cd.seasons.length > 0) setSeasons(cd.seasons);
-            if (cd.photo_url) setPhotoUri(cd.photo_url);
+            loadPlayerData(cSnap.data() as any);
           }
+        }
+        if (!editingPendingId && !editingCustomId) {
+          setPosition(getPlayerEditorSchema(authoritativeSport).positions[0] || '');
+          setSeasons([emptySeason(params.era || '2024-25', authoritativeSport)]);
         }
       } catch (e) { console.error('league/pending load failed', e); }
     })();
-  }, [params.leagueId, editingPendingId]);
+  }, [params.leagueId, params.era, params.sport, editingPendingId, editingCustomId]);
 
   const leagueId = params.leagueId;
+  const editorSchema = getPlayerEditorSchema(leagueSport);
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
@@ -116,8 +135,11 @@ export default function CreatePlayerScreen() {
   const [age, setAge] = useState('');
   const [salary, setSalary] = useState('');
   const [bio, setBio] = useState('');
+  const [contractYears, setContractYears] = useState('');
+  const [role, setRole] = useState('');
+  const [ratings, setRatings] = useState<Record<string, any>>({});
 
-  const [seasons, setSeasons] = useState<Season[]>([emptySeason(params.era || '2024-25')]);
+  const [seasons, setSeasons] = useState<EditorSeason[]>([emptySeason(params.era || '2024-25', params.sport)]);
   const [awards, setAwards] = useState<Record<string, number>>({});
 
   const [saving, setSaving] = useState(false);
@@ -145,7 +167,7 @@ export default function CreatePlayerScreen() {
 
   const addSeason = () => {
     const last = seasons[seasons.length - 1]?.season || '2024-25';
-    setSeasons([...seasons, emptySeason(last)]);
+    setSeasons([...seasons, emptySeason(last, leagueSport)]);
   };
 
   const removeSeason = (idx: number) => {
@@ -153,7 +175,7 @@ export default function CreatePlayerScreen() {
     setSeasons(seasons.filter((_, i) => i !== idx));
   };
 
-  const updateSeason = (idx: number, field: keyof Season, value: string) => {
+  const updateSeason = (idx: number, field: string, value: string) => {
     setSeasons(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   };
 
@@ -191,24 +213,20 @@ export default function CreatePlayerScreen() {
 
     setSaving(true);
     try {
-      const playerId = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      const playerId = editingCustomId || 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
       const photoUrl = await uploadPhotoIfLocal(playerId);
 
       const parts = trimmedName.split(/\s+/);
       const firstName = parts[0] || '';
       const lastName = parts.slice(1).join(' ') || '';
 
-      const seasonsClean = seasons.map(s => ({
-        season: s.season,
-        gp: parseInt(s.gp, 10) || 0,
-        ppg: parseFloat(s.ppg) || 0,
-        apg: parseFloat(s.apg) || 0,
-        rpg: parseFloat(s.rpg) || 0,
-        blk: parseFloat(s.blk) || 0,
-        stl: parseFloat(s.stl) || 0,
-        fg_pct: parseFloat(s.fg_pct) || 0,
-        three_pct: parseFloat(s.three_pct) || 0,
-      }));
+      const seasonsClean = seasons.map(s => {
+        const cleaned: Record<string, string | number> = { season: s.season };
+        editorSchema.stats.forEach(field => {
+          cleaned[field.key] = parseFloat(s[field.key]) || 0;
+        });
+        return cleaned;
+      });
 
       const playerDoc = {
         player_id: playerId,
@@ -223,6 +241,10 @@ export default function CreatePlayerScreen() {
         photo_url: photoUrl,
         bio: bio.trim(),
         salary: salary ? parseInt(salary.replace(/[^0-9]/g, ''), 10) : 0,
+        sport: leagueSport,
+        contractYears: contractYears ? parseInt(contractYears, 10) || 0 : 0,
+        role: role.trim(),
+        ratings: sanitizeEditableRatings(ratings, leagueSport),
         seasons: seasonsClean,
         awards,
         isCustom: true,
@@ -351,7 +373,7 @@ export default function CreatePlayerScreen() {
           <TextInput style={styles.input} value={name} onChangeText={setName} placeholder='Bron James Jr' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Position *</Text>
           <View style={styles.posRow}>
-            {POSITIONS.map(p => (
+            {editorSchema.positions.map(p => (
               <TouchableOpacity
                 key={p}
                 style={[styles.posBtn, position === p && styles.posBtnActive]}
@@ -379,7 +401,11 @@ export default function CreatePlayerScreen() {
           <TextInput style={styles.input} value={age} onChangeText={setAge} keyboardType='number-pad' placeholder='22' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Salary (USD per year)</Text>
           <TextInput style={styles.input} value={salary} onChangeText={setSalary} keyboardType='number-pad' placeholder='e.g. 25000000' placeholderTextColor='#555' />
-          <Text style={styles.helper}>Enter the player's annual cap hit. Used for trade balance math.</Text>
+          <Text style={styles.helper}>{"Enter the player's annual cap hit. Used for trade balance math."}</Text>
+          <Text style={styles.fieldLabel}>Contract Years</Text>
+          <TextInput style={styles.input} value={contractYears} onChangeText={setContractYears} keyboardType='number-pad' placeholder='1' placeholderTextColor='#555' />
+          <Text style={styles.fieldLabel}>Role</Text>
+          <TextInput style={styles.input} value={role} onChangeText={setRole} placeholder='Starter, rotation, prospect...' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput style={[styles.input, styles.textArea]} value={bio} onChangeText={setBio} multiline placeholder='Optional backstory...' placeholderTextColor='#555' />
         </View>
@@ -403,22 +429,13 @@ export default function CreatePlayerScreen() {
               )}
             </View>
             <View style={styles.statsGrid}>
-              {[
-                { k: 'gp', label: 'GP' },
-                { k: 'ppg', label: 'PPG' },
-                { k: 'apg', label: 'APG' },
-                { k: 'rpg', label: 'RPG' },
-                { k: 'blk', label: 'BLK' },
-                { k: 'stl', label: 'STL' },
-                { k: 'fg_pct', label: 'FG%' },
-                { k: 'three_pct', label: '3FG%' },
-              ].map(({ k, label }) => (
-                <View key={k} style={styles.statCell}>
-                  <Text style={styles.statLbl}>{label}</Text>
+              {editorSchema.stats.map(field => (
+                <View key={field.key} style={styles.statCell}>
+                  <Text style={styles.statLbl}>{field.label}</Text>
                   <TextInput
                     style={styles.statInput}
-                    value={(s as any)[k]}
-                    onChangeText={v => updateSeason(idx, k as keyof Season, v)}
+                    value={s[field.key] || ''}
+                    onChangeText={v => updateSeason(idx, field.key, v)}
                     keyboardType='decimal-pad'
                     placeholder='0'
                     placeholderTextColor='#444'
@@ -435,7 +452,7 @@ export default function CreatePlayerScreen() {
         {/* Awards */}
         <Text style={styles.sectionLabel}>AWARDS</Text>
         <View style={styles.card}>
-          {AWARDS.map(a => {
+          {editorSchema.awards.map(a => {
             const count = awards[a.key] || 0;
             return (
               <View key={a.key} style={styles.awardRow}>
@@ -486,8 +503,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 8 },
   textArea: { height: 70, textAlignVertical: 'top' },
   helper: { color: '#666', fontSize: 11, marginTop: -4, marginBottom: 8, fontStyle: 'italic' },
-  posRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
-  posBtn: { flex: 1, paddingVertical: 10, backgroundColor: '#1a1a1a', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
+  posRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  posBtn: { minWidth: 48, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#1a1a1a', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   posBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
   posBtnText: { color: '#888', fontSize: 12, fontWeight: '800' },
   posBtnTextActive: { color: '#00ff87' },

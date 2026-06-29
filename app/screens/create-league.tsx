@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { DRAFT_ROUNDS, draftBaseYearFor } from '@/constants/draftPicks';
+import { draftBaseYearFor } from '@/constants/draftPicks';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getEraCap } from '@/constants/eraCaps';
+import { buildLeagueDefaults, seasonLabel } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 
 const NBA_ERAS = [
@@ -23,7 +24,7 @@ const TEAM_MODES = [
   { label: 'Fantasy Draft', value: 'draft', desc: 'GMs draft players from scratch', icon: '🎯' },
 ];
 
-const MADDEN_MODES = [
+const NFL_MODES = [
   { label: 'Current Rosters', value: 'current', desc: 'Start with current NFL rosters', icon: '📅' },
   { label: 'Randomize Teams', value: 'random', desc: 'Teams randomly assigned to GMs', icon: '🎲' },
   { label: 'Fantasy Draft', value: 'draft', desc: 'Draft players from scratch before the season', icon: '🎯' },
@@ -69,12 +70,13 @@ export default function CreateLeagueScreen() {
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
   const [draftPickMode, setDraftPickMode] = useState('standard');
   const [stepienRule, setStepienRule] = useState(false);
+  const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
   const [loading, setLoading] = useState(false);
 
   const sports = [
-    { label: 'NBA 2K', value: 'nba', emoji: '🏀' },
-    { label: 'Madden NFL', value: 'madden', emoji: '🏈' },
-    { label: 'MLB The Show', value: 'mlb', emoji: '⚾' },
+    { label: 'NBA Franchise', value: 'nba', emoji: '🏀' },
+    { label: 'NFL Franchise', value: 'madden', emoji: '🏈' },
+    { label: 'MLB Franchise', value: 'mlb', emoji: '⚾' },
   ];
 
   // NBA has 4 steps: Name+Sport -> Era -> Team Mode -> Review
@@ -82,7 +84,7 @@ export default function CreateLeagueScreen() {
   const totalSteps = sport === 'nba' ? 4 : 3;
 
   const getModeOptions = () => {
-    if (sport === 'madden') return MADDEN_MODES;
+    if (sport === 'madden') return NFL_MODES;
     if (sport === 'mlb') return MLB_MODES;
     return [];
   };
@@ -109,7 +111,22 @@ export default function CreateLeagueScreen() {
       const leagueId = doc(collection(db, 'leagues')).id;
       const finalMode = sport === 'nba' ? teamMode : mode;
       const finalEra = sport === 'nba' ? era : null;
-      const leagueSeasonYear = sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : (sport === 'mlb' ? 2026 : 2025);
+      const defaults = buildLeagueDefaults(sport);
+      const historicalNbaYear = era === 'magic_bird' ? 1983
+        : era === 'jordan' ? 1991
+          : era === 'kobe' ? 2002
+            : era === 'lebron' ? 2010
+              : era === 'steph' ? 2016
+                : null;
+      const leagueSeasonYear = sport === 'nba' && historicalNbaYear !== null
+        ? historicalNbaYear
+        : defaults.currentYear;
+      const currentSeason = sport === 'nba' && historicalNbaYear !== null
+        ? seasonLabel(sport, historicalNbaYear)
+        : defaults.currentSeason;
+      const initialFinanceLimit = sport === 'nba'
+        ? getEraCap(finalEra)
+        : defaults.defaultFinanceLimit;
 
       await setDoc(doc(db, 'leagues', leagueId), {
         name: leagueName.trim(),
@@ -121,20 +138,30 @@ export default function CreateLeagueScreen() {
         votePassThreshold,
         voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
         spinChoices: (sport === 'nba' ? teamMode : mode) === 'random' ? (parseInt(spinChoices, 10) || 1) : 1,
-        currentYear: sport === 'nba' ? (era === 'magic_bird' ? 1983 : era === 'jordan' ? 1991 : era === 'kobe' ? 2002 : era === 'lebron' ? 2010 : era === 'steph' ? 2016 : 2024) : 2024,
-        currentSeason: sport === 'nba' ? (era === 'magic_bird' ? '1983-84' : era === 'jordan' ? '1991-92' : era === 'kobe' ? '2002-03' : era === 'lebron' ? '2010-11' : era === 'steph' ? '2016-17' : '2024-25') : '2024-25',
+        currentYear: leagueSeasonYear,
+        currentSeason,
         sport,
         mode: finalMode,
         era: finalEra,
         draftPickMode,
         stepienRule: sport === 'nba' ? stepienRule : false,
+        gamesPerTeam: sport === 'nba' ? Number(scheduleGamesPerTeam) : null,
+        scheduleLocked: false,
         draftBaseYear: draftBaseYearFor(leagueSeasonYear),
-        draftRounds: DRAFT_ROUNDS[sport] || 2,
-        salaryCap: getEraCap(finalEra),
+        rosterLimit: defaults.rosterLimit,
+        twoWayLimit: defaults.twoWayLimit,
+        draftRounds: defaults.draftRounds,
+        draftTimerSeconds: defaults.draftTimerSeconds,
+        draftStatus: finalMode === 'draft' ? 'setup' : 'none',
+        draftSeasonYear: leagueSeasonYear,
+        startupDraftRounds: defaults.rosterLimit,
+        financeMode: defaults.financeMode,
+        salaryCap: initialFinanceLimit,
+        ...(sport === 'mlb' ? { teamBudget: initialFinanceLimit } : {}),
         commissionerId: user.uid,
         coCommissioners: [],
         members: [user.uid],
-        maxMembers: 30,
+        maxMembers: defaults.maxMembers,
         invites: [],
         createdAt: serverTimestamp(),
         status: 'active',
@@ -440,7 +467,6 @@ export default function CreateLeagueScreen() {
             <Text style={styles.sectionLabel}>Draft Pick Ownership</Text>
             {[
               { value: 'standard', label: 'Standard', desc: 'Every team owns its own picks for the next 7 drafts. Fair and balanced.', disabled: false },
-              { value: 'realistic', label: 'Realistic (coming soon)', desc: 'Real current pick ownership from actual trades. Available soon.', disabled: true },
             ].map(opt => (
               <TouchableOpacity
                 key={opt.value}
@@ -457,6 +483,22 @@ export default function CreateLeagueScreen() {
 
             {sport === 'nba' && (
               <>
+                <Text style={styles.sectionLabel}>NBA Schedule</Text>
+                {['14', '29', '58', '82'].map(value => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.optionRow, scheduleGamesPerTeam === value && styles.optionRowActive]}
+                    onPress={() => setScheduleGamesPerTeam(value)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.optionLabel, scheduleGamesPerTeam === value && styles.optionLabelActive]}>{value} games</Text>
+                      <Text style={styles.optionDesc}>{value === '82' ? 'Full-length season' : 'Condensed league season'}</Text>
+                    </View>
+                    {scheduleGamesPerTeam === value && <Text style={styles.check}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+                <Text style={styles.helperSmall}>Your schedule will be created after you claim your team.</Text>
+
                 <Text style={styles.sectionLabel}>Stepien Rule</Text>
                 {[
                   { value: true, label: 'On', desc: "Can't trade away first-rounders in back-to-back drafts (real NBA rule)." },

@@ -52,20 +52,126 @@ function threeFloor(eraKey?: string): number {
   return ERA_3P_AVG[eraKey] + THREE_MARGIN;
 }
 
+function normalizedManualTier(player: any): Playstyle | null {
+  const raw = String(
+    player?.tierOverride
+    || player?.manualTier
+    || player?.franchiseTier
+    || player?.playerLabel
+    || '',
+  ).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (raw === 'LEGEND') return { label: 'LEGEND', color: '#ff00ff' };
+  if (raw === 'SUPERSTAR') return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (raw === 'STAR') return { label: 'STAR', color: '#FFA500' };
+  return null;
+}
+
+function numberFrom(player: any, keys: string[]): number {
+  for (const key of keys) {
+    const value = key.split('.').reduce((current, part) => current?.[part], player);
+    if (value !== undefined && value !== null && value !== '') {
+      const parsed = parseFloat(String(value));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function percentFrom(player: any, keys: string[]): number {
+  const value = numberFrom(player, keys);
+  return value > 1 ? value / 100 : value;
+}
+
+function tierFromText(value: unknown): Playstyle | null {
+  const raw = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (raw === 'LEGEND') return { label: 'LEGEND', color: '#ff00ff' };
+  if (raw === 'SUPERSTAR') return { label: 'SUPERSTAR', color: '#FFD700' };
+  if (raw === 'STAR') return { label: 'STAR', color: '#FFA500' };
+  return null;
+}
+
+function trustedReputationTier(player: any): Playstyle | null {
+  return tierFromText(player?.reputation)
+    || tierFromText(player?.visible?.reputation)
+    || tierFromText(player?.visibleIdentity?.reputation)
+    || tierFromText(player?.identity?.reputation)
+    || tierFromText(player?.profile?.visibleIdentity?.reputation)
+    || tierFromText(player?.profile?.identity?.reputation)
+    || tierFromText(player?.tier);
+}
+
+function accoladeText(accolade: string): string {
+  return String(accolade || '').toLowerCase();
+}
+
+function accoladeCount(accolades: string[], matcher: (text: string) => boolean): number {
+  return accolades.filter(item => matcher(accoladeText(item))).length;
+}
+
+function isMvp(text: string): boolean {
+  return text.includes('mvp') && !text.includes('all-star') && !text.includes('all star');
+}
+
+function isFinalsMvp(text: string): boolean {
+  return text.includes('finals') && text.includes('mvp');
+}
+
+function isAllNbaFirst(text: string): boolean {
+  return text.includes('all-nba 1') || text.includes('all nba 1') || text.includes('all-nba first') || text.includes('all nba first');
+}
+
+function isAllNbaSecondOrThird(text: string): boolean {
+  return text.includes('all-nba 2') || text.includes('all nba 2') || text.includes('all-nba second') || text.includes('all nba second')
+    || text.includes('all-nba 3') || text.includes('all nba 3') || text.includes('all-nba third') || text.includes('all nba third');
+}
+
+function isAllStar(text: string): boolean {
+  return text.includes('all-star') || text.includes('all star');
+}
+
+function isDpoy(text: string): boolean {
+  return text.includes('defensive player of the year') || text.includes('dpoy');
+}
+
+function isChampionship(text: string): boolean {
+  return text.includes('champion') || text.includes('championship') || text.includes('nba title');
+}
+
 export function getPlaystyle(player: any, eraKey?: string): Playstyle {
+  const manualTier = normalizedManualTier(player);
+  if (manualTier) return manualTier;
+
+  const reputationTier = trustedReputationTier(player);
+  if (reputationTier) return reputationTier;
+
   const f = paceFactor(eraKey);
   // pace-adjust counting stats; leave shooting rates alone
-  const ppg = (parseFloat(player?.ppg) || 0) * f;
-  const apg = (parseFloat(player?.apg) || 0) * f;
-  const rpg = (parseFloat(player?.rpg) || 0) * f;
-  const spg = (parseFloat(player?.spg) || 0) * f;
-  const bpg = (parseFloat(player?.bpg) || 0) * f;
-  const fg3 = parseFloat(player?.fg3_pct) || 0;
+  const ppg = numberFrom(player, ['ppg', 'pointsPerGame', 'points_per_game', 'pts_per_g', 'career_ppg']) * f;
+  const apg = numberFrom(player, ['apg', 'assistsPerGame', 'assists_per_game', 'ast_per_g', 'career_apg']) * f;
+  const rpg = numberFrom(player, ['rpg', 'reboundsPerGame', 'rebounds_per_game', 'trb_per_g', 'career_rpg']) * f;
+  const spg = numberFrom(player, ['spg', 'stealsPerGame', 'steals_per_game', 'stl_per_g', 'career_spg']) * f;
+  const bpg = numberFrom(player, ['bpg', 'blocksPerGame', 'blocks_per_game', 'blk_per_g', 'career_bpg']) * f;
+  const fg3 = percentFrom(player, ['fg3_pct', 'threePointPct', 'three_point_pct', 'threePointPercentage']);
+  const per = numberFrom(player, ['per', 'playerEfficiencyRating']);
+  const winShares = numberFrom(player, ['winShares', 'win_shares', 'ws']);
+  const overallSignal = numberFrom(player, [
+    'overall',
+    'overallImpact',
+    'impactRating',
+    'hidden.overall',
+    'attribute_model.overallImpact',
+    'attribute_model.overall',
+    'player_ratings.overall',
+    'ratings.overall',
+    'profile.attribute_model.overallImpact',
+    'profile.attribute_model.overall',
+    'profile.player_ratings.overall',
+    'profile.ratings.overall',
+  ]);
   const pos = player?.position || '';
   const t3 = threeFloor(eraKey);
   const isShooter = fg3 >= t3 && fg3 <= THREE_NOISE_CAP;
 
-  // Hall of Fame / Jersey retirement / Anniversary teams = LEGEND
   const accolades = player?.accolades || [];
   const isLegend = accolades.some((a: string) => {
     const t = a.toLowerCase();
@@ -74,22 +180,38 @@ export function getPlaystyle(player: any, eraKey?: string): Playstyle {
   });
   if (isLegend) return { label: 'LEGEND', color: '#ff00ff' };
 
-  // All-Star selection (career accolade) guarantees STAR or higher.
-  // bref writes both "All-Star" and "All Star"; exclude All-NBA/All-Defensive/All-Rookie.
-  const isAllStar = accolades.some((a: string) => {
-    const t = a.toLowerCase();
-    return t.includes('all-star') || t.includes('all star');
-  });
+  const mvpCount = accoladeCount(accolades, text => isMvp(text));
+  const finalsMvpCount = accoladeCount(accolades, text => isFinalsMvp(text));
+  const championshipCount = accoladeCount(accolades, text => isChampionship(text));
+  const allLeagueCount = accoladeCount(accolades, text => isAllStar(text) || text.includes('all-nba') || text.includes('all nba'));
+  if (mvpCount >= 2 || finalsMvpCount >= 2 || championshipCount >= 3 || allLeagueCount >= 8) {
+    return { label: 'LEGEND', color: '#ff00ff' };
+  }
 
   // Long career + strong scoring proxy (career ppg, era-neutral)
   const retiredYear = player?.retirement_year;
   const birthYear = player?.birth_year;
   const seasons = retiredYear && birthYear ? retiredYear - birthYear - 18 : 0;
-  if (seasons >= 15 && (parseFloat(player?.ppg) || 0) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
+  if (seasons >= 15 && numberFrom(player, ['ppg', 'pointsPerGame', 'points_per_game', 'pts_per_g', 'career_ppg']) >= 18) return { label: 'LEGEND', color: '#ff00ff' };
 
-  if (ppg >= 25) return { label: 'SUPERSTAR', color: '#FFD700' };
-  if (isAllStar) return { label: 'STAR', color: '#FFA500' }; // All-Star floor
-  if (ppg >= 20) return { label: 'STAR', color: '#FFA500' };
+  if (
+    mvpCount >= 1
+    || finalsMvpCount >= 1
+    || accoladeCount(accolades, text => isAllNbaFirst(text)) > 0
+  ) {
+    return { label: 'SUPERSTAR', color: '#FFD700' };
+  }
+  if (overallSignal >= 94 || per >= 25 || winShares >= 120 || ppg >= 25 || (ppg >= 22 && rpg >= 6 && apg >= 6)) {
+    return { label: 'SUPERSTAR', color: '#FFD700' };
+  }
+  if (
+    accoladeCount(accolades, text => isAllStar(text) || isAllNbaSecondOrThird(text) || isDpoy(text)) > 0
+  ) {
+    return { label: 'STAR', color: '#FFA500' };
+  }
+  if (overallSignal >= 86 || per >= 19 || winShares >= 45 || ppg >= 20 || (ppg >= 16 && rpg >= 5 && apg >= 5)) {
+    return { label: 'STAR', color: '#FFA500' };
+  }
   if (apg >= 7) return { label: 'PLAYMAKER', color: '#00ccff' };
   if (rpg >= 10) return { label: 'REBOUNDER', color: '#aa44ff' };
   if (bpg >= 2) return { label: 'SHOT BLOCKER', color: '#ff6644' };
@@ -185,7 +307,18 @@ const YEAR_COLOR = '#00ccff';
 export function getPlaystyleForYear(player: any, profile: any, currentYear: number | undefined): Playstyle {
   // Accolades (incl. All-Star) live on the profile, not the pool player — carry
   // them through so accolade-based tiers (LEGEND, All-Star floor) can fire.
-  const withAccolades = { ...player, accolades: profile?.accolades || player?.accolades || [] };
+  const profileIdentity = profile?.visibleIdentity || profile?.identity || null;
+  const withAccolades = {
+    ...player,
+    profile,
+    accolades: profile?.accolades || player?.accolades || [],
+    visibleIdentity: player?.visibleIdentity || profile?.visibleIdentity || profile?.identity,
+    identity: player?.identity || profile?.identity || profile?.visibleIdentity,
+    reputation: player?.reputation || profile?.reputation || profileIdentity?.reputation,
+    attribute_model: player?.attribute_model || profile?.attribute_model,
+    player_ratings: player?.player_ratings || profile?.player_ratings,
+    ratings: player?.ratings || profile?.ratings,
+  };
   const season = getSeasonForYear(profile, currentYear);
   if (!season) return getPlaystyle(withAccolades, eraForYear(currentYear));
   // Use the season's stat when it's actually present; otherwise keep the

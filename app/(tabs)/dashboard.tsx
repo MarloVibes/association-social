@@ -13,9 +13,9 @@ import { usePresence } from '@/hooks/usePresence';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 
 const SPORT_LABELS: Record<string, string> = {
-  nba: 'NBA 2K',
-  madden: 'Madden NFL',
-  mlb: 'MLB The Show',
+  nba: 'NBA Franchise',
+  madden: 'NFL Franchise',
+  mlb: 'MLB Franchise',
 };
 
 const SPORT_EMOJI: Record<string, string> = {
@@ -293,33 +293,6 @@ export default function DashboardScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => Alert.alert('Coming soon', 'Mini Games are on the way — sim seasons, draft, and win rings. Check back soon!')}
-            activeOpacity={0.85}
-            style={styles.miniGameShadow}
-          >
-            <LinearGradient
-              colors={['#99331a', '#6b1d0a']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.miniGameCard}
-            >
-              <LinearGradient
-                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 0.6 }}
-                style={styles.miniGameGloss}
-                pointerEvents='none'
-              />
-              <Text style={styles.miniGameIcon}>🎮</Text>
-              <View style={styles.miniGameInfo}>
-                <Text style={styles.miniGameTitle}>MINI GAME</Text>
-                <Text style={styles.miniGameDesc}>Sim seasons, draft, win rings — earn your card</Text>
-              </View>
-              <View style={styles.miniGameBadge}><Text style={styles.miniGameBadgeText}>COMING SOON</Text></View>
-            </LinearGradient>
-          </TouchableOpacity>
-
           {onlineFriends.length > 0 && (
             <View style={styles.onlineSection}>
               <View style={styles.sectionHeader}>
@@ -357,7 +330,7 @@ export default function DashboardScreen() {
             <View style={styles.loadingCard}><ActivityIndicator color='#00ff87' /></View>
           ) : leagues.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>You haven't joined any leagues yet.</Text>
+              <Text style={styles.emptyText}>{"You haven't joined any leagues yet."}</Text>
               <View style={styles.emptyButtons}>
                 <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/screens/create-league')}>
                   <Text style={styles.primaryButtonText}>Create League</Text>
@@ -435,23 +408,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
-  miniGameShadow: {
-    marginBottom: 20,
-    borderRadius: 16,
-    shadowColor: '#99331a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  miniGameCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
-  miniGameGloss: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  miniGameIcon: { fontSize: 30, marginRight: 14 },
-  miniGameInfo: { flex: 1 },
-  miniGameTitle: { color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: 2, marginBottom: 2 },
-  miniGameDesc: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' },
-  miniGameBadge: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  miniGameBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   mvpButton: {
     flexDirection: 'row',
     alignItems: 'center',
