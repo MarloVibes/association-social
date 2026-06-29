@@ -17,7 +17,9 @@ describe('NBA evaluation v2', () => {
     expect(gradeFromScore(70)).toBe('C+');
     expect(gradeFromScore(65)).toBe('C');
     expect(gradeFromScore(60)).toBe('C-');
-    expect(gradeFromScore(50)).toBe('D');
+    expect(gradeFromScore(57)).toBe('D+');
+    expect(gradeFromScore(53)).toBe('D');
+    expect(gradeFromScore(50)).toBe('D-');
     expect(gradeFromScore(49)).toBe('F');
     expect(gradeTier('B+')).toBe('Pro');
   });

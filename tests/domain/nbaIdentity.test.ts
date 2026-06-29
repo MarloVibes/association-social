@@ -11,7 +11,9 @@ describe('NBA player identity', () => {
     expect(gradeFromHiddenValue(91)).toBe('A-');
     expect(gradeFromHiddenValue(78)).toBe('B-');
     expect(gradeFromHiddenValue(65)).toBe('C');
-    expect(gradeFromHiddenValue(50)).toBe('D');
+    expect(gradeFromHiddenValue(57)).toBe('D+');
+    expect(gradeFromHiddenValue(53)).toBe('D');
+    expect(gradeFromHiddenValue(50)).toBe('D-');
     expect(gradeFromHiddenValue(42)).toBe('F');
 
     const identity = buildVisibleIdentity({

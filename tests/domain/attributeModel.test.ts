@@ -52,7 +52,9 @@ describe('original basketball attribute model', () => {
     expect(gradeFromAttribute(94)).toBe('A');
     expect(gradeFromAttribute(91)).toBe('A-');
     expect(gradeFromAttribute(88)).toBe('B+');
-    expect(gradeFromAttribute(59)).toBe('D');
+    expect(gradeFromAttribute(59)).toBe('D+');
+    expect(gradeFromAttribute(53)).toBe('D');
+    expect(gradeFromAttribute(50)).toBe('D-');
 
     const grades = skillGradesFromAttributes({ threePoint: 94, defenseIq: 99 });
     expect(grades.threePoint).toBe('A');
