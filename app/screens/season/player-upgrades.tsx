@@ -241,9 +241,22 @@ export default function PlayerUpgradesScreen() {
                       onPress={() => spendPoint(item, ability)}
                       style={[styles.abilityButton, !status.canImprove && styles.abilityButtonDisabled]}
                     >
-                      <Text style={styles.abilityName}>{ABILITY_LABELS[ability] || ability}</Text>
-                      <Text style={styles.abilityGrade}>{grade}{target !== grade ? ` -> ${target}` : ''}</Text>
-                      <Text style={styles.abilityStatus}>{status.text}</Text>
+                      <View style={styles.abilityTopRow}>
+                        <Text style={styles.abilityName} numberOfLines={1}>{ABILITY_LABELS[ability] || ability}</Text>
+                        {status.canImprove ? <Ionicons color="#00e58b" name="arrow-up-circle" size={18} /> : null}
+                      </View>
+                      <View style={styles.gradePath}>
+                        <Text style={styles.abilityGrade}>{grade}</Text>
+                        {target !== grade ? (
+                          <>
+                            <Ionicons color={status.canImprove ? '#00e58b' : '#666'} name="arrow-forward" size={14} />
+                            <Text style={[styles.abilityGrade, status.canImprove && styles.nextGrade]}>{target}</Text>
+                          </>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.abilityStatus, status.canImprove && styles.abilityStatusReady]}>
+                        {status.canImprove ? `1 point upgrades ${grade} to ${target}` : status.text}
+                      </Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -282,10 +295,14 @@ const styles = StyleSheet.create({
   labelBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   labelText: { fontSize: 9, fontWeight: '900' },
   abilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  abilityButton: { width: '48%', minHeight: 54, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b66', backgroundColor: '#07180f', padding: 8, justifyContent: 'center' },
+  abilityButton: { width: '48%', minHeight: 76, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b66', backgroundColor: '#07180f', padding: 8, justifyContent: 'center' },
   abilityButtonDisabled: { opacity: 0.45, borderColor: '#333', backgroundColor: '#151515' },
-  abilityName: { color: '#aaa', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  abilityGrade: { color: '#fff', fontSize: 15, fontWeight: '900', marginTop: 3 },
+  abilityTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  abilityName: { flex: 1, color: '#aaa', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  gradePath: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
+  abilityGrade: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  nextGrade: { color: '#00e58b' },
   abilityStatus: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
+  abilityStatusReady: { color: '#00e58b' },
   noGrades: { color: '#777', fontSize: 12, fontWeight: '700' },
 });
