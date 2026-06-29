@@ -10,7 +10,11 @@ type ResolveContext = {
 const baselineProfiles = buildBaselineRatingProfiles(1);
 
 const ERA_TO_SEASON: Record<string, number> = {
+  magic_bird: 1984,
+  jordan: 1992,
+  kobe: 2003,
   lebron: 2011,
+  steph: 2017,
   current: 2026,
 };
 

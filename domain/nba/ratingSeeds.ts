@@ -1,8 +1,9 @@
 import { buildPlayerRatingProfile, type PlayerRatingProfile } from './ratingProfile';
 import type { EraAdjustmentContext } from './eraAdjustedProfiles';
 import type { LeagueContext, PublicStatLine } from './attributeModel';
+import { generatedRatingSeeds } from './generatedRatingSeeds';
 
-type BaselineSeed = {
+export type BaselineSeed = {
   source: PublicStatLine;
   leagueContext: LeagueContext;
   eraContext: EraAdjustmentContext;
@@ -169,7 +170,13 @@ export function buildBaselineRatingProfiles(
   generated_at_ms = 1,
   options: { leagueDate?: string | Date | null } = {},
 ): PlayerRatingProfile[] {
-  return seeds.map(seed => buildPlayerRatingProfile({
+  const manualKeys = new Set(seeds.map(seed => seedKey(seed)));
+  const combinedSeeds = [
+    ...seeds,
+    ...generatedRatingSeeds.filter(seed => !manualKeys.has(seedKey(seed))),
+  ];
+
+  return combinedSeeds.map(seed => buildPlayerRatingProfile({
     source: seed.source,
     source_snapshot_id: seed.snapshotId,
     leagueContext: {
@@ -179,4 +186,12 @@ export function buildBaselineRatingProfiles(
     eraContext: seed.eraContext,
     generated_at_ms,
   }));
+}
+
+function seedKey(seed: BaselineSeed) {
+  return [
+    seed.leagueContext.season,
+    String(seed.source.full_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(),
+    String(seed.source.team || '').toUpperCase().trim(),
+  ].join('|');
 }

@@ -308,6 +308,20 @@ export function buildAttributeModel({
   const rimPressureBonus = tagBonus(source, 'elite_rim_pressure', 8);
   const highUsageBonus = tagBonus(source, 'high_usage_creator', 4);
   const mvpBonus = tagBonus(source, 'mvp', 5);
+  const allStarBonus = tagBonus(source, 'all_star', 3);
+  const floorGeneralBonus = tagBonus(source, 'floor_general', 7);
+  const elitePasserBonus = tagBonus(source, 'elite_passer', 6);
+  const eliteShooterBonus = tagBonus(source, 'elite_shooter', 7);
+  const eliteMidRangeBonus = tagBonus(source, 'elite_midrange', 6) + tagBonus(source, 'midrange_big', 4);
+  const defensiveWingBonus = tagBonus(source, 'defensive_wing_assignment', 7);
+  const pointAttackDefenseBonus = tagBonus(source, 'point_of_attack_defender', 5);
+  const defensiveAnchorBonus = tagBonus(source, 'defensive_anchor', 8);
+  const rimProtectorBonus = tagBonus(source, 'rim_protector', 7);
+  const rebounderBonus = tagBonus(source, 'elite_rebounder', 7);
+  const postScorerBonus = tagBonus(source, 'post_scorer', 7);
+  const connectorBigBonus = tagBonus(source, 'connector_big', 4);
+  const highMotorBonus = tagBonus(source, 'high_motor', 4);
+  const killerInstinctBonus = tagBonus(source, 'killer_instinct', 4);
 
   return roundModel({
     closeShot: 58 + scoringVolume * 0.85 + fg * 22 + ts * 8 + fta * 1.2 + (big ? 6 : 0),
@@ -316,38 +330,38 @@ export function buildAttributeModel({
     standingDunk: 45 + dunkRate * 90 + (big ? 18 : wing ? 6 : -5) + rpg * 0.7,
     drawFoul: 50 + fta * 4.8 + rimRate * 22 + driveRate * 18 + usage(source) * 0.25,
     hands: 58 + fg * 22 + rpg * 1.4 + Math.max(0, 14 - tovPct) * 0.9 + (big ? 4 : 0),
-    midRange: 56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0),
-    threePoint: 54 + (threePct - leagueContext.leagueThreePointPct) * 125 + threeAttempts * 2.7 + ft * 8 + efg * 12 + scoringVolume * 0.22,
+    midRange: 56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0) + eliteMidRangeBonus,
+    threePoint: 54 + (threePct - leagueContext.leagueThreePointPct) * 125 + threeAttempts * 2.7 + ft * 8 + efg * 12 + scoringVolume * 0.22 + eliteShooterBonus,
     freeThrow: 44 + ft * 58 + fta * 0.6,
     dunking: 52 + fta * 2.4 + fg * 20 + (big ? 8 : wing ? 4 : 0) + Math.max(0, 28 - age) * 0.6,
-    shotIq: 58 + scoringVolume * 0.45 + fg * 10 + ts * 12 + efg * 10 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7 + efficiencySignal * 0.08,
-    shotConsistency: 55 + fg * 10 + ts * 13 + efg * 11 + ft * 8 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25 + efficiencySignal * 0.08,
-    passing: 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0),
-    passIq: 54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0),
-    passVision: 52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.25 + (guard ? 6 : wing ? 3 : 0),
-    ballHandle: 56 + apg * 1.6 + usage(source) * 0.75 + (guard ? 7 : wing ? 4 : -3) - Math.max(0, tovPct - 14) * 0.7,
+    shotIq: 58 + scoringVolume * 0.45 + fg * 10 + ts * 12 + efg * 10 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.35,
+    shotConsistency: 55 + fg * 10 + ts * 13 + efg * 11 + ft * 8 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.3,
+    passing: 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
+    passIq: 54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
+    passVision: 52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.25 + (guard ? 6 : wing ? 3 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
+    ballHandle: 56 + apg * 1.6 + usage(source) * 0.75 + (guard ? 7 : wing ? 4 : -3) - Math.max(0, tovPct - 14) * 0.7 + floorGeneralBonus * 0.45 + burstBonus * 0.25,
     speedWithBall: 58 + apg * 0.9 + usage(source) * 0.65 + driveRate * 32 + transitionRate * 18 + (guard ? 7 : wing ? 3 : -5) + burstBonus,
-    offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35 + efficiencySignal * 0.06,
-    clutch: 58 + scoringVolume * 0.55 + usage(source) * 0.55 + wins * 1.1 + Math.max(0, mpg - 30) * 0.7,
-    perimeterDefense: 56 + spg * 8 + dws * 4.2 + mpg * 0.45 + (guard || wing ? 5 : -4),
-    lateralQuickness: 58 + spg * 4.5 + dws * 2.7 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35,
-    postDefense: 54 + bpg * 5.5 + rpg * 1.4 + dws * 4 + (big ? 8 : 0),
-    blocking: 50 + bpg * 13 + dws * 2.7 + (big ? 8 : wing ? 3 : 0),
-    steals: 54 + spg * 12 + dws * 2.4 + (guard || wing ? 4 : 0),
-    defenseIq: 56 + dws * 5 + spg * 3.4 + bpg * 2.5 + mpg * 0.45 + wins * 0.5,
-    helpDefense: 56 + dws * 4.6 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35,
+    offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35 + efficiencySignal * 0.06 + floorGeneralBonus * 0.5 + connectorBigBonus + allStarBonus,
+    clutch: 58 + scoringVolume * 0.55 + usage(source) * 0.55 + wins * 1.1 + Math.max(0, mpg - 30) * 0.7 + killerInstinctBonus + mvpBonus * 0.4,
+    perimeterDefense: 56 + spg * 8 + dws * 4.2 + mpg * 0.45 + (guard || wing ? 5 : -4) + defensiveWingBonus + pointAttackDefenseBonus,
+    lateralQuickness: 58 + spg * 4.5 + dws * 2.7 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35 + defensiveWingBonus * 0.5 + pointAttackDefenseBonus,
+    postDefense: 54 + bpg * 5.5 + rpg * 1.4 + dws * 4 + (big ? 8 : 0) + defensiveAnchorBonus + rimProtectorBonus * 0.45,
+    blocking: 50 + bpg * 13 + dws * 2.7 + (big ? 8 : wing ? 3 : 0) + rimProtectorBonus + defensiveAnchorBonus * 0.4,
+    steals: 54 + spg * 12 + dws * 2.4 + (guard || wing ? 4 : 0) + defensiveWingBonus * 0.35 + pointAttackDefenseBonus,
+    defenseIq: 56 + dws * 5 + spg * 3.4 + bpg * 2.5 + mpg * 0.45 + wins * 0.5 + defensiveAnchorBonus + defensiveWingBonus + pointAttackDefenseBonus * 0.4,
+    helpDefense: 56 + dws * 4.6 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35 + defensiveAnchorBonus + defensiveWingBonus * 0.6 + connectorBigBonus,
     speed: 62 + (guard ? 10 : wing ? 6 : 0) - Math.max(0, age - 29) * 1.1 + Math.max(0, 30 - mpg) * 0.1,
     acceleration: 62 + (guard ? 10 : wing ? 6 : 0) - Math.max(0, age - 29) * 1.15 + usage(source) * 0.15,
     vertical: 55 + dunkRate * 90 + rimRate * 12 + (guard || wing ? 6 : big ? 4 : 0) - Math.max(0, age - 29) * 0.7 + burstBonus * 0.45,
     agility: 58 + (guard ? 9 : wing ? 6 : 0) + driveRate * 18 + transitionRate * 12 - Math.max(0, age - 30) * 0.9 + burstBonus * 0.45,
-    strength: 56 + (big ? 13 : wing ? 6 : 0) + rpg * 1.1 + Math.max(0, age - 22) * 0.35,
-    rebounding: 52 + rpg * 3.2 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25,
-    offensiveRebound: 48 + rpg * 1.3 + orebPct * 1.6 + (big ? 8 : wing ? 3 : -2),
-    defensiveRebound: 50 + rpg * 2 + drebPct * 1.2 + (big ? 7 : wing ? 3 : -2),
-    postOffense: 50 + (big ? 9 : 0) + fg * 21 + rpg * 0.8 + fta * 1.1 + scoringVolume * 0.35,
+    strength: 56 + (big ? 13 : wing ? 6 : 0) + rpg * 1.1 + Math.max(0, age - 22) * 0.35 + rebounderBonus * 0.25 + postScorerBonus * 0.25,
+    rebounding: 52 + rpg * 3.2 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus,
+    offensiveRebound: 48 + rpg * 1.3 + orebPct * 1.6 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.65,
+    defensiveRebound: 50 + rpg * 2 + drebPct * 1.2 + (big ? 7 : wing ? 3 : -2) + rebounderBonus,
+    postOffense: 50 + (big ? 9 : 0) + fg * 21 + rpg * 0.8 + fta * 1.1 + scoringVolume * 0.35 + postScorerBonus + eliteMidRangeBonus * 0.25,
     stamina: availability * 0.72 + work * 0.28,
-    hustle: 56 + mpg * 0.45 + dws * 1.8 + rpg * 0.8 + spg * 2.4 + bpg * 1.5,
+    hustle: 56 + mpg * 0.45 + dws * 1.8 + rpg * 0.8 + spg * 2.4 + bpg * 1.5 + highMotorBonus,
     durability: availability,
-    potential: 58 + Math.max(0, 27 - age) * 2.2 + draftSignal(source) + Math.max(0, scoringVolume - 12) * 0.45 + astPct * 0.08 + wins * 0.35 + awardWeight * 1.2 + highUsageBonus + mvpBonus,
+    potential: 58 + Math.max(0, 27 - age) * 2.2 + draftSignal(source) + Math.max(0, scoringVolume - 12) * 0.45 + astPct * 0.08 + wins * 0.35 + awardWeight * 1.2 + highUsageBonus + mvpBonus + allStarBonus,
   });
 }

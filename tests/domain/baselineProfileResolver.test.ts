@@ -61,4 +61,34 @@ describe('baseline rating profile resolver', () => {
     expect(gradeRank(grades.offenseIq)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(summary.label).toBe('Near Peak');
   });
+
+  it('covers core 2011 era rosters beyond the hand-seeded headline players', () => {
+    const dwyaneWade = resolveBaselineRatingProfile({ full_name: 'Dwyane Wade', team: 'MIA' }, { era: 'lebron' });
+    const chrisBosh = resolveBaselineRatingProfile({ full_name: 'Chris Bosh', team: 'MIA' }, { era: 'lebron' });
+    const luolDeng = resolveBaselineRatingProfile({ full_name: 'Luol Deng', team: 'CHI' }, { era: 'lebron' });
+    const joakimNoah = resolveBaselineRatingProfile({ full_name: 'Joakim Noah', team: 'CHI' }, { era: 'lebron' });
+    const kobeBryant = resolveBaselineRatingProfile({ full_name: 'Kobe Bryant', team: 'LAL' }, { era: 'lebron' });
+    const chrisPaul = resolveBaselineRatingProfile({ full_name: 'Chris Paul', team: 'NOH' }, { era: 'lebron' });
+
+    expect(dwyaneWade?.team).toBe('MIA');
+    expect(chrisBosh?.team).toBe('MIA');
+    expect(luolDeng?.team).toBe('CHI');
+    expect(joakimNoah?.team).toBe('CHI');
+    expect(kobeBryant?.team).toBe('LAL');
+    expect(chrisPaul?.team).toBe('NOH');
+
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Dwyane Wade', team: 'MIA' }, dwyaneWade).overall)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Chris Bosh', team: 'MIA' }, chrisBosh).overall)).toBeGreaterThanOrEqual(gradeRank('B+'));
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Luol Deng', team: 'CHI' }, luolDeng).perimeterDefense)).toBeGreaterThanOrEqual(gradeRank('B+'));
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Joakim Noah', team: 'CHI' }, joakimNoah).rebounding)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Kobe Bryant', team: 'LAL' }, kobeBryant).overall)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(buildScoutingGrades({ full_name: 'Chris Paul', team: 'NOH' }, chrisPaul).passing)).toBeGreaterThanOrEqual(gradeRank('A'));
+  });
+
+  it('maps every historical era key to its generated baseline season', () => {
+    expect(resolveBaselineRatingProfile({ full_name: 'Magic Johnson', team: 'LAL' }, { era: 'magic_bird' })?.season).toBe(1984);
+    expect(resolveBaselineRatingProfile({ full_name: 'Michael Jordan', team: 'CHI' }, { era: 'jordan' })?.season).toBe(1992);
+    expect(resolveBaselineRatingProfile({ full_name: 'Kobe Bryant', team: 'LAL' }, { era: 'kobe' })?.season).toBe(2003);
+    expect(resolveBaselineRatingProfile({ full_name: 'Stephen Curry', team: 'GSW' }, { era: 'steph' })?.season).toBe(2017);
+  });
 });
