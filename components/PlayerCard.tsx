@@ -392,8 +392,9 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
   if (!player) return null;
 
   const name = player.full_name || player.name || '';
-  const resolvedProfile: any = playerProfileWithLeagueDateAge(profile, leagueDate)
-    || resolveBaselineRatingProfile(player, { era, leagueDate });
+  const savedProfile = playerProfileWithLeagueDateAge(profile, leagueDate);
+  const baselineProfile = resolveBaselineRatingProfile(player, { era, leagueDate });
+  const resolvedProfile: any = baselineProfile || savedProfile;
   const pos = resolvedProfile?.position || player.position || '?';
   const posLabel = cleanPositionLabel(pos);
   const posColor = POSITION_COLORS[posLabel.split(/[/-]/)[0]?.trim()] || '#888';
@@ -422,7 +423,9 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
   const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, resolvedProfile) : [];
   const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, resolvedProfile) : null;
   const playerGrades = isNBAPlayer ? buildScoutingGrades(player, resolvedProfile) : null;
-  const resolvedCompareProfile = selectedCompareProfile || (selectedComparePlayer ? resolveBaselineRatingProfile(selectedComparePlayer, { era, leagueDate }) : null);
+  const selectedSavedCompareProfile = playerProfileWithLeagueDateAge(selectedCompareProfile, leagueDate);
+  const selectedBaselineCompareProfile = selectedComparePlayer ? resolveBaselineRatingProfile(selectedComparePlayer, { era, leagueDate }) : null;
+  const resolvedCompareProfile = selectedBaselineCompareProfile || selectedSavedCompareProfile;
   const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, resolvedCompareProfile) : null;
   const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
   const filteredCompareCandidates = compareQuery.trim()
@@ -499,11 +502,8 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                   {(resolvedProfile?.height || resolvedProfile?.weight) ? (
                     <Text style={styles.physical}>{[resolvedProfile.height, resolvedProfile.weight ? resolvedProfile.weight + ' lbs' : ''].filter(Boolean).join(' · ')}</Text>
                   ) : null}
-                  {resolvedProfile?.birth_date ? (
-                    <Text style={styles.birthDate}>Born: {resolvedProfile.birth_date}</Text>
-                  ) : null}
-                  {resolvedProfile?.age ? (
-                    <Text style={styles.birthDate}>Age: {resolvedProfile.age}</Text>
+                  {(resolvedProfile?.display_age || resolvedProfile?.age) ? (
+                    <Text style={styles.birthDate}>Age: {resolvedProfile.display_age || resolvedProfile.age}</Text>
                   ) : null}
                   {originValue ? (
                     <Text style={styles.birthDate}>{originLabel}: {originValue}</Text>
@@ -735,13 +735,11 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                         <>
                           <View style={styles.compareHeader}>
                             <View style={styles.compareHeaderSide}>
-                              <Text style={styles.compareHeaderName} numberOfLines={1}>{name}</Text>
-                              <Text style={styles.compareHeaderMeta}>{playerTeam(player) || player.position || 'Player'}</Text>
+                              <Text style={styles.compareHeaderAbbr} numberOfLines={1}>{playerTeam(player) || player.position || 'YOU'}</Text>
                             </View>
                             <Text style={styles.compareVs}>VS</Text>
                             <View style={styles.compareHeaderSide}>
-                              <Text style={styles.compareHeaderName} numberOfLines={1}>{playerName(selectedComparePlayer)}</Text>
-                              <Text style={styles.compareHeaderMeta}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'Player'}</Text>
+                              <Text style={styles.compareHeaderAbbr} numberOfLines={1}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'NBA'}</Text>
                             </View>
                           </View>
                           <View style={styles.compareRows}>
@@ -755,18 +753,16 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                               const rightColors = gradeColors(model.right.grade);
                               return (
                                 <View key={row.key} style={styles.compareRow} accessibilityLabel={model.accessibilityLabel}>
-                                  <View style={styles.compareSide}>
-                                    <Text style={[styles.compareSmallName, model.winner === 'left' && styles.compareWinnerText]} numberOfLines={1}>{model.left.name}</Text>
+                                  <View style={styles.compareGradeColumn}>
                                     <View style={[styles.compareGradeBadge, { backgroundColor: leftColors.backgroundColor, borderColor: model.winner === 'left' ? leftColors.borderColor : '#333' }]}>
                                       <Text style={[styles.compareGradeText, { color: leftColors.textColor }]}>{model.left.grade}</Text>
                                     </View>
                                   </View>
                                   <Text style={styles.compareAbilityLabel}>{model.centerLabel}</Text>
-                                  <View style={[styles.compareSide, styles.compareSideRight]}>
+                                  <View style={styles.compareGradeColumn}>
                                     <View style={[styles.compareGradeBadge, { backgroundColor: rightColors.backgroundColor, borderColor: model.winner === 'right' ? rightColors.borderColor : '#333' }]}>
                                       <Text style={[styles.compareGradeText, { color: rightColors.textColor }]}>{model.right.grade}</Text>
                                     </View>
-                                    <Text style={[styles.compareSmallName, model.winner === 'right' && styles.compareWinnerText]} numberOfLines={1}>{model.right.name}</Text>
                                   </View>
                                 </View>
                               );
@@ -986,19 +982,16 @@ const styles = StyleSheet.create({
   compareChipNameActive: { color: '#00ff87' },
   compareChipTeam: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
   compareHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0b0b0b', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 10, marginBottom: 10 },
-  compareHeaderSide: { flex: 1, alignItems: 'center' },
-  compareHeaderName: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
-  compareHeaderMeta: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  compareHeaderSide: { width: 64, alignItems: 'center' },
+  compareHeaderAbbr: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   compareVs: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
   compareRows: { gap: 7 },
-  compareRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 8, gap: 8 },
-  compareSide: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  compareSideRight: { justifyContent: 'flex-end' },
-  compareSmallName: { color: '#8a8a8a', fontSize: 9, fontWeight: '900', maxWidth: 78 },
+  compareRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 8, gap: 8 },
+  compareGradeColumn: { width: 64, alignItems: 'center' },
   compareWinnerText: { color: '#ffffff' },
   compareGradeBadge: { minWidth: 42, height: 30, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   compareGradeText: { fontSize: 13, fontWeight: '900' },
-  compareAbilityLabel: { width: 88, color: '#ffffff', fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  compareAbilityLabel: { flex: 1, color: '#ffffff', fontSize: 11, fontWeight: '900', textAlign: 'center' },
   statsHeader: { flexDirection: 'row', marginBottom: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
   statsHeaderCell: { flex: 1, color: '#555', fontSize: 10, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase' },
   statsRow: { flexDirection: 'row', paddingVertical: 7, borderRadius: 6 },

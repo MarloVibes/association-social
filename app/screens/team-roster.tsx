@@ -94,6 +94,7 @@ export default function TeamRosterScreen() {
   const [profilesByName, setProfilesByName] = useState<Record<string, any>>({});
   const [isLeagueCommissioner, setIsLeagueCommissioner] = useState(false);
   const [posFilter, setPosFilter] = useState('ALL');
+  const [rosterViewMode, setRosterViewMode] = useState<'roster' | 'picks'>('roster');
   const myUid = auth.currentUser?.uid;
 
   useEffect(() => {
@@ -320,35 +321,59 @@ export default function TeamRosterScreen() {
       </View>
 
       {team.picks && team.picks.length > 0 ? (
+        <View style={styles.viewTabs}>
+          <TouchableOpacity
+            style={[styles.viewTab, rosterViewMode === 'roster' && styles.viewTabActive]}
+            onPress={() => setRosterViewMode('roster')}
+          >
+            <Text style={[styles.viewTabText, rosterViewMode === 'roster' && styles.viewTabTextActive]}>
+              ROSTER ({players.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewTab, rosterViewMode === 'picks' && styles.viewTabActive]}
+            onPress={() => setRosterViewMode('picks')}
+          >
+            <Text style={[styles.viewTabText, rosterViewMode === 'picks' && styles.viewTabTextActive]}>
+              PICKS ({team.picks.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {rosterViewMode === 'picks' ? (
         <>
-          <Text style={styles.sectionLabel}>DRAFT PICKS ({team.picks.length})</Text>
-          <View style={styles.picksRow}>
+          <Text style={styles.sectionLabel}>PICKS ({team.picks.length})</Text>
+          <View style={styles.picksList}>
             {[...team.picks].sort((a: any, b: any) => (a.year - b.year) || (a.round - b.round)).map((pk: any, i: number) => (
-              <View key={pk.id || i} style={styles.pickChip}>
-                <Text style={styles.pickChipText}>🎟️ {pickLabel(pk)}</Text>
-                {pk.originalTeam && pk.originalTeam !== abbr ? <Text style={styles.pickChipOrigin}>via {pk.originalTeam}</Text> : null}
+              <View key={pk.id || i} style={styles.pickCard}>
+                <Text style={styles.pickYear}>{pk.year}</Text>
+                <View style={styles.pickInfo}>
+                  <Text style={styles.pickTitle}>{pickLabel(pk).replace(String(pk.year), '').trim()}</Text>
+                  <Text style={styles.pickMeta}>{pk.originalTeam && pk.originalTeam !== abbr ? `via ${pk.originalTeam}` : 'Own pick'}</Text>
+                </View>
               </View>
             ))}
           </View>
         </>
-      ) : null}
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>ROSTER ({players.length})</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.posFilterScroll}>
+            <View style={styles.posFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
+                  onPress={() => setPosFilter(pos)}
+                >
+                  <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
 
-      <Text style={styles.sectionLabel}>ROSTER ({players.length})</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.posFilterScroll}>
-        <View style={styles.posFilters}>
-          {positionFilters.map(pos => (
-            <TouchableOpacity
-              key={pos}
-              style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
-              onPress={() => setPosFilter(pos)}
-            >
-              <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-
-      {players.length === 0 ? (
+          {players.length === 0 ? (
         <Text style={styles.empty}>No players on this roster.</Text>
       ) : (() => {
         // For MLB/NFL, order by position group so the roster reads like a depth chart.
@@ -374,7 +399,8 @@ export default function TeamRosterScreen() {
             }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         const canCpuTrade = !team.gmId && !isMyTeam;
-        const playerProfile = profilesByName[p.full_name] || resolveBaselineRatingProfile(p, { era: leagueEra, currentYear });
+        const playerBaselineProfile = resolveBaselineRatingProfile(p, { era: leagueEra, currentYear, leagueDate });
+        const playerProfile = playerBaselineProfile || profilesByName[p.full_name];
         const archetype = getSportArchetypeForYear(p, playerProfile, currentYear, sport);
         const gradePreview = isNBARoster ? rosterGradePreview(p, playerProfile) : [];
         const topGrade = gradePreview[0];
@@ -448,8 +474,10 @@ export default function TeamRosterScreen() {
             </TouchableOpacity>
           </Fragment>
         );
-      });
+       });
       })()}
+        </>
+      )}
 
       <View style={{ height: 60 }} />
       <PlayerCard
@@ -490,6 +518,17 @@ const styles = StyleSheet.create({
   posBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
   posBtnText: { color: '#777', fontSize: 11, fontWeight: '800' },
   posBtnTextActive: { color: '#00ff87' },
+  viewTabs: { flexDirection: 'row', gap: 8, padding: 4, borderRadius: 12, backgroundColor: '#101010', borderWidth: 1, borderColor: '#242424', marginBottom: 16 },
+  viewTab: { flex: 1, minHeight: 42, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent' },
+  viewTabActive: { backgroundColor: '#071f14', borderColor: '#00ff87' },
+  viewTabText: { color: '#777', fontSize: 12, fontWeight: '900' },
+  viewTabTextActive: { color: '#00ff87' },
+  picksList: { gap: 10, marginBottom: 18 },
+  pickCard: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 62, backgroundColor: '#101c14', borderWidth: 1, borderColor: '#1f5f3a', borderRadius: 12, padding: 12 },
+  pickYear: { width: 52, color: '#00ff87', fontSize: 16, fontWeight: '900' },
+  pickInfo: { flex: 1 },
+  pickTitle: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  pickMeta: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 2 },
   picksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   pickChip: { backgroundColor: '#101c14', borderWidth: 1, borderColor: '#1f5f3a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   pickChipText: { color: '#00ff87', fontSize: 12, fontWeight: '700' },

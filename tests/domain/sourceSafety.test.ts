@@ -533,6 +533,23 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('Potential');
     expect(playerCard).toContain('compareScoutingGrades');
     expect(playerCard).toContain('getCompareRowModel');
+    expect(playerCard).toContain('compareHeaderAbbr');
+    expect(playerCard).not.toContain('compareSmallName');
+    expect(playerCard).toContain('baselineProfile || savedProfile');
+    expect(playerCard).toContain('selectedBaselineCompareProfile || selectedSavedCompareProfile');
+    expect(playerCard).toContain('Age: {resolvedProfile.display_age || resolvedProfile.age}');
+    expect(playerCard).not.toContain('Born: {resolvedProfile.birth_date}');
+  });
+
+  it('keeps draft picks out of the default roster list view', () => {
+    const roster = source('app/screens/team-roster.tsx');
+
+    expect(roster).toContain("rosterViewMode, setRosterViewMode");
+    expect(roster).toContain('playerBaselineProfile || profilesByName[p.full_name]');
+    expect(roster).toContain("ROSTER");
+    expect(roster).toContain("PICKS");
+    expect(roster).toContain("rosterViewMode === 'picks'");
+    expect(roster).not.toContain('DRAFT PICKS ({team.picks.length})</Text>');
   });
 
   it('does not present the franchise game as a mini game on the dashboard', () => {
