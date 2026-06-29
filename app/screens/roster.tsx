@@ -8,10 +8,85 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { gradeFromNumeric } from '@/domain/nba/gradeScale';
+import type { NbaGrade } from '@/domain/nba/identity';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
+
+const ROSTER_GRADE_KEYS = [
+  { key: 'finishing', label: 'FIN' },
+  { key: 'threePoint', label: '3PT' },
+  { key: 'playmaking', label: 'PLY' },
+  { key: 'perimeterDefense', label: 'DEF' },
+  { key: 'athleticism', label: 'ATH' },
+  { key: 'potential', label: 'POT' },
+] as const;
+
+const GRADE_COLORS: Record<NbaGrade, string> = {
+  S: '#f6d365',
+  'A+': '#00ff87',
+  A: '#18e08a',
+  'A-': '#33c783',
+  'B+': '#5fd38d',
+  B: '#74c99b',
+  'B-': '#8fc6a8',
+  'C+': '#d5b85a',
+  C: '#b99f4d',
+  'C-': '#a48942',
+  'D+': '#ff8a5c',
+  D: '#ff6b6b',
+  'D-': '#e95360',
+  F: '#c83a4a',
+};
+
+function normalizePlayerName(player: any): string {
+  return String(player?.full_name || player?.name || '').trim();
+}
+
+function gradeFromAny(value: any): NbaGrade | null {
+  if (!value && value !== 0) return null;
+  if (typeof value === 'string') return value as NbaGrade;
+  if (typeof value === 'number') return gradeFromNumeric(value);
+  if (typeof value === 'object') {
+    if (value.grade) return String(value.grade) as NbaGrade;
+    if (value.rating !== undefined) return gradeFromNumeric(value.rating);
+  }
+  return null;
+}
+
+function rosterGradeChips(player: any, profile: any) {
+  const categoryGrades = player?.category_skill_grades || profile?.category_skill_grades || {};
+  const visibleGrades = player?.visibleIdentity?.grades || player?.identity?.grades || profile?.visibleIdentity?.grades || profile?.identity?.grades || {};
+  const attributes = player?.era_adjusted_profiles || player?.attribute_model || profile?.era_adjusted_profiles || profile?.attribute_model || {};
+
+  return ROSTER_GRADE_KEYS.map(({ key, label }) => {
+    const directGrade = gradeFromAny(categoryGrades[key]);
+    const visibleGrade = gradeFromAny(visibleGrades[key]);
+    const attrGrade = key === 'threePoint'
+      ? gradeFromAny(attributes.threePoint)
+      : key === 'perimeterDefense'
+        ? gradeFromAny(attributes.perimeterDefense)
+        : gradeFromAny(attributes[key]);
+    return {
+      key,
+      label,
+      grade: directGrade || visibleGrade || attrGrade || null,
+    };
+  }).filter(item => item.grade);
+}
+
+function strongestGrade(player: any, profile: any): { label: string; grade: NbaGrade } | null {
+  const chips = rosterGradeChips(player, profile);
+  if (chips.length === 0) return null;
+  const rank: Record<NbaGrade, number> = {
+    F: 0, 'D-': 1, D: 2, 'D+': 3, 'C-': 4, C: 5, 'C+': 6,
+    'B-': 7, B: 8, 'B+': 9, 'A-': 10, A: 11, 'A+': 12, S: 13,
+  };
+  const best = [...chips].sort((left, right) => rank[right.grade as NbaGrade] - rank[left.grade as NbaGrade])[0];
+  return best?.grade ? { label: best.label, grade: best.grade as NbaGrade } : null;
+}
 
 export default function RosterScreen() {
   const { leagueId, sport, teamId, era } = useLocalSearchParams<{
@@ -827,6 +902,10 @@ export default function RosterScreen() {
           const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
           const isUntouchable = isMine && myUntouchables.includes(pid);
           const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
+          const profile = profilesByName[normalizePlayerName(item)] || profilesByName[item.full_name] || profilesByName[item.name] || null;
+          const gradeChips = rosterGradeChips(item, profile);
+          const bestGrade = strongestGrade(item, profile);
+          const archetype = getSportArchetypeForYear(item, profile, currentYear, authoritativeSport);
           return (
             <TouchableOpacity
               style={[
@@ -842,27 +921,29 @@ export default function RosterScreen() {
               }}
               activeOpacity={0.7}
             >
-              <PlayerHeadshot
-                player={item}
-                sport={authoritativeSport}
-                imageStyle={styles.playerHeadshot}
-                fallback={
-                  <View style={styles.playerAvatar}>
-                    <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
+              <View style={styles.playerPortraitWrap}>
+                <PlayerHeadshot
+                  player={item}
+                  sport={authoritativeSport}
+                  imageStyle={styles.playerHeadshot}
+                  fallback={
+                    <View style={styles.playerAvatar}>
+                      <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
+                    </View>
+                  }
+                />
+                {bestGrade ? (
+                  <View style={[styles.bestGradeBadge, { borderColor: GRADE_COLORS[bestGrade.grade] + 'aa' }]}>
+                    <Text style={[styles.bestGradeText, { color: GRADE_COLORS[bestGrade.grade] }]}>{bestGrade.grade}</Text>
                   </View>
-                }
-              />
+                ) : null}
+              </View>
               <View style={styles.playerInfo}>
                 <View style={styles.playerNameRow}>
                   <Text style={styles.playerName}>{item.full_name || item.name}</Text>
-                  {(() => {
-                    const ps = getSportArchetypeForYear(item, profilesByName[item.full_name], currentYear, authoritativeSport);
-                    return (
-                      <View style={[styles.tierBadge, { borderColor: ps.color + '88' }]}>
-                        <Text style={[styles.tierBadgeText, { color: ps.color }]}>{ps.label}</Text>
-                      </View>
-                    );
-                  })()}
+                  <View style={[styles.tierBadge, { borderColor: archetype.color + '88' }]}>
+                    <Text style={[styles.tierBadgeText, { color: archetype.color }]}>{archetype.label}</Text>
+                  </View>
                 </View>
                 {isUntouchable ? <Text style={styles.playerStatusRed}>🔒 Untouchable</Text> : null}
                 {isOnBlock ? <Text style={styles.playerStatusBlue}>💼 On Block</Text> : null}
@@ -876,6 +957,22 @@ export default function RosterScreen() {
                     </View>
                   )}
                 </View>
+                {gradeChips.length > 0 ? (
+                  <View style={styles.gradeChipRow}>
+                    {gradeChips.map(chip => {
+                      const grade = chip.grade as NbaGrade;
+                      const color = GRADE_COLORS[grade] || '#888';
+                      return (
+                        <View key={chip.key} style={[styles.gradeChip, { borderColor: color + '99', backgroundColor: color + '18' }]}>
+                          <Text style={styles.gradeChipLabel}>{chip.label}</Text>
+                          <Text style={[styles.gradeChipValue, { color }]}>{grade}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.gradeFallback}>Tap to view full player card</Text>
+                )}
               </View>
               {activeTab === 'my_team' ? (
                 <TouchableOpacity style={styles.moveBtn} onPress={(e) => { e.stopPropagation?.(); handlePlayerAction(item, true); }}>
@@ -976,7 +1073,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 20, paddingBottom: 100 },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },
-  playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#2a2a2a', gap: 12 },
+  playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#252525', gap: 12 },
   playerCardUntouchable: { borderWidth: 1, borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
   playerCardOnBlock: { borderWidth: 1, borderColor: '#3B82F6', backgroundColor: '#0a1530' },
   playerStatusRed: { color: '#ff4444', fontSize: 10, fontWeight: '700', marginTop: 2 },
@@ -984,13 +1081,21 @@ const styles = StyleSheet.create({
   playerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   tierBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   tierBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  playerPortraitWrap: { width: 54, alignItems: 'center', justifyContent: 'center' },
   playerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', borderWidth: 1, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
-  playerHeadshot: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
+  playerHeadshot: { width: 48, height: 48, borderRadius: 24 },
   playerAvatarText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
+  bestGradeBadge: { marginTop: -8, backgroundColor: '#050505', borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  bestGradeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   playerInfo: { flex: 1 },
-  playerName: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  playerName: { color: '#ffffff', fontSize: 15, fontWeight: '800', marginBottom: 3 },
   playerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   playerMeta: { color: '#666', fontSize: 12 },
+  gradeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 9 },
+  gradeChip: { minWidth: 47, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4 },
+  gradeChipLabel: { color: '#777', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  gradeChipValue: { fontSize: 12, fontWeight: '900', marginTop: 1 },
+  gradeFallback: { color: '#777', fontSize: 11, fontWeight: '600', marginTop: 8 },
   addBtn: { backgroundColor: '#00ff87', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   addBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
   moveBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#4444ff' },
