@@ -275,6 +275,8 @@ export function buildAttributeModel({
   const mpg = numberFrom(source.minutesPerGame);
   const games = numberFrom(source.games);
   const fg = pct(source.fieldGoalPct, 0.45);
+  const ts = pct(source.trueShootingPct, fg + 0.08);
+  const efg = pct(source.effectiveFieldGoalPct, fg);
   const threePct = pct(source.threePointPct, leagueContext.leagueThreePointPct);
   const threeAttempts = numberFrom(source.threePointAttemptsPerGame);
   const ft = pct(source.freeThrowPct, leagueContext.leagueFreeThrowPct);
@@ -297,6 +299,7 @@ export function buildAttributeModel({
   const work = workload(source);
   const paceFactor = clamp(numberFrom(leagueContext.pace, 100) / 100, 0.9, 1.1);
   const scoringVolume = ppg / paceFactor;
+  const efficiencySignal = (ts - 0.54) * 90 + (efg - 0.5) * 70;
   const availability = clamp(60 + games * 0.35 + mpg * 0.15, 45, 96);
   const burstBonus = tagBonus(source, 'elite_burst', 8);
   const rimPressureBonus = tagBonus(source, 'elite_rim_pressure', 8);
@@ -304,24 +307,24 @@ export function buildAttributeModel({
   const mvpBonus = tagBonus(source, 'mvp', 5);
 
   return roundModel({
-    closeShot: 58 + scoringVolume * 0.85 + fg * 28 + fta * 1.2 + (big ? 6 : 0),
-    drivingLayup: 58 + scoringVolume * 0.65 + fg * 20 + fta * 1.4 + driveRate * 30 + rimRate * 24 + (guard || wing ? 4 : 0) + rimPressureBonus,
+    closeShot: 58 + scoringVolume * 0.85 + fg * 22 + ts * 8 + fta * 1.2 + (big ? 6 : 0),
+    drivingLayup: 58 + scoringVolume * 0.65 + fg * 15 + ts * 8 + fta * 1.4 + driveRate * 30 + rimRate * 24 + (guard || wing ? 4 : 0) + rimPressureBonus,
     drivingDunk: 48 + dunkRate * 125 + rimRate * 25 + fta * 1.1 + (big ? 8 : wing ? 5 : 0) + burstBonus * 0.5,
     standingDunk: 45 + dunkRate * 90 + (big ? 18 : wing ? 6 : -5) + rpg * 0.7,
     drawFoul: 50 + fta * 4.8 + rimRate * 22 + driveRate * 18 + usage(source) * 0.25,
     hands: 58 + fg * 22 + rpg * 1.4 + Math.max(0, 14 - tovPct) * 0.9 + (big ? 4 : 0),
-    midRange: 56 + scoringVolume * 0.65 + ft * 18 + usage(source) * 0.45 + (guard || wing ? 3 : 0),
-    threePoint: 54 + (threePct - leagueContext.leagueThreePointPct) * 135 + threeAttempts * 2.7 + ft * 10 + scoringVolume * 0.22,
+    midRange: 56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0),
+    threePoint: 54 + (threePct - leagueContext.leagueThreePointPct) * 125 + threeAttempts * 2.7 + ft * 8 + efg * 12 + scoringVolume * 0.22,
     freeThrow: 44 + ft * 58 + fta * 0.6,
     dunking: 52 + fta * 2.4 + fg * 20 + (big ? 8 : wing ? 4 : 0) + Math.max(0, 28 - age) * 0.6,
-    shotIq: 58 + scoringVolume * 0.45 + fg * 16 + ft * 12 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7,
-    shotConsistency: 55 + fg * 18 + ft * 12 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25,
+    shotIq: 58 + scoringVolume * 0.45 + fg * 10 + ts * 12 + efg * 10 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7 + efficiencySignal * 0.08,
+    shotConsistency: 55 + fg * 10 + ts * 13 + efg * 11 + ft * 8 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25 + efficiencySignal * 0.08,
     passing: 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0),
     passIq: 54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0),
     passVision: 52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.25 + (guard ? 6 : wing ? 3 : 0),
     ballHandle: 56 + apg * 1.6 + usage(source) * 0.75 + (guard ? 7 : wing ? 4 : -3) - Math.max(0, tovPct - 14) * 0.7,
     speedWithBall: 58 + apg * 0.9 + usage(source) * 0.65 + driveRate * 32 + transitionRate * 18 + (guard ? 7 : wing ? 3 : -5) + burstBonus,
-    offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35,
+    offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35 + efficiencySignal * 0.06,
     clutch: 58 + scoringVolume * 0.55 + usage(source) * 0.55 + wins * 1.1 + Math.max(0, mpg - 30) * 0.7,
     perimeterDefense: 56 + spg * 8 + dws * 4.2 + mpg * 0.45 + (guard || wing ? 5 : -4),
     lateralQuickness: 58 + spg * 4.5 + dws * 2.7 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35,

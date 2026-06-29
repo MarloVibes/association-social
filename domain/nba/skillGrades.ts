@@ -86,7 +86,9 @@ function threePointSkill(attributes: Partial<AttributeModel>, context: SkillGrad
     offenseIq: 0.2,
   }, context);
   const hasVolumeProof = Number.isFinite(Number(context.shotVolumeModifier)) && Number(context.shotVolumeModifier) >= 82;
-  const capped = !hasVolumeProof && support < 80 ? Math.min(raw, 84.4) : raw;
+  const supportCapped = !hasVolumeProof && support < 80 ? Math.min(raw, 84.4) : raw;
+  const hasEliteVolumeProof = Number.isFinite(Number(context.shotVolumeModifier)) && Number(context.shotVolumeModifier) >= 95;
+  const capped = support < 95 || !hasEliteVolumeProof ? Math.min(supportCapped, 98.4) : supportCapped;
 
   return {
     rating: Math.round(capped * 10) / 10,

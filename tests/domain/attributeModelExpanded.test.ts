@@ -78,4 +78,55 @@ describe('expanded attribute model', () => {
     expect(rose.potential).toBeGreaterThanOrEqual(95);
     expect(rose.threePoint).toBeLessThan(85);
   });
+
+  it('uses true shooting and effective field goal data to separate efficient scorers', () => {
+    const common = {
+      player_id: 'wing-scorer',
+      full_name: 'Wing Scorer',
+      team: 'SIM',
+      position: 'SF',
+      age: 25,
+      games: 72,
+      minutesPerGame: 34,
+      pointsPerGame: 21,
+      reboundsPerGame: 6,
+      assistsPerGame: 3,
+      stealsPerGame: 1,
+      blocksPerGame: 0.5,
+      fieldGoalPct: 0.45,
+      threePointPct: 0.36,
+      threePointAttemptsPerGame: 5,
+      freeThrowPct: 0.78,
+      freeThrowAttemptsPerGame: 4,
+      usagePct: 26,
+      assistPct: 16,
+      turnoverPct: 12,
+      defensiveWinShares: 2,
+      winShares: 8,
+      draftPick: 8,
+    };
+
+    const efficient = buildAttributeModel({
+      source: {
+        ...common,
+        player_id: 'efficient-wing',
+        trueShootingPct: 0.61,
+        effectiveFieldGoalPct: 0.56,
+      },
+      leagueContext,
+    });
+    const inefficient = buildAttributeModel({
+      source: {
+        ...common,
+        player_id: 'inefficient-wing',
+        trueShootingPct: 0.51,
+        effectiveFieldGoalPct: 0.47,
+      },
+      leagueContext,
+    });
+
+    expect(efficient.shotIq).toBeGreaterThan(inefficient.shotIq);
+    expect(efficient.shotConsistency).toBeGreaterThan(inefficient.shotConsistency);
+    expect(efficient.offenseIq).toBeGreaterThan(inefficient.offenseIq);
+  });
 });
