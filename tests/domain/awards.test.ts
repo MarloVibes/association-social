@@ -201,4 +201,29 @@ describe('NBA awards trophy case', () => {
       teamAbbr: 'SAS',
     });
   });
+
+  it('resolves stored award team labels from league teams when schedule data is missing', () => {
+    const records = recordsForAward({
+      seasonAwards: {
+        mvp: [{ season: 2026, winnerName: 'Anthony Edwards', teamName: 'MIN', teamAbbr: 'MIN' }],
+      },
+    }, 'mvp', {
+      currentYear: 2026,
+      includeProjected: false,
+      teams: [
+        {
+          id: 'MIN_2026',
+          teamId: 'MIN_2026',
+          abbreviation: 'MIN',
+          name: 'Minnesota Timberwolves',
+        },
+      ],
+    });
+
+    expect(records[0]).toMatchObject({
+      winnerName: 'Anthony Edwards',
+      teamName: 'Minnesota Timberwolves',
+      teamAbbr: 'MIN',
+    });
+  });
 });

@@ -239,7 +239,7 @@ function resolveAwardTeam(team: AwardParticipant, context?: AwardContext) {
 
 function resolveRecordTeam(record: NbaAwardRecord, context?: AwardContext): NbaAwardRecord {
   const lookup = record.teamAbbr || record.teamName || record.winnerName;
-  const participant = (context?.schedule?.participants || []).find(team => (
+  const participant = [...(context?.schedule?.participants || []), ...(context?.teams || [])].find(team => (
     [team.scheduleTeamId, team.teamId, team.abbreviation, team.abbr, team.id]
       .some(value => sameAwardTeam(value, lookup))
   ));
