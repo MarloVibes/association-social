@@ -13,16 +13,16 @@ const GRADE_LADDER = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A
 const LIMITED_LABELS = new Set(['STAR', 'SUPERSTAR', 'LEGEND']);
 const S_ELIGIBLE_LABELS = new Set(['SUPERSTAR', 'LEGEND']);
 const GRADE_NUMERIC_FLOOR = {
-  F: 25,
-  'D-': 60,
-  D: 65,
-  'D+': 68,
-  'C-': 71,
-  C: 74,
-  'C+': 77,
-  'B-': 80,
-  B: 83,
-  'B+': 86,
+  F: 0,
+  'D-': 50,
+  D: 53,
+  'D+': 57,
+  'C-': 60,
+  C: 65,
+  'C+': 70,
+  'B-': 75,
+  B: 80,
+  'B+': 85,
   'A-': 89,
   A: 92,
   'A+': 95,
@@ -44,15 +44,15 @@ function gradeFromRating(value) {
   if (rating >= 95) return 'A+';
   if (rating >= 92) return 'A';
   if (rating >= 89) return 'A-';
-  if (rating >= 86) return 'B+';
-  if (rating >= 83) return 'B';
-  if (rating >= 80) return 'B-';
-  if (rating >= 77) return 'C+';
-  if (rating >= 74) return 'C';
-  if (rating >= 71) return 'C-';
-  if (rating >= 68) return 'D+';
-  if (rating >= 65) return 'D';
-  if (rating >= 60) return 'D-';
+  if (rating >= 85) return 'B+';
+  if (rating >= 80) return 'B';
+  if (rating >= 75) return 'B-';
+  if (rating >= 70) return 'C+';
+  if (rating >= 65) return 'C';
+  if (rating >= 60) return 'C-';
+  if (rating >= 57) return 'D+';
+  if (rating >= 53) return 'D';
+  if (rating >= 50) return 'D-';
   return 'F';
 }
 

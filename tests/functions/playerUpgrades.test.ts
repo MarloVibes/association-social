@@ -47,6 +47,23 @@ describe('player upgrade callable helpers', () => {
     expect(result.player.hidden.shooting).toBeGreaterThanOrEqual(80);
   });
 
+  it('uses the full D-tier ladder when updating hidden upgrade floors', () => {
+    const result = spendTeamUpgradePoint({
+      team: { upgradePoints: 1 },
+      player: {
+        id: 'p1',
+        playerLabel: 'ROLE PLAYER',
+        hidden: { defense: 53 },
+        grades: { defense: 'D' },
+      },
+      ability: 'defense',
+      seasonYear: 2026,
+    });
+
+    expect(result.player.grades.defense).toBe('D+');
+    expect(result.player.hidden.defense).toBe(57);
+  });
+
   it('blocks second same-season upgrades for star and above players', () => {
     expect(() => spendTeamUpgradePoint({
       team: { upgradePoints: 3 },
