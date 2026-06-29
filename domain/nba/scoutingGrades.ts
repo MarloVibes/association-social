@@ -198,7 +198,11 @@ function firstNumber(player: Record<string, any>, profile: Record<string, any> |
 
 function statNumber(player: Record<string, any>, profile: Record<string, any> | null | undefined, keys: string[]) {
   for (const key of keys) {
-    const value = player?.[key] ?? player?.seasonStats?.[key] ?? profile?.[key] ?? profile?.careerStats?.[key];
+    const value = player?.[key]
+      ?? player?.seasonStats?.[key]
+      ?? profile?.[key]
+      ?? profile?.source_stat_line?.[key]
+      ?? profile?.careerStats?.[key];
     const numeric = numberFrom(value);
     if (numeric !== null) return numeric;
   }
@@ -598,11 +602,17 @@ export function getCompareRowModel({
 }
 
 export function getPotentialScoutingSummary(player: Record<string, any>, profile?: Record<string, any> | null): PotentialScoutingSummary {
-  const age = Number(player?.age ?? profile?.age ?? 27);
+  const age = Number(player?.age ?? profile?.age ?? profile?.source_stat_line?.age ?? 27);
   const grades = buildScoutingGrades(player, profile);
   const potential = gradeRank(grades.potential);
   const overall = gradeRank(grades.overall);
 
+  if (age >= 34 && overall >= gradeRank('A-') && potential <= gradeRank('B-')) {
+    return {
+      label: 'Near Peak',
+      description: 'A proven player already close to his ceiling, with growth limited by age and career stage.',
+    };
+  }
   if (age >= 34 && potential <= gradeRank('C+')) {
     return {
       label: 'Near Peak',

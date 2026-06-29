@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
-import { buildScoutingGrades, gradeRank } from '@/domain/nba/scoutingGrades';
+import { buildScoutingGrades, getPotentialScoutingSummary, gradeRank } from '@/domain/nba/scoutingGrades';
 
 describe('baseline rating profile resolver', () => {
   it('resolves 2011 LeBron from an older roster snapshot and keeps him elite', () => {
@@ -19,6 +19,9 @@ describe('baseline rating profile resolver', () => {
 
     expect(profile?.player_id).toBe('lebron-james-2011');
     expect(gradeRank(evaluation.overallTalent.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(grades.overall)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(grades.role)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(grades.impact)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(grades.potential)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(grades.passing)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(grades.perimeterDefense)).toBeGreaterThanOrEqual(gradeRank('B+'));
@@ -28,9 +31,12 @@ describe('baseline rating profile resolver', () => {
   it('resolves 2026 LeBron as a legacy star with lower future-growth potential', () => {
     const profile = resolveBaselineRatingProfile({ full_name: 'LeBron James', team: 'LAL' }, { era: 'current' });
     const grades = buildScoutingGrades({ full_name: 'LeBron James', team: 'LAL' }, profile);
+    const summary = getPotentialScoutingSummary({ full_name: 'LeBron James', team: 'LAL' }, profile);
 
     expect(profile?.player_id).toBe('lebron-james-2026');
+    expect(gradeRank(grades.overall)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(grades.potential)).toBeLessThanOrEqual(gradeRank('B'));
     expect(gradeRank(grades.offenseIq)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(summary.label).toBe('Near Peak');
   });
 });

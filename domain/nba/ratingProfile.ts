@@ -62,6 +62,7 @@ export type PlayerRatingProfile = {
   tendencies: PlayerTendencies;
   archetypes: string[];
   traits: string[];
+  source_stat_line: PublicStatLine;
   development_curve: {
     potential: number;
     potential_grade: NbaGrade;
@@ -188,6 +189,7 @@ export function buildPlayerRatingProfile({
     tendencies,
     archetypes: archetypesFor(era.era_adjusted_profiles, resolvedSource),
     traits: traitsFor(era.era_adjusted_profiles),
+    source_stat_line: resolvedSource,
     development_curve: developmentCurve(era.era_adjusted_profiles, resolvedSource),
     era_notes: era.era_notes,
     validation_warnings,
