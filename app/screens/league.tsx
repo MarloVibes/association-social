@@ -319,9 +319,9 @@ export default function LeagueScreen() {
         <TouchableOpacity style={[styles.channelsTab, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '22' }]} onPress={goToChannels}>
           <View style={styles.channelsTabLeft}>
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
-            <View>
+            <View style={styles.channelsTabTextBlock}>
               <Text style={[styles.channelsTabLabel, { color: titleColor }]}>{channelLabel}</Text>
-              <Text style={styles.channelsTabSub}>League News · Trade Center · Coaching · Front Office</Text>
+              <Text style={styles.channelsTabSub} numberOfLines={2}>News, trades, coaching, front office</Text>
             </View>
           </View>
           <Text style={styles.channelsTabChevron}>›</Text>
@@ -385,7 +385,7 @@ export default function LeagueScreen() {
               <Text style={styles.channelsTabIcon}>🎯</Text>
               <View>
                 <Text style={[styles.channelsTabLabel, { color: '#f4b942' }]}>Fantasy Draft Room</Text>
-                <Text style={styles.channelsTabSub}>80-second picks · draft boards · CPU auto-pick</Text>
+                <Text style={styles.channelsTabSub} numberOfLines={2}>80-second picks, draft boards, CPU auto-pick</Text>
               </View>
             </View>
             <Text style={styles.channelsTabChevron}>›</Text>
@@ -468,9 +468,10 @@ const styles = StyleSheet.create({
   channelsTab: { backgroundColor: '#0a1a2a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 2, borderColor: '#1a3a5a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   channelsTabLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
   channelsTabIcon: { fontSize: 32 },
+  channelsTabTextBlock: { flex: 1, minWidth: 0 },
   channelsTabLabel: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 3 },
-  channelsTabSub: { fontSize: 12, color: '#4a7a9a' },
-  channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300' },
+  channelsTabSub: { fontSize: 12, color: '#4a7a9a', lineHeight: 16 },
+  channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300', marginLeft: 8 },
   myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 2 },
   myTeamChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
   myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
