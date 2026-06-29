@@ -9,6 +9,7 @@ import {
 import type { NbaGrade } from './identity';
 import { applyEraAdjustment, type EraAdjustmentContext } from './eraAdjustedProfiles';
 import { buildSkillGrades, type SkillGrades } from './skillGrades';
+import { buildPlayerTendencies, type PlayerTendencies } from './tendencies';
 
 export type RatingPatch = Partial<Pick<
   PublicStatLine,
@@ -57,6 +58,7 @@ export type PlayerRatingProfile = {
   era_adjusted_profiles: AttributeModel;
   skill_grades: Partial<Record<keyof AttributeModel, NbaGrade>>;
   category_skill_grades: SkillGrades;
+  tendencies: PlayerTendencies;
   archetypes: string[];
   traits: string[];
   development_curve: {
@@ -153,6 +155,7 @@ export function buildPlayerRatingProfile({
   const category_skill_grades = buildSkillGrades(era.era_adjusted_profiles, {
     shotVolumeModifier: shotVolumeModifier(resolvedSource),
   });
+  const tendencies = buildPlayerTendencies(resolvedSource);
 
   return {
     collection: 'player_ratings',
@@ -169,6 +172,7 @@ export function buildPlayerRatingProfile({
     era_adjusted_profiles: era.era_adjusted_profiles,
     skill_grades,
     category_skill_grades,
+    tendencies,
     archetypes: archetypesFor(era.era_adjusted_profiles, resolvedSource),
     traits: traitsFor(era.era_adjusted_profiles),
     development_curve: developmentCurve(era.era_adjusted_profiles, resolvedSource),
