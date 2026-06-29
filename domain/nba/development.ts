@@ -120,7 +120,7 @@ export function buildDevelopmentCurve(input: DevelopmentCurveInput): Development
   );
   const declineRisk = clamp(20 + Math.max(0, age - 30) * 6 + injuryRisk * 0.85 - resistance * 7 - trend * 1.5);
   const rawPotential = age >= 35
-    ? 65 + resistance * 2 + currentImpact * 0.05 + trend - injuryRisk * 0.05
+    ? 60 + resistance * 2 + currentImpact * 0.08 - injuryRisk * 0.05 - Math.max(0, age - 38) * 0.5
     : currentImpact * 0.38
       + growthScore * 0.58
       - oldAgePenalty
