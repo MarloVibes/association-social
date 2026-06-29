@@ -735,11 +735,13 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                         <>
                           <View style={styles.compareHeader}>
                             <View style={styles.compareHeaderSide}>
-                              <Text style={styles.compareHeaderAbbr} numberOfLines={1}>{playerTeam(player) || player.position || 'YOU'}</Text>
+                              <Text style={styles.compareHeaderName} numberOfLines={1}>{name}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(player) || player.position || 'Player'}</Text>
                             </View>
                             <Text style={styles.compareVs}>VS</Text>
                             <View style={styles.compareHeaderSide}>
-                              <Text style={styles.compareHeaderAbbr} numberOfLines={1}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'NBA'}</Text>
+                              <Text style={styles.compareHeaderName} numberOfLines={1}>{playerName(selectedComparePlayer)}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'Player'}</Text>
                             </View>
                           </View>
                           <View style={styles.compareRows}>
@@ -982,12 +984,13 @@ const styles = StyleSheet.create({
   compareChipNameActive: { color: '#00ff87' },
   compareChipTeam: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
   compareHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0b0b0b', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 10, marginBottom: 10 },
-  compareHeaderSide: { width: 64, alignItems: 'center' },
-  compareHeaderAbbr: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  compareHeaderSide: { flex: 1, alignItems: 'center' },
+  compareHeaderName: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  compareHeaderMeta: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 2 },
   compareVs: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
   compareRows: { gap: 7 },
   compareRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#222', padding: 8, gap: 8 },
-  compareGradeColumn: { width: 64, alignItems: 'center' },
+  compareGradeColumn: { flex: 1, alignItems: 'center' },
   compareWinnerText: { color: '#ffffff' },
   compareGradeBadge: { minWidth: 42, height: 30, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   compareGradeText: { fontSize: 13, fontWeight: '900' },

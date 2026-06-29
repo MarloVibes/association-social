@@ -533,7 +533,9 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('Potential');
     expect(playerCard).toContain('compareScoutingGrades');
     expect(playerCard).toContain('getCompareRowModel');
-    expect(playerCard).toContain('compareHeaderAbbr');
+    expect(playerCard).toContain('compareHeaderName');
+    expect(playerCard).toContain('compareHeaderMeta');
+    expect(playerCard).toContain('compareGradeColumn');
     expect(playerCard).not.toContain('compareSmallName');
     expect(playerCard).toContain('baselineProfile || savedProfile');
     expect(playerCard).toContain('selectedBaselineCompareProfile || selectedSavedCompareProfile');
