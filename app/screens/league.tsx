@@ -29,7 +29,7 @@ const NBA_ERA_LABELS: Record<string, string> = {
 };
 
 const CHANNEL_LABEL: Record<string, string> = {
-  nba: 'Inside the NBA',
+  nba: 'Inside The NBA',
   madden: 'Inside the NFL',
   mlb: 'Inside MLB',
 };
@@ -321,7 +321,7 @@ export default function LeagueScreen() {
             <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
             <View style={styles.channelsTabTextBlock}>
               <Text style={[styles.channelsTabLabel, { color: titleColor }]}>{channelLabel}</Text>
-              <Text style={styles.channelsTabSub} numberOfLines={2}>News, trades, coaching, front office</Text>
+              <Text style={styles.channelsTabSub} numberOfLines={2}>GM Controls and News</Text>
             </View>
           </View>
           <Text style={styles.channelsTabChevron}>›</Text>
