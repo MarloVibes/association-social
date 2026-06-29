@@ -28,7 +28,7 @@ type CommandRoom = {
 };
 
 function insideTitle(sport?: string) {
-  if (sport === 'nba') return 'Inside the NBA';
+  if (sport === 'nba') return 'Inside The NBA';
   if (sport === 'madden') return 'Inside the NFL';
   if (sport === 'mlb') return 'Inside MLB';
   return 'League Hub';

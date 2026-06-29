@@ -10,6 +10,7 @@ import PlayerCard from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { gradeFromNumeric } from '@/domain/nba/gradeScale';
 import type { NbaGrade } from '@/domain/nba/identity';
+import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
@@ -60,10 +61,16 @@ function rosterGradeChips(player: any, profile: any) {
   const categoryGrades = player?.category_skill_grades || profile?.category_skill_grades || {};
   const visibleGrades = player?.visibleIdentity?.grades || player?.identity?.grades || profile?.visibleIdentity?.grades || profile?.identity?.grades || {};
   const attributes = player?.era_adjusted_profiles || player?.attribute_model || profile?.era_adjusted_profiles || profile?.attribute_model || {};
+  const scoutingGrades = buildScoutingGrades(player || {}, profile || null);
 
   return ROSTER_GRADE_KEYS.map(({ key, label }) => {
     const directGrade = gradeFromAny(categoryGrades[key]);
     const visibleGrade = gradeFromAny(visibleGrades[key]);
+    const scoutingGrade = key === 'finishing'
+      ? gradeFromAny(scoutingGrades.dunking) || gradeFromAny(scoutingGrades.closeShot)
+      : key === 'athleticism'
+        ? gradeFromAny(scoutingGrades.speed) || gradeFromAny(scoutingGrades.acceleration)
+        : gradeFromAny(scoutingGrades[key as keyof typeof scoutingGrades]);
     const attrGrade = key === 'threePoint'
       ? gradeFromAny(attributes.threePoint)
       : key === 'perimeterDefense'
@@ -72,7 +79,7 @@ function rosterGradeChips(player: any, profile: any) {
     return {
       key,
       label,
-      grade: directGrade || visibleGrade || attrGrade || null,
+      grade: directGrade || visibleGrade || scoutingGrade || attrGrade || null,
     };
   }).filter(item => item.grade);
 }
