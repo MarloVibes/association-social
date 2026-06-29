@@ -279,15 +279,27 @@ function normalizePlayer(player, teamId, side, index) {
   const hidden = player && player.hidden || {};
   const position = normalizePosition(player && player.position, index);
   const shooting = skill(player, 'shooting', 72);
-  const threePoint = skill(player, 'threePoint', shooting);
-  const midRange = skill(player, 'midRange', shooting);
   const closeShot = skill(player, 'closeShot', shooting);
   const dunking = skill(player, 'dunking', skill(player, 'athleticism', 70));
-  const playmaking = Math.max(skill(player, 'playmaking', 70), skill(player, 'passing', 70));
+  const finishing = categoryRating(player, 'finishing', (closeShot + dunking + skill(player, 'postOffense', shooting)) / 3);
+  const threePoint = categoryRating(player, 'threePoint', skill(player, 'threePoint', shooting));
+  const midRange = categoryRating(player, 'midRange', skill(player, 'midRange', shooting));
+  const playmaking = Math.max(categoryRating(player, 'playmaking', skill(player, 'playmaking', 70)), skill(player, 'passing', 70));
   const defense = skill(player, 'defense', 70);
-  const iq = Math.max(skill(player, 'basketballIq', 72), skill(player, 'offenseIq', 72), skill(player, 'shotIq', 72));
-  const rebounding = skill(player, 'rebounding', position === 'C' ? 78 : 62);
+  const iq = categoryRating(player, 'basketballIq', Math.max(skill(player, 'basketballIq', 72), skill(player, 'offenseIq', 72), skill(player, 'shotIq', 72)));
+  const perimeterDefense = categoryRating(player, 'perimeterDefense', skill(player, 'perimeterDefense', defense));
+  const interiorDefense = categoryRating(player, 'interiorDefense', skill(player, 'postDefense', defense));
+  const rebounding = categoryRating(player, 'rebounding', skill(player, 'rebounding', position === 'C' ? 78 : 62));
   const speed = skill(player, 'speed', position === 'C' ? 62 : 76);
+  const paintAttack = tendency(player, 'paintAttack', 58);
+  const rimFinish = tendency(player, 'rimFinishFrequency', 55);
+  const threePointFrequency = tendency(player, 'threePointFrequency', 58);
+  const catchAndShoot = tendency(player, 'catchAndShootFrequency', 55);
+  const drawFoulPressure = tendency(player, 'drawFoulPressure', (finishing + paintAttack + skill(player, 'freeThrow', shooting)) / 3);
+  const defensivePlaymaking = tendency(player, 'defensivePlaymaking', defense);
+  const reboundCrash = tendency(player, 'reboundCrash', 55);
+  const passFirst = tendency(player, 'passFirst', 50);
+  const pickAndRollBallHandler = tendency(player, 'pickAndRollBallHandler', 45);
   return {
     raw: player,
     index,
@@ -296,19 +308,27 @@ function normalizePlayer(player, teamId, side, index) {
     playerId: String(player && (player.playerId || player.player_id || player.id || player.full_name || player.name) || `${teamId}-${index}`),
     name: String(player && (player.full_name || player.name || player.playerName) || `${teamId} Player ${index + 1}`),
     position,
-    scoring: clamp(threePoint * 0.25 + midRange * 0.2 + closeShot * 0.25 + dunking * 0.15 + shooting * 0.15, 35, 99),
+    scoring: clamp(threePoint * 0.22 + midRange * 0.16 + finishing * 0.26 + closeShot * 0.12 + dunking * 0.1 + shooting * 0.08 + paintAttack * 0.03 + threePointFrequency * 0.03, 35, 99),
+    finishing,
     threePoint,
+    midRange,
+    paintAttack,
+    rimFinish,
+    threePointFrequency,
+    catchAndShoot,
+    drawFoulPressure,
+    reboundCrash,
     playmaking,
-    assistWeight: playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48),
-    defense: clamp(Math.max(defense, skill(player, 'perimeterDefense', defense), skill(player, 'postDefense', defense)) * 0.75 + iq * 0.25, 35, 99),
-    stealSkill: clamp(Math.max(skill(player, 'stealsSkill', defense), skill(player, 'steal', defense)) * 0.8 + speed * 0.2, 35, 99),
-    blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense)) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
-    rebounding: clamp(rebounding * 0.72 + skill(player, 'strength', 70) * 0.16 + skill(player, 'vertical', 70) * 0.12, 25, 99),
+    assistWeight: playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48) + passFirst * 0.7 + pickAndRollBallHandler * 0.35,
+    defense: clamp(Math.max(defense, perimeterDefense, interiorDefense) * 0.75 + iq * 0.25, 35, 99),
+    stealSkill: clamp(Math.max(skill(player, 'stealsSkill', defense), skill(player, 'steal', defense), defensivePlaymaking) * 0.8 + speed * 0.2, 35, 99),
+    blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense), interiorDefense) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
+    rebounding: clamp(rebounding * 0.7 + skill(player, 'strength', 70) * 0.13 + skill(player, 'vertical', 70) * 0.1 + reboundCrash * 0.07, 25, 99),
     freeThrow: skill(player, 'freeThrow', shooting),
-    foulDraw: clamp(closeShot * 0.35 + dunking * 0.25 + speed * 0.2 + skill(player, 'strength', 70) * 0.2, 25, 99),
+    foulDraw: clamp(drawFoulPressure * 0.38 + finishing * 0.25 + paintAttack * 0.18 + speed * 0.1 + skill(player, 'strength', 70) * 0.09, 25, 99),
     iq,
     rotationValue: Number(player && (player.minutes || player.rotationMinutes)) || (
-      clamp(shooting * 0.28 + playmaking * 0.22 + defense * 0.25 + rebounding * 0.15 + iq * 0.1, 1, 99)
+      clamp(shooting * 0.2 + playmaking * 0.2 + Math.max(perimeterDefense, interiorDefense) * 0.22 + rebounding * 0.13 + iq * 0.1 + Math.max(threePoint, finishing) * 0.15, 1, 99)
     ),
     baseMinutes: Number(player && (player.minutes || player.rotationMinutes)) || (index < 5 ? 30 : 16),
   };
@@ -321,6 +341,17 @@ function normalizePlayer(player, teamId, side, index) {
     const hiddenValue = Number(hidden[key]);
     return Number.isFinite(hiddenValue) ? hiddenValue : fallback;
   }
+}
+
+function categoryRating(player, key, fallback) {
+  const entry = player && player.category_skill_grades && player.category_skill_grades[key];
+  const value = typeof entry === 'number' ? entry : entry && entry.rating;
+  return clamp(Number.isFinite(Number(value)) ? Number(value) : fallback, 0, 100);
+}
+
+function tendency(player, key, fallback) {
+  const value = Number(player && player.tendencies && player.tendencies[key]);
+  return clamp(Number.isFinite(value) ? value : fallback, 0, 100);
 }
 
 function selectStarters(players) {
@@ -350,7 +381,9 @@ function normalizeMinutes(players) {
 }
 
 function chooseShotValue(player, team, rng) {
-  const threeRate = clamp(0.12 + (player.threePoint - 60) / 80 + (team.offenseBoost || 0) / 120, 0.05, 0.68);
+  const perimeterProfile = player.threePoint * 0.58 + player.threePointFrequency * 0.24 + player.catchAndShoot * 0.1 + player.midRange * 0.08;
+  const interiorProfile = player.finishing * 0.42 + player.paintAttack * 0.28 + player.rimFinish * 0.18 + player.scoring * 0.12;
+  const threeRate = clamp(0.1 + (perimeterProfile - interiorProfile + 46) / 155 + (team.offenseBoost || 0) / 120, 0.04, 0.7);
   if (rng() < threeRate) return 3;
   return 2;
 }

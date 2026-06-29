@@ -129,4 +129,64 @@ describe('possession timeline engine', () => {
     expect(timeline.homeScore).toBeGreaterThan(timeline.awayScore);
     expect(totalsFromPossessionEvents(timeline).homeScore).toBe(timeline.homeScore);
   });
+
+  it('uses category skill grades and tendencies for live shot profile', () => {
+    const timeline = buildPossessionTimeline({
+      gameId: 'game-engine-profile',
+      seed: 'engine-profile-seed',
+      homeTeamId: 'ENGINE',
+      awayTeamId: 'CPU',
+      homeTeam: {
+        teamId: 'ENGINE',
+        players: [
+          {
+            player_id: 'category-shooter',
+            full_name: 'Category Shooter',
+            position: 'SG',
+            minutes: 36,
+            hidden: { shooting: 70, playmaking: 66, defense: 68 },
+            category_skill_grades: {
+              threePoint: { rating: 96, grade: 'A+' },
+              finishing: { rating: 62, grade: 'C-' },
+              playmaking: { rating: 72, grade: 'C+' },
+            },
+            tendencies: {
+              threePointFrequency: 96,
+              catchAndShootFrequency: 94,
+              paintAttack: 42,
+              rimFinishFrequency: 45,
+            },
+          },
+          {
+            player_id: 'category-driver',
+            full_name: 'Category Driver',
+            position: 'SF',
+            minutes: 36,
+            hidden: { shooting: 70, playmaking: 66, defense: 68 },
+            category_skill_grades: {
+              threePoint: { rating: 66, grade: 'C' },
+              finishing: { rating: 94, grade: 'A' },
+              playmaking: { rating: 74, grade: 'C+' },
+            },
+            tendencies: {
+              threePointFrequency: 34,
+              catchAndShootFrequency: 38,
+              paintAttack: 94,
+              rimFinishFrequency: 92,
+            },
+          },
+          { player_id: 'engine-pg', full_name: 'Engine PG', position: 'PG', minutes: 32, hidden: { shooting: 76, playmaking: 84, defense: 72 } },
+          { player_id: 'engine-pf', full_name: 'Engine PF', position: 'PF', minutes: 30, hidden: { shooting: 72, playmaking: 60, defense: 78, rebounding: 82 } },
+          { player_id: 'engine-c', full_name: 'Engine C', position: 'C', minutes: 28, hidden: { shooting: 68, playmaking: 54, defense: 82, rebounding: 88 } },
+        ],
+      },
+      awayTeam: team('CPU', 72),
+      nowMs: 10_000,
+    });
+
+    const boxScore = boxScoreFromPossessionTimeline(timeline);
+    const lines = new Map(boxScore.home.players.map((player: any) => [player.name, player]));
+    expect(lines.get('Category Shooter').threePointersAttempted).toBeGreaterThan(lines.get('Category Driver').threePointersAttempted);
+    expect(lines.get('Category Driver').freeThrowsAttempted).toBeGreaterThanOrEqual(lines.get('Category Shooter').freeThrowsAttempted);
+  });
 });
