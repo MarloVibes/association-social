@@ -25,6 +25,22 @@ export type PublicStatLine = {
   defensiveWinShares?: number;
   winShares?: number;
   draftPick?: number;
+  offensiveReboundPct?: number;
+  defensiveReboundPct?: number;
+  trueShootingPct?: number;
+  effectiveFieldGoalPct?: number;
+  rimAttemptRate?: number;
+  dunkRate?: number;
+  midRangeAttemptRate?: number;
+  threePointAttemptRate?: number;
+  catchAndShootRate?: number;
+  pullUpRate?: number;
+  driveRate?: number;
+  transitionRate?: number;
+  postTouchRate?: number;
+  playoffMinutesPerGame?: number;
+  awardWeight?: number;
+  scoutingTags?: string[];
 };
 
 export type LeagueContext = {
@@ -36,16 +52,26 @@ export type LeagueContext = {
 
 export type AttributeModel = {
   closeShot: number;
+  drivingLayup: number;
+  drivingDunk: number;
+  standingDunk: number;
+  drawFoul: number;
+  hands: number;
   midRange: number;
   threePoint: number;
   freeThrow: number;
   dunking: number;
   shotIq: number;
+  shotConsistency: number;
   passing: number;
+  passIq: number;
+  passVision: number;
   ballHandle: number;
+  speedWithBall: number;
   offenseIq: number;
   clutch: number;
   perimeterDefense: number;
+  lateralQuickness: number;
   postDefense: number;
   blocking: number;
   steals: number;
@@ -53,25 +79,41 @@ export type AttributeModel = {
   helpDefense: number;
   speed: number;
   acceleration: number;
+  vertical: number;
+  agility: number;
   strength: number;
   rebounding: number;
+  offensiveRebound: number;
+  defensiveRebound: number;
   postOffense: number;
   stamina: number;
+  hustle: number;
+  durability: number;
   potential: number;
 };
 
 export const ATTRIBUTE_KEYS: Array<keyof AttributeModel> = [
   'closeShot',
+  'drivingLayup',
+  'drivingDunk',
+  'standingDunk',
+  'drawFoul',
+  'hands',
   'midRange',
   'threePoint',
   'freeThrow',
   'dunking',
   'shotIq',
+  'shotConsistency',
   'passing',
+  'passIq',
+  'passVision',
   'ballHandle',
+  'speedWithBall',
   'offenseIq',
   'clutch',
   'perimeterDefense',
+  'lateralQuickness',
   'postDefense',
   'blocking',
   'steals',
@@ -79,10 +121,16 @@ export const ATTRIBUTE_KEYS: Array<keyof AttributeModel> = [
   'helpDefense',
   'speed',
   'acceleration',
+  'vertical',
+  'agility',
   'strength',
   'rebounding',
+  'offensiveRebound',
+  'defensiveRebound',
   'postOffense',
   'stamina',
+  'hustle',
+  'durability',
   'potential',
 ];
 
@@ -98,12 +146,12 @@ export type AttributeUpgradeCategory =
   | 'Development';
 
 export const ATTRIBUTE_UPGRADE_CATEGORIES: Record<AttributeUpgradeCategory, Array<keyof AttributeModel>> = {
-  Finishing: ['closeShot', 'dunking'],
-  Shooting: ['midRange', 'threePoint', 'freeThrow', 'shotIq'],
-  Playmaking: ['passing', 'ballHandle', 'offenseIq'],
-  Defense: ['perimeterDefense', 'postDefense', 'blocking', 'steals', 'defenseIq', 'helpDefense'],
-  Rebounding: ['rebounding'],
-  Athleticism: ['speed', 'acceleration', 'strength', 'stamina'],
+  Finishing: ['closeShot', 'drivingLayup', 'drivingDunk', 'standingDunk', 'drawFoul', 'hands', 'dunking'],
+  Shooting: ['midRange', 'threePoint', 'freeThrow', 'shotIq', 'shotConsistency'],
+  Playmaking: ['passing', 'passIq', 'passVision', 'ballHandle', 'speedWithBall', 'offenseIq'],
+  Defense: ['perimeterDefense', 'lateralQuickness', 'postDefense', 'blocking', 'steals', 'defenseIq', 'helpDefense'],
+  Rebounding: ['rebounding', 'offensiveRebound', 'defensiveRebound'],
+  Athleticism: ['speed', 'acceleration', 'vertical', 'agility', 'strength', 'stamina', 'hustle', 'durability'],
   Post: ['postOffense'],
   Intangibles: ['clutch'],
   Development: ['potential'],
@@ -156,6 +204,19 @@ function workload(source: PublicStatLine) {
 
 function usage(source: PublicStatLine) {
   return numberFrom(source.usagePct, 18);
+}
+
+function rate(value: unknown, fallback = 0) {
+  const numeric = pct(value, fallback);
+  return clamp(numeric, 0, 1);
+}
+
+function hasTag(source: PublicStatLine, tag: string) {
+  return (source.scoutingTags || []).some(value => String(value).toLowerCase() === tag.toLowerCase());
+}
+
+function tagBonus(source: PublicStatLine, tag: string, bonus: number) {
+  return hasTag(source, tag) ? bonus : 0;
 }
 
 function roundModel(model: AttributeModel): AttributeModel {
@@ -223,26 +284,47 @@ export function buildAttributeModel({
   const dws = numberFrom(source.defensiveWinShares);
   const wins = numberFrom(source.winShares);
   const age = numberFrom(source.age, 25);
-  const work = workload(source);
-  const paceFactor = clamp(numberFrom(leagueContext.pace, 100) / 100, 0.9, 1.1);
   const big = isBig(source);
   const guard = isGuard(source);
   const wing = isWing(source);
+  const rimRate = rate(source.rimAttemptRate, big ? 0.32 : guard ? 0.28 : 0.24);
+  const dunkRate = rate(source.dunkRate, big ? 0.1 : wing ? 0.07 : 0.03);
+  const driveRate = rate(source.driveRate, guard ? 0.28 : wing ? 0.22 : 0.12);
+  const transitionRate = rate(source.transitionRate, guard || wing ? 0.16 : 0.09);
+  const orebPct = numberFrom(source.offensiveReboundPct, big ? 8 : wing ? 4 : 2);
+  const drebPct = numberFrom(source.defensiveReboundPct, big ? 18 : wing ? 12 : 8);
+  const awardWeight = numberFrom(source.awardWeight);
+  const work = workload(source);
+  const paceFactor = clamp(numberFrom(leagueContext.pace, 100) / 100, 0.9, 1.1);
   const scoringVolume = ppg / paceFactor;
   const availability = clamp(60 + games * 0.35 + mpg * 0.15, 45, 96);
+  const burstBonus = tagBonus(source, 'elite_burst', 8);
+  const rimPressureBonus = tagBonus(source, 'elite_rim_pressure', 8);
+  const highUsageBonus = tagBonus(source, 'high_usage_creator', 4);
+  const mvpBonus = tagBonus(source, 'mvp', 5);
 
   return roundModel({
     closeShot: 58 + scoringVolume * 0.85 + fg * 28 + fta * 1.2 + (big ? 6 : 0),
+    drivingLayup: 58 + scoringVolume * 0.65 + fg * 20 + fta * 1.4 + driveRate * 30 + rimRate * 24 + (guard || wing ? 4 : 0) + rimPressureBonus,
+    drivingDunk: 48 + dunkRate * 125 + rimRate * 25 + fta * 1.1 + (big ? 8 : wing ? 5 : 0) + burstBonus * 0.5,
+    standingDunk: 45 + dunkRate * 90 + (big ? 18 : wing ? 6 : -5) + rpg * 0.7,
+    drawFoul: 50 + fta * 4.8 + rimRate * 22 + driveRate * 18 + usage(source) * 0.25,
+    hands: 58 + fg * 22 + rpg * 1.4 + Math.max(0, 14 - tovPct) * 0.9 + (big ? 4 : 0),
     midRange: 56 + scoringVolume * 0.65 + ft * 18 + usage(source) * 0.45 + (guard || wing ? 3 : 0),
     threePoint: 54 + (threePct - leagueContext.leagueThreePointPct) * 135 + threeAttempts * 2.7 + ft * 10 + scoringVolume * 0.22,
     freeThrow: 44 + ft * 58 + fta * 0.6,
     dunking: 52 + fta * 2.4 + fg * 20 + (big ? 8 : wing ? 4 : 0) + Math.max(0, 28 - age) * 0.6,
     shotIq: 58 + scoringVolume * 0.45 + fg * 16 + ft * 12 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7,
+    shotConsistency: 55 + fg * 18 + ft * 12 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25,
     passing: 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0),
+    passIq: 54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0),
+    passVision: 52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.25 + (guard ? 6 : wing ? 3 : 0),
     ballHandle: 56 + apg * 1.6 + usage(source) * 0.75 + (guard ? 7 : wing ? 4 : -3) - Math.max(0, tovPct - 14) * 0.7,
+    speedWithBall: 58 + apg * 0.9 + usage(source) * 0.65 + driveRate * 32 + transitionRate * 18 + (guard ? 7 : wing ? 3 : -5) + burstBonus,
     offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35,
     clutch: 58 + scoringVolume * 0.55 + usage(source) * 0.55 + wins * 1.1 + Math.max(0, mpg - 30) * 0.7,
     perimeterDefense: 56 + spg * 8 + dws * 4.2 + mpg * 0.45 + (guard || wing ? 5 : -4),
+    lateralQuickness: 58 + spg * 4.5 + dws * 2.7 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35,
     postDefense: 54 + bpg * 5.5 + rpg * 1.4 + dws * 4 + (big ? 8 : 0),
     blocking: 50 + bpg * 13 + dws * 2.7 + (big ? 8 : wing ? 3 : 0),
     steals: 54 + spg * 12 + dws * 2.4 + (guard || wing ? 4 : 0),
@@ -250,10 +332,16 @@ export function buildAttributeModel({
     helpDefense: 56 + dws * 4.6 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35,
     speed: 62 + (guard ? 10 : wing ? 6 : 0) - Math.max(0, age - 29) * 1.1 + Math.max(0, 30 - mpg) * 0.1,
     acceleration: 62 + (guard ? 10 : wing ? 6 : 0) - Math.max(0, age - 29) * 1.15 + usage(source) * 0.15,
+    vertical: 55 + dunkRate * 90 + rimRate * 12 + (guard || wing ? 6 : big ? 4 : 0) - Math.max(0, age - 29) * 0.7 + burstBonus * 0.45,
+    agility: 58 + (guard ? 9 : wing ? 6 : 0) + driveRate * 18 + transitionRate * 12 - Math.max(0, age - 30) * 0.9 + burstBonus * 0.45,
     strength: 56 + (big ? 13 : wing ? 6 : 0) + rpg * 1.1 + Math.max(0, age - 22) * 0.35,
     rebounding: 52 + rpg * 3.2 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25,
+    offensiveRebound: 48 + rpg * 1.3 + orebPct * 1.6 + (big ? 8 : wing ? 3 : -2),
+    defensiveRebound: 50 + rpg * 2 + drebPct * 1.2 + (big ? 7 : wing ? 3 : -2),
     postOffense: 50 + (big ? 9 : 0) + fg * 21 + rpg * 0.8 + fta * 1.1 + scoringVolume * 0.35,
     stamina: availability * 0.72 + work * 0.28,
-    potential: 58 + Math.max(0, 27 - age) * 2.2 + draftSignal(source) + Math.max(0, scoringVolume - 12) * 0.45 + astPct * 0.08 + wins * 0.35,
+    hustle: 56 + mpg * 0.45 + dws * 1.8 + rpg * 0.8 + spg * 2.4 + bpg * 1.5,
+    durability: availability,
+    potential: 58 + Math.max(0, 27 - age) * 2.2 + draftSignal(source) + Math.max(0, scoringVolume - 12) * 0.45 + astPct * 0.08 + wins * 0.35 + awardWeight * 1.2 + highUsageBonus + mvpBonus,
   });
 }

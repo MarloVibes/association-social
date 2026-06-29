@@ -59,7 +59,7 @@ describe('NBA scouting grades', () => {
     });
 
     expect(hiddenGrades.threePoint).toBe('S');
-    expect(hiddenGrades.dunking).toBe('D');
+    expect(hiddenGrades.dunking).toBe('D-');
     expect(hiddenGrades.defenseIq).toBe('A');
     expect(hiddenGrades.offenseIq).toBe('A');
 

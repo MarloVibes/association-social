@@ -24,7 +24,9 @@ export function gradeFromNumeric(value: unknown): NbaGrade {
   if (rating >= 70) return 'C+';
   if (rating >= 65) return 'C';
   if (rating >= 60) return 'C-';
-  if (rating >= 50) return 'D';
+  if (rating >= 57) return 'D+';
+  if (rating >= 53) return 'D';
+  if (rating >= 50) return 'D-';
   return 'F';
 }
 
