@@ -495,6 +495,9 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, visib
                   {resolvedProfile?.birth_date ? (
                     <Text style={styles.birthDate}>Born: {resolvedProfile.birth_date}</Text>
                   ) : null}
+                  {resolvedProfile?.age ? (
+                    <Text style={styles.birthDate}>Age: {resolvedProfile.age}</Text>
+                  ) : null}
                   {originValue ? (
                     <Text style={styles.birthDate}>{originLabel}: {originValue}</Text>
                   ) : null}

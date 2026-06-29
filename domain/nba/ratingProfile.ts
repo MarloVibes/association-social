@@ -51,6 +51,7 @@ export type PlayerRatingProfile = {
   season: number;
   team: string;
   position: string;
+  age?: number;
   jersey_number?: string;
   injury_state?: string;
   roster_status?: string;
@@ -178,6 +179,7 @@ export function buildPlayerRatingProfile({
     season: leagueContext.season,
     team: resolvedSource.team,
     position: resolvedSource.position,
+    age: resolvedSource.age,
     jersey_number: patch?.jersey_number,
     injury_state: patch?.injury_state,
     roster_status: patch?.roster_status,

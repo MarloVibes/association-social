@@ -18,6 +18,7 @@ describe('baseline rating profile resolver', () => {
     const evaluation = buildEvaluationLayers(rosterSnapshot, profile);
 
     expect(profile?.player_id).toBe('lebron-james-2011');
+    expect(profile?.age).toBe(26);
     expect(gradeRank(evaluation.overallTalent.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(grades.overall)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(grades.role)).toBeGreaterThanOrEqual(gradeRank('A'));
@@ -34,6 +35,7 @@ describe('baseline rating profile resolver', () => {
     const summary = getPotentialScoutingSummary({ full_name: 'LeBron James', team: 'LAL' }, profile);
 
     expect(profile?.player_id).toBe('lebron-james-2026');
+    expect(profile?.age).toBe(41);
     expect(gradeRank(grades.overall)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(grades.potential)).toBeLessThanOrEqual(gradeRank('B'));
     expect(gradeRank(grades.offenseIq)).toBeGreaterThanOrEqual(gradeRank('A'));

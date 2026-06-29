@@ -10,6 +10,8 @@ describe('rating seed baselines', () => {
 
     expect(lebron2011?.development_curve.potential_grade).toBe('A+');
     expect(rose2011?.development_curve.potential_grade).toBe('A+');
+    expect(lebron2011?.age).toBe(26);
+    expect(rose2011?.age).toBe(22);
     expect(lebron2011?.category_skill_grades.finishing.grade).toMatch(/^A/);
     expect(lebron2011?.category_skill_grades.playmaking.grade).toMatch(/^A/);
     expect(rose2011?.category_skill_grades.playmaking.grade).toMatch(/^A|S/);

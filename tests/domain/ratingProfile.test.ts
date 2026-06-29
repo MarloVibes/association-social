@@ -58,12 +58,14 @@ describe('neutral player rating profile', () => {
       player_id: 'p-current-1',
       full_name: 'Test Creator',
       season: 2027,
+      age: 23,
       collection: 'player_ratings',
       source_snapshot_id: 'snapshot-1',
       model_version: 'original-attribute-model-v1',
       generated_at_ms: 500,
     });
     expect(profile.attribute_model.passing).toBeGreaterThan(80);
+    expect(profile.source_stat_line.age).toBe(23);
     expect(profile.era_adjusted_profiles.threePoint).toBeGreaterThanOrEqual(profile.attribute_model.threePoint);
     expect(profile.skill_grades.passing).toBeTruthy();
     expect(profile.category_skill_grades.threePoint.grade).toMatch(/A|B/);

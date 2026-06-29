@@ -53,8 +53,8 @@ describe('local NBA era audit data builder', () => {
       };
     `;
     const playersCsv = [
-      'index,_id,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
-      '1,denglu01,2.3,15.4,14.8,6.1,74.0,Luol Deng,SF',
+      'index,_id,birthDate,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,denglu01,"April 16, 1985",2.3,15.4,14.8,6.1,74.0,Luol Deng,SF',
     ].join('\n');
     const salariesCsv = [
       'player_id,salary,season,season_end,team',
@@ -76,6 +76,7 @@ describe('local NBA era audit data builder', () => {
         team: 'CHI',
         position: 'SF',
         salary: 11345000,
+        eraAge: 25,
         career_WS: 74,
         career_PER: 15.4,
         ppg: 14.8,

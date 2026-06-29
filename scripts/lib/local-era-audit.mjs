@@ -84,6 +84,20 @@ function numberFrom(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function birthYearFrom(value) {
+  const date = new Date(String(value || ''));
+  if (!Number.isNaN(date.getTime())) return date.getUTCFullYear();
+  const match = String(value || '').match(/\b(19|20)\d{2}\b/);
+  return match ? Number(match[0]) : null;
+}
+
+function eraAgeFromBirthDate(value, seasonStartYear) {
+  const birthYear = birthYearFrom(value);
+  if (!birthYear) return null;
+  const age = Number(seasonStartYear) - birthYear;
+  return age > 15 && age < 60 ? age : null;
+}
+
 function positionIncludes(player, values) {
   const position = String(player.position || '').toUpperCase();
   return values.some(value => position.includes(value));
@@ -138,6 +152,7 @@ function buildProfileIndex(playersCsv) {
   const headers = rows[0] || [];
   const idIndex = column(headers, '_id', 'id', 'player_id');
   const nameIndex = column(headers, 'name', 'full_name', 'player');
+  const birthDateIndex = column(headers, 'birthdate', 'birth_date', 'born');
   const positionIndex = column(headers, 'position', 'pos');
   const ppgIndex = column(headers, 'career_pts', 'ppg', 'points');
   const rpgIndex = column(headers, 'career_trb', 'rpg', 'rebounds');
@@ -154,6 +169,7 @@ function buildProfileIndex(playersCsv) {
     const profile = {
       player_id: row[idIndex],
       full_name: name,
+      birthDate: row[birthDateIndex],
       position: row[positionIndex],
       ppg: numberFrom(row[ppgIndex]),
       rpg: numberFrom(row[rpgIndex]),
@@ -209,6 +225,7 @@ export function buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playe
         position: profile.position || player.position,
         salary: salaryByYear[String(seasonStartYear)] || 0,
         salaryByYear,
+        eraAge: eraAgeFromBirthDate(profile.birthDate, seasonStartYear),
         matchedProfile,
         matchedProfileId: profile.player_id,
         matchedSalary: Boolean(salaryByYear[String(seasonStartYear)]),
@@ -302,6 +319,7 @@ export function buildLocalEraAuditReport(era, players) {
       player.team || '-',
       player.position || '-',
       priorityFor(player),
+      String(player.eraAge ?? '-'),
       String(numberFrom(player.salary)),
       String(numberFrom(player.career_WS)),
       String(numberFrom(player.career_PER)),
@@ -317,8 +335,8 @@ export function buildLocalEraAuditReport(era, players) {
     '',
     'Read-only report built from local seeded rosters, player profiles, and salary history.',
     '',
-    '| Player | Team | Pos | Priority | Salary | Career WS | Career PER | Career P/R/A | Evidence | Suggested Grade Review |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Player | Team | Pos | Priority | Era Age | Salary | Career WS | Career PER | Career P/R/A | Evidence | Suggested Grade Review |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...rows.map(row => `| ${row.join(' | ')} |`),
     '',
     ...(duplicateWarnings.length
