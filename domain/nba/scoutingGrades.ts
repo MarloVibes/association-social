@@ -209,9 +209,31 @@ function statNumber(player: Record<string, any>, profile: Record<string, any> | 
   return null;
 }
 
+function hasSourceTag(player: Record<string, any>, profile: Record<string, any> | null | undefined, tag: string) {
+  const target = tag.toLowerCase();
+  const tags = [
+    ...(profile?.source_stat_line?.scoutingTags || []),
+    ...(profile?.scoutingTags || []),
+    ...(player?.source_stat_line?.scoutingTags || []),
+    ...(player?.scoutingTags || []),
+  ];
+  return tags.some(value => String(value).toLowerCase() === target);
+}
+
+function suspiciousThreePointSample(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const pct = statNumber(player, profile, ['threePointPct', 'fg3_pct', 'three_pct']);
+  const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
+  return pct !== null
+    && attempts !== null
+    && pct >= 0.9
+    && attempts >= 2
+    && !hasSourceTag(player, profile, 'verified_shooting_data');
+}
+
 function volumeModifier(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
   const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
   if (attempts === null) return null;
+  if (suspiciousThreePointSample(player, profile)) return 55;
   return clamp(58 + attempts * 6, 50, 96);
 }
 
@@ -269,13 +291,20 @@ function roleRating(player: Record<string, any>, profile: Record<string, any> | 
 function numericRatingForKey(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: ScoutingGradeKey): number | null {
   switch (key) {
     case 'threePoint':
-      return weightedRating(player, profile, [
+      {
+        const rating = weightedRating(player, profile, [
         { keys: ['threePoint', 'threePointShot'], weight: 70 },
         { keys: ['shotIq'], weight: 10 },
         { keys: ['consistency', 'shotConsistency'], weight: 10 },
         { keys: ['offenseIq', 'offensiveAwareness'], weight: 5 },
         { keys: ['shotVolumeModifier'], weight: 5, fallback: volumeModifier(player, profile) },
-      ]) ?? statRatingForKey(player, profile, key);
+        ]) ?? statRatingForKey(player, profile, key);
+        if (rating === null) return null;
+        if (suspiciousThreePointSample(player, profile)) return Math.min(rating, 69.4);
+        const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
+        if (attempts !== null && attempts < 1 && !hasSourceTag(player, profile, 'elite_shooter')) return Math.min(rating, 59.4);
+        return rating;
+      }
     case 'closeShot':
       return weightedRating(player, profile, [
         { keys: ['closeShot', 'insideScoring', 'drivingLayup'], weight: 70 },

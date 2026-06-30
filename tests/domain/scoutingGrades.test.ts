@@ -8,6 +8,7 @@ import {
   gradeColors,
   gradeRank,
 } from '@/domain/nba/scoutingGrades';
+import { buildBaselineRatingProfiles } from '@/domain/nba/ratingSeeds';
 
 describe('NBA scouting grades', () => {
   it('maps grade colors from red through gold', () => {
@@ -181,6 +182,64 @@ describe('NBA scouting grades', () => {
     };
 
     expect(buildScoutingGrades(staleRosterSnapshot, canonicalProfile).threePoint).toBe('D+');
+  });
+
+  it('uses production caps for public passing grades on player cards', () => {
+    const profiles = buildBaselineRatingProfiles();
+    const rose2011 = profiles.find(profile => profile.player_id === 'derrick-rose-2011');
+    const paul2011 = profiles.find(profile => profile.full_name === 'Chris Paul' && profile.team === 'NOH' && profile.season === 2011);
+
+    expect(rose2011).toBeTruthy();
+    expect(paul2011).toBeTruthy();
+    const roseGrades = buildScoutingGrades(rose2011!, rose2011);
+    const paulGrades = buildScoutingGrades(paul2011!, paul2011);
+
+    expect(gradeRank(roseGrades.passing)).toBeLessThan(gradeRank('S'));
+    expect(gradeRank(roseGrades.passing)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(paulGrades.passing)).toBeGreaterThanOrEqual(gradeRank('A+'));
+  });
+
+  it('keeps public shooting grades capped for low-volume and untrusted three point samples', () => {
+    const profiles = buildBaselineRatingProfiles();
+    const gobert2017 = profiles.find(profile => profile.full_name === 'Rudy Gobert' && profile.team === 'UTA' && profile.season === 2017);
+    const truckRobinson1984 = profiles.find(profile => profile.full_name === 'Truck Robinson' && profile.team === 'NYK' && profile.season === 1984);
+
+    expect(gobert2017).toBeTruthy();
+    expect(truckRobinson1984).toBeTruthy();
+    expect(gradeRank(buildScoutingGrades(gobert2017!, gobert2017).threePoint)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(gradeRank(buildScoutingGrades(truckRobinson1984!, truckRobinson1984).threePoint)).toBeLessThanOrEqual(gradeRank('C'));
+  });
+
+  it('shows true rebounders as rebounders on public player cards', () => {
+    const profiles = buildBaselineRatingProfiles();
+    const roundfield1984 = profiles.find(profile => profile.full_name === 'Dan Roundfield' && profile.team === 'ATL' && profile.season === 1984);
+
+    expect(roundfield1984).toBeTruthy();
+    expect(gradeRank(buildScoutingGrades(roundfield1984!, roundfield1984).rebounding)).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
+  it('does not copy one broad legacy defense grade into every defensive subskill', () => {
+    const grades = buildScoutingGrades({
+      position: 'SG',
+      grades: {
+        defense: 'A',
+      },
+      hidden: {
+        perimeterDefense: 88,
+        lateralQuickness: 84,
+        steals: 72,
+        defenseIq: 80,
+        postDefense: 58,
+        blocking: 51,
+        strength: 62,
+        helpDefense: 68,
+      },
+      blocksPerGame: 0.2,
+    });
+
+    expect(gradeRank(grades.perimeterDefense)).toBeGreaterThanOrEqual(gradeRank('B'));
+    expect(gradeRank(grades.blocking)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(gradeRank(grades.postDefense)).toBeLessThanOrEqual(gradeRank('C-'));
   });
 
   it('separates skill, role, impact, overall, and trade value grades', () => {

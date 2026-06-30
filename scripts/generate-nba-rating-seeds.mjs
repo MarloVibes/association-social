@@ -159,10 +159,28 @@ function buildProfileIndex(playersCsv) {
       efg: pct(row[indexes.efg], 0.5),
       draftPick: draftPick(row[indexes.draftPick]),
     };
-    byName[normalizeName(name)] = profile;
+    const normalized = normalizeName(name);
+    const existing = byName[normalized];
+    if (!existing || profileConfidence(profile) > profileConfidence(existing)) {
+      byName[normalized] = profile;
+    }
     if (id) idToName[id] = name;
   }
   return { byName, idToName };
+}
+
+function profileConfidence(profile) {
+  const birthYear = Number(String(profile.birthDate || '').slice(0, 4));
+  const validBirthDate = Number.isFinite(birthYear) && birthYear >= 1940 && birthYear <= 2008;
+  return (
+    (validBirthDate ? 1000 : 0)
+    + numberFrom(profile.games) * 0.4
+    + numberFrom(profile.ppg) * 12
+    + numberFrom(profile.rpg) * 9
+    + numberFrom(profile.apg) * 8
+    + numberFrom(profile.ws) * 2
+    + numberFrom(profile.per) * 5
+  );
 }
 
 function buildSalaryIndex(salariesCsv, idToName) {

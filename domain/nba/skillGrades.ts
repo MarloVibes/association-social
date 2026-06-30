@@ -156,11 +156,12 @@ export function buildSkillGrades(
       durability: 0.05,
     }, context),
     rebounding: skill(attributes, {
-      offensiveRebound: 0.32,
-      defensiveRebound: 0.34,
-      vertical: 0.12,
-      strength: 0.12,
-      hustle: 0.1,
+      rebounding: 0.28,
+      offensiveRebound: 0.22,
+      defensiveRebound: 0.28,
+      vertical: 0.08,
+      strength: 0.08,
+      hustle: 0.06,
     }, context),
     basketballIq: skill(attributes, {
       offenseIq: 0.28,

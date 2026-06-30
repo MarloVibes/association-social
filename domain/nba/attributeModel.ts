@@ -222,6 +222,25 @@ function tagBonus(source: PublicStatLine, tag: string, bonus: number) {
   return hasTag(source, tag) ? bonus : 0;
 }
 
+function passingProductionCap(source: PublicStatLine): number {
+  const apg = numberFrom(source.assistsPerGame);
+  const astPct = numberFrom(source.assistPct);
+  const tovPct = numberFrom(source.turnoverPct, 12);
+  const elitePasser = hasTag(source, 'elite_passer');
+  const floorGeneral = hasTag(source, 'floor_general');
+  const connectorBig = hasTag(source, 'connector_big');
+
+  if (apg >= 10 && astPct >= 45 && tovPct <= 14.5 && (elitePasser || floorGeneral)) return 100;
+  if ((apg >= 9 && astPct >= 40) || (apg >= 8 && elitePasser)) return 98;
+  if (apg >= 7.5 && astPct >= 35) return 94;
+  if (apg >= 6.5 && astPct >= 31) return 91;
+  if (apg >= 5.5 && astPct >= 27) return floorGeneral ? 91 : 88;
+  if (apg >= 4.5 && astPct >= 23) return connectorBig ? 88 : 84;
+  if (apg >= 3.5 && astPct >= 19) return connectorBig ? 85 : 79;
+  if (apg >= 2.5 && astPct >= 15) return connectorBig ? 82 : 74;
+  return connectorBig ? 78 : 69;
+}
+
 function roundModel(model: AttributeModel): AttributeModel {
   return ATTRIBUTE_KEYS.reduce((acc, key) => {
     acc[key] = Math.round(clamp(model[key]));
@@ -295,6 +314,7 @@ export function buildAttributeModel({
   const wing = isWing(source);
   const rimRate = rate(source.rimAttemptRate, big ? 0.32 : guard ? 0.28 : 0.24);
   const dunkRate = rate(source.dunkRate, big ? 0.1 : wing ? 0.07 : 0.03);
+  const midRangeAttemptRate = rate(source.midRangeAttemptRate, 0);
   const driveRate = rate(source.driveRate, guard ? 0.28 : wing ? 0.22 : 0.12);
   const transitionRate = rate(source.transitionRate, guard || wing ? 0.16 : 0.09);
   const orebPct = numberFrom(source.offensiveReboundPct, big ? 8 : wing ? 4 : 2);
@@ -312,7 +332,9 @@ export function buildAttributeModel({
   const allStarBonus = tagBonus(source, 'all_star', 3);
   const floorGeneralBonus = tagBonus(source, 'floor_general', 7);
   const elitePasserBonus = tagBonus(source, 'elite_passer', 6);
-  const eliteShooterBonus = tagBonus(source, 'elite_shooter', 7);
+  const suspiciousThreeSample = threePct >= 0.9 && threeAttempts >= 2 && !hasTag(source, 'verified_shooting_data');
+  const trustedThreePct = suspiciousThreeSample ? leagueContext.leagueThreePointPct : threePct;
+  const eliteShooterBonus = suspiciousThreeSample ? 0 : tagBonus(source, 'elite_shooter', 7);
   const eliteMidRangeBonus = tagBonus(source, 'elite_midrange', 6) + tagBonus(source, 'midrange_big', 4);
   const defensiveWingBonus = tagBonus(source, 'defensive_wing_assignment', 7);
   const pointAttackDefenseBonus = tagBonus(source, 'point_of_attack_defender', 5);
@@ -327,14 +349,16 @@ export function buildAttributeModel({
     || pointAttackDefenseBonus > 0
     || defensiveAnchorBonus > 0
     || rimProtectorBonus > 0;
-  const lowVolumeThreeProof = threeAttempts < 1 && eliteShooterBonus <= 0;
-  const rawThreePoint = 54
-    + (threePct - leagueContext.leagueThreePointPct) * 125
+  const lowVolumeThreeProof = (threeAttempts < 1 && eliteShooterBonus <= 0) || suspiciousThreeSample;
+  const uncappedThreePoint = 54
+    + (trustedThreePct - leagueContext.leagueThreePointPct) * 125
     + threeAttempts * 2.7
     + ft * 8
     + efg * 12
     + scoringVolume * 0.22
     + eliteShooterBonus;
+  const weakEraThreeProof = trustedThreePct < 0.33 && eliteShooterBonus <= 0;
+  const rawThreePoint = weakEraThreeProof ? Math.min(uncappedThreePoint, 84.4) : uncappedThreePoint;
   const rawPerimeterDefense = 56
     + spg * 8
     + defenseSignal * 5.6
@@ -352,23 +376,31 @@ export function buildAttributeModel({
     + defensiveWingBonus
     + pointAttackDefenseBonus * 0.4;
   const nonStopperGuardOrWing = (guard || wing) && !individualDefenseProof && spg < 1.4 && bpg < 0.9;
+  const eliteReboundFloor = rebounderBonus > 0 && rpg >= 9 && drebPct >= 17 && mpg >= 24 ? 89 : 0;
+  const strongReboundFloor = rpg >= 10 && drebPct >= 18 && mpg >= 24 ? 89 : 0;
+  const reboundFloor = Math.max(eliteReboundFloor, strongReboundFloor);
+  const hasEliteMidrangeProof = eliteMidRangeBonus > 0 || mvpBonus > 0 || allStarBonus > 0 || highUsageBonus > 0;
+  const midrangeProofCap = !hasEliteMidrangeProof && midRangeAttemptRate < 0.22 ? 94.4 : 100;
+
+  const rawPassing = 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus;
+  const passingCap = passingProductionCap(source);
 
   return roundModel({
     closeShot: 58 + scoringVolume * 0.85 + fg * 22 + ts * 8 + fta * 1.2 + (big ? 6 : 0),
     drivingLayup: 58 + scoringVolume * 0.65 + fg * 15 + ts * 8 + fta * 1.4 + driveRate * 30 + rimRate * 24 + (guard || wing ? 4 : 0) + rimPressureBonus,
-    drivingDunk: 48 + dunkRate * 125 + rimRate * 25 + fta * 1.1 + (big ? 8 : wing ? 5 : 0) + burstBonus * 0.5,
+    drivingDunk: 50 + dunkRate * 130 + rimRate * 28 + fta * 1.2 + (big ? 8 : wing ? 6 : 0) + burstBonus * 0.65 + rimPressureBonus * 0.25,
     standingDunk: 45 + dunkRate * 90 + (big ? 18 : wing ? 6 : -5) + rpg * 0.7,
     drawFoul: 50 + fta * 4.8 + rimRate * 22 + driveRate * 18 + usage(source) * 0.25,
     hands: 58 + fg * 22 + rpg * 1.4 + Math.max(0, 14 - tovPct) * 0.9 + (big ? 4 : 0),
-    midRange: 56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0) + eliteMidRangeBonus,
+    midRange: Math.min(56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0) + eliteMidRangeBonus, midrangeProofCap),
     threePoint: lowVolumeThreeProof ? Math.min(rawThreePoint, big ? 57 : 62) : rawThreePoint,
     freeThrow: 44 + ft * 58 + fta * 0.6,
-    dunking: 48 + fta * 1.8 + fg * 14 + dunkRate * 95 + rimRate * 24 + driveRate * 14 + transitionRate * 10 + (big ? 7 : wing ? 5 : 0) + Math.max(0, 28 - age) * 0.6 + rimPressureBonus + burstBonus,
+    dunking: 50 + fta * 1.8 + fg * 14 + dunkRate * 102 + rimRate * 27 + driveRate * 15 + transitionRate * 10 + (big ? 7 : wing ? 6 : 0) + Math.max(0, 28 - age) * 0.6 + rimPressureBonus + burstBonus,
     shotIq: 58 + scoringVolume * 0.45 + fg * 10 + ts * 12 + efg * 10 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.35,
     shotConsistency: 55 + fg * 10 + ts * 13 + efg * 11 + ft * 8 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.3,
-    passing: 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
-    passIq: 54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
-    passVision: 52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.25 + (guard ? 6 : wing ? 3 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus,
+    passing: Math.min(rawPassing, passingCap),
+    passIq: Math.min(54 + apg * 2.8 + astPct * 0.55 + Math.max(0, 15 - tovPct) * 0.9 + wins * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus, Math.max(passingCap, 84)),
+    passVision: Math.min(52 + apg * 3.1 + astPct * 0.7 + usage(source) * 0.12 + (guard ? 6 : wing ? 3 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus, Math.max(passingCap, 84)),
     ballHandle: 56 + apg * 1.6 + usage(source) * 0.75 + (guard ? 7 : wing ? 4 : -3) - Math.max(0, tovPct - 14) * 0.7 + floorGeneralBonus * 0.45 + burstBonus * 0.25,
     speedWithBall: 58 + apg * 0.9 + usage(source) * 0.65 + driveRate * 32 + transitionRate * 18 + (guard ? 7 : wing ? 3 : -5) + burstBonus,
     offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35 + efficiencySignal * 0.06 + floorGeneralBonus * 0.5 + connectorBigBonus + allStarBonus,
@@ -385,9 +417,9 @@ export function buildAttributeModel({
     vertical: 55 + dunkRate * 96 + rimRate * 14 + (guard || wing ? 6 : big ? 4 : 0) - Math.max(0, age - 29) * 0.7 + burstBonus * 1.2 + rimPressureBonus * 0.55,
     agility: 58 + (guard ? 9 : wing ? 6 : 0) + driveRate * 22 + transitionRate * 14 - Math.max(0, age - 30) * 0.9 + burstBonus * 1.25,
     strength: 56 + (big ? 13 : wing ? 6 : 0) + rpg * 1.1 + Math.max(0, age - 22) * 0.35 + rebounderBonus * 0.25 + postScorerBonus * 0.25,
-    rebounding: 52 + rpg * 3.3 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus * 1.25,
-    offensiveRebound: 48 + rpg * 1.35 + orebPct * 1.65 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.8,
-    defensiveRebound: 50 + rpg * 2.05 + drebPct * 1.25 + (big ? 7 : wing ? 3 : -2) + rebounderBonus * 1.15,
+    rebounding: Math.max(52 + rpg * 3.3 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus * 1.25, reboundFloor),
+    offensiveRebound: Math.max(48 + rpg * 1.35 + orebPct * 1.65 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.8, reboundFloor ? 84 : 0),
+    defensiveRebound: Math.max(50 + rpg * 2.05 + drebPct * 1.25 + (big ? 7 : wing ? 3 : -2) + rebounderBonus * 1.15, reboundFloor),
     postOffense: 50 + (big ? 9 : 0) + fg * 21 + rpg * 0.8 + fta * 1.1 + scoringVolume * 0.35 + postScorerBonus + eliteMidRangeBonus * 0.25,
     stamina: availability * 0.72 + work * 0.28,
     hustle: 56 + mpg * 0.45 + defenseSignal * 2.8 + rpg * 0.8 + spg * 2.4 + bpg * 1.5 + highMotorBonus,

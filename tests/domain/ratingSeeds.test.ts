@@ -37,12 +37,67 @@ describe('rating seed baselines', () => {
     expect(gradeRank(rose2011?.category_skill_grades.perimeterDefense.grade || 'F')).toBeLessThan(gradeRank('A-'));
   });
 
+  it('keeps pure passing tied to historic assist production instead of creator usage', () => {
+    const rose2011 = buildBaselineRatingProfiles().find(profile => profile.player_id === 'derrick-rose-2011');
+    const rose2017 = findProfile('Derrick Rose', 'NYK', 2017);
+    const lillard2017 = findProfile('Damian Lillard', 'POR', 2017);
+    const paul2011 = findProfile('Chris Paul', 'NOH', 2011);
+
+    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeLessThan(gradeRank('S'));
+    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(rose2011?.category_skill_grades.playmaking.grade || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(rose2017.skill_grades.passing || 'F')).toBeLessThanOrEqual(gradeRank('B+'));
+    expect(gradeRank(lillard2017.skill_grades.passing || 'F')).toBeLessThan(gradeRank('S'));
+    expect(gradeRank(paul2011.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A+'));
+  });
+
   it('keeps low-volume rim centers from receiving good three point grades', () => {
     const gobert2017 = findProfile('Rudy Gobert', 'UTA', 2017);
 
     expect(gradeRank(gobert2017.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(gradeRank(gobert2017.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('D+'));
     expect(gradeRank(gobert2017.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(gobert2017.category_skill_grades.rebounding.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
+  it('does not trust impossible generated three point samples as elite shooting proof', () => {
+    const truckRobinson1984 = findProfile('Truck Robinson', 'NYK', 1984);
+    const eddyCurry2003 = findProfile('Eddy Curry', 'CHI', 2003);
+
+    expect(gradeRank(truckRobinson1984.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('C'));
+    expect(gradeRank(truckRobinson1984.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('C'));
+    expect(gradeRank(eddyCurry2003.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('C'));
+    expect(gradeRank(eddyCurry2003.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('C'));
+  });
+
+  it('does not inflate weak era three point profiles into A-level shooters', () => {
+    const dominique1984 = findProfile('Dominique Wilkins', 'ATL', 1984);
+    const magic1984 = findProfile('Magic Johnson', 'LAL', 1984);
+    const drexler1984 = findProfile('Clyde Drexler', 'POR', 1984);
+
+    for (const profile of [dominique1984, magic1984, drexler1984]) {
+      expect(
+        gradeRank(profile.category_skill_grades.threePoint.grade),
+        `${profile.full_name} ${profile.season} needs efficiency and volume proof for A-level 3PT`,
+      ).toBeLessThan(gradeRank('A-'));
+    }
+  });
+
+  it('reserves elite midrange grades for players with role or tag proof', () => {
+    const joeJohnson2011 = findProfile('Joe Johnson', 'ATL', 2011);
+    const kobe2011 = findProfile('Kobe Bryant', 'LAL', 2011);
+
+    expect(gradeRank(joeJohnson2011.category_skill_grades.midRange.grade)).toBeLessThan(gradeRank('A+'));
+    expect(gradeRank(kobe2011.category_skill_grades.midRange.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
+  it('does not let duplicate source-name collisions overwrite famous player profiles', () => {
+    const ewing1992 = findProfile('Patrick Ewing', 'NYK', 1992);
+
+    expect(ewing1992.age).toBeGreaterThanOrEqual(25);
+    expect(ewing1992.source_stat_line.minutesPerGame).toBeGreaterThanOrEqual(30);
+    expect(ewing1992.source_stat_line.reboundsPerGame).toBeGreaterThanOrEqual(9);
+    expect(gradeRank(ewing1992.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
 
   it('keeps explosive wings and guards as real dunking threats', () => {
@@ -51,6 +106,8 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(lebron2011.skill_grades.dunking || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(edwards2026.skill_grades.dunking || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(lebron2011.category_skill_grades.finishing.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(edwards2026.skill_grades.drivingDunk || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.category_skill_grades.athleticism.grade)).toBeGreaterThanOrEqual(gradeRank('B+'));
   });
 
@@ -65,6 +122,7 @@ describe('rating seed baselines', () => {
     const hasDefensiveProof = (profile: any) => (
       hasTag(profile, 'defensive_wing_assignment')
       || hasTag(profile, 'point_of_attack_defender')
+      || hasTag(profile, 'all_defense')
       || hasTag(profile, 'defensive_anchor')
       || hasTag(profile, 'rim_protector')
     );
@@ -91,6 +149,59 @@ describe('rating seed baselines', () => {
       expect(
         gradeRank(profile.category_skill_grades.perimeterDefense.grade),
         `${profile.full_name} ${profile.season} should need individual defense proof for stopper grades`,
+      ).toBeLessThan(gradeRank('A-'));
+    }
+
+    const nonRimProtectorWings = allProfiles.filter(profile => (
+      isGuardOrWing(profile)
+      && !isBig(profile)
+      && !hasTag(profile, 'defensive_anchor')
+      && !hasTag(profile, 'rim_protector')
+      && Number(profile.source_stat_line?.blocksPerGame || 0) < 0.7
+    ));
+    for (const profile of nonRimProtectorWings) {
+      expect(
+        gradeRank(profile.category_skill_grades.interiorDefense.grade),
+        `${profile.full_name} ${profile.season} should need rim proof for elite interior defense`,
+      ).toBeLessThan(gradeRank('A-'));
+    }
+
+    const eliteReboundProfiles = allProfiles.filter(profile => (
+      hasTag(profile, 'elite_rebounder')
+      && Number(profile.source_stat_line?.reboundsPerGame || 0) >= 9
+      && Number(profile.source_stat_line?.defensiveReboundPct || 0) >= 17
+      && Number(profile.source_stat_line?.minutesPerGame || 0) >= 24
+    ));
+    for (const profile of eliteReboundProfiles) {
+      expect(
+        gradeRank(profile.category_skill_grades.rebounding.grade),
+        `${profile.full_name} ${profile.season} should grade as an elite rebounder`,
+      ).toBeGreaterThanOrEqual(gradeRank('A-'));
+    }
+
+    const weakMidrangeProof = allProfiles.filter(profile => (
+      !hasTag(profile, 'elite_midrange')
+      && !hasTag(profile, 'midrange_big')
+      && !hasTag(profile, 'mvp')
+      && !hasTag(profile, 'all_star')
+      && !hasTag(profile, 'high_usage_creator')
+      && Number(profile.source_stat_line?.midRangeAttemptRate || 0) < 0.15
+    ));
+    for (const profile of weakMidrangeProof) {
+      expect(
+        gradeRank(profile.category_skill_grades.midRange.grade),
+        `${profile.full_name} ${profile.season} needs midrange role proof for elite midrange`,
+      ).toBeLessThan(gradeRank('A+'));
+    }
+
+    const suspiciousYouthStars = allProfiles.filter(profile => (
+      Number(profile.source_stat_line?.age || profile.age || 0) < 18
+      && Number(profile.source_stat_line?.minutesPerGame || 0) < 10
+    ));
+    for (const profile of suspiciousYouthStars) {
+      expect(
+        gradeRank(profile.development_curve.potential_grade),
+        `${profile.full_name} ${profile.season} has suspicious source data and should not get star potential`,
       ).toBeLessThan(gradeRank('A-'));
     }
   });

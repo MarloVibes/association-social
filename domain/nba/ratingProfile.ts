@@ -146,6 +146,11 @@ function developmentCurve(model: AttributeModel, source: PublicStatLine) {
 function shotVolumeModifier(source: PublicStatLine) {
   const attempts = Number(source.threePointAttemptsPerGame || 0);
   if (!Number.isFinite(attempts)) return 60;
+  const pct = Number(source.threePointPct || 0);
+  const suspiciousSample = pct >= 0.9
+    && attempts >= 2
+    && !(source.scoutingTags || []).some(tag => String(tag).toLowerCase() === 'verified_shooting_data');
+  if (suspiciousSample) return 55;
   return Math.max(50, Math.min(96, 58 + attempts * 5));
 }
 
