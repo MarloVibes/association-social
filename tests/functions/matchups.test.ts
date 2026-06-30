@@ -333,6 +333,67 @@ describe('matchup request state helpers', () => {
     expect(team.players[0].category_skill_grades.finishing).toEqual({ rating: 78, grade: 'B' });
   });
 
+  it('keeps stale center shooting from leaking into scheduled game box scores', () => {
+    const game = seedAvailableGame({ homeTeamId: 'AUDIT', awayTeamId: 'CPU' });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {
+        players: [
+          {
+            player_id: 'stale-center',
+            full_name: 'Stale Center',
+            position: 'C',
+            minutes: 32,
+            hidden: { shooting: 99, threePoint: 99, shotIq: 99, defense: 92, rebounding: 94 },
+            category_skill_grades: {
+              threePoint: { rating: 99, grade: 'S' },
+              finishing: { rating: 92, grade: 'A' },
+            },
+            baselineRatingProfile: {
+              attribute_model: { shooting: 48, threePoint: 38, shotIq: 62, closeShot: 82, dunking: 74 },
+              source_stat_line: { threePointAttemptsPerGame: 0.1 },
+              category_skill_grades: {
+                threePoint: { rating: 42, grade: 'F' },
+                finishing: { rating: 78, grade: 'B' },
+              },
+            },
+          },
+          {
+            player_id: 'real-shooter',
+            full_name: 'Real Shooter',
+            position: 'SG',
+            minutes: 30,
+            hidden: { shooting: 82, threePoint: 86, shotIq: 84, playmaking: 68, defense: 66 },
+            category_skill_grades: {
+              threePoint: { rating: 86, grade: 'B+' },
+            },
+            tendencies: {
+              threePointFrequency: 88,
+            },
+          },
+          { player_id: 'audit-pg', full_name: 'Audit PG', position: 'PG', minutes: 32, hidden: { shooting: 76, playmaking: 84, defense: 72 } },
+          { player_id: 'audit-pf', full_name: 'Audit PF', position: 'PF', minutes: 30, hidden: { shooting: 72, playmaking: 60, defense: 78, rebounding: 82 } },
+          { player_id: 'audit-sf', full_name: 'Audit SF', position: 'SF', minutes: 28, hidden: { shooting: 70, playmaking: 58, defense: 76 } },
+        ],
+      },
+      awayTeam: {
+        players: Array.from({ length: 5 }, (_, index) => ({
+          player_id: `plain-${index}`,
+          full_name: `Plain ${index}`,
+          minutes: 30,
+          hidden: { shooting: 70, playmaking: 68, defense: 68 },
+        })),
+      },
+    });
+
+    const lines = new Map<string, any>(result.boxScore.home.players.map((player: any) => [player.name, player]));
+    expect(lines.get('Stale Center').threePointersAttempted).toBeLessThan(lines.get('Real Shooter').threePointersAttempted);
+    expect(lines.get('Stale Center').threePointersAttempted).toBeLessThanOrEqual(1);
+    expect(lines.get('Stale Center').threePointersMade).toBe(0);
+  });
+
   it('uses roster hidden values and stores a box score for simulated games', () => {
     const game = seedAvailableGame();
     const result = simulateScheduledGame({

@@ -121,16 +121,8 @@ function resolvePossession(ctx) {
   const shooter = weightedPick(offenseTeam.rotation, player => player.usage, ctx.rng);
   const assister = weightedPick(offenseTeam.rotation.filter(player => player.playerId !== shooter.playerId), player => player.assistWeight, ctx.rng);
   const defender = weightedPick(defenseTeam.rotation, player => player.defense + player.stealSkill * 0.35, ctx.rng);
-  const shotValue = chooseShotValue(shooter, offenseTeam, ctx.rng);
-  const shotDifficulty = shotValue === 3 ? 10 : shooter.position === 'C' || shooter.position === 'PF' ? -4 : 0;
   const winnerBoost = offenseTeam.teamId === ctx.input.preferredWinnerTeamId ? Number(ctx.input.winnerBias || 0) : 0;
   const defenseBoost = defenseTeam.teamId === ctx.input.preferredWinnerTeamId ? Number(ctx.input.winnerBias || 0) * 0.35 : 0;
-  const makeChance = clamp(
-    0.53
-      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330,
-    shotValue === 3 ? 0.28 : 0.36,
-    shotValue === 3 ? 0.49 : 0.66,
-  );
   const roll = ctx.rng();
   const clockUsed = 7 + Math.floor(ctx.rng() * 16);
   const actingTeamId = offenseTeam.teamId;
@@ -158,10 +150,23 @@ function resolvePossession(ctx) {
     });
   }
 
+  const shotValue = chooseShotValue(shooter, offenseTeam, ctx.rng);
+  const shotDifficulty = shotValue === 3 ? 10 : shooter.position === 'C' || shooter.position === 'PF' ? -4 : 0;
+  const makeChance = clamp(
+    0.53
+      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330,
+    shotValue === 3 ? 0.28 : 0.36,
+    shotValue === 3 ? 0.49 : 0.66,
+  );
+
   const foulThreshold = shotValue === 3
     ? 0.08 + shooter.foulDraw / 1000
     : 0.13 + shooter.foulDraw / 360;
   if (roll < foulThreshold) {
+    if (shotValue === 3) {
+      shooter.threePointAttemptsUsed = Math.max(0, Number(shooter.threePointAttemptsUsed || 0) - 1);
+      shooter.shotChoicesUsed = Math.max(0, Number(shooter.shotChoicesUsed || 0) - 1);
+    }
     const freeThrows = shotValue === 3 && ctx.rng() < 0.07 ? 3 : 2;
     const made = Array.from({ length: freeThrows }).filter(() => ctx.rng() < clamp(shooter.freeThrow / 110, 0.56, 0.93)).length;
     deltas.push(deltaFor(shooter, {
@@ -259,12 +264,16 @@ function buildTeamContext(teamId, team, side, input) {
   const minutes = normalizeMinutes(selected);
   const rotation = selected.map((player, index) => {
     const night = scoringNightContext(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
+    const sourceThreeAttemptCap = sourceThreeAttemptBudget(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
     return {
       ...player,
       ...night,
       minutes: minutes[index],
       usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) * night.nightUsageMultiplier / 100),
       starter: starters.some(starter => starter.playerId === player.playerId),
+      sourceThreeAttemptCap,
+      threePointAttemptsUsed: 0,
+      shotChoicesUsed: 0,
     };
   });
   return {
@@ -281,6 +290,7 @@ function buildTeamContext(teamId, team, side, input) {
 
 function normalizePlayer(player, teamId, side, index) {
   const hidden = player && player.hidden || {};
+  const sourceThreeAttempts = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line.threePointAttemptsPerGame);
   const position = normalizePosition(player && player.position, index);
   const shooting = skill(player, 'shooting', 72);
   const closeShot = skill(player, 'closeShot', shooting);
@@ -335,6 +345,7 @@ function normalizePlayer(player, teamId, side, index) {
       clamp(shooting * 0.2 + playmaking * 0.2 + Math.max(perimeterDefense, interiorDefense) * 0.22 + rebounding * 0.13 + iq * 0.1 + Math.max(threePoint, finishing) * 0.15, 1, 99)
     ),
     baseMinutes: Number(player && (player.minutes || player.rotationMinutes)) || (index < 5 ? 30 : 16),
+    sourceThreeAttemptsPerGame: Number.isFinite(sourceThreeAttempts) ? Math.max(0, sourceThreeAttempts) : null,
   };
 
   function skill(source, key, fallback) {
@@ -345,6 +356,15 @@ function normalizePlayer(player, teamId, side, index) {
     const hiddenValue = Number(hidden[key]);
     return Number.isFinite(hiddenValue) ? hiddenValue : fallback;
   }
+}
+
+function sourceThreeAttemptBudget(player, minutes, seed) {
+  if (!player || player.sourceThreeAttemptsPerGame == null) return null;
+  const sourceAttempts = Number(player && player.sourceThreeAttemptsPerGame);
+  if (!Number.isFinite(sourceAttempts)) return null;
+  if (player.threePoint < 50 && sourceAttempts <= 0.5) return 0;
+  const minuteScale = clamp(Number(minutes || 0) / 36, 0.25, 1.45);
+  return Math.max(0, Math.round(sourceAttempts * minuteScale + (hashString(`${seed}:${player.playerId}:three-cap`) % 6 === 0 ? 1 : 0)));
 }
 
 function categoryRating(player, key, fallback) {
@@ -406,10 +426,19 @@ function scoringNightContext(player, minutes, seed) {
 }
 
 function chooseShotValue(player, team, rng) {
+  const attemptCap = Number(player && player.sourceThreeAttemptCap);
+  const hasAttemptCap = player && player.sourceThreeAttemptCap != null && Number.isFinite(attemptCap);
+  if (hasAttemptCap && Number(player.threePointAttemptsUsed || 0) >= attemptCap) return 2;
+  const choiceCount = Number(player && player.shotChoicesUsed || 0);
+  player.shotChoicesUsed = choiceCount + 1;
   const perimeterProfile = player.threePoint * 0.58 + player.threePointFrequency * 0.24 + player.catchAndShoot * 0.1 + player.midRange * 0.08;
   const interiorProfile = player.finishing * 0.42 + player.paintAttack * 0.28 + player.rimFinish * 0.18 + player.scoring * 0.12;
   const threeRate = clamp(0.1 + (perimeterProfile - interiorProfile + 46) / 155 + (team.offenseBoost || 0) / 120, 0.04, 0.7);
-  if (rng() < threeRate) return 3;
+  const provenShooterFloor = player.threePoint >= 88 && (player.threePointFrequency >= 64 || player.catchAndShoot >= 64 || player.threePoint >= 95);
+  if ((provenShooterFloor && choiceCount % 3 === 0) || rng() < threeRate) {
+    player.threePointAttemptsUsed = Number(player.threePointAttemptsUsed || 0) + 1;
+    return 3;
+  }
   return 2;
 }
 
