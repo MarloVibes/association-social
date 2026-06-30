@@ -42,6 +42,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Kevin Johnson | PHX | Point Guard | high | 25 | 1950000 | 92.8 | 20.7 | 17.9/3.3/9.1 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Scott Skiles | ORL | Point Guard | high | 27 | 1925000 | 30.4 | 14.4 | 11.1/2.5/6.5 | above-average PER, creator value | - |
 | Rolando Blackman | DAL | Shooting Guard | high | 32 | 1920000 | 75.6 | 16.7 | 18/3.3/3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
+| Gary Payton | SEA | Point Guard | high | 23 | 1883000 | 145.5 | 18.9 | 16.3/3.9/6.7 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Terry Cummings | SAS | Power Forward and Small Forward | high | 30 | 1861000 | 91.1 | 18.3 | 16.4/7.3/1.9 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
 | Kenny Anderson | NJN | Point Guard | high | 21 | 1828000 | 62.5 | 16.4 | 12.6/3.1/6.1 | career win shares, above-average PER, creator value | - |
 | Sean Elliott | SAS | Small Forward | high | 23 | 1802000 | 55.7 | 13.9 | 14.2/4.3/2.6 | career win shares, scoring load | Offense IQ -> B- |
@@ -65,9 +66,11 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Clyde Drexler | POR | Shooting Guard | high | 29 | 1378000 | 135.6 | 21.1 | 20.4/6.1/5.6 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Drazen Petrovic | NJN | Shooting Guard | high | 27 | 1375000 | 21.5 | 16.4 | 15.4/2.3/2.4 | above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Bill Laimbeer | DET | Center | high | 34 | 1369000 | 105.6 | 16.1 | 12.9/9.7/2 | career win shares, above-average PER, rebounding value | - |
+| Larry Nance | CLE | Power Forward | high | 32 | 1363000 | 109.6 | 19.9 | 17.1/8/2.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Armon Gilliam | PHI | Power Forward and Small Forward | high | 27 | 1350000 | 58.1 | 16.4 | 13.7/6.9/1.2 | career win shares, above-average PER, rebounding value | - |
 | Rik Smits | IND | Center | high | 25 | 1350000 | 56.6 | 17.9 | 14.8/6.1/1.4 | career win shares, above-average PER, scoring load, rebounding value | - |
 | Michael Adams | WAS | Point Guard | high | 28 | 1309000 | 46.9 | 16.6 | 14.7/2.9/6.4 | above-average PER, scoring load, creator value | Offense IQ -> B- |
+| Glen Rice | MIA | Small Forward | high | 24 | 1302000 | 88.7 | 16.2 | 18.3/4.4/2.1 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Dale Ellis | MIL | Small Forward and Shooting Guard | high | 31 | 1300000 | 84.7 | 16 | 15.7/3.5/1.4 | career win shares, above-average PER, scoring load | Mid Range -> B- |
 | Joe Dumars | DET | Point Guard and Shooting Guard | high | 28 | 1295000 | 86.2 | 15.3 | 16.1/2.2/4.5 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Lionel Simmons | SAC | Small Forward | high | 23 | 1289000 | 16.9 | 14.7 | 12.8/6.2/3.3 | above-average PER, rebounding value | - |
@@ -91,6 +94,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Nick Anderson | ORL | Shooting Guard and Small Forward | high | 23 | 750000 | 55.3 | 15.8 | 14.4/5.1/2.6 | career win shares, above-average PER, scoring load | Offense IQ -> B- |
 | Nate McMillan | SEA | Shooting Guard and Point Guard | high | 27 | 733000 | 50.2 | 14.5 | 5.9/4/6.1 | career win shares, above-average PER, creator value | - |
 | Kevin Willis | ATL | Power Forward and Center | high | 29 | 725000 | 81.8 | 15.7 | 12.1/8.4/0.9 | career win shares, above-average PER, rebounding value | - |
+| Tim Hardaway | GSW | Point Guard | high | 25 | 640000 | 85 | 18.6 | 17.7/3.3/8.2 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Brad Davis | DAL | Point Guard | high | 36 | 600000 | 53.6 | 14.7 | 8.2/1.8/4.9 | career win shares, above-average PER | - |
 | Mookie Blaylock | ATL | Point Guard | high | 24 | 575000 | 71.8 | 16.8 | 13.5/4.1/6.7 | career win shares, above-average PER, creator value | - |
 | Jerome Kersey | POR | Small Forward | high | 29 | 561000 | 69.5 | 14.9 | 10.3/5.5/1.9 | career win shares, above-average PER | - |
@@ -113,7 +117,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Johnny Dawkins | PHI | Point Guard | medium | 28 | 1700000 | 21.8 | 14.7 | 11.1/2.5/5.5 | above-average PER, creator value | - |
 | John Paxson | CHI | Point Guard | medium | 31 | 1600000 | 36.3 | 12 | 7.2/1.2/3.6 | - | - |
 | Kevin Gamble | BOS | Small Forward | medium | 26 | 1400000 | 33.3 | 14.2 | 9.5/2.2/2 | above-average PER | - |
-| Larry Nance | CLE | Center and Power Forward | medium | - | 1363000 | 16.4 | 17.1 | 7.7/6.5/1.7 | above-average PER, rebounding value | - |
 | Mark Eaton | UTA | Center | medium | 34 | 1333000 | 44.8 | 10.9 | 6/7.9/1 | rebounding value | - |
 | Jerry Reynolds | ORL | Shooting Guard and Small Forward | medium | 29 | 1300000 | 10.5 | 15 | 9.1/3/2 | above-average PER | - |
 | Sarunas Marciulionis | GSW | Small Forward and Shooting Guard | medium | 27 | 1267000 | 20 | 16.7 | 12.8/2.3/2.2 | above-average PER | - |
@@ -137,30 +140,25 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Micheal Williams | IND | Point Guard | medium | 25 | 500000 | 28.5 | 17.9 | 11/2.5/5.8 | above-average PER, creator value | - |
 | Harvey Grant | WAS | Small Forward and Power Forward | medium | 26 | 450000 | 36.4 | 12.7 | 9.9/4.4/1.6 | - | - |
 | B.J. Armstrong | CHI | Point Guard | medium | 24 | 435000 | 45 | 14.5 | 9.8/1.8/3.3 | above-average PER | - |
-| Reggie Williams | DEN | Small Forward | medium | - | 425000 | 6.4 | 14.3 | 7.8/2.4/1.5 | above-average PER | - |
 | John Starks | NYK | Shooting Guard | medium | 26 | 400000 | 49.9 | 14 | 12.5/2.5/3.6 | above-average PER | - |
 | Vernon Maxwell | HOU | Point Guard and Shooting Guard | medium | 26 | 325000 | 27.4 | 12.7 | 12.8/2.6/3.4 | - | - |
 | Mario Elie | GSW | Shooting Guard and Small Forward | medium | 28 | 130000 | 48.9 | 13.1 | 8.6/2.8/2.6 | - | - |
+| Reggie Williams | DEN | Small Forward | medium | - | 0 | 6.4 | 14.3 | 7.8/2.4/1.5 | above-average PER | - |
 | Walt Williams | SAC | Small Forward | medium | 21 | 0 | 33.9 | 14.2 | 11.8/3.9/2.3 | above-average PER | - |
 | Patrick Ewing | NYK | Small Forward | normal | - | 3139000 | -0.1 | 0.6 | 0.4/0.3/0.3 | - | - |
 | Kevin Duckworth | POR | Center | normal | 27 | 2013000 | 24.7 | 11.9 | 11.8/5.8/0.9 | - | - |
-| Gary Payton | SEA | Point Guard | normal | - | 1883000 | 0.2 | 9.5 | 3.1/1.8/1.2 | - | - |
 | Blair Rasmussen | DEN | Center | normal | 29 | 1558000 | 19 | 13.3 | 9.6/5.7/0.9 | - | - |
 | Brad Lohaus | MIL | Power Forward | normal | 27 | 1377000 | 15.2 | 12.3 | 5.9/2.8/1.1 | - | - |
 | Manute Bol | PHI | Center | normal | 29 | 1350000 | 12.3 | 9.4 | 2.6/4.2/0.3 | - | - |
 | Felton Spencer | MIN | Center | normal | 23 | 1340000 | 20.9 | 10.8 | 5.2/5.4/0.3 | - | - |
-| Glen Rice | MIA | Shooting Guard | normal | - | 1302000 | -0.2 | 3.8 | 2.7/1.5/0.6 | - | - |
-| Charles Smith | LAC | Shooting Guard | normal | 16 | 1050000 | 1.5 | 11.5 | 5.1/1.4/0.9 | - | - |
 | Mark Macon | DEN | Shooting Guard and Point Guard | normal | 22 | 970000 | 0.1 | 8.9 | 6.7/1.9/1.7 | - | - |
 | Rex Chapman | CHA | Shooting Guard and Point Guard | normal | 24 | 940000 | 24.7 | 13.9 | 14.6/2.5/2.7 | scoring load | Offense IQ -> B- |
 | Gary Grant | LAC | Point Guard | normal | 26 | 928000 | 12 | 13.4 | 7.9/2.3/5.5 | creator value | - |
 | Ledell Eackles | WAS | Shooting Guard | normal | 25 | 780000 | 10.8 | 13.8 | 10.8/2.2/1.7 | - | - |
 | Buck Johnson | HOU | Small Forward | normal | 27 | 775000 | 20.8 | 11.9 | 9.1/3.5/1.7 | - | - |
 | Tod Murphy | MIN | Center and Power Forward | normal | 28 | 760000 | 8 | 11.9 | 5.5/4.9/1 | - | - |
-| Dee Brown | BOS | Point Guard | normal | - | 705000 | 0.1 | 7.9 | 2.1/1/1.8 | - | - |
 | Gerald Glass | MIN | Small Forward | normal | 24 | 705000 | 1.8 | 13.3 | 7.7/2.5/1.5 | - | - |
 | John Battle | CLE | Shooting Guard | normal | 29 | 700000 | 17.9 | 13.7 | 8.7/1.3/2.1 | - | - |
-| Tim Hardaway | GSW | Shooting Guard | normal | - | 640000 | 15.1 | 13.5 | 13.1/2.6/1.8 | - | - |
 | Kevin Edwards | MIA | Point Guard and Shooting Guard | normal | 26 | 600000 | 12.5 | 12.7 | 10.9/2.7/2.7 | - | - |
 | Todd Lichti | DEN | Shooting Guard | normal | 24 | 565000 | 5.6 | 12.2 | 7.9/2.1/1.4 | - | - |
 | Kenny Gattison | CHA | Power Forward | normal | 27 | 456000 | 16.9 | 13 | 7.9/4.7/0.9 | - | - |
@@ -168,3 +166,5 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Matt Bullard | HOU | Small Forward and Power Forward | normal | 24 | 275000 | 16.8 | 11.9 | 5.3/2/0.9 | - | - |
 | Randy Brown | SAC | Point Guard | normal | 23 | 210000 | 11 | 10.3 | 4.8/1.8/2.2 | - | - |
 | Larry Stewart | WAS | Small Forward and Power Forward | normal | 23 | 130000 | 9.7 | 13 | 7.4/4/1.3 | - | - |
+| Charles Smith | LAC | Shooting Guard | normal | 16 | 0 | 1.5 | 11.5 | 5.1/1.4/0.9 | - | - |
+| Dee Brown | BOS | Point Guard | normal | - | 0 | 0.1 | 7.9 | 2.1/1/1.8 | - | - |

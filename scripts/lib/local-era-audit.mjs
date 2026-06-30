@@ -47,6 +47,17 @@ export function normalizeName(value) {
     .trim();
 }
 
+function normalizeExactName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.'`]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const PROFILE_NAME_ALIASES = {
   [normalizeName('Nene Hilario')]: normalizeName('Nene'),
   [normalizeName('Ron Artest')]: normalizeName('Metta World Peace'),
@@ -161,6 +172,7 @@ function buildProfileIndex(playersCsv) {
   const winSharesIndex = column(headers, 'career_ws', 'winshares', 'win_shares');
   const perIndex = column(headers, 'career_per', 'per');
   const byName = {};
+  const byExactName = {};
   const byId = {};
   const idToName = {};
   for (const row of rows.slice(1)) {
@@ -178,11 +190,12 @@ function buildProfileIndex(playersCsv) {
       career_WS: numberFrom(row[winSharesIndex]),
       career_PER: numberFrom(row[perIndex]),
     };
-    byName[normalizeName(name)] = profile;
+    byExactName[normalizeExactName(name)] = profile;
+    byName[normalizeName(name)] = byName[normalizeName(name)] || profile;
     if (profile.player_id) byId[profile.player_id] = profile;
     if (profile.player_id) idToName[profile.player_id] = name;
   }
-  return { byName, byId, idToName };
+  return { byName, byExactName, byId, idToName };
 }
 
 function buildSalaryIndex(salariesCsv, idToName) {
@@ -192,30 +205,43 @@ function buildSalaryIndex(salariesCsv, idToName) {
   const salaryIndex = column(headers, 'salary');
   const seasonIndex = column(headers, 'season_start', 'seasonstart', 'year', 'season');
   const byNameYear = {};
+  const byExactNameYear = {};
+  const byIdYear = {};
   for (const row of rows.slice(1)) {
-    const name = idToName[row[playerIdIndex]];
+    const playerId = row[playerIdIndex];
+    const name = idToName[playerId];
     if (!name) continue;
     const season = parseInt(String(row[seasonIndex]).slice(0, 4), 10);
     const salary = Math.round(numberFrom(row[salaryIndex]));
     if (!season || salary <= 0) continue;
     const key = normalizeName(name);
+    const exactKey = normalizeExactName(name);
     byNameYear[key] = byNameYear[key] || {};
+    byExactNameYear[exactKey] = byExactNameYear[exactKey] || {};
+    byIdYear[playerId] = byIdYear[playerId] || {};
     byNameYear[key][String(season)] = salary;
+    byExactNameYear[exactKey][String(season)] = salary;
+    byIdYear[playerId][String(season)] = salary;
   }
-  return byNameYear;
+  return { byNameYear, byExactNameYear, byIdYear };
 }
 
 export function buildLocalEraAuditPlayers({ era, seasonStartYear, rosters, playersCsv, salariesCsv }) {
-  const { byName, byId, idToName } = buildProfileIndex(playersCsv);
-  const salaries = buildSalaryIndex(salariesCsv, idToName);
+  const { byName, byExactName, byId, idToName } = buildProfileIndex(playersCsv);
+  const { byNameYear, byExactNameYear, byIdYear } = buildSalaryIndex(salariesCsv, idToName);
   const teams = rosters[era] || [];
   const players = [];
   for (const team of teams) {
     for (const player of team.players || []) {
       const aliasProfileId = profileIdForPlayer(player.full_name, player.team || team.abbreviation);
       const key = profileKeyForName(player.full_name);
-      const profile = (aliasProfileId && byId[aliasProfileId]) || byName[key] || {};
-      const salaryByYear = salaries[key] || {};
+      const exactKey = normalizeExactName(player.full_name);
+      const profile = (aliasProfileId && byId[aliasProfileId]) || byExactName[exactKey] || byName[key] || {};
+      const salaryByYear =
+        (profile.player_id && byIdYear[profile.player_id])
+        || byExactNameYear[exactKey]
+        || byNameYear[key]
+        || {};
       const matchedProfile = Boolean(profile.player_id);
       players.push({
         ...player,

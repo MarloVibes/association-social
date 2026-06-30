@@ -14,7 +14,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Dikembe Mutombo | NYK | Center | high | 36 | 16105264 | 117 | 17.2 | 9.8/10.3/1 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Allan Houston | NYK | Shooting Guard | high | 31 | 14343750 | 55.3 | 14.9 | 17.3/2.9/2.4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Chris Webber | SAC | Center and Power Forward | high | 29 | 14343750 | 84.7 | 20.9 | 20.7/9.8/4.2 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Gary Payton | LAL | Point Guard | high | - | 12636117 | 0.2 | 9.5 | 3.1/1.8/1.2 | core salary | - |
+| Gary Payton | LAL | Point Guard | high | 34 | 12636117 | 145.5 | 18.9 | 16.3/3.9/6.7 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Antonio McDyess | NYK | Center and Power Forward | high | 28 | 12600000 | 69.8 | 17.2 | 12/7.5/1.3 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Allen Iverson | PHI | Shooting Guard and Point Guard | high | 27 | 12375000 | 99 | 20.9 | 26.7/3.7/6.2 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Anfernee Hardaway | NYK | Small Forward and Point Guard and Shooting Guard | high | 31 | 12375000 | 61.9 | 17.4 | 15.2/4.5/5 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
@@ -42,7 +42,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Dirk Nowitzki | DAL | Power Forward and Center | high | 24 | 10067750 | 206.3 | 22.4 | 20.7/7.5/2.4 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Paul Pierce | BOS | Shooting Guard and Small Forward | high | 25 | 10067750 | 150 | 19.7 | 19.7/5.6/3.5 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Vince Carter | NJN | Small Forward and Shooting Guard | high | 25 | 10067750 | 125.5 | 18.8 | 17.2/4.4/3.2 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Glenn Robinson | ATL | Shooting Guard and Small Forward | high | - | 9860000 | 4.7 | 10.6 | 4.4/2.1/0.6 | core salary | - |
+| Glenn Robinson | ATL | Small Forward | high | 29 | 9860000 | 39.8 | 17.5 | 20.7/6.1/2.7 | core salary, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Derrick Coleman | PHI | Power Forward and Center | high | 35 | 9380000 | 64.3 | 18 | 16.5/9.3/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Theo Ratliff | ATL | Center and Power Forward | high | 29 | 9375000 | 47.9 | 14.3 | 7.2/5.7/0.6 | core salary, above-average PER | Core-role review |
 | Jason Kidd | NJN | Shooting Guard and Point Guard | high | 29 | 9265000 | 138.6 | 17.9 | 12.6/6.3/8.7 | core salary, career win shares, above-average PER, rebounding value, creator value | Core-role review |

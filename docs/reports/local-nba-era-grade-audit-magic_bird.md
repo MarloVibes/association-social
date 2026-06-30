@@ -62,6 +62,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Kevin McHale | BOS | Power Forward | high | 26 | 0 | 113 | 20 | 17.9/7.3/1.7 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
 | Kiki Vandeweghe | DEN | Small Forward and Power Forward | high | 25 | 0 | 75.6 | 18.4 | 19.7/3.4/2.1 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Larry Bird | BOS | Power Forward and Small Forward | high | 27 | 0 | 145.8 | 23.5 | 24.3/10/6.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Larry Nance | PHX | Power Forward | high | 24 | 0 | 109.6 | 19.9 | 17.1/8/2.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Magic Johnson | LAL | Shooting Guard and Power Forward and Point Guard | high | 24 | 0 | 155.8 | 24.1 | 19.5/7.2/11.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Mark Aguirre | DAL | Small Forward | high | 24 | 0 | 67.8 | 19 | 20/5/3.1 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Marques Johnson | MIL | Small Forward and Shooting Guard | high | 27 | 0 | 79.8 | 20.1 | 20.1/7/3.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
@@ -112,7 +113,6 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Junior Bridgeman | MIL | Shooting Guard and Small Forward | medium | 30 | 0 | 45 | 15.6 | 13.6/3.5/2.4 | above-average PER | - |
 | Kent Benson | DET | Center | medium | 29 | 0 | 33.6 | 14.2 | 9.1/5.7/1.8 | above-average PER | - |
 | Kyle Macy | PHX | Point Guard | medium | 26 | 0 | 36 | 14 | 9.5/2.2/4 | above-average PER | - |
-| Larry Nance | PHX | Center and Power Forward | medium | - | 0 | 16.4 | 17.1 | 7.7/6.5/1.7 | above-average PER, rebounding value | - |
 | Larry Smith | GSW | Power Forward | medium | 25 | 0 | 46 | 12.6 | 6.7/9.2/1.1 | rebounding value | - |
 | LaSalle Thompson | SAC | Center | medium | 22 | 0 | 35 | 13.6 | 7.9/6.8/1.2 | rebounding value | - |
 | Lester Conner | GSW | Shooting Guard and Point Guard | medium | 24 | 0 | 28.6 | 14.1 | 6.3/2.7/3.9 | above-average PER | - |

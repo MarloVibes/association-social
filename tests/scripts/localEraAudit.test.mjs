@@ -126,6 +126,50 @@ describe('local NBA era audit data builder', () => {
     ]);
   });
 
+  it('does not let suffix-stripped duplicate names overwrite the intended local profile', () => {
+    const rosterSource = `
+      const ERA_KOBE = {
+        era: 'kobe',
+        season: '2002-03',
+        teams: [
+          { id: 'lal_2003', abbreviation: 'LAL', full_name: 'Los Angeles Lakers', city: 'Los Angeles', name: 'Lakers',
+            players: [
+              p('k_lal_4', 'Gary', 'Payton', 'PG', '20', 'LAL'),
+            ]
+          },
+        ]
+      };
+    `;
+    const playersCsv = [
+      'index,_id,birthDate,career_AST,career_PER,career_PTS,career_TRB,career_WS,name,position',
+      '1,paytoga01,"July 23, 1968",6.7,18.9,16.3,3.9,145.5,Gary Payton,Point Guard',
+      '2,paytoga02,"December 1, 1992",1.2,9.5,3.1,1.8,0.2,Gary Payton II,Point Guard',
+    ].join('\n');
+    const salariesCsv = [
+      'player_id,salary,season,season_end,team',
+      'paytoga01,12636117,2002-03,2003,LAL',
+      'paytoga02,2000000,2002-03,2003,GSW',
+    ].join('\n');
+
+    const players = buildLocalEraAuditPlayers({
+      era: 'kobe',
+      seasonStartYear: 2002,
+      rosters: parseEraRosters(rosterSource),
+      playersCsv,
+      salariesCsv,
+    });
+
+    expect(players).toEqual([
+      expect.objectContaining({
+        full_name: 'Gary Payton',
+        matchedProfileId: 'paytoga01',
+        career_WS: 145.5,
+        salary: 12636117,
+        eraAge: 34,
+      }),
+    ]);
+  });
+
   it('matches Magic/Bird era profile aliases used by local player history', () => {
     const rosterSource = `
       const ERA_MAGIC_BIRD = {
