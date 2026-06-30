@@ -500,6 +500,50 @@ describe('local NBA era audit data builder', () => {
     expect(report).toContain('Missing Match: CLE');
   });
 
+  it('uses stronger suggested grade floors for proven primary creators in local reports', () => {
+    const report = buildLocalEraAuditReport('lebron', [
+      {
+        full_name: 'LeBron James',
+        team: 'MIA',
+        position: 'SF/PF',
+        salary: 14500000,
+        career_WS: 236,
+        career_PER: 27,
+        ppg: 26.7,
+        rpg: 7.5,
+        apg: 7,
+        mpg: 38,
+        spg: 1.6,
+      },
+    ]);
+
+    expect(report).toContain('Offense IQ -> A');
+    expect(report).toContain('Mid Range -> A-');
+    expect(report).not.toContain('Offense IQ -> B-');
+    expect(report).not.toContain('Mid Range -> B-');
+  });
+
+  it('uses elite offense IQ review floors for pass-first creator guards in local reports', () => {
+    const report = buildLocalEraAuditReport('lebron', [
+      {
+        full_name: 'Chris Paul',
+        team: 'NOH',
+        position: 'PG',
+        salary: 14940153,
+        career_WS: 171.5,
+        career_PER: 25.3,
+        ppg: 18.5,
+        rpg: 4.5,
+        apg: 9.7,
+        mpg: 36,
+        spg: 2.4,
+      },
+    ]);
+
+    expect(report).toContain('Offense IQ -> A');
+    expect(report).not.toContain('Offense IQ -> B+');
+  });
+
   it('does not upgrade career three-point grade from percentage alone', () => {
     const report = buildLocalEraAuditReport('lebron', [
       {

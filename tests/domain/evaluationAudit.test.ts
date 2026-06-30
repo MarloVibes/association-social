@@ -69,6 +69,51 @@ describe('NBA evaluation audit', () => {
     expect(JSON.stringify(result.suggestedGradeUpdates)).not.toMatch(/\b8\d\b|\b9\d\b/);
   });
 
+  it('raises audit suggestions for proven primary creators instead of stopping at B minus', () => {
+    const result = auditEraPlayer({
+      full_name: 'LeBron James',
+      team: 'MIA',
+      position: 'SF/PF',
+      minutes: 38,
+      ppg: 26.7,
+      rpg: 7.5,
+      apg: 7,
+      spg: 1.6,
+      salary: 14500000,
+      career_WS: 236,
+      career_PER: 27,
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'offenseIq', suggestedGrade: 'A' }),
+      expect.objectContaining({ key: 'midRange', suggestedGrade: 'A-' }),
+    ]));
+    expect(result.suggestedGradeUpdates).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'offenseIq', suggestedGrade: 'B-' }),
+      expect.objectContaining({ key: 'midRange', suggestedGrade: 'B-' }),
+    ]));
+  });
+
+  it('recognizes elite table-setting guards even when scoring volume is not superstar-wing level', () => {
+    const result = auditEraPlayer({
+      full_name: 'Chris Paul',
+      team: 'NOH',
+      position: 'PG',
+      minutes: 36,
+      ppg: 18.5,
+      rpg: 4.5,
+      apg: 9.7,
+      spg: 2.4,
+      salary: 14940153,
+      career_WS: 171.5,
+      career_PER: 25.3,
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'offenseIq', suggestedGrade: 'A' }),
+    ]));
+  });
+
   it('produces a markdown report without Firestore writes', () => {
     const report = buildEraAuditReport('rose', [
       {

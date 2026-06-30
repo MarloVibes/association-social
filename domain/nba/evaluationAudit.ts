@@ -138,10 +138,17 @@ function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
   const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
   const apg = stat(player, ['apg', 'assists', 'ast']);
   const spg = stat(player, ['spg', 'steals', 'stl']);
+  const per = stat(player, ['career_PER', 'careerPer', 'per']);
+  const winShares = stat(player, ['career_WS', 'careerWinShares', 'winShares']);
   const suggestions: SuggestedGradeUpdate[] = [];
   const add = (key: string, suggestedGrade: NbaGrade, reason: string) => {
     const current = currentGrade(player, key);
     if (gradeRank(current) >= gradeRank(suggestedGrade)) return;
+    const existingIndex = suggestions.findIndex(suggestion => suggestion.key === key);
+    if (existingIndex >= 0) {
+      if (gradeRank(suggestions[existingIndex].suggestedGrade) >= gradeRank(suggestedGrade)) return;
+      suggestions.splice(existingIndex, 1);
+    }
     suggestions.push({
       key,
       label: GRADE_LABELS[key] || key,
@@ -158,8 +165,15 @@ function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
   }
   if (minutes >= 36) add('stamina', 'A-', 'near-40-minute role');
   else if (minutes >= 32) add('stamina', 'B+', 'starter workload');
-  if (ppg >= 14 && apg >= 2) add('offenseIq', 'B-', 'secondary offensive engine');
-  if (ppg >= 15) add('midRange', 'B-', 'half-court scoring load');
+  if (apg >= 9 && per >= 22 && winShares >= 70) add('offenseIq', 'A', 'elite table-setting production proof');
+  else if (apg >= 8 && per >= 19 && winShares >= 40) add('offenseIq', 'A-', 'lead table-setting production proof');
+  else if (ppg >= 25 && apg >= 6 && per >= 22 && winShares >= 70) add('offenseIq', 'A', 'primary creator with elite production proof');
+  else if (ppg >= 22 && apg >= 5 && per >= 19) add('offenseIq', 'A-', 'primary creator production');
+  else if (ppg >= 18 && apg >= 4) add('offenseIq', 'B+', 'high-usage creator');
+  else if (ppg >= 14 && apg >= 2) add('offenseIq', 'B-', 'secondary offensive engine');
+  if (ppg >= 25 && per >= 22) add('midRange', 'A-', 'elite half-court scoring load');
+  else if (ppg >= 21 && per >= 18) add('midRange', 'B+', 'primary scoring load');
+  else if (ppg >= 15) add('midRange', 'B-', 'half-court scoring load');
   if (rpg >= 5 && isWing(player)) add('rebounding', 'C+', 'plus rebounding wing');
   if (spg >= 1) add('steals', 'B-', 'active defensive event rate');
 

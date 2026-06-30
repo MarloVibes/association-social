@@ -285,7 +285,7 @@ function evidenceFor(player) {
 }
 
 function suggestedGradeReviewFor(player) {
-  const suggestions = [];
+  const suggestions = new Map();
   const salary = numberFrom(player.salary);
   const winShares = numberFrom(player.career_WS);
   const per = numberFrom(player.career_PER);
@@ -294,26 +294,42 @@ function suggestedGradeReviewFor(player) {
   const apg = numberFrom(player.apg);
   const spg = numberFrom(player.spg);
   const mpg = numberFrom(player.mpg || player.minutes || player.minutesPerGame);
+  const gradeOrder = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
+  const add = (label, grade) => {
+    const current = suggestions.get(label);
+    if (current && gradeOrder.indexOf(current) >= gradeOrder.indexOf(grade)) return;
+    suggestions.set(label, grade);
+  };
 
   if (isWing(player) && mpg >= 32 && ppg >= 11 && rpg >= 4 && spg >= 0.7) {
-    suggestions.push('Perimeter D -> B+');
-    suggestions.push('Defense IQ -> B');
-    suggestions.push('Help Defense -> B-');
+    add('Perimeter D', 'B+');
+    add('Defense IQ', 'B');
+    add('Help Defense', 'B-');
   } else if (isWing(player) && salary >= 8_000_000 && winShares >= 40 && ppg >= 12 && rpg >= 4) {
-    suggestions.push('Perimeter D -> B');
-    suggestions.push('Defense IQ -> B-');
+    add('Perimeter D', 'B');
+    add('Defense IQ', 'B-');
   }
 
-  if (mpg >= 36) suggestions.push('Stamina -> A-');
-  else if (mpg >= 32) suggestions.push('Stamina -> B+');
+  if (mpg >= 36) add('Stamina', 'A-');
+  else if (mpg >= 32) add('Stamina', 'B+');
 
-  if (ppg >= 14 && apg >= 2) suggestions.push('Offense IQ -> B-');
-  if (ppg >= 15) suggestions.push('Mid Range -> B-');
-  if (rpg >= 5 && isWing(player)) suggestions.push('Rebounding -> C+');
-  if (spg >= 1) suggestions.push('Steals -> B-');
-  if (salary >= 8_000_000 && winShares >= 40 && per >= 14) suggestions.push('Core-role review');
+  if (apg >= 9 && per >= 22 && winShares >= 70) add('Offense IQ', 'A');
+  else if (apg >= 8 && per >= 19 && winShares >= 40) add('Offense IQ', 'A-');
+  else if (ppg >= 25 && apg >= 6 && per >= 22 && winShares >= 70) add('Offense IQ', 'A');
+  else if (ppg >= 22 && apg >= 5 && per >= 19) add('Offense IQ', 'A-');
+  else if (ppg >= 18 && apg >= 4) add('Offense IQ', 'B+');
+  else if (ppg >= 14 && apg >= 2) add('Offense IQ', 'B-');
+  if (ppg >= 25 && per >= 22) add('Mid Range', 'A-');
+  else if (ppg >= 21 && per >= 18) add('Mid Range', 'B+');
+  else if (ppg >= 15) add('Mid Range', 'B-');
+  if (rpg >= 5 && isWing(player)) add('Rebounding', 'C+');
+  if (spg >= 1) add('Steals', 'B-');
+  const review = salary >= 8_000_000 && winShares >= 40 && per >= 14 ? ['Core-role review'] : [];
 
-  return [...new Set(suggestions)].join('; ') || '-';
+  return [
+    ...[...suggestions.entries()].map(([label, grade]) => `${label} -> ${grade}`),
+    ...review,
+  ].join('; ') || '-';
 }
 
 export function buildLocalEraAuditReport(era, players) {

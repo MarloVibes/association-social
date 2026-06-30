@@ -6,40 +6,40 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 
 | Player | Team | Pos | Priority | Era Age | Salary | Career WS | Career PER | Career P/R/A | Evidence | Suggested Grade Review |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Larry Bird | BOS | Power Forward and Small Forward | high | 35 | 7070000 | 145.8 | 23.5 | 24.3/10/6.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Larry Bird | BOS | Power Forward and Small Forward | high | 35 | 7070000 | 145.8 | 23.5 | 24.3/10/6.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> A-; Mid Range -> B+ |
 | Hot Rod Williams | CLE | Center and Power Forward | high | 29 | 3786000 | 70.5 | 15.6 | 11/6.8/1.8 | career win shares, above-average PER, rebounding value | - |
 | Kevin McHale | BOS | Power Forward | high | 34 | 3500000 | 113 | 20 | 17.9/7.3/1.7 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
 | Reggie Lewis | BOS | Small Forward and Shooting Guard | high | 26 | 3340000 | 38.9 | 17.1 | 17.6/4.3/2.6 | above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
-| Michael Jordan | CHI | Small Forward and Shooting Guard | high | 28 | 3250000 | 214 | 27.9 | 30.1/6.2/5.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Michael Jordan | CHI | Small Forward and Shooting Guard | high | 28 | 3250000 | 214 | 27.9 | 30.1/6.2/5.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> A-; Mid Range -> A- |
 | Reggie Miller | IND | Shooting Guard | high | 26 | 3211000 | 174.4 | 18.4 | 18.2/3/3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
-| Charles Barkley | PHX | Small Forward and Power Forward | high | 28 | 3200000 | 177.2 | 24.6 | 22.1/11.7/3.9 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| Hakeem Olajuwon | HOU | Center | high | 28 | 3170000 | 162.8 | 23.6 | 21.8/11.1/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| Dominique Wilkins | ATL | Small Forward | high | 31 | 3100000 | 117.5 | 21.6 | 24.8/6.7/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
+| Charles Barkley | PHX | Small Forward and Power Forward | high | 28 | 3200000 | 177.2 | 24.6 | 22.1/11.7/3.9 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
+| Hakeem Olajuwon | HOU | Center | high | 28 | 3170000 | 162.8 | 23.6 | 21.8/11.1/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
+| Dominique Wilkins | ATL | Small Forward | high | 31 | 3100000 | 117.5 | 21.6 | 24.8/6.7/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
 | Robert Parish | BOS | Center | high | 38 | 3000000 | 147 | 19.2 | 14.5/9.1/1.4 | career win shares, above-average PER, scoring load, rebounding value | - |
-| Isiah Thomas | DET | Point Guard | high | 30 | 2960000 | 80.7 | 18.1 | 19.2/3.6/9.3 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Isiah Thomas | DET | Point Guard | high | 30 | 2960000 | 80.7 | 18.1 | 19.2/3.6/9.3 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B+; Mid Range -> B- |
 | Benoit Benjamin | SEA | Center | high | 27 | 2875000 | 32.7 | 14.8 | 11.4/7.5/1.3 | above-average PER, rebounding value | - |
 | Chris Mullin | GSW | Small Forward and Shooting Guard | high | 28 | 2844000 | 93.1 | 18.8 | 18.2/4.1/3.5 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Scottie Pippen | CHI | Small Forward | high | 26 | 2770000 | 125.1 | 18.6 | 16.1/6.4/5.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
-| Karl Malone | UTA | Power Forward | high | 28 | 2556000 | 234.6 | 23.9 | 25/10.1/3.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| Bernard King | WAS | Small Forward | high | 35 | 2525000 | 75.4 | 19.2 | 22.5/5.8/3.3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
+| Karl Malone | UTA | Power Forward | high | 28 | 2556000 | 234.6 | 23.9 | 25/10.1/3.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> A- |
+| Bernard King | WAS | Small Forward | high | 35 | 2525000 | 75.4 | 19.2 | 22.5/5.8/3.3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B+ |
 | Sam Perkins | LAL | Power Forward and Small Forward and Center | high | 30 | 2507000 | 105.4 | 15.5 | 11.9/6/1.5 | career win shares, above-average PER, rebounding value | - |
-| Magic Johnson | LAL | Shooting Guard and Power Forward and Point Guard | high | 32 | 2500000 | 155.8 | 24.1 | 19.5/7.2/11.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Magic Johnson | LAL | Shooting Guard and Power Forward and Point Guard | high | 32 | 2500000 | 155.8 | 24.1 | 19.5/7.2/11.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> A; Mid Range -> B- |
 | Wayman Tisdale | SAC | Power Forward | high | 27 | 2333000 | 45.7 | 15.7 | 15.3/6.1/1.3 | above-average PER, scoring load, rebounding value | Mid Range -> B- |
 | Danny Manning | LAC | Power Forward | high | 25 | 2300000 | 55.1 | 16.9 | 14/5.2/2.3 | career win shares, above-average PER, scoring load | Offense IQ -> B- |
 | Derrick Coleman | NJN | Power Forward and Center | high | 24 | 2300000 | 64.3 | 18 | 16.5/9.3/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Tom Chambers | PHX | Power Forward | high | 32 | 2275000 | 79 | 16.5 | 18.1/6.1/2.1 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Steve Smith | MIA | Shooting Guard | high | 22 | 2250000 | 83.7 | 16.1 | 14.3/3.2/3.1 | career win shares, above-average PER, scoring load | Offense IQ -> B- |
 | Brad Daugherty | CLE | Center | high | 26 | 2245000 | 65.2 | 18.9 | 19/9.5/3.7 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| David Robinson | SAS | Center | high | 26 | 2240000 | 178.7 | 26.2 | 21.1/10.6/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
+| David Robinson | SAS | Center | high | 26 | 2240000 | 178.7 | 26.2 | 21.1/10.6/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
 | Chuck Person | IND | Small Forward and Power Forward | high | 27 | 2156000 | 38.9 | 13.7 | 14.7/5.1/2.8 | scoring load | Offense IQ -> B- |
-| John Stockton | UTA | Point Guard | high | 29 | 2100000 | 207.7 | 21.8 | 13.1/2.7/10.5 | career win shares, above-average PER, creator value | - |
+| John Stockton | UTA | Point Guard | high | 29 | 2100000 | 207.7 | 21.8 | 13.1/2.7/10.5 | career win shares, above-average PER, creator value | Offense IQ -> A- |
 | Chris Jackson | DEN | Point Guard | high | 22 | 2008000 | 25.2 | 15.4 | 14.6/1.9/3.5 | above-average PER, scoring load | Offense IQ -> B- |
 | Dikembe Mutombo | DEN | Center | high | 25 | 2005000 | 117 | 17.2 | 9.8/10.3/1 | career win shares, above-average PER, rebounding value | - |
 | Rony Seikaly | MIA | Center | high | 26 | 2002000 | 37.3 | 15.7 | 14.7/9.5/1.3 | above-average PER, scoring load, rebounding value | - |
 | Bill Cartwright | CHI | Center | high | 34 | 2000000 | 72.8 | 15.2 | 13.2/6.3/1.4 | career win shares, above-average PER, rebounding value | - |
 | Sam Bowie | NJN | Center | high | 30 | 2000000 | 26.9 | 14.6 | 10.9/7.5/2.1 | above-average PER, rebounding value | - |
 | Larry Johnson | CHA | Small Forward and Power Forward | high | 22 | 1955000 | 69.7 | 16.3 | 16.2/7.5/3.3 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| Kevin Johnson | PHX | Point Guard | high | 25 | 1950000 | 92.8 | 20.7 | 17.9/3.3/9.1 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Kevin Johnson | PHX | Point Guard | high | 25 | 1950000 | 92.8 | 20.7 | 17.9/3.3/9.1 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> A-; Mid Range -> B- |
 | Scott Skiles | ORL | Point Guard | high | 27 | 1925000 | 30.4 | 14.4 | 11.1/2.5/6.5 | above-average PER, creator value | - |
 | Rolando Blackman | DAL | Shooting Guard | high | 32 | 1920000 | 75.6 | 16.7 | 18/3.3/3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Gary Payton | SEA | Point Guard | high | 23 | 1883000 | 145.5 | 18.9 | 16.3/3.9/6.7 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
@@ -63,7 +63,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Mark Price | CLE | Point Guard | high | 27 | 1520000 | 71.1 | 19.6 | 15.2/2.6/6.7 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Billy Owens | GSW | Small Forward and Power Forward and Shooting Guard | high | 22 | 1509000 | 28.6 | 14.4 | 11.7/6.7/2.8 | above-average PER, rebounding value | - |
 | Terry Catledge | ORL | Power Forward | high | 28 | 1386000 | 20.9 | 14.1 | 12.7/6.4/0.9 | above-average PER, rebounding value | - |
-| Clyde Drexler | POR | Shooting Guard | high | 29 | 1378000 | 135.6 | 21.1 | 20.4/6.1/5.6 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Clyde Drexler | POR | Shooting Guard | high | 29 | 1378000 | 135.6 | 21.1 | 20.4/6.1/5.6 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B+; Mid Range -> B- |
 | Drazen Petrovic | NJN | Shooting Guard | high | 27 | 1375000 | 21.5 | 16.4 | 15.4/2.3/2.4 | above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Bill Laimbeer | DET | Center | high | 34 | 1369000 | 105.6 | 16.1 | 12.9/9.7/2 | career win shares, above-average PER, rebounding value | - |
 | Larry Nance | CLE | Power Forward | high | 32 | 1363000 | 109.6 | 19.9 | 17.1/8/2.6 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
@@ -110,7 +110,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Alonzo Mourning | CHA | Power Forward and Center | high | 21 | 0 | 89.7 | 21.2 | 17.1/8.5/1.1 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
 | Clarence Weatherspoon | PHI | Small Forward and Power Forward | high | 21 | 0 | 58.4 | 15.6 | 11.5/7.5/1.5 | career win shares, above-average PER, rebounding value | - |
 | Roy Tarpley | DAL | Power Forward and Center | high | 27 | 0 | 19.8 | 18.4 | 12.6/10/1 | above-average PER, rebounding value | - |
-| Shaquille O'Neal | ORL | Center | high | 19 | 0 | 181.7 | 26.4 | 23.7/10.9/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
+| Shaquille O'Neal | ORL | Center | high | 19 | 0 | 181.7 | 26.4 | 23.7/10.9/2.5 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
 | Pervis Ellison | WAS | Power Forward and Center | medium | 24 | 2300000 | 21.8 | 15.2 | 9.5/6.7/1.5 | above-average PER, rebounding value | - |
 | Jon Koncak | ATL | Center | medium | 28 | 2000000 | 29.2 | 9.8 | 4.5/4.9/1 | - | - |
 | Dennis Scott | ORL | Small Forward and Shooting Guard | medium | 23 | 1980000 | 33.4 | 13.4 | 12.9/2.8/2.1 | - | - |

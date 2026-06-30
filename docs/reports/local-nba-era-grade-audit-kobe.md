@@ -7,37 +7,37 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Player | Team | Pos | Priority | Era Age | Salary | Career WS | Career PER | Career P/R/A | Evidence | Suggested Grade Review |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Kevin Garnett | MIN | Small Forward and Center and Power Forward | high | 26 | 25200000 | 191.4 | 22.7 | 17.8/10/3.7 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Shaquille O'Neal | LAL | Center | high | 30 | 23571429 | 181.7 | 26.4 | 23.7/10.9/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Shaquille O'Neal | LAL | Center | high | 30 | 23571429 | 181.7 | 26.4 | 23.7/10.9/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+; Core-role review |
 | Scottie Pippen | POR | Small Forward | high | 37 | 19727524 | 125.1 | 18.6 | 16.1/6.4/5.2 | core salary, career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Karl Malone | LAL | Power Forward | high | 39 | 19250000 | 234.6 | 23.9 | 25/10.1/3.6 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Karl Malone | LAL | Power Forward | high | 39 | 19250000 | 234.6 | 23.9 | 25/10.1/3.6 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> A-; Core-role review |
 | Rasheed Wallace | DET | Center and Power Forward | high | 28 | 16200000 | 105.1 | 17 | 14.4/6.7/1.8 | core salary, career win shares, above-average PER, scoring load, rebounding value | Core-role review |
 | Dikembe Mutombo | NYK | Center | high | 36 | 16105264 | 117 | 17.2 | 9.8/10.3/1 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Allan Houston | NYK | Shooting Guard | high | 31 | 14343750 | 55.3 | 14.9 | 17.3/2.9/2.4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Chris Webber | SAC | Center and Power Forward | high | 29 | 14343750 | 84.7 | 20.9 | 20.7/9.8/4.2 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Chris Webber | SAC | Center and Power Forward | high | 29 | 14343750 | 84.7 | 20.9 | 20.7/9.8/4.2 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B+; Mid Range -> B-; Core-role review |
 | Gary Payton | LAL | Point Guard | high | 34 | 12636117 | 145.5 | 18.9 | 16.3/3.9/6.7 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Antonio McDyess | NYK | Center and Power Forward | high | 28 | 12600000 | 69.8 | 17.2 | 12/7.5/1.3 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
-| Allen Iverson | PHI | Shooting Guard and Point Guard | high | 27 | 12375000 | 99 | 20.9 | 26.7/3.7/6.2 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Allen Iverson | PHI | Shooting Guard and Point Guard | high | 27 | 12375000 | 99 | 20.9 | 26.7/3.7/6.2 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> A-; Mid Range -> B+; Core-role review |
 | Anfernee Hardaway | NYK | Small Forward and Point Guard and Shooting Guard | high | 31 | 12375000 | 61.9 | 17.4 | 15.2/4.5/5 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Antoine Walker | BOS | Power Forward | high | 26 | 12375000 | 38.1 | 16 | 17.5/7.7/3.5 | core salary, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Damon Stoudamire | POR | Point Guard | high | 29 | 12375000 | 55.4 | 15.4 | 13.4/3.5/6.1 | core salary, career win shares, above-average PER, creator value | Core-role review |
-| Kobe Bryant | LAL | Shooting Guard and Small Forward | high | 24 | 12375000 | 172.7 | 22.9 | 25/5.2/4.7 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Latrell Sprewell | MIN | Small Forward and Shooting Guard | high | 32 | 12375000 | 56.3 | 15.1 | 18.3/4.1/4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Kobe Bryant | LAL | Shooting Guard and Small Forward | high | 24 | 12375000 | 172.7 | 22.9 | 25/5.2/4.7 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B+; Mid Range -> A-; Core-role review |
+| Latrell Sprewell | MIN | Small Forward and Shooting Guard | high | 32 | 12375000 | 56.3 | 15.1 | 18.3/4.1/4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B+; Mid Range -> B-; Core-role review |
 | Ray Allen | SEA | Shooting Guard | high | 27 | 12375000 | 145.1 | 18.6 | 18.9/4.1/3.4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Shareef Abdur-Rahim | ATL | Center and Small Forward and Power Forward | high | 26 | 12375000 | 71.2 | 19 | 18.1/7.5/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Stephon Marbury | NYK | Point Guard | high | 25 | 12375000 | 77.5 | 18.7 | 19.3/3/7.6 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Stephon Marbury | NYK | Point Guard | high | 25 | 12375000 | 77.5 | 18.7 | 19.3/3/7.6 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B+; Mid Range -> B-; Core-role review |
 | Zydrunas Ilgauskas | CLE | Center | high | 27 | 12375000 | 66.3 | 18.5 | 13/7.3/1.1 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Grant Hill | ORL | Shooting Guard and Small Forward | high | 30 | 12072500 | 99.9 | 19 | 16.7/6/4.1 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Jalen Rose | CHI | Shooting Guard and Small Forward and Point Guard | high | 29 | 12072500 | 47.2 | 15.3 | 14.3/3.5/3.8 | core salary, above-average PER, scoring load | Offense IQ -> B-; Core-role review |
 | Keith Van Horn | PHI | Power Forward and Small Forward | high | 27 | 12072500 | 41.7 | 16.8 | 16/6.8/1.6 | core salary, above-average PER, scoring load, rebounding value | Mid Range -> B-; Core-role review |
 | Tim Duncan | SAS | Center and Power Forward | high | 26 | 12072500 | 206.4 | 24.2 | 19/10.8/3 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
-| Tracy McGrady | ORL | Shooting Guard and Small Forward | high | 23 | 12072500 | 97.3 | 22.1 | 19.6/5.6/4.4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| Tracy McGrady | ORL | Shooting Guard and Small Forward | high | 23 | 12072500 | 97.3 | 22.1 | 19.6/5.6/4.4 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B+; Mid Range -> B-; Core-role review |
 | Reggie Miller | IND | Shooting Guard | high | 37 | 12046473 | 174.4 | 18.4 | 18.2/3/3 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Antonio Davis | TOR | Center and Power Forward | high | 34 | 12000000 | 59.6 | 14.1 | 10/7.5/1.1 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Michael Finley | DAL | Small Forward and Shooting Guard | high | 29 | 11953125 | 85.2 | 16 | 15.7/4.4/2.9 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Vlade Divac | SAC | Center | high | 34 | 11248076 | 96.4 | 17.7 | 11.8/8.2/3.1 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Nick Van Exel | GSW | Shooting Guard and Point Guard | high | 31 | 11061234 | 55.9 | 15.8 | 14.4/2.9/6.6 | core salary, career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Core-role review |
 | Tim Thomas | MIL | Power Forward and Small Forward | high | 25 | 10750000 | 35.2 | 14 | 11.5/4.1/1.5 | core salary, above-average PER | - |
-| David Robinson | SAS | Center | high | 37 | 10500000 | 178.7 | 26.2 | 21.1/10.6/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
+| David Robinson | SAS | Center | high | 37 | 10500000 | 178.7 | 26.2 | 21.1/10.6/2.5 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+; Core-role review |
 | Antawn Jamison | GSW | Power Forward and Small Forward | high | 26 | 10067750 | 87.8 | 18.1 | 18.5/7.5/1.6 | core salary, career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B-; Core-role review |
 | Dirk Nowitzki | DAL | Power Forward and Center | high | 24 | 10067750 | 206.3 | 22.4 | 20.7/7.5/2.4 | core salary, career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B-; Core-role review |
 | Paul Pierce | BOS | Shooting Guard and Small Forward | high | 25 | 10067750 | 150 | 19.7 | 19.7/5.6/3.5 | core salary, career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B-; Core-role review |
@@ -52,8 +52,8 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Dale Davis | POR | Power Forward and Center | high | 33 | 8055000 | 86.9 | 15.2 | 8/7.9/0.9 | core salary, career win shares, above-average PER, rebounding value | Core-role review |
 | Elden Campbell | CHA | Power Forward and Center | high | 34 | 8050000 | 62.8 | 15.9 | 10.3/5.9/1.1 | core salary, career win shares, above-average PER | Core-role review |
 | Toni Kukoc | MIL | Power Forward and Small Forward | high | 34 | 8050000 | 59.6 | 17.3 | 11.6/4.2/3.7 | core salary, career win shares, above-average PER | Core-role review |
-| John Stockton | UTA | Point Guard | high | 40 | 7875000 | 207.7 | 21.8 | 13.1/2.7/10.5 | career win shares, above-average PER, creator value | - |
-| Jamal Mashburn | NOK | Small Forward | high | 30 | 7750000 | 43.7 | 15.7 | 19.1/5.4/4 | above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
+| John Stockton | UTA | Point Guard | high | 40 | 7875000 | 207.7 | 21.8 | 13.1/2.7/10.5 | career win shares, above-average PER, creator value | Offense IQ -> A- |
+| Jamal Mashburn | NOK | Small Forward | high | 30 | 7750000 | 43.7 | 15.7 | 19.1/5.4/4 | above-average PER, scoring load | Offense IQ -> B+; Mid Range -> B- |
 | P.J. Brown | NOK | Center and Power Forward | high | 33 | 7044800 | 89.8 | 14.1 | 9.1/7.7/1.5 | career win shares, above-average PER, rebounding value | - |
 | Jermaine O'Neal | IND | Power Forward and Center | high | 24 | 6900000 | 66 | 17.9 | 13.2/7.2/1.4 | career win shares, above-average PER, rebounding value | - |
 | Erick Dampier | GSW | Center | high | 27 | 6858500 | 52.7 | 14.3 | 7.4/7.1/0.8 | career win shares, above-average PER, rebounding value | - |
@@ -61,7 +61,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Jerry Stackhouse | WAS | Shooting Guard and Small Forward | high | 28 | 6375000 | 52.4 | 16.5 | 16.9/3.2/3.3 | career win shares, above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Doug Christie | SAC | Shooting Guard and Small Forward | high | 32 | 6250000 | 55.7 | 14.6 | 11.2/4.1/3.6 | career win shares, above-average PER | - |
 | Rashard Lewis | SEA | Small Forward and Power Forward | high | 23 | 6233766 | 90.9 | 16.8 | 14.9/5.2/1.7 | career win shares, above-average PER, scoring load | - |
-| Steve Nash | PHX | Point Guard | high | 28 | 5750000 | 129.7 | 20 | 14.3/3/8.5 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B- |
+| Steve Nash | PHX | Point Guard | high | 28 | 5750000 | 129.7 | 20 | 14.3/3/8.5 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> A- |
 | Peja Stojakovic | SAC | Small Forward | high | 25 | 5625000 | 82.6 | 17.1 | 17/4.7/1.8 | career win shares, above-average PER, scoring load | Mid Range -> B- |
 | Ben Wallace | DET | Power Forward and Center | high | 28 | 5200000 | 93.5 | 15.5 | 5.7/9.6/1.3 | career win shares, above-average PER, rebounding value | - |
 | Al Harrington | IND | Power Forward and Center and Small Forward | high | 22 | 5060000 | 42.5 | 14.3 | 13.5/5.6/1.7 | above-average PER | - |
@@ -74,7 +74,7 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Chauncey Billups | DET | Point Guard and Shooting Guard | high | 26 | 4546000 | 120.8 | 18.8 | 15.2/2.9/5.4 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Larry Hughes | WAS | Shooting Guard and Point Guard and Small Forward | high | 23 | 4546000 | 32.3 | 14.9 | 14.1/4.2/3.1 | above-average PER, scoring load | Offense IQ -> B- |
 | Ricky Davis | CLE | Small Forward and Shooting Guard | high | 23 | 4546000 | 28 | 14.7 | 13.5/3.5/3.3 | above-average PER | - |
-| Steve Francis | HOU | Shooting Guard and Point Guard | high | 25 | 4383581 | 54.1 | 18.3 | 18.1/5.6/6 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Steve Francis | HOU | Shooting Guard and Point Guard | high | 25 | 4383581 | 54.1 | 18.3 | 18.1/5.6/6 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B+; Mid Range -> B- |
 | Kenyon Martin | NJN | Power Forward and Center | high | 25 | 4067160 | 48 | 15 | 12.3/6.8/1.9 | above-average PER, rebounding value | - |
 | Baron Davis | NOK | Point Guard | high | 23 | 3942922 | 63.1 | 17.8 | 16.1/3.8/7.2 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Yao Ming | HOU | Center | high | 22 | 3858240 | 65.9 | 23 | 19/9.2/1.6 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
@@ -103,22 +103,22 @@ Read-only report built from local seeded rosters, player profiles, and salary hi
 | Richard Jefferson | NJN | Small Forward | high | 22 | 1482840 | 83 | 14.4 | 12.6/4/2 | career win shares, above-average PER | - |
 | Manu Ginobili | SAS | Shooting Guard | high | 25 | 1325000 | 106.4 | 20.2 | 13.3/3.5/3.8 | career win shares, above-average PER | - |
 | Zach Randolph | POR | Power Forward and Center | high | 21 | 1095720 | 81.1 | 19.3 | 16.6/9.1/1.8 | career win shares, above-average PER, scoring load, rebounding value | Mid Range -> B- |
-| Michael Jordan | WAS | Small Forward and Shooting Guard | high | 39 | 1030000 | 214 | 27.9 | 30.1/6.2/5.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Michael Jordan | WAS | Small Forward and Shooting Guard | high | 39 | 1030000 | 214 | 27.9 | 30.1/6.2/5.3 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> A-; Mid Range -> A- |
 | Mehmet Okur | UTA | Power Forward and Center | high | 23 | 1000000 | 54.7 | 17.1 | 13.5/7/1.7 | career win shares, above-average PER, rebounding value | - |
 | Tayshaun Prince | DET | Small Forward | high | 22 | 903360 | 63.1 | 13.7 | 11.1/4.3/2.4 | career win shares | - |
 | Andrei Kirilenko | UTA | Small Forward and Power Forward | high | 21 | 893400 | 75.4 | 18.7 | 11.8/5.5/2.7 | career win shares, above-average PER | - |
 | Tony Parker | SAS | Point Guard | high | 20 | 800400 | 111.3 | 18.2 | 15.5/2.7/5.6 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
 | Stephen Jackson | SAS | Small Forward and Shooting Guard and Power Forward | high | 24 | 699935 | 36.1 | 14.3 | 15.1/3.9/3.1 | above-average PER, scoring load | Offense IQ -> B-; Mid Range -> B- |
 | Samuel Dalembert | PHI | Center | high | 21 | 691100 | 51.3 | 15.4 | 7.7/7.8/0.5 | career win shares, above-average PER, rebounding value | - |
-| Gilbert Arenas | GSW | Point Guard | high | 20 | 512435 | 51.3 | 19.6 | 20.7/3.9/5.3 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Gilbert Arenas | GSW | Point Guard | high | 20 | 512435 | 51.3 | 19.6 | 20.7/3.9/5.3 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B+; Mid Range -> B- |
 | Carlos Boozer | CLE | Center and Power Forward | high | 21 | 349458 | 80.3 | 19.5 | 16.2/9.5/2.2 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
-| Carmelo Anthony | DEN | Small Forward and Power Forward | high | 18 | 0 | 101 | 20.3 | 24/6.5/3 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
+| Carmelo Anthony | DEN | Small Forward and Power Forward | high | 18 | 0 | 101 | 20.3 | 24/6.5/3 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B+ |
 | Chris Bosh | TOR | Power Forward and Center | high | 18 | 0 | 106 | 20.6 | 19.2/8.5/2 | career win shares, above-average PER, scoring load, rebounding value | Offense IQ -> B-; Mid Range -> B- |
 | Chris Kaman | LAC | Center | high | 20 | 0 | 24.6 | 14.9 | 11.2/7.6/1.3 | above-average PER, rebounding value | - |
-| Dwyane Wade | MIA | Point Guard and Shooting Guard | high | 20 | 0 | 120.7 | 23.5 | 22/4.7/5.4 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> B-; Mid Range -> B- |
+| Dwyane Wade | MIA | Point Guard and Shooting Guard | high | 20 | 0 | 120.7 | 23.5 | 22/4.7/5.4 | career win shares, above-average PER, scoring load, creator value | Offense IQ -> A-; Mid Range -> B+ |
 | Josh Howard | DAL | Small Forward | high | 22 | 0 | 38 | 16.7 | 14.3/5.7/1.6 | above-average PER, scoring load | - |
 | Kirk Hinrich | CHI | Point Guard and Shooting Guard | high | 21 | 0 | 52.5 | 12.8 | 10.9/2.9/4.8 | career win shares | - |
-| LeBron James | CLE | Shooting Guard and Small Forward and Power Forward | high | 18 | 0 | 226.6 | 27.6 | 27.2/7.4/7.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> B-; Mid Range -> B- |
+| LeBron James | CLE | Shooting Guard and Small Forward and Power Forward | high | 18 | 0 | 226.6 | 27.6 | 27.2/7.4/7.2 | career win shares, above-average PER, scoring load, rebounding value, creator value | Offense IQ -> A; Mid Range -> A- |
 | Mo Williams | MIL | Point Guard and Shooting Guard | high | 20 | 0 | 40 | 15 | 13.2/2.8/4.9 | above-average PER | - |
 | Udonis Haslem | MIA | Power Forward and Center | high | 22 | 0 | 50.7 | 13 | 7.6/6.7/0.9 | career win shares, rebounding value | - |
 | Maurice Taylor | HOU | Small Forward and Center and Power Forward | medium | 26 | 7150000 | 9.9 | 13.1 | 11/4.6/1.2 | - | - |
