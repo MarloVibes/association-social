@@ -74,7 +74,9 @@ const GRADE_VALUE: Record<string, number> = {
   'C+': 72,
   C: 67,
   'C-': 62,
+  'D+': 57,
   D: 55,
+  'D-': 50,
   F: 45,
 };
 

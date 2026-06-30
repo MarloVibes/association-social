@@ -229,6 +229,34 @@ describe('NBA rotations', () => {
     expect(sorted.map(player => player.player_id)).toEqual(['two-way-star', 'rotation-guard', 'bench-center']);
   });
 
+  it('understands the full D-tier grade ladder when valuing players', () => {
+    const dPlusShooter = rosterPlayerValue({
+      player_id: 'd-plus',
+      full_name: 'D Plus Shooter',
+      skill_grades: {
+        shooting: 'D+',
+        playmaking: 'D+',
+        defense: 'D+',
+        rebounding: 'D+',
+        basketballIq: 'D+',
+      },
+    });
+    const dMinusShooter = rosterPlayerValue({
+      player_id: 'd-minus',
+      full_name: 'D Minus Shooter',
+      skill_grades: {
+        shooting: 'D-',
+        playmaking: 'D-',
+        defense: 'D-',
+        rebounding: 'D-',
+        basketballIq: 'D-',
+      },
+    });
+
+    expect(dPlusShooter).toBeGreaterThan(dMinusShooter);
+    expect(dMinusShooter).toBeGreaterThan(0);
+  });
+
   it('matches roster position filters for full position names and broad groups', () => {
     const pointGuard = { full_name: 'Point Guard', position: 'Point Guard' };
     const comboForward = { full_name: 'Combo Forward', position: 'Small Forward and Power Forward' };

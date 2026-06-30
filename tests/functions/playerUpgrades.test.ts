@@ -103,6 +103,32 @@ describe('player upgrade callable helpers', () => {
     }).player.grades.shooting).toBe('S');
   });
 
+  it('uses canonical skill grades before stale saved upgrade grades', () => {
+    const result = spendTeamUpgradePoint({
+      team: { upgradePoints: 1 },
+      player: {
+        id: 'gobert',
+        full_name: 'Rudy Gobert',
+        playerLabel: 'SUPERSTAR',
+        grades: { shooting: 'A+', rebounding: 'B' },
+        category_skill_grades: {
+          threePoint: { grade: 'F', rating: 28 },
+          midRange: { grade: 'D', rating: 54 },
+          freeThrow: { grade: 'C', rating: 66 },
+          finishing: { grade: 'B+', rating: 85 },
+          rebounding: { grade: 'A+', rating: 96 },
+          interiorDefense: { grade: 'A+', rating: 97 },
+        },
+      },
+      ability: 'rebounding',
+      seasonYear: 2026,
+    });
+
+    expect(result.player.grades.shooting).not.toBe('A+');
+    expect(result.player.grades.shooting).toMatch(/D|F|C-/);
+    expect(result.player.grades.rebounding).toBe('S');
+  });
+
   it('applies season grants once per team and season', () => {
     const teams = [
       { id: 'E5', upgradePoints: 1, upgradePointGrants: {} },

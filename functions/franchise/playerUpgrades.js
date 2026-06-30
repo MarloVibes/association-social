@@ -28,6 +28,80 @@ const GRADE_NUMERIC_FLOOR = {
   'A+': 95,
   S: 99,
 };
+const GRADE_VALUE = {
+  F: 25,
+  'D-': 50,
+  D: 53,
+  'D+': 57,
+  'C-': 60,
+  C: 65,
+  'C+': 70,
+  'B-': 75,
+  B: 80,
+  'B+': 85,
+  'A-': 89,
+  A: 92,
+  'A+': 95,
+  S: 99,
+};
+const UPGRADE_BUCKETS = {
+  shooting: [
+    ['threePoint', 0.36],
+    ['midRange', 0.22],
+    ['freeThrow', 0.12],
+    ['shotIq', 0.12],
+    ['overallOffense', 0.1],
+    ['finishing', 0.08],
+  ],
+  playmaking: [
+    ['playmaking', 0.42],
+    ['passing', 0.24],
+    ['ballHandle', 0.18],
+    ['offenseIq', 0.1],
+    ['basketballIq', 0.06],
+  ],
+  defense: [
+    ['perimeterDefense', 0.32],
+    ['interiorDefense', 0.25],
+    ['defenseIq', 0.18],
+    ['steals', 0.12],
+    ['blocking', 0.08],
+    ['rebounding', 0.05],
+  ],
+  rebounding: [
+    ['rebounding', 0.58],
+    ['interiorDefense', 0.16],
+    ['blocking', 0.12],
+    ['strength', 0.08],
+    ['athleticism', 0.06],
+  ],
+  athleticism: [
+    ['athleticism', 0.5],
+    ['speed', 0.18],
+    ['acceleration', 0.14],
+    ['finishing', 0.1],
+    ['stamina', 0.08],
+  ],
+  basketballIq: [
+    ['basketballIq', 0.42],
+    ['offenseIq', 0.18],
+    ['defenseIq', 0.18],
+    ['shotIq', 0.12],
+    ['playmaking', 0.1],
+  ],
+  consistency: [
+    ['consistency', 0.5],
+    ['stamina', 0.2],
+    ['shotIq', 0.16],
+    ['basketballIq', 0.14],
+  ],
+  chemistry: [
+    ['chemistry', 0.55],
+    ['basketballIq', 0.2],
+    ['playmaking', 0.15],
+    ['defenseIq', 0.1],
+  ],
+};
 
 function normalizedLabel(label) {
   return String(label || '').trim().toUpperCase();
@@ -56,6 +130,58 @@ function gradeFromRating(value) {
   return 'F';
 }
 
+function ratingFromGrade(raw) {
+  const grade = String(raw || '').trim().toUpperCase();
+  return GRADE_VALUE[grade] === undefined ? null : GRADE_VALUE[grade];
+}
+
+function ratingFromEntry(entry) {
+  if (typeof entry === 'number' && Number.isFinite(entry)) return entry;
+  if (typeof entry === 'string') return ratingFromGrade(entry);
+  if (!entry || typeof entry !== 'object') return null;
+  if (typeof entry.rating === 'number' && Number.isFinite(entry.rating)) return entry.rating;
+  return ratingFromGrade(entry.grade || entry.value);
+}
+
+function firstCanonicalRating(player, key) {
+  const sources = [
+    player && player.category_skill_grades,
+    player && player.skill_grades,
+    player && player.attribute_model,
+    player && player.era_adjusted_profiles,
+    player && player.hidden,
+  ].filter(Boolean);
+  for (const source of sources) {
+    const rating = ratingFromEntry(source[key]);
+    if (rating !== null) return rating;
+  }
+  return null;
+}
+
+function weightedBucketGrade(player, bucket) {
+  let total = 0;
+  let weightTotal = 0;
+  for (const [key, weight] of bucket) {
+    const rating = firstCanonicalRating(player, key);
+    if (rating === null) continue;
+    total += rating * weight;
+    weightTotal += weight;
+  }
+  return weightTotal > 0 ? gradeFromRating(total / weightTotal) : null;
+}
+
+function abilityGradesFromCanonicalRatings(player) {
+  if (!player || typeof player !== 'object') return null;
+  const hasCanonical = player.category_skill_grades || player.skill_grades || player.attribute_model || player.era_adjusted_profiles || player.hidden;
+  if (!hasCanonical) return null;
+  const grades = {};
+  for (const [ability, bucket] of Object.entries(UPGRADE_BUCKETS)) {
+    const grade = weightedBucketGrade(player, bucket);
+    if (grade) grades[ability] = grade;
+  }
+  return Object.keys(grades).length > 0 ? grades : null;
+}
+
 function abilityGradesFromStats(player) {
   const ppg = numberFrom(player && player.ppg);
   const apg = numberFrom(player && player.apg);
@@ -75,6 +201,18 @@ function abilityGradesFromStats(player) {
     consistency: gradeFromRating(60 + Math.min(30, gp * 0.3)),
     chemistry: gradeFromRating(65),
   };
+}
+
+function upgradeGradesForPlayer(player) {
+  const canonical = abilityGradesFromCanonicalRatings(player);
+  if (canonical) {
+    return {
+      ...(player && player.grades || {}),
+      ...(player && player.abilityGrades || {}),
+      ...canonical,
+    };
+  }
+  return { ...(player && player.grades || player && player.abilityGrades || abilityGradesFromStats(player)) };
 }
 
 function nextGrade(current, label) {
@@ -137,7 +275,7 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
   if (!player) throw new PlayerUpgradeError('not-found', 'Player not found.');
   const points = Number(team.upgradePoints || 0);
   if (points < 1) throw new PlayerUpgradeError('failed-precondition', 'This team does not have upgrade points.');
-  const grades = { ...(player.grades || player.abilityGrades || abilityGradesFromStats(player)) };
+  const grades = upgradeGradesForPlayer(player);
   const current = grades[ability];
   if (!current) throw new PlayerUpgradeError('invalid-argument', 'Choose a valid ability to upgrade.');
   const usageKey = String(seasonYear || 'current');
