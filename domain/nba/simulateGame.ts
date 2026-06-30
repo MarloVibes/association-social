@@ -44,6 +44,10 @@ export type SimPlayerInput = {
     era_adjusted_profiles?: Record<string, number>;
     source_stat_line?: {
       threePointAttemptsPerGame?: number;
+      trueShootingPct?: number;
+      effectiveFieldGoalPct?: number;
+      freeThrowAttemptsPerGame?: number;
+      turnoverPct?: number;
     };
   };
   tendencies?: Partial<Record<
@@ -159,6 +163,30 @@ function tendency(player: SimPlayerInput, key: keyof NonNullable<SimPlayerInput[
   return clamp(Number.isFinite(value) ? value : fallback, 0, 100);
 }
 
+function sourceStat(player: SimPlayerInput, key: string, fallback: number) {
+  const value = Number((player.baselineRatingProfile?.source_stat_line as Record<string, unknown> | undefined)?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function pct(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return value > 1 ? value / 100 : value;
+}
+
+function sourceEfficiencyRating(player: SimPlayerInput) {
+  const trueShooting = pct(sourceStat(player, 'trueShootingPct', 0.555), 0.555);
+  const effectiveFieldGoal = pct(sourceStat(player, 'effectiveFieldGoalPct', 0.51), 0.51);
+  const turnoverPct = sourceStat(player, 'turnoverPct', 12.5);
+  return clamp(
+    72
+      + ((trueShooting - 0.555) * 115)
+      + ((effectiveFieldGoal - 0.51) * 85)
+      - ((turnoverPct - 12.5) * 0.7),
+    42,
+    98,
+  );
+}
+
 function playerValue(player: SimPlayerInput) {
   const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
   const offense = categoryRating(player, 'overallOffense', sim.offensiveImpact);
@@ -172,6 +200,7 @@ function playerValue(player: SimPlayerInput) {
     + defense * 0.24
     + playmaking * 0.12
     + iq * 0.1
+    + sourceEfficiencyRating(player) * 0.06
     + sim.formMultiplier * 10
     + (player.minutes || 0) * 0.1;
 }
@@ -264,7 +293,8 @@ function distributePoints(players: Array<SimPlayerInput & { minutes: number }>, 
   const weights = players.map((player) => {
     const { scorerProfile, specialty, sim } = scorerProfileForPlayer(player);
     const nightMultiplier = scoringNightMultiplier(player, seed, scorerProfile, specialty);
-    return Math.max(1, player.minutes * scorerProfile * nightMultiplier * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
+    const efficiencyMultiplier = clamp(0.72 + sourceEfficiencyRating(player) / 150, 0.72, 1.34);
+    return Math.max(1, player.minutes * scorerProfile * efficiencyMultiplier * nightMultiplier * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
   });
   const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
   const points = weights.map(weight => Math.floor((weight / totalWeight) * teamPoints));
@@ -343,7 +373,8 @@ function shootingLine(points: number, variance: number, player: SimPlayerInput) 
   const pullUp = tendency(player, 'pullUpFrequency', 50);
   const paintAttack = tendency(player, 'paintAttack', 58);
   const rimFinish = tendency(player, 'rimFinishFrequency', 55);
-  const foulPressure = tendency(player, 'drawFoulPressure', (sim.freeThrow + finishing + paintAttack) / 3);
+  const sourceFreeThrowPressure = clamp(sourceStat(player, 'freeThrowAttemptsPerGame', 4) * 11, 30, 99);
+  const foulPressure = tendency(player, 'drawFoulPressure', (sim.freeThrow + finishing + paintAttack + sourceFreeThrowPressure) / 4);
   const perimeterProfile = threePoint * 0.56 + sim.shotIq * 0.18 + threeFrequency * 0.18 + catchAndShoot * 0.05 + pullUp * 0.03;
   const interiorProfile = finishing * 0.45 + sim.closeShot * 0.18 + sim.dunking * 0.14 + sim.postOffense * 0.08 + paintAttack * 0.1 + rimFinish * 0.05;
   const threeRate = clamp(0.08 + (perimeterProfile - interiorProfile + 52) / 170, 0.04, 0.62);
@@ -363,7 +394,8 @@ function shootingLine(points: number, variance: number, player: SimPlayerInput) 
   remaining -= freeThrowsMade;
   const twoPointersMade = Math.max(0, Math.floor(remaining / 2));
   const fieldGoalsMade = twoPointersMade + threePointersMade;
-  const shotQuality = clamp((sim.shotIq + sim.confidenceMultiplier * 80 + sim.formMultiplier * 80) / 240, 0.48, 0.9);
+  const sourceEfficiency = sourceEfficiencyRating(player);
+  const shotQuality = clamp((sim.shotIq + sim.confidenceMultiplier * 80 + sim.formMultiplier * 80 + sourceEfficiency * 0.72) / 312, 0.48, 0.92);
   const extraFreeThrowAttempts = Math.max(variance % 3, Math.round((freeThrowPressure - 62) / 14));
   const generatedThreeAttempts = threePointersMade + Math.max(0, Math.round(threeRate * 8) + (variance % 3));
   const volumeCappedThreeAttempts = sourceAttemptCap === null
@@ -423,7 +455,12 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       assists: assists[index],
       steals: Math.min(5, Math.floor((sim.stealsSkill + tendency(player, 'defensivePlaymaking', sim.stealsSkill) - 110) / 34) + (variance % 2)),
       blocks: Math.min(5, Math.floor((sim.blocking + categoryRating(player, 'interiorDefense', sim.blocking) - 110) / 34) + Math.floor((variance / 7) % 2)),
-      turnovers: Math.max(0, Math.floor((variance / 11) % 4) - Math.floor((sim.ballHandle + sim.offenseIq - 140) / 32)),
+      turnovers: Math.max(
+        0,
+        Math.floor((variance / 11) % 4)
+          - Math.floor((sim.ballHandle + sim.offenseIq - 140) / 32)
+          + Math.round((sourceStat(player, 'turnoverPct', 12.5) - 12.5) / 5),
+      ),
       ...line,
       offensiveRebounds,
       defensiveRebounds: playerRebounds - offensiveRebounds,

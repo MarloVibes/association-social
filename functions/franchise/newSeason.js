@@ -454,8 +454,62 @@ function nextSalaryCap(currentSalaryCap, growthRate = 0.05) {
   return Math.round(Number(currentSalaryCap || 0) * (1 + growthRate));
 }
 
-function projectCapHistory({ currentYear, currentSalaryCap, existingHistory = [], growthRate = 0.05 }) {
-  const salaryCap = nextSalaryCap(currentSalaryCap, growthRate);
+function capEntry(seasonYear, salaryCap, extras = {}) {
+  return {
+    seasonYear,
+    salaryCap,
+    minimumSalary: Math.round(salaryCap * 0.01),
+    rookieScaleBase: Math.round(salaryCap * 0.05),
+    ...extras,
+  };
+}
+
+const NBA_CAP_HISTORY = {
+  2010: capEntry(2010, 58_044_000),
+  2011: capEntry(2011, 58_044_000),
+  2012: capEntry(2012, 58_044_000),
+  2013: capEntry(2013, 58_679_000),
+  2014: capEntry(2014, 63_065_000),
+  2015: capEntry(2015, 70_000_000),
+  2016: capEntry(2016, 94_143_000),
+  2017: capEntry(2017, 99_093_000),
+  2018: capEntry(2018, 101_869_000),
+  2019: capEntry(2019, 109_140_000),
+  2020: capEntry(2020, 109_140_000),
+  2021: capEntry(2021, 112_414_000),
+  2022: capEntry(2022, 123_655_000),
+  2023: capEntry(2023, 136_021_000),
+  2024: capEntry(2024, 140_588_000),
+  2025: capEntry(2025, 154_647_000),
+  2026: capEntry(2026, 165_000_000, {
+    seasonYear: 2026,
+    luxuryTaxLine: 201_000_000,
+    firstApron: 209_000_000,
+    secondApron: 222_000_000,
+    nonTaxpayerMidLevelException: 15_050_000,
+    taxpayerMidLevelException: 6_100_000,
+  }),
+};
+
+function averageCapGrowthRate(lookbackYears = 5) {
+  const entries = Object.values(NBA_CAP_HISTORY).sort((left, right) => left.seasonYear - right.seasonYear);
+  const start = Math.max(1, entries.length - lookbackYears);
+  const rates = entries.slice(start).map((entry, index, recentEntries) => {
+    const previous = entries[entries.length - recentEntries.length + index - 1];
+    return previous && previous.salaryCap > 0 ? (entry.salaryCap - previous.salaryCap) / previous.salaryCap : 0;
+  }).filter(rate => Number.isFinite(rate) && rate > 0);
+  const average = rates.reduce((sum, rate) => sum + rate, 0) / Math.max(1, rates.length);
+  return Math.max(0.02, Math.min(0.1, average || 0.05));
+}
+
+function projectCapHistory({ currentYear, currentSalaryCap, existingHistory = [], growthRate }) {
+  const knownEntry = growthRate === undefined ? NBA_CAP_HISTORY[currentYear + 1] : null;
+  if (knownEntry) {
+    return [...existingHistory, knownEntry];
+  }
+
+  const nextGrowthRate = Number.isFinite(growthRate) ? growthRate : averageCapGrowthRate();
+  const salaryCap = nextSalaryCap(currentSalaryCap, nextGrowthRate);
   return [
     ...existingHistory,
     {
@@ -492,7 +546,7 @@ function buildNextSeasonLeague(league, stageStartedAt) {
       currentYear,
       currentSalaryCap: Number(league.salaryCap || 0),
       existingHistory: Array.isArray(league.capHistory) ? league.capHistory : [],
-      growthRate: Number.isFinite(league.capGrowthRate) ? league.capGrowthRate : 0.05,
+      growthRate: Number.isFinite(league.capGrowthRate) ? league.capGrowthRate : undefined,
     })
     : league.capHistory;
   const latestCap = Array.isArray(capHistory) ? capHistory[capHistory.length - 1] : null;

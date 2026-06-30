@@ -323,6 +323,64 @@ describe('NBA game simulation', () => {
     expect(Math.max(...genericBenchPoints)).toBeLessThan(22);
   });
 
+  it('uses public efficiency signals so similar grades do not produce identical scoring value', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'EFF',
+        players: [
+          {
+            playerId: 'efficient-primary',
+            name: 'Efficient Primary',
+            position: 'SF',
+            minutes: 38,
+            shooting: 88,
+            playmaking: 82,
+            defense: 76,
+            baselineRatingProfile: {
+              source_stat_line: {
+                trueShootingPct: 0.635,
+                effectiveFieldGoalPct: 0.585,
+                turnoverPct: 9.5,
+                freeThrowAttemptsPerGame: 7.2,
+              },
+            },
+          },
+          {
+            playerId: 'inefficient-primary',
+            name: 'Inefficient Primary',
+            position: 'SF',
+            minutes: 38,
+            shooting: 88,
+            playmaking: 82,
+            defense: 76,
+            baselineRatingProfile: {
+              source_stat_line: {
+                trueShootingPct: 0.505,
+                effectiveFieldGoalPct: 0.455,
+                turnoverPct: 15.8,
+                freeThrowAttemptsPerGame: 3.1,
+              },
+            },
+          },
+          { playerId: 'eff-pg', name: 'Efficiency PG', position: 'PG', minutes: 34, shooting: 76, playmaking: 84, defense: 72 },
+          { playerId: 'eff-pf', name: 'Efficiency PF', position: 'PF', minutes: 30, shooting: 72, playmaking: 60, defense: 78, rebounding: 82 },
+          { playerId: 'eff-c', name: 'Efficiency C', position: 'C', minutes: 28, shooting: 68, playmaking: 54, defense: 82, rebounding: 88 },
+        ],
+      },
+      away: fixture.away,
+    }, 'efficiency-profile-seed');
+
+    const lines = new Map(result.home.players.map(player => [player.name, player]));
+    const efficient = lines.get('Efficient Primary')!;
+    const inefficient = lines.get('Inefficient Primary')!;
+    const efficientTrueAttempts = efficient.fieldGoalsAttempted + 0.44 * efficient.freeThrowsAttempted;
+    const inefficientTrueAttempts = inefficient.fieldGoalsAttempted + 0.44 * inefficient.freeThrowsAttempted;
+
+    expect(efficient.points).toBeGreaterThanOrEqual(inefficient.points);
+    expect(efficient.points / efficientTrueAttempts).toBeGreaterThan(inefficient.points / inefficientTrueAttempts);
+    expect(efficient.turnovers).toBeLessThanOrEqual(inefficient.turnovers);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },
