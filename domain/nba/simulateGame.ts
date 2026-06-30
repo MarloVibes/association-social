@@ -193,6 +193,55 @@ function positionFactor(player: SimPlayerInput, kind: 'assist' | 'rebound') {
   return 0.9;
 }
 
+function scorerProfileForPlayer(player: SimPlayerInput) {
+  const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
+  const finishing = categoryRating(player, 'finishing', (sim.closeShot + sim.dunking + sim.postOffense) / 3);
+  const midRange = categoryRating(player, 'midRange', sim.midRange);
+  const threePoint = categoryRating(player, 'threePoint', sim.threePoint);
+  const playmaking = categoryRating(player, 'playmaking', sim.passing);
+  const paintAttack = tendency(player, 'paintAttack', 58);
+  const threeFrequency = tendency(player, 'threePointFrequency', 58);
+  const midFrequency = tendency(player, 'midRangeFrequency', 55);
+  const scorerProfile = finishing * 0.22
+    + midRange * 0.14
+    + threePoint * 0.2
+    + playmaking * 0.07
+    + sim.dunking * 0.06
+    + sim.postOffense * 0.08
+    + sim.shotIq * 0.1
+    + sim.offenseIq * 0.05
+    + paintAttack * 0.04
+    + threeFrequency * 0.04;
+  const specialty = Math.max(
+    finishing * 0.72 + paintAttack * 0.2 + sim.dunking * 0.08,
+    threePoint * 0.72 + threeFrequency * 0.2 + tendency(player, 'catchAndShootFrequency', 55) * 0.08,
+    midRange * 0.76 + midFrequency * 0.16 + sim.shotIq * 0.08,
+  );
+  return { scorerProfile, specialty, sim };
+}
+
+function scoringNightMultiplier(player: SimPlayerInput & { minutes: number }, seed: string, scorerProfile: number, specialty: number) {
+  const roll = hash(`${seed}:${player.playerId}:scoring-night`) % 1000;
+  const texture = hash(`${seed}:${player.playerId}:scoring-texture`) % 100;
+  const currentForm = categoryRating(player, 'currentForm', skill(player, 'currentForm', 75));
+  const offense = categoryRating(player, 'overallOffense', scorerProfile);
+  const eliteUsage = player.minutes >= 32 && Math.max(offense, scorerProfile, specialty) >= 88;
+  const benchSpecialist = player.minutes >= 12
+    && player.minutes <= 26
+    && specialty >= 88
+    && scorerProfile >= 68;
+  const steady = 0.9 + texture / 320;
+
+  if (eliteUsage && roll < 95) return 2.25 + texture / 165;
+  if (eliteUsage && roll > 905) return 0.44 + texture / 500;
+  if (benchSpecialist && roll < 85) return 2.65 + texture / 130;
+  if (benchSpecialist) return 0.82 + texture / 260;
+  if (player.minutes <= 24 && Math.max(scorerProfile, specialty) < 78) return Math.min(steady, 1.12);
+  if (currentForm >= 86 && roll < 180) return steady + 0.18;
+  if (currentForm <= 62 && roll > 800) return steady - 0.16;
+  return steady;
+}
+
 function normalizeMinutes(players: SimPlayerInput[]): Array<SimPlayerInput & { minutes: number }> {
   const sorted = [...players].sort((a, b) => playerValue(b) - playerValue(a) || a.playerId.localeCompare(b.playerId)).slice(0, 10);
   const raw = sorted.map(player => Math.max(1, Number(player.minutes || 0)));
@@ -213,24 +262,9 @@ function normalizeMinutes(players: SimPlayerInput[]): Array<SimPlayerInput & { m
 
 function distributePoints(players: Array<SimPlayerInput & { minutes: number }>, teamPoints: number, seed: string) {
   const weights = players.map((player) => {
-    const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
-    const finishing = categoryRating(player, 'finishing', (sim.closeShot + sim.dunking + sim.postOffense) / 3);
-    const midRange = categoryRating(player, 'midRange', sim.midRange);
-    const threePoint = categoryRating(player, 'threePoint', sim.threePoint);
-    const playmaking = categoryRating(player, 'playmaking', sim.passing);
-    const paintAttack = tendency(player, 'paintAttack', 58);
-    const threeFrequency = tendency(player, 'threePointFrequency', 58);
-    const scorerProfile = finishing * 0.22
-      + midRange * 0.14
-      + threePoint * 0.2
-      + playmaking * 0.07
-      + sim.dunking * 0.06
-      + sim.postOffense * 0.08
-      + sim.shotIq * 0.1
-      + sim.offenseIq * 0.05
-      + paintAttack * 0.04
-      + threeFrequency * 0.04;
-    return Math.max(1, player.minutes * scorerProfile * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
+    const { scorerProfile, specialty, sim } = scorerProfileForPlayer(player);
+    const nightMultiplier = scoringNightMultiplier(player, seed, scorerProfile, specialty);
+    return Math.max(1, player.minutes * scorerProfile * nightMultiplier * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
   });
   const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
   const points = weights.map(weight => Math.floor((weight / totalWeight) * teamPoints));

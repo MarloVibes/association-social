@@ -127,7 +127,7 @@ function resolvePossession(ctx) {
   const defenseBoost = defenseTeam.teamId === ctx.input.preferredWinnerTeamId ? Number(ctx.input.winnerBias || 0) * 0.35 : 0;
   const makeChance = clamp(
     0.53
-      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330,
+      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330,
     shotValue === 3 ? 0.28 : 0.36,
     shotValue === 3 ? 0.49 : 0.66,
   );
@@ -257,12 +257,16 @@ function buildTeamContext(teamId, team, side, input) {
   const selected = players.slice(0, Math.max(5, Math.min(10, players.length)));
   const starters = selectStarters(selected);
   const minutes = normalizeMinutes(selected);
-  const rotation = selected.map((player, index) => ({
-    ...player,
-    minutes: minutes[index],
-    usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) / 100),
-    starter: starters.some(starter => starter.playerId === player.playerId),
-  }));
+  const rotation = selected.map((player, index) => {
+    const night = scoringNightContext(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
+    return {
+      ...player,
+      ...night,
+      minutes: minutes[index],
+      usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) * night.nightUsageMultiplier / 100),
+      starter: starters.some(starter => starter.playerId === player.playerId),
+    };
+  });
   return {
     teamId,
     side,
@@ -378,6 +382,27 @@ function normalizeMinutes(players) {
     cursor = (cursor + 1) % minutes.length;
   }
   return minutes;
+}
+
+function scoringNightContext(player, minutes, seed) {
+  const roll = hashString(`${seed}:${player.playerId}:scoring-night`) % 1000;
+  const texture = hashString(`${seed}:${player.playerId}:scoring-texture`) % 100;
+  const offense = Math.max(player.scoring, player.finishing, player.threePoint, player.midRange);
+  const specialty = Math.max(
+    player.finishing * 0.72 + player.paintAttack * 0.2 + player.rimFinish * 0.08,
+    player.threePoint * 0.72 + player.threePointFrequency * 0.2 + player.catchAndShoot * 0.08,
+    player.midRange * 0.78 + player.iq * 0.12,
+  );
+  const eliteUsage = minutes >= 32 && Math.max(offense, specialty) >= 88;
+  const benchSpecialist = minutes >= 12 && minutes <= 26 && specialty >= 88 && player.scoring >= 68;
+  const steady = 0.9 + texture / 320;
+
+  if (eliteUsage && roll < 95) return { nightUsageMultiplier: 2.25 + texture / 165, nightMakeBoost: 9 };
+  if (eliteUsage && roll > 905) return { nightUsageMultiplier: 0.44 + texture / 500, nightMakeBoost: -8 };
+  if (benchSpecialist && roll < 85) return { nightUsageMultiplier: 2.65 + texture / 130, nightMakeBoost: 7 };
+  if (benchSpecialist) return { nightUsageMultiplier: 0.82 + texture / 260, nightMakeBoost: 0 };
+  if (minutes <= 24 && Math.max(player.scoring, specialty) < 78) return { nightUsageMultiplier: Math.min(steady, 1.12), nightMakeBoost: 0 };
+  return { nightUsageMultiplier: steady, nightMakeBoost: 0 };
 }
 
 function chooseShotValue(player, team, rng) {

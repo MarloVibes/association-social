@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simulateGame } from '@/domain/nba/simulateGame';
+import { simulateGame, type SimGameInput } from '@/domain/nba/simulateGame';
 
 const fixture = {
   home: {
@@ -249,6 +249,78 @@ describe('NBA game simulation', () => {
     expect(lines.get('Stale Center')!.threePointersAttempted).toBeLessThan(lines.get('Real Shooter')!.threePointersAttempted);
     expect(lines.get('Stale Center')!.threePointersAttempted).toBeLessThanOrEqual(1);
     expect(lines.get('Stale Center')!.threePointersMade).toBe(0);
+  });
+
+  it('creates believable star explosions, quiet nights, and specialist bench pops', () => {
+    const varianceFixture: SimGameInput = {
+      home: {
+        teamId: 'VAR',
+        players: [
+          {
+            playerId: 'elite-wing',
+            name: 'Elite Wing',
+            position: 'SF',
+            minutes: 38,
+            shooting: 95,
+            playmaking: 88,
+            defense: 84,
+            category_skill_grades: {
+              overallOffense: { rating: 97, grade: 'A+' },
+              finishing: { rating: 96, grade: 'A+' },
+              threePoint: { rating: 91, grade: 'A-' },
+              midRange: { rating: 94, grade: 'A' },
+              playmaking: { rating: 88, grade: 'B+' },
+            },
+            tendencies: {
+              paintAttack: 94,
+              midRangeFrequency: 88,
+              threePointFrequency: 76,
+              isolationFrequency: 92,
+              drawFoulPressure: 92,
+            },
+          },
+          {
+            playerId: 'bench-flamethrower',
+            name: 'Bench Flamethrower',
+            position: 'SG',
+            minutes: 19,
+            shooting: 86,
+            playmaking: 54,
+            defense: 58,
+            category_skill_grades: {
+              threePoint: { rating: 94, grade: 'A' },
+              finishing: { rating: 58, grade: 'D+' },
+              playmaking: { rating: 54, grade: 'D+' },
+            },
+            tendencies: {
+              threePointFrequency: 98,
+              catchAndShootFrequency: 96,
+              paintAttack: 24,
+            },
+          },
+          { playerId: 'generic-bench', name: 'Generic Bench', position: 'SG', minutes: 19, shooting: 66, playmaking: 58, defense: 60 },
+          { playerId: 'starter-pg', name: 'Starter PG', position: 'PG', minutes: 33, shooting: 77, playmaking: 84, defense: 72 },
+          { playerId: 'starter-pf', name: 'Starter PF', position: 'PF', minutes: 32, shooting: 74, playmaking: 60, rebounding: 82, defense: 78 },
+          { playerId: 'starter-c', name: 'Starter C', position: 'C', minutes: 30, shooting: 70, playmaking: 52, rebounding: 88, defense: 84 },
+          { playerId: 'reserve-f', name: 'Reserve F', position: 'SF', minutes: 14, shooting: 68, playmaking: 55, defense: 70 },
+        ],
+      },
+      away: fixture.away,
+    };
+    const seeds = Array.from({ length: 90 }, (_, index) => `variance-${index}`);
+    const lines = seeds.map((seed) => {
+      const result = simulateGame(varianceFixture, seed);
+      return new Map(result.home.players.map(player => [player.name, player.points]));
+    });
+
+    const elitePoints = lines.map(line => line.get('Elite Wing') || 0);
+    const specialistPoints = lines.map(line => line.get('Bench Flamethrower') || 0);
+    const genericBenchPoints = lines.map(line => line.get('Generic Bench') || 0);
+
+    expect(Math.max(...elitePoints)).toBeGreaterThanOrEqual(40);
+    expect(Math.min(...elitePoints)).toBeLessThanOrEqual(18);
+    expect(Math.max(...specialistPoints)).toBeGreaterThanOrEqual(25);
+    expect(Math.max(...genericBenchPoints)).toBeLessThan(22);
   });
 
   it('keeps raw era ids out of generated game stories', () => {
