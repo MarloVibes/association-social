@@ -16,6 +16,14 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, updateDoc, setDoc, arrayUnion } from 'firebase/firestore';
 import https from 'https';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {
+  buildFreeAgentVaultDoc,
+  buildProfileLookupFromCsv,
+  normName,
+  parsePriorYearPlayers,
+} from './lib/vault-free-agent-seed.mjs';
 
 const app = initializeApp({
   apiKey: "AIzaSyCyGdEjmV3B4ZpxBq-h1gJFWqY9sD7kvDY",
@@ -53,45 +61,10 @@ function fetchPage(path) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function normName(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function parsePriorYearPlayers(html) {
-  const uncommented = html.replace(/<!--([\s\S]*?)-->/g, '$1');
-  const tbodyStart = uncommented.indexOf('<tbody>');
-  const tableEnd = uncommented.indexOf('</table>', tbodyStart);
-  const tbody = uncommented.slice(tbodyStart, tableEnd);
-  const rows = tbody.match(/<tr[\s\S]*?<\/tr>/g) || [];
-
-  const players = [];
-  const seen = new Set();
-
-  for (const row of rows) {
-    if (row.includes('thead') || row.includes('class="over_header"')) continue;
-    const idMatch = row.match(/data-append-csv="([^"]+)"/);
-    const nameMatch = row.match(/data-stat="name_display"[^>]*>(?:<a[^>]*>)?([^<]+)/);
-    const gamesMatch = row.match(/data-stat="games"[^>]*>([^<]+)/);
-
-    if (!idMatch || !nameMatch) continue;
-    const brefId = idMatch[1];
-    if (seen.has(brefId)) continue;
-    seen.add(brefId);
-
-    const name = nameMatch[1].trim();
-    const games = parseInt(gamesMatch ? gamesMatch[1] : '0', 10) || 0;
-
-    // Filter: must have played at least 10 games (rules out token appearances)
-    if (games < 10) continue;
-
-    players.push({ bref_id: brefId, full_name: name, games });
-  }
-
-  return players;
-}
-
 async function main() {
   console.log(`\n=== Vault Free Agents Seeder ${DRY_RUN ? '(DRY RUN)' : '(LIVE WRITE)'} ===\n`);
+  const playersCsv = await fs.readFile(path.join(process.cwd(), 'players.csv'), 'utf8');
+  const profileLookup = buildProfileLookupFromCsv(playersCsv);
 
   for (const { era, priorYear, priorUrl } of ERAS) {
     console.log(`\n--- ERA: ${era} (looking at ${priorYear} season for free agent candidates) ---`);
@@ -137,26 +110,7 @@ async function main() {
       } else {
         // Player not in vault yet - add them as free agent
         if (!DRY_RUN) {
-          const parts = c.full_name.split(' ');
-          await setDoc(doc(db, 'players', c.bref_id), {
-            bref_id: c.bref_id,
-            full_name: c.full_name,
-            first_name: parts[0] || '',
-            last_name: parts.slice(1).join(' ') || '',
-            position: '',
-            height: '',
-            weight: '',
-            birth_date: '',
-            jersey_number: '',
-            accolades: [],
-            seasons: [],
-            eras: [era],
-            free_in_eras: [era],
-            is_custom: false,
-            no_profile: true,
-            added_as_free_agent: true,
-            created_at: new Date().toISOString(),
-          });
+          await setDoc(doc(db, 'players', c.bref_id), buildFreeAgentVaultDoc(c, era, profileLookup));
           created++;
         }
       }
