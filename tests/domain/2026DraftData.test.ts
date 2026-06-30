@@ -34,5 +34,10 @@ describe('2026 NBA Draft data', () => {
     expect(source).toContain("doc(db, 'draft_classes', String(draft.year))");
     expect(source).toContain("doc(db, 'players', player.player_id)");
     expect(source).toContain('vaultPlayers');
+    expect(source).toContain('player.position ||');
+    expect(source).toContain('player.height ||');
+    expect(source).toContain('player.headshotUrl ||');
+    expect(source).not.toContain("position: '',");
+    expect(source).not.toContain("birth_date: '',");
   });
 });

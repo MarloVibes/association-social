@@ -6,6 +6,12 @@ export type DraftVaultPick = {
   name: string;
   school: string;
   tradeNote?: string;
+  position?: string;
+  height?: string;
+  weight?: string;
+  birthDate?: string;
+  headshotUrl?: string;
+  archetype?: string;
 };
 
 export type DraftVaultInput = {
@@ -40,6 +46,11 @@ export type DraftVaultDoc = {
   is_custom: false;
   no_profile: true;
   draft_source: true;
+  photo?: string;
+  headshot_url?: string;
+  archetype?: string;
+  projectedOverall: number;
+  projectedRound: number;
   source: string;
   sourceUpdatedAt?: string;
 };
@@ -67,10 +78,10 @@ export function buildDraftVaultDoc(input: DraftVaultInput): DraftVaultDoc {
     full_name: input.pick.name,
     first_name: names.firstName,
     last_name: names.lastName,
-    position: '',
-    height: '',
-    weight: '',
-    birth_date: '',
+    position: input.pick.position || '',
+    height: input.pick.height || '',
+    weight: input.pick.weight || '',
+    birth_date: input.pick.birthDate || '',
     jersey_number: '',
     draft_year: input.year,
     draft_pick: input.pick.pick,
@@ -86,6 +97,11 @@ export function buildDraftVaultDoc(input: DraftVaultInput): DraftVaultDoc {
     is_custom: false,
     no_profile: true,
     draft_source: true,
+    photo: input.pick.headshotUrl || undefined,
+    headshot_url: input.pick.headshotUrl || undefined,
+    archetype: input.pick.archetype || undefined,
+    projectedOverall: input.pick.pick,
+    projectedRound: input.pick.round,
     source: input.source,
     sourceUpdatedAt: input.sourceUpdatedAt,
   };

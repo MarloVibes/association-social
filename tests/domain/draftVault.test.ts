@@ -40,4 +40,39 @@ describe('draft vault source', () => {
     expect(vaultDoc.seasons).toEqual([]);
     expect(vaultDoc.accolades).toEqual([]);
   });
+
+  it('preserves sourced prospect metadata for richer draft class cards', () => {
+    const vaultDoc = buildDraftVaultDoc({
+      year: 2026,
+      era: 'current',
+      source: 'https://www.nba.com/news/2026-nba-draft-order',
+      pick: {
+        pick: 3,
+        round: 1,
+        draftedBy: 'MEM',
+        rightsTeam: 'MEM',
+        name: 'Cameron Boozer',
+        school: 'Duke',
+        position: 'PF',
+        height: '6-9',
+        weight: '235',
+        birthDate: '2007-07-18',
+        headshotUrl: 'https://example.com/cameron-boozer.png',
+        archetype: 'Interior Scorer',
+      },
+    });
+
+    expect(vaultDoc).toMatchObject({
+      position: 'PF',
+      height: '6-9',
+      weight: '235',
+      birth_date: '2007-07-18',
+      photo: 'https://example.com/cameron-boozer.png',
+      headshot_url: 'https://example.com/cameron-boozer.png',
+      archetype: 'Interior Scorer',
+      projectedOverall: 3,
+      projectedRound: 1,
+      no_profile: true,
+    });
+  });
 });
