@@ -35,6 +35,9 @@ function numberFrom(value: unknown, fallback = 0): number {
 
 const GRADE_ORDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
 const GRADE_LABELS: Record<string, string> = {
+  threePoint: '3PT Shot',
+  passing: 'Passing',
+  dunking: 'Dunking',
   perimeterDefense: 'Perimeter D',
   defenseIq: 'Defense IQ',
   helpDefense: 'Help Defense',
@@ -77,6 +80,10 @@ function positionIncludes(player: EraAuditPlayer, values: string[]) {
 
 function isWing(player: EraAuditPlayer) {
   return positionIncludes(player, ['SG', 'SF', 'G-F', 'F-G']);
+}
+
+function isBig(player: EraAuditPlayer) {
+  return positionIncludes(player, ['PF', 'C', 'F-C', 'C-F']);
 }
 
 function salaryCoreSignal(player: EraAuditPlayer) {
@@ -132,6 +139,41 @@ function archetypeFor(player: EraAuditPlayer) {
   return 'Rotation Player';
 }
 
+function passingGradeFromAssists(apg: number): NbaGrade | null {
+  if (apg >= 10) return 'S';
+  if (apg >= 9) return 'A+';
+  if (apg >= 8) return 'A';
+  if (apg >= 7) return 'A-';
+  if (apg >= 6) return 'B+';
+  if (apg >= 5) return 'B';
+  if (apg >= 4) return 'B-';
+  if (apg >= 3) return 'C+';
+  if (apg >= 2) return 'C';
+  return null;
+}
+
+function likelyThreePointVolume(player: EraAuditPlayer) {
+  return stat(player, [
+    'threePointAttemptsPerGame',
+    'fg3a',
+    'fg3Attempts',
+    'threePointAttempts',
+    'three_point_attempts_per_game',
+  ]);
+}
+
+function dunkingGradeFromProfile(player: EraAuditPlayer): NbaGrade | null {
+  const ppg = stat(player, ['ppg', 'points', 'pts']);
+  const freeThrows = stat(player, ['freeThrowAttemptsPerGame', 'fta', 'freeThrowsAttempted']);
+  const dunks = stat(player, ['dunks', 'dunkAttempts', 'madeDunks']);
+  const athleticism = hidden(player, 'athleticism');
+  const finishing = hidden(player, 'finishing');
+  if (dunks >= 100 || (athleticism >= 94 && ppg >= 24 && freeThrows >= 5)) return 'A';
+  if (dunks >= 70 || (athleticism >= 90 && ppg >= 20 && freeThrows >= 4)) return 'A-';
+  if (dunks >= 40 || (finishing >= 88 && athleticism >= 86 && ppg >= 17)) return 'B+';
+  return null;
+}
+
 function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
   const minutes = stat(player, ['minutes', 'mpg', 'min']);
   const ppg = stat(player, ['ppg', 'points', 'pts']);
@@ -157,6 +199,34 @@ function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
       reason,
     });
   };
+  const correctDown = (key: string, suggestedGrade: NbaGrade, reason: string) => {
+    const current = currentGrade(player, key);
+    if (gradeRank(current) <= gradeRank(suggestedGrade)) return;
+    const existingIndex = suggestions.findIndex(suggestion => suggestion.key === key);
+    if (existingIndex >= 0) {
+      suggestions.splice(existingIndex, 1);
+    }
+    suggestions.push({
+      key,
+      label: GRADE_LABELS[key] || key,
+      currentGrade: current,
+      suggestedGrade,
+      reason,
+    });
+  };
+
+  const assistBasedPassingGrade = passingGradeFromAssists(apg);
+  if (assistBasedPassingGrade && hasHidden(player, 'passing')) {
+    const current = currentGrade(player, 'passing');
+    if (gradeRank(current) - gradeRank(assistBasedPassingGrade) >= 2) {
+      correctDown('passing', assistBasedPassingGrade, `${apg.toFixed(1)} APG does not support a higher passing tier`);
+    }
+  }
+
+  const threePointAttempts = likelyThreePointVolume(player);
+  if (isBig(player) && threePointAttempts > 0 && threePointAttempts <= 0.5 && hasHidden(player, 'threePoint')) {
+    correctDown('threePoint', 'F', `${threePointAttempts.toFixed(1)} 3PA per game non-shooting big profile`);
+  }
 
   if (wingDefensiveWorkloadSignal(player)) {
     add('perimeterDefense', 'B+', 'trusted wing-stopper workload');
@@ -176,6 +246,8 @@ function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
   else if (ppg >= 15) add('midRange', 'B-', 'half-court scoring load');
   if (rpg >= 5 && isWing(player)) add('rebounding', 'C+', 'plus rebounding wing');
   if (spg >= 1) add('steals', 'B-', 'active defensive event rate');
+  const suggestedDunking = dunkingGradeFromProfile(player);
+  if (suggestedDunking) add('dunking', suggestedDunking, 'downhill athletic finishing proof');
 
   return suggestions;
 }

@@ -114,6 +114,69 @@ describe('NBA evaluation audit', () => {
     ]));
   });
 
+  it('downgrades inflated passing when assist production does not support an S grade', () => {
+    const result = auditEraPlayer({
+      full_name: 'Derrick Rose',
+      team: 'CHI',
+      position: 'PG',
+      minutes: 37,
+      ppg: 25,
+      apg: 7.7,
+      career_PER: 23.5,
+      hidden: { passing: 99 },
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'passing',
+        currentGrade: 'S',
+        suggestedGrade: 'A-',
+      }),
+    ]));
+  });
+
+  it('downgrades inflated three-point grades for non-shooting bigs without attempt proof', () => {
+    const result = auditEraPlayer({
+      full_name: 'Rudy Gobert',
+      team: 'MIN',
+      position: 'C',
+      minutes: 34,
+      ppg: 13,
+      rpg: 12,
+      threePointAttemptsPerGame: 0.1,
+      hidden: { threePoint: 86 },
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'threePoint',
+        currentGrade: 'B+',
+        suggestedGrade: 'F',
+      }),
+    ]));
+  });
+
+  it('raises dunking for explosive downhill athletes with production proof', () => {
+    const result = auditEraPlayer({
+      full_name: 'Anthony Edwards',
+      team: 'MIN',
+      position: 'SG',
+      minutes: 36,
+      ppg: 26,
+      freeThrowAttemptsPerGame: 6.4,
+      dunks: 110,
+      hidden: { dunking: 84, athleticism: 94 },
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'dunking',
+        currentGrade: 'B',
+        suggestedGrade: 'A',
+      }),
+    ]));
+  });
+
   it('produces a markdown report without Firestore writes', () => {
     const report = buildEraAuditReport('rose', [
       {
