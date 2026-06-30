@@ -376,6 +376,8 @@ export function buildAttributeModel({
     + defensiveWingBonus
     + pointAttackDefenseBonus * 0.4;
   const nonStopperGuardOrWing = (guard || wing) && !individualDefenseProof && spg < 1.4 && bpg < 0.9;
+  const noProofInteriorBig = big && !individualDefenseProof && (bpg < 2.2 || dws < 4);
+  const lowBoardBig = big && rebounderBonus <= 0 && rpg < 5 && drebPct <= 16.5;
   const eliteReboundFloor = rebounderBonus > 0 && rpg >= 9 && drebPct >= 17 && mpg >= 24 ? 89 : 0;
   const strongReboundFloor = rpg >= 10 && drebPct >= 18 && mpg >= 24 ? 89 : 0;
   const reboundFloor = Math.max(eliteReboundFloor, strongReboundFloor);
@@ -413,21 +415,21 @@ export function buildAttributeModel({
     speedWithBall: 58 + apg * 0.9 + usage(source) * 0.65 + driveRate * 32 + transitionRate * 18 + (guard ? 7 : wing ? 3 : -5) + burstBonus,
     offenseIq: 58 + astPct * 0.28 + scoringVolume * 0.42 + wins * 1.1 + Math.max(0, 14 - tovPct) * 0.8 + mpg * 0.35 + efficiencySignal * 0.06 + floorGeneralBonus * 0.5 + connectorBigBonus + allStarBonus,
     clutch: 58 + scoringVolume * 0.55 + usage(source) * 0.55 + wins * 1.1 + Math.max(0, mpg - 30) * 0.7 + killerInstinctBonus + mvpBonus * 0.4,
-    perimeterDefense: nonStopperGuardOrWing ? Math.min(rawPerimeterDefense, 86) : rawPerimeterDefense,
-    lateralQuickness: 58 + spg * 4.5 + defenseSignal * 4.4 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35 + defensiveWingBonus * 0.5 + pointAttackDefenseBonus,
-    postDefense: 54 + bpg * 5.5 + rpg * 1.4 + defenseSignal * 6.4 + (big ? 8 : 0) + defensiveAnchorBonus + rimProtectorBonus * 0.45,
-    blocking: 50 + bpg * 13 + defenseSignal * 4.2 + (big ? 8 : wing ? 3 : 0) + rimProtectorBonus + defensiveAnchorBonus * 0.4,
+    perimeterDefense: nonStopperGuardOrWing ? Math.min(rawPerimeterDefense, 78.4) : rawPerimeterDefense,
+    lateralQuickness: nonStopperGuardOrWing ? Math.min(58 + spg * 4.5 + defenseSignal * 4.4 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35 + defensiveWingBonus * 0.5 + pointAttackDefenseBonus, 78.4) : 58 + spg * 4.5 + defenseSignal * 4.4 + (guard ? 8 : wing ? 5 : -3) - Math.max(0, age - 31) * 0.9 + burstBonus * 0.35 + defensiveWingBonus * 0.5 + pointAttackDefenseBonus,
+    postDefense: noProofInteriorBig ? Math.min(54 + bpg * 5.5 + rpg * 1.4 + defenseSignal * 6.4 + (big ? 8 : 0) + defensiveAnchorBonus + rimProtectorBonus * 0.45, 84.4) : 54 + bpg * 5.5 + rpg * 1.4 + defenseSignal * 6.4 + (big ? 8 : 0) + defensiveAnchorBonus + rimProtectorBonus * 0.45,
+    blocking: noProofInteriorBig ? Math.min(50 + bpg * 13 + defenseSignal * 4.2 + (big ? 8 : wing ? 3 : 0) + rimProtectorBonus + defensiveAnchorBonus * 0.4, 84.4) : 50 + bpg * 13 + defenseSignal * 4.2 + (big ? 8 : wing ? 3 : 0) + rimProtectorBonus + defensiveAnchorBonus * 0.4,
     steals: 54 + spg * 12 + defenseSignal * 3.6 + (guard || wing ? 4 : 0) + defensiveWingBonus * 0.35 + pointAttackDefenseBonus,
-    defenseIq: nonStopperGuardOrWing ? Math.min(rawDefenseIq, 86) : rawDefenseIq,
-    helpDefense: 56 + defenseSignal * 6.2 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35 + defensiveAnchorBonus + defensiveWingBonus * 0.6 + connectorBigBonus,
+    defenseIq: nonStopperGuardOrWing ? Math.min(rawDefenseIq, 78.4) : noProofInteriorBig ? Math.min(rawDefenseIq, 84.4) : rawDefenseIq,
+    helpDefense: noProofInteriorBig ? Math.min(56 + defenseSignal * 6.2 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35 + defensiveAnchorBonus + defensiveWingBonus * 0.6 + connectorBigBonus, 84.4) : 56 + defenseSignal * 6.2 + rpg * 0.9 + bpg * 3.8 + mpg * 0.35 + defensiveAnchorBonus + defensiveWingBonus * 0.6 + connectorBigBonus,
     speed: 62 + (guard ? 10 : wing ? 6 : 0) + driveRate * 8 + transitionRate * 12 - Math.max(0, age - 29) * 1.1 + Math.max(0, 30 - mpg) * 0.1 + burstBonus * 1.25,
     acceleration: 62 + (guard ? 10 : wing ? 6 : 0) + driveRate * 12 + transitionRate * 8 - Math.max(0, age - 29) * 1.15 + usage(source) * 0.15 + burstBonus * 1.4,
     vertical: 55 + dunkRate * 96 + rimRate * 14 + (guard || wing ? 6 : big ? 4 : 0) - Math.max(0, age - 29) * 0.7 + burstBonus * 1.2 + rimPressureBonus * 0.55,
     agility: 58 + (guard ? 9 : wing ? 6 : 0) + driveRate * 22 + transitionRate * 14 - Math.max(0, age - 30) * 0.9 + burstBonus * 1.25,
     strength: 56 + (big ? 13 : wing ? 6 : 0) + rpg * 1.1 + Math.max(0, age - 22) * 0.35 + rebounderBonus * 0.25 + postScorerBonus * 0.25,
-    rebounding: Math.max(52 + rpg * 3.3 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus * 1.25, reboundFloor),
-    offensiveRebound: Math.max(48 + rpg * 1.35 + orebPct * 1.65 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.8, reboundFloor ? 84 : 0),
-    defensiveRebound: Math.max(50 + rpg * 2.05 + drebPct * 1.25 + (big ? 7 : wing ? 3 : -2) + rebounderBonus * 1.15, reboundFloor),
+    rebounding: lowBoardBig ? Math.min(Math.max(52 + rpg * 3.3 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus * 1.25, reboundFloor), 78.4) : Math.max(52 + rpg * 3.3 + (big ? 9 : wing ? 3 : 0) + mpg * 0.25 + rebounderBonus * 1.25, reboundFloor),
+    offensiveRebound: lowBoardBig ? Math.min(Math.max(48 + rpg * 1.35 + orebPct * 1.65 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.8, reboundFloor ? 84 : 0), 78.4) : Math.max(48 + rpg * 1.35 + orebPct * 1.65 + (big ? 8 : wing ? 3 : -2) + rebounderBonus * 0.8, reboundFloor ? 84 : 0),
+    defensiveRebound: lowBoardBig ? Math.min(Math.max(50 + rpg * 2.05 + drebPct * 1.25 + (big ? 7 : wing ? 3 : -2) + rebounderBonus * 1.15, reboundFloor), 78.4) : Math.max(50 + rpg * 2.05 + drebPct * 1.25 + (big ? 7 : wing ? 3 : -2) + rebounderBonus * 1.15, reboundFloor),
     postOffense: 50 + (big ? 9 : 0) + fg * 21 + rpg * 0.8 + fta * 1.1 + scoringVolume * 0.35 + postScorerBonus + eliteMidRangeBonus * 0.25,
     stamina: availability * 0.72 + work * 0.28,
     hustle: 56 + mpg * 0.45 + defenseSignal * 2.8 + rpg * 0.8 + spg * 2.4 + bpg * 1.5 + highMotorBonus,

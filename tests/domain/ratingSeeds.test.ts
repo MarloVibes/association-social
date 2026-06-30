@@ -60,6 +60,52 @@ describe('rating seed baselines', () => {
     expect(gradeRank(gobert2017.category_skill_grades.rebounding.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
 
+  it('keeps defense and rebounding grades tied to role proof instead of synthetic team signals', () => {
+    const nash2003 = findProfile('Steve Nash', 'PHX', 2003);
+    const kyrie2017 = findProfile('Kyrie Irving', 'CLE', 2017);
+    const kawhi2017 = findProfile('Kawhi Leonard', 'SAS', 2017);
+    const draymond2017 = findProfile('Draymond Green', 'GSW', 2017);
+    const dirk2011 = findProfile('Dirk Nowitzki', 'DAL', 2011);
+    const love2017 = findProfile('Kevin Love', 'CLE', 2017);
+    const bargnani2011 = findProfile('Andrea Bargnani', 'TOR', 2011);
+
+    expect(gradeRank(nash2003.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
+    expect(gradeRank(kyrie2017.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
+    expect(gradeRank(kawhi2017.category_skill_grades.perimeterDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(draymond2017.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(dirk2011.category_skill_grades.interiorDefense.grade)).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(love2017.category_skill_grades.interiorDefense.grade)).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(bargnani2011.category_skill_grades.rebounding.grade)).toBeLessThan(gradeRank('B'));
+  });
+
+  it('prevents career production from leaking into pre-rookie and duplicate-name era seeds', () => {
+    const lebron2003 = findProfile('LeBron James', 'CLE', 2003);
+    const wade2003 = findProfile('Dwyane Wade', 'MIA', 2003);
+    const bosh2003 = findProfile('Chris Bosh', 'TOR', 2003);
+    const hawksEddie1984 = findProfile('Eddie Johnson', 'ATL', 1984);
+    const warriorsReggie2011 = findProfile('Reggie Williams', 'GSW', 2011);
+    const dirk2017 = findProfile('Dirk Nowitzki', 'DAL', 2017);
+    const vince2017 = findProfile('Vince Carter', 'MEM', 2017);
+
+    for (const rookie of [lebron2003, wade2003, bosh2003]) {
+      expect(rookie.age).toBeLessThanOrEqual(21);
+      expect(rookie.source_stat_line.minutesPerGame).toBeLessThan(34);
+      expect(rookie.source_stat_line.pointsPerGame).toBeLessThan(22);
+    }
+
+    expect(hawksEddie1984.source_stat_line.birthDate).toBe('1955-02-24');
+    expect(warriorsReggie2011.age).toBeLessThan(30);
+    expect(warriorsReggie2011.position).toMatch(/SG|SF|G|F/i);
+
+    for (const veteran of [dirk2017, vince2017]) {
+      expect(veteran.age).toBeGreaterThanOrEqual(37);
+      expect(veteran.source_stat_line.minutesPerGame).toBeLessThanOrEqual(31);
+      expect(veteran.source_stat_line.awardWeight).toBeLessThanOrEqual(2);
+      expect(veteran.source_stat_line.scoutingTags).not.toContain('mvp');
+      expect(veteran.source_stat_line.scoutingTags).not.toContain('high_usage_creator');
+    }
+  });
+
   it('does not trust impossible generated three point samples as elite shooting proof', () => {
     const truckRobinson1984 = findProfile('Truck Robinson', 'NYK', 1984);
     const eddyCurry2003 = findProfile('Eddy Curry', 'CHI', 2003);

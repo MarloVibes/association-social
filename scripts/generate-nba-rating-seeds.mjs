@@ -24,6 +24,12 @@ const NAME_ALIASES = {
   [normalizeName('Otto Porter Jr')]: normalizeName('Otto Porter'),
 };
 
+const TEAM_PROFILE_ID_ALIASES = {
+  [`${normalizeName('Eddie Johnson')}|ATL`]: 'johnsed02',
+  [`${normalizeName('Eddie Johnson')}|SAC`]: 'johnsed03',
+  [`${normalizeName('Reggie Williams')}|GSW`]: 'willire02',
+};
+
 const SEASON_SOURCE_OVERRIDES = {
   [`${profileExactKey('Ben Simmons')}|2016`]: {
     minutesPerGame: 0,
@@ -84,6 +90,10 @@ const SCOUTING_TAGS = {
   'james harden': ['high_usage_creator', 'elite_passer'],
   'russell westbrook': ['elite_rim_pressure', 'elite_burst', 'high_usage_creator'],
   'kevin love': ['elite_rebounder', 'elite_shooter'],
+  'rudy gobert': ['defensive_anchor', 'rim_protector', 'elite_rebounder'],
+  'kawhi leonard': ['mvp', 'defensive_wing_assignment', 'point_of_attack_defender', 'two_way_connector'],
+  'draymond green': ['defensive_anchor', 'rim_protector', 'connector_big', 'high_motor'],
+  'klay thompson': ['elite_shooter', 'defensive_wing_assignment'],
   'steve nash': ['mvp', 'floor_general', 'elite_passer', 'elite_shooter'],
   'carmelo anthony': ['high_usage_creator', 'elite_midrange', 'post_scorer'],
   'paul pierce': ['high_usage_creator', 'elite_midrange', 'killer_instinct'],
@@ -177,9 +187,11 @@ function buildProfileIndex(playersCsv) {
     ws: headerIndex(headers, 'career_ws'),
     efg: headerIndex(headers, 'career_efg%'),
     draftPick: headerIndex(headers, 'draft_pick'),
+    draftYear: headerIndex(headers, 'draft_year'),
   };
   const byName = {};
   const byExactName = {};
+  const byId = {};
   const idToName = {};
   for (const row of rows.slice(1)) {
     const name = row[indexes.name];
@@ -201,7 +213,9 @@ function buildProfileIndex(playersCsv) {
       ws: numberFrom(row[indexes.ws]),
       efg: pct(row[indexes.efg], 0.5),
       draftPick: draftPick(row[indexes.draftPick]),
+      draftYear: numberFrom(row[indexes.draftYear], undefined),
     };
+    if (id) byId[id] = profile;
     const exact = profileExactKey(name);
     const exactExisting = byExactName[exact];
     if (!exactExisting || profileConfidence(profile) > profileConfidence(exactExisting)) {
@@ -216,7 +230,7 @@ function buildProfileIndex(playersCsv) {
     }
     if (id) idToName[id] = name;
   }
-  return { byName, byExactName, idToName };
+  return { byName, byExactName, byId, idToName };
 }
 
 function profileConfidence(profile) {
@@ -286,8 +300,14 @@ function sourceForPlayer(player, profile, salary, config) {
   const isBig = /PF|C/i.test(player.position || profile.position);
   const age = ageFromBirthDate(profile.birthDate, config.seasonStart);
   const lateCareer = Number(age) >= 37;
+  const draftYear = Number(profile.draftYear);
+  const preRookie = Number.isFinite(draftYear) && draftYear > config.seasonStart;
   if (lateCareer) {
-    tags = tags.filter(tag => !['elite_burst', 'elite_rim_pressure'].includes(tag));
+    tags = tags.filter(tag => !['elite_burst', 'elite_rim_pressure', 'mvp', 'all_star', 'high_usage_creator'].includes(tag));
+  }
+  if (preRookie) {
+    tags = tags.filter(tag => !['mvp', 'all_star', 'high_usage_creator', 'floor_general', 'elite_passer'].includes(tag));
+    tags = [...new Set([...tags, 'pre_rookie_projection'])];
   }
   const override = SEASON_SOURCE_OVERRIDES[`${profileExactKey(player.full_name)}|${config.seasonStart}`] || {};
   if (override.tagsToRemove) {
@@ -297,11 +317,14 @@ function sourceForPlayer(player, profile, salary, config) {
     tags = [...new Set([...tags, ...override.tagsToAdd])];
   }
   const shootingSample = hasShootingSample(profile);
-  const productionScale = lateCareer ? 0.66 : 1;
+  const productionScale = preRookie ? 0.55 : lateCareer ? 0.66 : 1;
+  const reboundScale = preRookie ? 0.58 : lateCareer ? 0.82 : 1;
+  const assistScale = preRookie ? 0.58 : lateCareer ? 0.88 : 1;
   const ppg = numberFrom(override.pointsPerGame, profile.ppg * productionScale);
-  const rpg = numberFrom(override.reboundsPerGame, profile.rpg * (lateCareer ? 0.82 : 1));
-  const apg = numberFrom(override.assistsPerGame, profile.apg * (lateCareer ? 0.88 : 1));
-  const minutes = numberFrom(override.minutesPerGame, lateCareer ? Math.min(34, estimateMinutes(profile, salary)) : estimateMinutes(profile, salary));
+  const rpg = numberFrom(override.reboundsPerGame, profile.rpg * reboundScale);
+  const apg = numberFrom(override.assistsPerGame, profile.apg * assistScale);
+  const minutesCap = preRookie ? 28 : lateCareer ? 31 : 39;
+  const minutes = numberFrom(override.minutesPerGame, Math.min(minutesCap, estimateMinutes(profile, salary)));
   const star = roleSignal(profile, salary);
   const uncappedThreeAttempts = !shootingSample && isBig
     ? 0.1
@@ -313,8 +336,8 @@ function sourceForPlayer(player, profile, salary, config) {
   const threeAttempts = numberFrom(override.threePointAttemptsPerGame, uncappedThreeAttempts);
   const freeThrowAttempts = numberFrom(override.freeThrowAttemptsPerGame, Math.max(1.2, Math.min(9.5, ppg * 0.24 + (tags.includes('elite_rim_pressure') ? 2.2 : 0) + (isBig ? 0.5 : 0))));
   const usage = numberFrom(override.usagePct, Math.max(12, Math.min(34, 13 + ppg * 0.65 + apg * 0.45 + (tags.includes('high_usage_creator') ? 4 : 0))));
-  const defensiveWinShares = Math.max(0.8, Math.min(5.8, profile.ws / 24 + (tags.includes('defensive_anchor') ? 1.6 : 0) + (tags.includes('defensive_wing_assignment') ? 1.1 : 0)));
-  const winShares = Math.max(1, Math.min(16, profile.ws / 11 + (salary >= 8_000_000 ? 1.2 : 0)));
+  const defensiveWinShares = Math.max(0.4, Math.min(preRookie ? 2.2 : lateCareer ? 3.4 : 5.8, profile.ws / 24 + (tags.includes('defensive_anchor') ? 1.6 : 0) + (tags.includes('defensive_wing_assignment') ? 1.1 : 0)));
+  const winShares = Math.max(0.5, Math.min(preRookie ? 5.5 : lateCareer ? 8 : 16, profile.ws / 11 + (salary >= 8_000_000 ? 1.2 : 0)));
 
   return {
     player_id: playerSlug(player.full_name, config.season),
@@ -354,7 +377,7 @@ function sourceForPlayer(player, profile, salary, config) {
     driveRate: numberFrom(override.driveRate, tags.includes('elite_rim_pressure') ? 0.4 : isGuard ? 0.28 : 0.16),
     transitionRate: numberFrom(override.transitionRate, tags.includes('elite_burst') ? 0.24 : isGuard ? 0.16 : 0.1),
     postTouchRate: numberFrom(override.postTouchRate, tags.includes('post_scorer') ? 0.32 : isBig ? 0.18 : 0.05),
-    awardWeight: numberFrom(override.awardWeight, tags.includes('generational') ? 10 : tags.includes('mvp') ? 7 : tags.includes('all_star') ? 4 : star >= 42 ? 2 : 0),
+    awardWeight: numberFrom(override.awardWeight, preRookie ? 2 : lateCareer ? Math.min(2, star >= 42 ? 2 : 0) : tags.includes('generational') ? 10 : tags.includes('mvp') ? 7 : tags.includes('all_star') ? 4 : star >= 42 ? 2 : 0),
     scoutingTags: tags,
   };
 }
@@ -368,7 +391,7 @@ function main() {
   const rosters = parseEraRosters(rosterSource);
   const playersCsv = readFileSync(resolve(ROOT, 'players.csv'), 'utf8');
   const salariesCsv = readFileSync(resolve(ROOT, 'salaries_1985to2018.csv'), 'utf8');
-  const { byName, byExactName, idToName } = buildProfileIndex(playersCsv);
+  const { byName, byExactName, byId, idToName } = buildProfileIndex(playersCsv);
   const salaries = buildSalaryIndex(salariesCsv, idToName);
 
   const seeds = [];
@@ -378,7 +401,8 @@ function main() {
     for (const team of teams) {
       for (const player of team.players || []) {
         const key = NAME_ALIASES[normalizeName(player.full_name)] || normalizeName(player.full_name);
-        const profile = byExactName[profileExactKey(player.full_name)] || byName[key];
+        const profileId = TEAM_PROFILE_ID_ALIASES[`${normalizeName(player.full_name)}|${String(player.team || '').toUpperCase()}`];
+        const profile = (profileId ? byId[profileId] : undefined) || byExactName[profileExactKey(player.full_name)] || byName[key];
         if (!profile) continue;
         const salary = (salaries[key] || {})[String(config.seasonStart)] || 0;
         seeds.push({
