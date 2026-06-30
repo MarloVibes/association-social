@@ -188,6 +188,66 @@ describe('NBA game simulation', () => {
     expect(lines.get('Category Driver')!.freeThrowsAttempted).toBeGreaterThanOrEqual(lines.get('Category Shooter')!.freeThrowsAttempted);
   });
 
+  it('lets audited baseline profiles override stale saved shooting data', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'AUDIT',
+        players: [
+          {
+            playerId: 'stale-center',
+            name: 'Stale Center',
+            position: 'C',
+            minutes: 34,
+            shooting: 99,
+            threePoint: 99,
+            hidden: { shooting: 99, threePoint: 99, shotIq: 99 },
+            category_skill_grades: {
+              threePoint: { rating: 99, grade: 'S' },
+              finishing: { rating: 82, grade: 'B' },
+            },
+            baselineRatingProfile: {
+              attribute_model: { shooting: 48, threePoint: 35, shotIq: 62, closeShot: 78, dunking: 60 },
+              category_skill_grades: {
+                threePoint: { rating: 42, grade: 'F' },
+                finishing: { rating: 76, grade: 'B-' },
+              },
+            },
+            tendencies: {
+              threePointFrequency: 30,
+              catchAndShootFrequency: 26,
+              paintAttack: 62,
+            },
+          },
+          {
+            playerId: 'real-shooter',
+            name: 'Real Shooter',
+            position: 'SG',
+            minutes: 34,
+            shooting: 82,
+            threePoint: 86,
+            hidden: { shooting: 82, threePoint: 86, shotIq: 84 },
+            category_skill_grades: {
+              threePoint: { rating: 86, grade: 'B+' },
+              finishing: { rating: 64, grade: 'C-' },
+            },
+            tendencies: {
+              threePointFrequency: 88,
+              catchAndShootFrequency: 86,
+              paintAttack: 38,
+            },
+          },
+          { playerId: 'audit-pg', name: 'Audit PG', position: 'PG', minutes: 32, shooting: 76, playmaking: 84, defense: 72 },
+          { playerId: 'audit-pf', name: 'Audit PF', position: 'PF', minutes: 30, shooting: 72, playmaking: 60, defense: 78, rebounding: 82 },
+          { playerId: 'audit-sf', name: 'Audit SF', position: 'SF', minutes: 28, shooting: 70, playmaking: 58, defense: 76 },
+        ],
+      },
+      away: fixture.away,
+    }, 'audited-baseline-sim-seed');
+
+    const lines = new Map(result.home.players.map(player => [player.name, player]));
+    expect(lines.get('Stale Center')!.threePointersAttempted).toBeLessThan(lines.get('Real Shooter')!.threePointersAttempted);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },

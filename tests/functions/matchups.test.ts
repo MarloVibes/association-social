@@ -304,6 +304,35 @@ describe('matchup request state helpers', () => {
     expect(team.players[1].hidden.shooting).toBe(84);
   });
 
+  it('lets baseline category grades override stale saved categories before live simulation', () => {
+    const team = canonicalizeTeamForSimulation({
+      players: [
+        {
+          player_id: 'baseline-center',
+          full_name: 'Baseline Center',
+          position: 'C',
+          hidden: { shooting: 99, threePoint: 99, defense: 92, rebounding: 94 },
+          category_skill_grades: {
+            threePoint: { rating: 99, grade: 'S' },
+            finishing: { rating: 99, grade: 'S' },
+          },
+          baselineRatingProfile: {
+            attribute_model: { shooting: 48, threePoint: 38, closeShot: 82, dunking: 74 },
+            category_skill_grades: {
+              threePoint: { rating: 42, grade: 'F' },
+              finishing: { rating: 78, grade: 'B' },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(team.players[0].hidden.threePoint).toBe(38);
+    expect(team.players[0].hidden.shooting).toBe(48);
+    expect(team.players[0].category_skill_grades.threePoint).toEqual({ rating: 42, grade: 'F' });
+    expect(team.players[0].category_skill_grades.finishing).toEqual({ rating: 78, grade: 'B' });
+  });
+
   it('uses roster hidden values and stores a box score for simulated games', () => {
     const game = seedAvailableGame();
     const result = simulateScheduledGame({

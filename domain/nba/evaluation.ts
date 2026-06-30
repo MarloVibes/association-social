@@ -97,8 +97,9 @@ function hiddenValue(player: Record<string, any>, profile: Record<string, any> |
     ...sourceObject(profile || {}, null, 'hidden'),
     ...sourceObject(player, profile, 'hidden'),
   };
-  const direct = ratingModelValue(player, profile, key) ?? player?.[key] ?? profile?.[key];
-  return clamp(numberFrom(hidden[key] ?? direct, fallback), 0, 100);
+  const modelValue = ratingModelValue(player, profile, key);
+  const direct = modelValue ?? player?.[key] ?? profile?.[key];
+  return clamp(numberFrom(modelValue ?? hidden[key] ?? direct, fallback), 0, 100);
 }
 
 function optionalHiddenValue(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: string) {
@@ -106,8 +107,9 @@ function optionalHiddenValue(player: Record<string, any>, profile: Record<string
     ...sourceObject(profile || {}, null, 'hidden'),
     ...sourceObject(player, profile, 'hidden'),
   };
-  const direct = ratingModelValue(player, profile, key) ?? player?.[key] ?? profile?.[key];
-  const numeric = numberFrom(hidden[key] ?? direct, Number.NaN);
+  const modelValue = ratingModelValue(player, profile, key);
+  const direct = modelValue ?? player?.[key] ?? profile?.[key];
+  const numeric = numberFrom(modelValue ?? hidden[key] ?? direct, Number.NaN);
   return Number.isFinite(numeric) ? clamp(numeric, 0, 100) : null;
 }
 

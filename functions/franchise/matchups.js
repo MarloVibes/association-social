@@ -248,11 +248,20 @@ function canonicalHiddenForSimulation(player) {
   return hidden;
 }
 
+function canonicalCategoryGradesForSimulation(player) {
+  const profile = player && player.baselineRatingProfile;
+  return {
+    ...((player && player.category_skill_grades) || {}),
+    ...((profile && profile.category_skill_grades) || {}),
+  };
+}
+
 function canonicalizePlayerForSimulation(player) {
   if (!player || typeof player !== 'object') return player;
   return {
     ...player,
     hidden: canonicalHiddenForSimulation(player),
+    category_skill_grades: canonicalCategoryGradesForSimulation(player),
   };
 }
 

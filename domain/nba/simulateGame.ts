@@ -38,6 +38,11 @@ export type SimPlayerInput = {
   fatigue?: number;
   hidden?: Record<string, number>;
   category_skill_grades?: Record<string, { rating?: number; grade?: string } | number>;
+  baselineRatingProfile?: {
+    category_skill_grades?: Record<string, { rating?: number; grade?: string } | number>;
+    attribute_model?: Record<string, number>;
+    era_adjusted_profiles?: Record<string, number>;
+  };
   tendencies?: Partial<Record<
     | 'paintAttack'
     | 'rimFinishFrequency'
@@ -140,7 +145,8 @@ function skill(player: SimPlayerInput, key: keyof SimPlayerInput, fallback = 60)
 }
 
 function categoryRating(player: SimPlayerInput, key: string, fallback: number) {
-  const entry = player.category_skill_grades?.[key];
+  const entry = player.baselineRatingProfile?.category_skill_grades?.[key]
+    ?? player.category_skill_grades?.[key];
   const value = typeof entry === 'number' ? entry : entry?.rating;
   return clamp(Number.isFinite(Number(value)) ? Number(value) : fallback, 0, 100);
 }
