@@ -207,6 +207,7 @@ describe('NBA game simulation', () => {
             },
             baselineRatingProfile: {
               attribute_model: { shooting: 48, threePoint: 35, shotIq: 62, closeShot: 78, dunking: 60 },
+              source_stat_line: { threePointAttemptsPerGame: 0.1 },
               category_skill_grades: {
                 threePoint: { rating: 42, grade: 'F' },
                 finishing: { rating: 76, grade: 'B-' },
@@ -246,6 +247,8 @@ describe('NBA game simulation', () => {
 
     const lines = new Map(result.home.players.map(player => [player.name, player]));
     expect(lines.get('Stale Center')!.threePointersAttempted).toBeLessThan(lines.get('Real Shooter')!.threePointersAttempted);
+    expect(lines.get('Stale Center')!.threePointersAttempted).toBeLessThanOrEqual(1);
+    expect(lines.get('Stale Center')!.threePointersMade).toBe(0);
   });
 
   it('keeps raw era ids out of generated game stories', () => {

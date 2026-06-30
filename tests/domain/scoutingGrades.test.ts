@@ -194,8 +194,8 @@ describe('NBA scouting grades', () => {
     const roseGrades = buildScoutingGrades(rose2011!, rose2011);
     const paulGrades = buildScoutingGrades(paul2011!, paul2011);
 
-    expect(gradeRank(roseGrades.passing)).toBeLessThan(gradeRank('S'));
-    expect(gradeRank(roseGrades.passing)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(roseGrades.passing)).toBeLessThan(gradeRank('A+'));
+    expect(gradeRank(roseGrades.passing)).toBeGreaterThanOrEqual(gradeRank('B+'));
     expect(gradeRank(paulGrades.passing)).toBeGreaterThanOrEqual(gradeRank('A+'));
   });
 

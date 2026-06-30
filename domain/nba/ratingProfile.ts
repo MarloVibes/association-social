@@ -283,11 +283,16 @@ export function buildPlayerRatingProfile({
     : resolvedSource;
   const attribute_model = buildAttributeModel({ source: sourceWithAge, leagueContext });
   const era = applyEraAdjustment({ source: sourceWithAge, attribute_model, context: eraContext });
+  const development_curve = developmentCurve(era.era_adjusted_profiles, sourceWithAge);
+  const era_adjusted_profiles = {
+    ...era.era_adjusted_profiles,
+    potential: development_curve.potential,
+  };
   const validation_warnings = patch?.skill_grades
-    ? validateSkillGrades(era.era_adjusted_profiles, patch.skill_grades)
+    ? validateSkillGrades(era_adjusted_profiles, patch.skill_grades)
     : [];
-  const skill_grades = skillGradesFromAttributes(era.era_adjusted_profiles);
-  const category_skill_grades = buildSkillGrades(era.era_adjusted_profiles, {
+  const skill_grades = skillGradesFromAttributes(era_adjusted_profiles);
+  const category_skill_grades = buildSkillGrades(era_adjusted_profiles, {
     shotVolumeModifier: shotVolumeModifier(resolvedSource),
   });
   const tendencies = buildPlayerTendencies(sourceWithAge);
@@ -309,14 +314,14 @@ export function buildPlayerRatingProfile({
     roster_status: patch?.roster_status,
     source_snapshot_id,
     attribute_model,
-    era_adjusted_profiles: era.era_adjusted_profiles,
+    era_adjusted_profiles,
     skill_grades,
     category_skill_grades,
     tendencies,
-    archetypes: archetypesFor(era.era_adjusted_profiles, sourceWithAge),
-    traits: traitsFor(era.era_adjusted_profiles),
+    archetypes: archetypesFor(era_adjusted_profiles, sourceWithAge),
+    traits: traitsFor(era_adjusted_profiles),
     source_stat_line: sourceWithAge,
-    development_curve: developmentCurve(era.era_adjusted_profiles, sourceWithAge),
+    development_curve,
     era_notes: era.era_notes,
     validation_warnings,
     model_version: 'original-attribute-model-v1',

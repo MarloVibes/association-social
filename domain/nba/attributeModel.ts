@@ -222,7 +222,7 @@ function tagBonus(source: PublicStatLine, tag: string, bonus: number) {
   return hasTag(source, tag) ? bonus : 0;
 }
 
-function passingProductionCap(source: PublicStatLine): number {
+export function passingProductionCap(source: PublicStatLine): number {
   const apg = numberFrom(source.assistsPerGame);
   const astPct = numberFrom(source.assistPct);
   const tovPct = numberFrom(source.turnoverPct, 12);
@@ -231,10 +231,10 @@ function passingProductionCap(source: PublicStatLine): number {
   const connectorBig = hasTag(source, 'connector_big');
 
   if (apg >= 10 && astPct >= 45 && tovPct <= 14.5 && (elitePasser || floorGeneral)) return 100;
-  if ((apg >= 9 && astPct >= 40) || (apg >= 8 && elitePasser)) return 98;
-  if (apg >= 7.5 && astPct >= 35) return 94;
-  if (apg >= 6.5 && astPct >= 31) return 91;
-  if (apg >= 5.5 && astPct >= 27) return floorGeneral ? 91 : 88;
+  if ((apg >= 9 && astPct >= 40) || (apg >= 8.5 && elitePasser)) return 98;
+  if (apg >= 8 && astPct >= 35) return elitePasser || floorGeneral ? 94 : 91;
+  if (apg >= 7 && astPct >= 32) return elitePasser || floorGeneral ? 91 : 88;
+  if (apg >= 6 && astPct >= 28) return floorGeneral ? 88 : 85;
   if (apg >= 4.5 && astPct >= 23) return connectorBig ? 88 : 84;
   if (apg >= 3.5 && astPct >= 19) return connectorBig ? 85 : 79;
   if (apg >= 2.5 && astPct >= 15) return connectorBig ? 82 : 74;

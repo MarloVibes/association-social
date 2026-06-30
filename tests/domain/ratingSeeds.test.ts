@@ -27,6 +27,7 @@ describe('rating seed baselines', () => {
     expect(lebron2011?.category_skill_grades.finishing.grade).toMatch(/^A/);
     expect(lebron2011?.category_skill_grades.playmaking.grade).toMatch(/^A/);
     expect(rose2011?.category_skill_grades.playmaking.grade).toMatch(/^A|S/);
+    expect(gradeRank(lebron2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
 
   it('does not inflate 2011 Derrick Rose into an elite three point shooter', () => {
@@ -43,8 +44,8 @@ describe('rating seed baselines', () => {
     const lillard2017 = findProfile('Damian Lillard', 'POR', 2017);
     const paul2011 = findProfile('Chris Paul', 'NOH', 2011);
 
-    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeLessThan(gradeRank('S'));
-    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeLessThan(gradeRank('A+'));
+    expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('B+'));
     expect(gradeRank(rose2011?.category_skill_grades.playmaking.grade || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(rose2017.skill_grades.passing || 'F')).toBeLessThanOrEqual(gradeRank('B+'));
     expect(gradeRank(lillard2017.skill_grades.passing || 'F')).toBeLessThan(gradeRank('S'));
@@ -304,6 +305,8 @@ describe('rating seed baselines', () => {
 
     expect(lebron2026?.development_curve.phase).toBe('Legacy Star');
     expect(lebron2026?.development_curve.potential_grade).toBe('B-');
+    expect(lebron2026?.skill_grades.potential).toBe('B-');
+    expect(lebron2026?.category_skill_grades.potential.grade).toBe('B-');
     expect(lebron2026?.category_skill_grades.basketballIq.grade).toMatch(/^A|S/);
     expect(lebron2026?.category_skill_grades.finishing.grade).toMatch(/^A|B/);
   });

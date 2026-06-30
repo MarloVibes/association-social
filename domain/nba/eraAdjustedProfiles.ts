@@ -1,5 +1,5 @@
 import type { AttributeModel, PublicStatLine } from './attributeModel';
-import { ATTRIBUTE_KEYS } from './attributeModel';
+import { ATTRIBUTE_KEYS, passingProductionCap } from './attributeModel';
 
 export type EraAdjustmentContext = {
   season: number;
@@ -141,6 +141,12 @@ export function applyEraAdjustment({
     add(profile, 'offenseIq', 1.5);
     add(profile, 'defenseIq', 1.5);
     notes.push('recognized winning rotation impact');
+  }
+
+  const finalPassingCap = passingProductionCap(source);
+  if (profile.passing > finalPassingCap) {
+    profile.passing = finalPassingCap;
+    notes.push('capped pure passing to assist-production proof');
   }
 
   return {

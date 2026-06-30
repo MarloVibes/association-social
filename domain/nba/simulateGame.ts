@@ -42,6 +42,9 @@ export type SimPlayerInput = {
     category_skill_grades?: Record<string, { rating?: number; grade?: string } | number>;
     attribute_model?: Record<string, number>;
     era_adjusted_profiles?: Record<string, number>;
+    source_stat_line?: {
+      threePointAttemptsPerGame?: number;
+    };
   };
   tendencies?: Partial<Record<
     | 'paintAttack'
@@ -310,7 +313,15 @@ function shootingLine(points: number, variance: number, player: SimPlayerInput) 
   const perimeterProfile = threePoint * 0.56 + sim.shotIq * 0.18 + threeFrequency * 0.18 + catchAndShoot * 0.05 + pullUp * 0.03;
   const interiorProfile = finishing * 0.45 + sim.closeShot * 0.18 + sim.dunking * 0.14 + sim.postOffense * 0.08 + paintAttack * 0.1 + rimFinish * 0.05;
   const threeRate = clamp(0.08 + (perimeterProfile - interiorProfile + 52) / 170, 0.04, 0.62);
-  const threePointersMade = Math.min(Math.floor(points / 3), Math.floor(points * threeRate / 3));
+  const sourceThreeAttempts = Number(player.baselineRatingProfile?.source_stat_line?.threePointAttemptsPerGame);
+  const hasSourceThreeVolume = Number.isFinite(sourceThreeAttempts);
+  const minuteScale = clamp(Number(player.minutes || 0) / 36, 0.25, 1.45);
+  const sourceAttemptCap = hasSourceThreeVolume
+    ? Math.max(0, Math.round(Math.max(0, sourceThreeAttempts) * minuteScale + (variance % 6 === 0 ? 1 : 0)))
+    : null;
+  const nonShootingProfile = threePoint < 65 && threeFrequency < 55 && (sourceAttemptCap ?? 2) <= 1;
+  let threePointersMade = Math.min(Math.floor(points / 3), Math.floor(points * threeRate / 3));
+  if (nonShootingProfile) threePointersMade = 0;
   let remaining = points - (threePointersMade * 3);
   const freeThrowPressure = clamp(foulPressure * 0.45 + paintAttack * 0.24 + finishing * 0.22 + sim.freeThrow * 0.09, 35, 99);
   let freeThrowsMade = Math.min(remaining, Math.round((freeThrowPressure / 100) * (variance % 7)));
@@ -320,11 +331,15 @@ function shootingLine(points: number, variance: number, player: SimPlayerInput) 
   const fieldGoalsMade = twoPointersMade + threePointersMade;
   const shotQuality = clamp((sim.shotIq + sim.confidenceMultiplier * 80 + sim.formMultiplier * 80) / 240, 0.48, 0.9);
   const extraFreeThrowAttempts = Math.max(variance % 3, Math.round((freeThrowPressure - 62) / 14));
+  const generatedThreeAttempts = threePointersMade + Math.max(0, Math.round(threeRate * 8) + (variance % 3));
+  const volumeCappedThreeAttempts = sourceAttemptCap === null
+    ? generatedThreeAttempts
+    : Math.min(generatedThreeAttempts, Math.max(sourceAttemptCap, threePointersMade));
   return {
     fieldGoalsMade,
     fieldGoalsAttempted: fieldGoalsMade + 2 + Math.max(0, Math.round((variance % 7) * (1.04 - shotQuality))),
     threePointersMade,
-    threePointersAttempted: threePointersMade + Math.max(1, Math.round(threeRate * 8) + (variance % 3)),
+    threePointersAttempted: Math.max(threePointersMade, volumeCappedThreeAttempts),
     freeThrowsMade,
     freeThrowsAttempted: freeThrowsMade + extraFreeThrowAttempts,
   };

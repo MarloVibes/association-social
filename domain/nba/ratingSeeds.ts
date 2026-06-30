@@ -59,7 +59,7 @@ const seeds: BaselineSeed[] = [
       driveRate: 0.38,
       transitionRate: 0.24,
       awardWeight: 8,
-      scoutingTags: ['generational', 'elite_rim_pressure', 'high_usage_creator', 'defensive_wing_assignment'],
+      scoutingTags: ['generational', 'elite_rim_pressure', 'high_usage_creator', 'floor_general', 'defensive_wing_assignment'],
     },
   },
   {
