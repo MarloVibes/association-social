@@ -80,6 +80,14 @@ function threePointSkill(attributes: Partial<AttributeModel>, context: SkillGrad
     offenseIq: 0.05,
     shotVolumeModifier: 0.05,
   }, context);
+  const volume = Number(context.shotVolumeModifier);
+  if (Number.isFinite(volume) && volume <= 65) {
+    const capped = Math.min(raw, 59.4);
+    return {
+      rating: Math.round(capped * 10) / 10,
+      grade: gradeFromNumeric(capped),
+    };
+  }
   const support = weightedRating(attributes, {
     shotIq: 0.4,
     shotConsistency: 0.4,

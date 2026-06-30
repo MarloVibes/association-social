@@ -34,6 +34,7 @@ const baseSource: PublicStatLine = {
   turnoverPct: 11,
   defensiveWinShares: 4.1,
   winShares: 9,
+  scoutingTags: ['defensive_wing_assignment'],
 };
 
 const baseModel: AttributeModel = {

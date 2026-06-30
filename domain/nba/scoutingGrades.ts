@@ -152,14 +152,14 @@ function firstGrade(...values: unknown[]): NbaGrade | null {
 
 function sourceObject(player: Record<string, any>, profile: Record<string, any> | null | undefined, key: string) {
   const candidates = [
-    player?.[key],
-    player?.visible?.[key],
-    player?.identity?.[key],
-    player?.visibleIdentity?.[key],
     profile?.[key],
     profile?.visible?.[key],
     profile?.identity?.[key],
     profile?.visibleIdentity?.[key],
+    player?.[key],
+    player?.visible?.[key],
+    player?.identity?.[key],
+    player?.visibleIdentity?.[key],
   ];
   return candidates.find(value => value && typeof value === 'object') || {};
 }

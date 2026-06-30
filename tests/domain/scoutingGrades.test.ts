@@ -157,6 +157,32 @@ describe('NBA scouting grades', () => {
     expect(buildScoutingGrades(rosterSnapshot, canonicalProfile).threePoint).toBe('B-');
   });
 
+  it('prefers the canonical rating profile over stale saved attribute models', () => {
+    const staleRosterSnapshot = {
+      full_name: 'Stale Big',
+      position: 'C',
+      attribute_model: {
+        threePoint: 94,
+        shotIq: 86,
+        shotConsistency: 88,
+        offenseIq: 78,
+      },
+    };
+    const canonicalProfile = {
+      attribute_model: {
+        threePoint: 55,
+        shotIq: 62,
+        shotConsistency: 60,
+        offenseIq: 72,
+      },
+      source_stat_line: {
+        threePointAttemptsPerGame: 0.1,
+      },
+    };
+
+    expect(buildScoutingGrades(staleRosterSnapshot, canonicalProfile).threePoint).toBe('D+');
+  });
+
   it('separates skill, role, impact, overall, and trade value grades', () => {
     const benchShooter = buildScoutingGrades({
       hidden: {

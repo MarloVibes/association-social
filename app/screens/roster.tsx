@@ -59,9 +59,9 @@ function gradeFromAny(value: any): NbaGrade | null {
 }
 
 function rosterGradeChips(player: any, profile: any) {
-  const categoryGrades = player?.category_skill_grades || profile?.category_skill_grades || {};
-  const visibleGrades = player?.visibleIdentity?.grades || player?.identity?.grades || profile?.visibleIdentity?.grades || profile?.identity?.grades || {};
-  const attributes = player?.era_adjusted_profiles || player?.attribute_model || profile?.era_adjusted_profiles || profile?.attribute_model || {};
+  const categoryGrades = profile?.category_skill_grades || player?.category_skill_grades || {};
+  const visibleGrades = profile?.visibleIdentity?.grades || profile?.identity?.grades || player?.visibleIdentity?.grades || player?.identity?.grades || {};
+  const attributes = profile?.era_adjusted_profiles || profile?.attribute_model || player?.era_adjusted_profiles || player?.attribute_model || {};
   const scoutingGrades = buildScoutingGrades(player || {}, profile || null);
 
   return ROSTER_GRADE_KEYS.map(({ key, label }) => {

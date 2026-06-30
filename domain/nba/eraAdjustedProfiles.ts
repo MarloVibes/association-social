@@ -46,6 +46,17 @@ function isBig(source: PublicStatLine) {
   return ['PF', 'C'].some(pos => position(source).includes(pos));
 }
 
+function hasTag(source: PublicStatLine, tag: string) {
+  return (source.scoutingTags || []).some(value => String(value).toLowerCase() === tag.toLowerCase());
+}
+
+function hasIndividualDefenseProof(source: PublicStatLine) {
+  return hasTag(source, 'defensive_wing_assignment')
+    || hasTag(source, 'point_of_attack_defender')
+    || hasTag(source, 'defensive_anchor')
+    || hasTag(source, 'rim_protector');
+}
+
 function add(profile: AttributeModel, key: keyof AttributeModel, value: number) {
   profile[key] = clamp(profile[key] + value);
 }
@@ -82,7 +93,7 @@ export function applyEraAdjustment({
   const leagueThree = pct(context.leagueThreePointPct, 0.36);
   const paceRatio = numberFrom(context.leaguePace || context.pace, 100) / 100;
 
-  if (minutes >= baselineMinutes + 4 && dws >= 3 && (isWing(source) || isGuard(source))) {
+  if (minutes >= baselineMinutes + 4 && dws >= 3 && hasIndividualDefenseProof(source) && (isWing(source) || isGuard(source))) {
     add(profile, 'perimeterDefense', 3 + workloadBonus * 0.35);
     add(profile, 'defenseIq', 3 + dws * 0.35);
     add(profile, 'helpDefense', 2 + stocks);

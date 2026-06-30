@@ -208,13 +208,20 @@ function tagsFor(name, profile, salary) {
   return [...tags];
 }
 
+function hasShootingSample(profile) {
+  return Number.isFinite(profile.fg3) && profile.fg3 >= 0.12;
+}
+
 function sourceForPlayer(player, profile, salary, config) {
   const tags = tagsFor(player.full_name, profile, salary);
   const isGuard = /PG|SG|G/i.test(player.position || profile.position);
   const isBig = /PF|C/i.test(player.position || profile.position);
+  const shootingSample = hasShootingSample(profile);
   const minutes = estimateMinutes(profile, salary);
   const star = roleSignal(profile, salary);
-  const threeAttempts = tags.includes('elite_shooter')
+  const threeAttempts = !shootingSample && isBig
+    ? 0.1
+    : tags.includes('elite_shooter')
     ? 5.6
     : isGuard ? 3.4
       : /SF/i.test(player.position || profile.position) ? 2.6
@@ -241,7 +248,7 @@ function sourceForPlayer(player, profile, salary, config) {
     fieldGoalPct: profile.fg || 0.45,
     trueShootingPct: Math.max(0.45, Math.min(0.66, (profile.efg || profile.fg || 0.5) + profile.ft * 0.055 + (tags.includes('elite_shooter') ? 0.018 : 0))),
     effectiveFieldGoalPct: profile.efg || profile.fg || 0.5,
-    threePointPct: profile.fg3 || config.leagueThreePointPct,
+    threePointPct: shootingSample ? profile.fg3 : isBig ? 0.05 : Math.max(0.24, config.leagueThreePointPct - 0.08),
     threePointAttemptsPerGame: threeAttempts,
     freeThrowPct: profile.ft || config.leagueFreeThrowPct,
     freeThrowAttemptsPerGame: freeThrowAttempts,
