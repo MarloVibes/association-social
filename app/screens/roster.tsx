@@ -8,10 +8,10 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { gradeFromNumeric } from '@/domain/nba/gradeScale';
 import type { NbaGrade } from '@/domain/nba/identity';
 import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
+import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
@@ -42,10 +42,6 @@ const GRADE_COLORS: Record<NbaGrade, string> = {
   'D-': '#e95360',
   F: '#c83a4a',
 };
-
-function normalizePlayerName(player: any): string {
-  return String(player?.full_name || player?.name || '').trim();
-}
 
 function gradeFromAny(value: any): NbaGrade | null {
   if (!value && value !== 0) return null;
@@ -910,11 +906,7 @@ export default function RosterScreen() {
           const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
           const isUntouchable = isMine && myUntouchables.includes(pid);
           const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
-          const profile = profilesByName[normalizePlayerName(item)]
-            || profilesByName[item.full_name]
-            || profilesByName[item.name]
-            || resolveBaselineRatingProfile(item, { era: eraKey, currentYear })
-            || null;
+          const profile = selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear });
           const gradeChips = rosterGradeChips(item, profile);
           const bestGrade = strongestGrade(item, profile);
           const archetype = getSportArchetypeForYear(item, profile, currentYear, authoritativeSport);

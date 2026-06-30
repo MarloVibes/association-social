@@ -210,6 +210,29 @@ describe('NBA scouting grades', () => {
     expect(gradeRank(buildScoutingGrades(truckRobinson1984!, truckRobinson1984).threePoint)).toBeLessThanOrEqual(gradeRank('C'));
   });
 
+  it('keeps public player-card grades aligned with obvious real player skill profiles', () => {
+    const profiles = buildBaselineRatingProfiles();
+    const lebron2011 = profiles.find(profile => profile.full_name === 'LeBron James' && profile.team === 'MIA' && profile.season === 2011);
+    const edwards2026 = profiles.find(profile => profile.full_name === 'Anthony Edwards' && profile.team === 'MIN' && profile.season === 2026);
+    const rose2011 = profiles.find(profile => profile.full_name === 'Derrick Rose' && profile.team === 'CHI' && profile.season === 2011);
+    const gobert2026 = profiles.find(profile => profile.full_name === 'Rudy Gobert' && profile.team === 'MIN' && profile.season === 2026);
+
+    expect(lebron2011).toBeTruthy();
+    expect(edwards2026).toBeTruthy();
+    expect(rose2011).toBeTruthy();
+    expect(gobert2026).toBeTruthy();
+
+    const lebronGrades = buildScoutingGrades(lebron2011!, lebron2011);
+    const edwardsGrades = buildScoutingGrades(edwards2026!, edwards2026);
+    const roseGrades = buildScoutingGrades(rose2011!, rose2011);
+    const gobertGrades = buildScoutingGrades(gobert2026!, gobert2026);
+
+    expect(gradeRank(lebronGrades.dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(edwardsGrades.dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(roseGrades.perimeterDefense)).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(gobertGrades.threePoint)).toBeLessThanOrEqual(gradeRank('D+'));
+  });
+
   it('shows true rebounders as rebounders on public player cards', () => {
     const profiles = buildBaselineRatingProfiles();
     const roundfield1984 = profiles.find(profile => profile.full_name === 'Dan Roundfield' && profile.team === 'ATL' && profile.season === 1984);

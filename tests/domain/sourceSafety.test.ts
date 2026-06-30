@@ -547,7 +547,7 @@ describe('source safety regressions', () => {
     const roster = source('app/screens/team-roster.tsx');
 
     expect(roster).toContain("rosterViewMode, setRosterViewMode");
-    expect(roster).toContain('playerBaselineProfile || profilesByName[p.full_name]');
+    expect(roster).toContain('selectRosterRatingProfile(p, profilesByName');
     expect(roster).toContain("ROSTER");
     expect(roster).toContain("PICKS");
     expect(roster).toContain("rosterViewMode === 'picks'");

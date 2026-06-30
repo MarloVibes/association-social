@@ -8,8 +8,8 @@ import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
-import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
+import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { gradeRank } from '@/domain/nba/gradeScale';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -399,8 +399,7 @@ export default function TeamRosterScreen() {
             }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         const canCpuTrade = !team.gmId && !isMyTeam;
-        const playerBaselineProfile = resolveBaselineRatingProfile(p, { era: leagueEra, currentYear, leagueDate });
-        const playerProfile = playerBaselineProfile || profilesByName[p.full_name];
+        const playerProfile = selectRosterRatingProfile(p, profilesByName, { era: leagueEra, currentYear, leagueDate });
         const archetype = getSportArchetypeForYear(p, playerProfile, currentYear, sport);
         const gradePreview = isNBARoster ? rosterGradePreview(p, playerProfile) : [];
         const topGrade = gradePreview[0];
