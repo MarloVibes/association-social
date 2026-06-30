@@ -100,6 +100,24 @@ describe('rating seed baselines', () => {
     expect(gradeRank(ewing1992.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
 
+  it('does not merge Jr players into older same-name historical profiles', () => {
+    const hardawayJr2017 = findProfile('Tim Hardaway Jr', 'ATL', 2017);
+
+    expect(hardawayJr2017.age).toBeLessThan(30);
+    expect(hardawayJr2017.position).toMatch(/SG|SF|G|F/i);
+    expect(hardawayJr2017.source_stat_line.assistsPerGame).toBeLessThan(5);
+    expect(gradeRank(hardawayJr2017.category_skill_grades.playmaking.grade)).toBeLessThan(gradeRank('A-'));
+  });
+
+  it('does not give pre-breakout or inactive era seasons future playmaking production', () => {
+    const simmons2017 = findProfile('Ben Simmons', 'PHI', 2017);
+
+    expect(simmons2017.source_stat_line.minutesPerGame).toBeLessThan(18);
+    expect(simmons2017.source_stat_line.assistsPerGame).toBeLessThan(4);
+    expect(gradeRank(simmons2017.category_skill_grades.playmaking.grade)).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(simmons2017.development_curve.potential_grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
   it('keeps explosive wings and guards as real dunking threats', () => {
     const lebron2011 = findProfile('LeBron James', 'MIA', 2011);
     const edwards2026 = findProfile('Anthony Edwards', 'MIN', 2026);
@@ -185,13 +203,42 @@ describe('rating seed baselines', () => {
       && !hasTag(profile, 'mvp')
       && !hasTag(profile, 'all_star')
       && !hasTag(profile, 'high_usage_creator')
+      && !hasTag(profile, 'elite_shooter')
       && Number(profile.source_stat_line?.midRangeAttemptRate || 0) < 0.15
     ));
     for (const profile of weakMidrangeProof) {
       expect(
         gradeRank(profile.category_skill_grades.midRange.grade),
-        `${profile.full_name} ${profile.season} needs midrange role proof for elite midrange`,
-      ).toBeLessThan(gradeRank('A+'));
+        `${profile.full_name} ${profile.season} needs midrange role proof for A-level midrange`,
+      ).toBeLessThan(gradeRank('A-'));
+    }
+
+    const preModernGenericThreePoint = allProfiles.filter(profile => (
+      Number(profile.season || 0) < 1990
+      && !hasTag(profile, 'elite_shooter')
+      && Number(profile.source_stat_line?.threePointPct || 0) < 0.33
+      && Number(profile.source_stat_line?.threePointAttemptsPerGame || 0) >= 2
+    ));
+    for (const profile of preModernGenericThreePoint) {
+      expect(
+        gradeRank(profile.category_skill_grades.threePoint.grade),
+        `${profile.full_name} ${profile.season} needs real era volume and efficiency proof for B+ or better 3PT`,
+      ).toBeLessThan(gradeRank('B+'));
+    }
+
+    const genericBigDunkers = allProfiles.filter(profile => (
+      isBig(profile)
+      && !hasTag(profile, 'elite_rim_pressure')
+      && !hasTag(profile, 'elite_burst')
+      && !hasTag(profile, 'high_usage_creator')
+      && Number(profile.source_stat_line?.rimAttemptRate || 0) <= 0.35
+      && Number(profile.source_stat_line?.dunkRate || 0) <= 0.11
+    ));
+    for (const profile of genericBigDunkers) {
+      expect(
+        gradeRank(profile.skill_grades.dunking || 'F'),
+        `${profile.full_name} ${profile.season} needs real rim-pressure proof for A-level dunking`,
+      ).toBeLessThan(gradeRank('A-'));
     }
 
     const suspiciousYouthStars = allProfiles.filter(profile => (
@@ -213,6 +260,15 @@ describe('rating seed baselines', () => {
     expect(lebron2026?.development_curve.potential_grade).toBe('B-');
     expect(lebron2026?.category_skill_grades.basketballIq.grade).toMatch(/^A|S/);
     expect(lebron2026?.category_skill_grades.finishing.grade).toMatch(/^A|B/);
+  });
+
+  it('does not reuse prime-career athleticism for late-career generated seasons', () => {
+    const jordan2003 = findProfile('Michael Jordan', 'WAS', 2003);
+
+    expect(jordan2003.age).toBeGreaterThanOrEqual(39);
+    expect(jordan2003.source_stat_line.pointsPerGame).toBeLessThan(25);
+    expect(gradeRank(jordan2003.skill_grades.dunking || 'F')).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(jordan2003.category_skill_grades.athleticism.grade)).toBeLessThan(gradeRank('A-'));
   });
 
   it('generates broad 2011 era roster baselines instead of leaving core teams generic', () => {

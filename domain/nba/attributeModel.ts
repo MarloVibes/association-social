@@ -358,7 +358,7 @@ export function buildAttributeModel({
     + scoringVolume * 0.22
     + eliteShooterBonus;
   const weakEraThreeProof = trustedThreePct < 0.33 && eliteShooterBonus <= 0;
-  const rawThreePoint = weakEraThreeProof ? Math.min(uncappedThreePoint, 84.4) : uncappedThreePoint;
+  const rawThreePoint = weakEraThreeProof ? Math.min(uncappedThreePoint, 79.4) : uncappedThreePoint;
   const rawPerimeterDefense = 56
     + spg * 8
     + defenseSignal * 5.6
@@ -380,7 +380,15 @@ export function buildAttributeModel({
   const strongReboundFloor = rpg >= 10 && drebPct >= 18 && mpg >= 24 ? 89 : 0;
   const reboundFloor = Math.max(eliteReboundFloor, strongReboundFloor);
   const hasEliteMidrangeProof = eliteMidRangeBonus > 0 || mvpBonus > 0 || allStarBonus > 0 || highUsageBonus > 0;
-  const midrangeProofCap = !hasEliteMidrangeProof && midRangeAttemptRate < 0.22 ? 94.4 : 100;
+  const midrangeProofCap = !hasEliteMidrangeProof && midRangeAttemptRate < 0.22 ? 86.4 : 100;
+  const genericBigDunkCap = big
+    && rimPressureBonus <= 0
+    && burstBonus <= 0
+    && highUsageBonus <= 0
+    && dunkRate <= 0.11
+    && rimRate <= 0.35
+    ? 84.4
+    : 100;
 
   const rawPassing = 52 + apg * 3.4 + astPct * 0.65 - Math.max(0, tovPct - 12) * 0.6 + (guard ? 5 : 0) + floorGeneralBonus + elitePasserBonus + connectorBigBonus;
   const passingCap = passingProductionCap(source);
@@ -395,7 +403,7 @@ export function buildAttributeModel({
     midRange: Math.min(56 + scoringVolume * 0.65 + ft * 15 + efg * 9 + usage(source) * 0.45 + (guard || wing ? 3 : 0) + eliteMidRangeBonus, midrangeProofCap),
     threePoint: lowVolumeThreeProof ? Math.min(rawThreePoint, big ? 57 : 62) : rawThreePoint,
     freeThrow: 44 + ft * 58 + fta * 0.6,
-    dunking: 50 + fta * 1.8 + fg * 14 + dunkRate * 102 + rimRate * 27 + driveRate * 15 + transitionRate * 10 + (big ? 7 : wing ? 6 : 0) + Math.max(0, 28 - age) * 0.6 + rimPressureBonus + burstBonus,
+    dunking: Math.min(50 + fta * 1.8 + fg * 14 + dunkRate * 102 + rimRate * 27 + driveRate * 15 + transitionRate * 10 + (big ? 7 : wing ? 6 : 0) + Math.max(0, 28 - age) * 0.6 + rimPressureBonus + burstBonus, genericBigDunkCap),
     shotIq: 58 + scoringVolume * 0.45 + fg * 10 + ts * 12 + efg * 10 + Math.max(0, 15 - tovPct) * 0.7 + wins * 0.7 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.35,
     shotConsistency: 55 + fg * 10 + ts * 13 + efg * 11 + ft * 8 + wins * 0.9 + Math.max(0, mpg - 20) * 0.5 + Math.max(0, scoringVolume - 10) * 0.25 + efficiencySignal * 0.08 + eliteShooterBonus * 0.35 + eliteMidRangeBonus * 0.3,
     passing: Math.min(rawPassing, passingCap),

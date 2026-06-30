@@ -126,7 +126,8 @@ export function buildDevelopmentCurve(input: DevelopmentCurveInput): Development
       - oldAgePenalty
       + resistance * 1.2
       + (hasTag(input, 'mvp') ? 3 : 0);
-  const potentialRating = Math.round(clamp(rawPotential, 40, hasTag(input, 's_potential') ? 99 : 98));
+  const preBreakoutTopPickFloor = hasTag(input, 'pre_breakout') && pick <= 1 && age <= 21 ? 89 : 40;
+  const potentialRating = Math.round(clamp(rawPotential, preBreakoutTopPickFloor, hasTag(input, 's_potential') ? 99 : 98));
   const phase = phaseFor({
     age,
     currentImpact,
