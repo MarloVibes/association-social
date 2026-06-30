@@ -73,10 +73,10 @@ export function mergeBaselineRatingProfile<T extends Record<string, any>>(
   return {
     ...player,
     baselineRatingProfile: profile,
-    category_skill_grades: player.category_skill_grades || profile.category_skill_grades,
-    era_adjusted_profiles: player.era_adjusted_profiles || profile.era_adjusted_profiles,
-    attribute_model: player.attribute_model || profile.attribute_model,
-    development_curve: player.development_curve || profile.development_curve,
-    tendencies: player.tendencies || profile.tendencies,
+    category_skill_grades: profile.category_skill_grades || player.category_skill_grades,
+    era_adjusted_profiles: profile.era_adjusted_profiles || player.era_adjusted_profiles,
+    attribute_model: profile.attribute_model || player.attribute_model,
+    development_curve: profile.development_curve || player.development_curve,
+    tendencies: profile.tendencies || player.tendencies,
   };
 }

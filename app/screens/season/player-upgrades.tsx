@@ -6,7 +6,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
-import { abilityGradesFromStats, canUpgradePlayerThisSeason, nextGrade, type UpgradePlayerLabel } from '@/domain/nba/upgradePoints';
+import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
+import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
+import { abilityGradesFromStats, canUpgradePlayerThisSeason, nextGrade, upgradeGradesFromScoutingGrades, type UpgradePlayerLabel } from '@/domain/nba/upgradePoints';
 import type { NbaGrade } from '@/domain/nba/identity';
 
 type Team = {
@@ -27,6 +29,10 @@ type Player = {
   position?: string;
   grades?: Record<string, NbaGrade>;
   abilityGrades?: Record<string, NbaGrade>;
+  category_skill_grades?: Record<string, unknown>;
+  attribute_model?: Record<string, unknown>;
+  era_adjusted_profiles?: Record<string, unknown>;
+  hidden?: Record<string, unknown>;
   upgradeUsage?: Record<string, number>;
   playerLabel?: string;
   tierLabel?: string;
@@ -38,6 +44,8 @@ type League = {
   sport?: string;
   commissionerId?: string;
   coCommissioners?: string[];
+  era?: string;
+  leagueDate?: string;
 };
 
 const ABILITY_LABELS: Record<string, string> = {
@@ -59,7 +67,15 @@ function playerName(player: Player) {
   return player.full_name || player.name || 'Unnamed player';
 }
 
-function gradesFor(player: Player): Record<string, NbaGrade> {
+function gradesFor(player: Player, league?: League | null): Record<string, NbaGrade> {
+  const profile = resolveBaselineRatingProfile(player as Record<string, unknown>, {
+    era: league?.era,
+    currentYear: league?.currentYear,
+    leagueDate: league?.leagueDate,
+  });
+  if (profile || player.category_skill_grades || player.attribute_model || player.era_adjusted_profiles || player.hidden) {
+    return upgradeGradesFromScoutingGrades(buildScoutingGrades(player as Record<string, unknown>, profile));
+  }
   return player.grades || player.abilityGrades || abilityGradesFromStats(player as Record<string, unknown>);
 }
 
@@ -208,7 +224,7 @@ export default function PlayerUpgradesScreen() {
           const style = getSportArchetypeForYear(item, null, league?.currentYear, 'nba');
           const label = (item.playerLabel || item.tierLabel || item.reputation || style.label) as UpgradePlayerLabel;
           const used = Number(item.upgradeUsage?.[seasonKey] || 0);
-          const grades = gradesFor(item);
+          const grades = gradesFor(item, league);
           const abilityEntries = Object.entries(grades);
           return (
             <View style={styles.playerCard}>

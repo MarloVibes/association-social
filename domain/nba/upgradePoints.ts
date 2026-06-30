@@ -114,6 +114,96 @@ function gradeFromRating(value: number): NbaGrade {
   return gradeFromNumeric(value);
 }
 
+const GRADE_RATINGS: Record<NbaGrade, number> = {
+  F: 25,
+  'D-': 50,
+  D: 53,
+  'D+': 57,
+  'C-': 60,
+  C: 65,
+  'C+': 70,
+  'B-': 75,
+  B: 80,
+  'B+': 85,
+  'A-': 89,
+  A: 92,
+  'A+': 95,
+  S: 99,
+};
+
+function weightedGradeAverage(
+  grades: Record<string, NbaGrade>,
+  weights: Array<{ key: string; weight: number }>,
+): NbaGrade {
+  let total = 0;
+  let weightTotal = 0;
+  weights.forEach(({ key, weight }) => {
+    const grade = grades[key];
+    if (!grade) return;
+    total += (GRADE_RATINGS[grade] ?? 65) * weight;
+    weightTotal += weight;
+  });
+  return gradeFromRating(weightTotal > 0 ? total / weightTotal : 65);
+}
+
+export function upgradeGradesFromScoutingGrades(grades: Record<string, NbaGrade>): Record<string, NbaGrade> {
+  return {
+    shooting: weightedGradeAverage(grades, [
+      { key: 'closeShot', weight: 18 },
+      { key: 'midRange', weight: 16 },
+      { key: 'threePoint', weight: 18 },
+      { key: 'freeThrow', weight: 10 },
+      { key: 'dunking', weight: 14 },
+      { key: 'shotIq', weight: 24 },
+    ]),
+    playmaking: weightedGradeAverage(grades, [
+      { key: 'passing', weight: 34 },
+      { key: 'ballHandle', weight: 30 },
+      { key: 'offenseIq', weight: 24 },
+      { key: 'clutch', weight: 12 },
+    ]),
+    defense: weightedGradeAverage(grades, [
+      { key: 'perimeterDefense', weight: 22 },
+      { key: 'postDefense', weight: 18 },
+      { key: 'blocking', weight: 14 },
+      { key: 'steals', weight: 14 },
+      { key: 'defenseIq', weight: 20 },
+      { key: 'helpDefense', weight: 12 },
+    ]),
+    rebounding: weightedGradeAverage(grades, [
+      { key: 'rebounding', weight: 74 },
+      { key: 'strength', weight: 16 },
+      { key: 'stamina', weight: 10 },
+    ]),
+    athleticism: weightedGradeAverage(grades, [
+      { key: 'speed', weight: 24 },
+      { key: 'acceleration', weight: 24 },
+      { key: 'strength', weight: 18 },
+      { key: 'dunking', weight: 18 },
+      { key: 'stamina', weight: 16 },
+    ]),
+    basketballIq: weightedGradeAverage(grades, [
+      { key: 'shotIq', weight: 25 },
+      { key: 'offenseIq', weight: 25 },
+      { key: 'defenseIq', weight: 25 },
+      { key: 'helpDefense', weight: 15 },
+      { key: 'clutch', weight: 10 },
+    ]),
+    consistency: weightedGradeAverage(grades, [
+      { key: 'stamina', weight: 35 },
+      { key: 'shotIq', weight: 25 },
+      { key: 'clutch', weight: 20 },
+      { key: 'offenseIq', weight: 20 },
+    ]),
+    chemistry: weightedGradeAverage(grades, [
+      { key: 'offenseIq', weight: 30 },
+      { key: 'defenseIq', weight: 30 },
+      { key: 'passing', weight: 20 },
+      { key: 'helpDefense', weight: 20 },
+    ]),
+  };
+}
+
 export function abilityGradesFromStats(player: Record<string, unknown>): Record<string, NbaGrade> {
   const ppg = numberFrom(player.ppg);
   const apg = numberFrom(player.apg);

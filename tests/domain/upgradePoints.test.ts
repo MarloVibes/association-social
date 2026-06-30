@@ -3,6 +3,7 @@ import {
   awardUpgradePoints,
   abilityGradesFromStats,
   canUpgradePlayerThisSeason,
+  upgradeGradesFromScoutingGrades,
   seasonUpgradeGrants,
   nextGrade,
   spendUpgradePoint,
@@ -74,6 +75,42 @@ describe('NBA upgrade points', () => {
     expect(grades.playmaking).toBe('B+');
     expect(grades.rebounding).toBe('B+');
     expect(grades.defense).toBe('B+');
+  });
+
+  it('derives upgrade buckets from detailed scouting grades without letting one inflated skill dominate', () => {
+    const grades = upgradeGradesFromScoutingGrades({
+      closeShot: 'A',
+      midRange: 'C',
+      threePoint: 'A+',
+      freeThrow: 'B',
+      dunking: 'C+',
+      shotIq: 'C',
+      passing: 'C',
+      ballHandle: 'C',
+      offenseIq: 'C+',
+      clutch: 'C',
+      perimeterDefense: 'A',
+      postDefense: 'B+',
+      blocking: 'A-',
+      steals: 'B+',
+      defenseIq: 'A',
+      helpDefense: 'A-',
+      speed: 'B',
+      acceleration: 'B',
+      strength: 'A',
+      rebounding: 'A+',
+      postOffense: 'C',
+      stamina: 'B+',
+      potential: 'B',
+      role: 'B',
+      impact: 'B+',
+      overall: 'B',
+      tradeValue: 'B',
+    });
+
+    expect(grades.shooting).toMatch(/^B/);
+    expect(grades.defense).toBe('A-');
+    expect(grades.rebounding).toMatch(/^A/);
   });
 
   it('combines award points and lottery boosts into team grants', () => {

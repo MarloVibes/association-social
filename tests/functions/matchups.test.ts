@@ -6,6 +6,7 @@ const {
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
+  canonicalizeTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   createResetScheduledGameHandler,
   expireMatchupRequest,
@@ -276,6 +277,31 @@ describe('matchup request state helpers', () => {
       homeTeam: {},
       awayTeam: seedRoster('Chicago', 77),
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+  });
+
+  it('sanitizes stale big-man shooting values before simulation without hurting real stretch profiles', () => {
+    const team = canonicalizeTeamForSimulation({
+      players: [
+        {
+          player_id: 'stale-center',
+          full_name: 'Defensive Center',
+          position: 'C',
+          hidden: { shooting: 99, threePoint: 99, defense: 92, rebounding: 94 },
+        },
+        {
+          player_id: 'stretch-big',
+          full_name: 'Stretch Big',
+          position: 'C',
+          hidden: { shooting: 70, threePoint: 70 },
+          attribute_model: { shooting: 84, threePoint: 88 },
+        },
+      ],
+    });
+
+    expect(team.players[0].hidden.threePoint).toBeLessThanOrEqual(49);
+    expect(team.players[0].hidden.shooting).toBeLessThanOrEqual(65);
+    expect(team.players[1].hidden.threePoint).toBe(88);
+    expect(team.players[1].hidden.shooting).toBe(84);
   });
 
   it('uses roster hidden values and stores a box score for simulated games', () => {

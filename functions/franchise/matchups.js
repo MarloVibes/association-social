@@ -131,6 +131,141 @@ function detailedPlayerSkill(player, key, fallbacks = []) {
   return 60;
 }
 
+function categorySkillRating(player, key) {
+  const entry = player && player.category_skill_grades && player.category_skill_grades[key];
+  if (typeof entry === 'number') return clamp(entry, 0, 100);
+  const rating = Number(entry && entry.rating);
+  if (Number.isFinite(rating)) return clamp(rating, 0, 100);
+  return null;
+}
+
+function canonicalAttributeValue(player, key) {
+  const profile = player && player.baselineRatingProfile;
+  const sources = [
+    profile && profile.era_adjusted_profiles,
+    profile && profile.attribute_model,
+    player && player.era_adjusted_profiles,
+    player && player.attribute_model,
+  ];
+  for (const source of sources) {
+    const value = Number(source && source[key]);
+    if (Number.isFinite(value)) return clamp(value, 0, 100);
+  }
+  return null;
+}
+
+function hasThreePointProof(player) {
+  if (canonicalAttributeValue(player, 'threePoint') != null) return true;
+  if (categorySkillRating(player, 'threePoint') != null) return true;
+  const attempts = Number(player && (
+    player.threePointAttemptsPerGame
+    || player.fg3a
+    || player.fg3_attempts
+    || player.threePointAttempts
+  ));
+  const percentage = Number(player && (
+    player.threePointPct
+    || player.fg3_pct
+    || player.three_pct
+  ));
+  if (Number.isFinite(attempts) && attempts >= 2 && Number.isFinite(percentage) && percentage >= 0.33) return true;
+  const text = [
+    player && player.archetype,
+    player && player.playStyle,
+    player && player.playstyle,
+    ...(Array.isArray(player && player.labels) ? player.labels : []),
+    ...(Array.isArray(player && player.traits) ? player.traits : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+  return text.includes('shoot') || text.includes('stretch') || text.includes('spacing');
+}
+
+function isBigForSimulation(player) {
+  const position = String(player && player.position || '').toUpperCase();
+  return position.includes('C') || position.includes('PF') || position === 'F-C';
+}
+
+function canonicalHiddenForSimulation(player) {
+  const hidden = { ...((player && player.hidden) || {}) };
+  const attributeKeys = [
+    'shooting',
+    'playmaking',
+    'defense',
+    'rebounding',
+    'athleticism',
+    'basketballIq',
+    'closeShot',
+    'midRange',
+    'threePoint',
+    'freeThrow',
+    'dunking',
+    'shotIq',
+    'passing',
+    'ballHandle',
+    'offenseIq',
+    'clutch',
+    'perimeterDefense',
+    'postDefense',
+    'blocking',
+    'stealsSkill',
+    'defenseIq',
+    'helpDefense',
+    'speed',
+    'acceleration',
+    'strength',
+    'postOffense',
+    'stamina',
+  ];
+  attributeKeys.forEach((key) => {
+    const value = canonicalAttributeValue(player, key);
+    if (value != null) hidden[key] = value;
+  });
+
+  const categoryMap = {
+    threePoint: ['threePoint'],
+    midRange: ['midRange'],
+    finishing: ['closeShot', 'dunking'],
+    playmaking: ['playmaking', 'passing', 'ballHandle'],
+    perimeterDefense: ['defense', 'perimeterDefense', 'stealsSkill'],
+    interiorDefense: ['defense', 'postDefense', 'blocking'],
+    rebounding: ['rebounding'],
+    athleticism: ['athleticism', 'speed', 'acceleration'],
+    basketballIq: ['basketballIq', 'offenseIq', 'defenseIq'],
+  };
+  Object.entries(categoryMap).forEach(([category, keys]) => {
+    const rating = categorySkillRating(player, category);
+    if (rating == null) return;
+    keys.forEach((key) => {
+      const current = Number(hidden[key]);
+      if (!Number.isFinite(current)) hidden[key] = rating;
+    });
+  });
+
+  if (isBigForSimulation(player) && !hasThreePointProof(player)) {
+    hidden.threePoint = Math.min(numberFrom(hidden.threePoint, 42), 49);
+    hidden.shooting = Math.min(numberFrom(hidden.shooting, 60), 65);
+  }
+
+  return hidden;
+}
+
+function canonicalizePlayerForSimulation(player) {
+  if (!player || typeof player !== 'object') return player;
+  return {
+    ...player,
+    hidden: canonicalHiddenForSimulation(player),
+  };
+}
+
+function canonicalizeTeamForSimulation(team) {
+  if (!team || typeof team !== 'object') return team;
+  return {
+    ...team,
+    players: Array.isArray(team.players)
+      ? team.players.map(player => canonicalizePlayerForSimulation(player))
+      : team.players,
+  };
+}
+
 function coachingIdentityText(player) {
   return [
     ...(Array.isArray(player && player.labels) ? player.labels : []),
@@ -712,12 +847,14 @@ function adjustScoresForWinner({ homeScore, awayScore, winnerTeamId, game, seed 
 }
 
 function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
-  assertSimulationRoster(homeTeam, game.homeTeamId);
-  assertSimulationRoster(awayTeam, game.awayTeamId);
+  const canonicalHomeTeam = canonicalizeTeamForSimulation(homeTeam);
+  const canonicalAwayTeam = canonicalizeTeamForSimulation(awayTeam);
+  assertSimulationRoster(canonicalHomeTeam, game.homeTeamId);
+  assertSimulationRoster(canonicalAwayTeam, game.awayTeamId);
   const homePresetIds = coachingPlanPresetIdsForSide(game, 'home');
   const awayPresetIds = coachingPlanPresetIdsForSide(game, 'away');
-  const simulatedHomeTeam = applyCoachingToTeamForSimulation(homeTeam, homePresetIds);
-  const simulatedAwayTeam = applyCoachingToTeamForSimulation(awayTeam, awayPresetIds);
+  const simulatedHomeTeam = applyCoachingToTeamForSimulation(canonicalHomeTeam, homePresetIds);
+  const simulatedAwayTeam = applyCoachingToTeamForSimulation(canonicalAwayTeam, awayPresetIds);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const liveTimeline = buildPossessionTimeline({
     gameId: game.id,
@@ -2109,6 +2246,7 @@ module.exports = {
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
+  canonicalizeTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   createAcceptMatchupHandler,
   createExpireMatchupRequestHandler,

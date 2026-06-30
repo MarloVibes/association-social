@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
+import { mergeBaselineRatingProfile, resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
+import type { NbaGrade } from '@/domain/nba/identity';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
 import { buildScoutingGrades, getPotentialScoutingSummary, gradeRank } from '@/domain/nba/scoutingGrades';
+
+function resolvedGrade(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'grade' in value) {
+    return String((value as { grade?: unknown }).grade || '');
+  }
+  return '';
+}
 
 describe('baseline rating profile resolver', () => {
   it('resolves 2011 LeBron from an older roster snapshot and keeps him elite', () => {
@@ -60,6 +69,28 @@ describe('baseline rating profile resolver', () => {
     expect(gradeRank(grades.potential)).toBeLessThanOrEqual(gradeRank('B'));
     expect(gradeRank(grades.offenseIq)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(summary.label).toBe('Near Peak');
+  });
+
+  it('uses the canonical baseline model over stale saved roster grade fields', () => {
+    const staleRosterSnapshot = {
+      full_name: 'Rudy Gobert',
+      team: 'MIN',
+      category_skill_grades: {
+        threePoint: 'A+',
+        dunking: 'C',
+      },
+      attribute_model: {
+        threePoint: 99,
+        dunking: 62,
+      },
+    };
+
+    const merged = mergeBaselineRatingProfile(staleRosterSnapshot, { era: 'current' });
+
+    expect((merged as Record<string, any>).baselineRatingProfile?.player_id).toBe('rudy-gobert-2026');
+    expect(gradeRank(resolvedGrade(merged.category_skill_grades.threePoint) as NbaGrade)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(merged.attribute_model.threePoint).toBeLessThan(50);
+    expect(merged.attribute_model.dunking).toBeGreaterThanOrEqual(80);
   });
 
   it('covers core 2011 era rosters beyond the hand-seeded headline players', () => {
