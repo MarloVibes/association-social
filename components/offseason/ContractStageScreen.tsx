@@ -19,6 +19,7 @@ import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import { auth, db, functions } from '@/constants/firebase';
 import {
   derivePlayerContractPreferences,
+  contractAvailabilityMessage,
   expectedAnnualSalary,
   scoreContractOffer,
   selectContractCandidates,
@@ -323,6 +324,13 @@ export default function ContractStageScreen({ stage }: Props) {
   const myTeamComplete = Boolean(
     myTeam && offseason?.completedTeamIds?.includes(myTeam.id),
   );
+  const emptyAvailableMessage = contractAvailabilityMessage({
+    stage,
+    stageIsCurrent,
+    candidateCount: candidates.length,
+    freeAgentPoolCount: freeAgents.length,
+    fallbackExpiredCount: 0,
+  });
 
   const openOffer = (player: Player) => {
     setSelected(player);
@@ -508,7 +516,7 @@ export default function ContractStageScreen({ stage }: Props) {
 
         {tab === 'available' && (
           candidates.length === 0 ? (
-            <Text style={styles.empty}>No eligible players are available right now.</Text>
+            <Text style={styles.empty}>{emptyAvailableMessage}</Text>
           ) : candidates.map(player => {
             const id = playerId(player);
             const preferences = derivePlayerContractPreferences({ player, eraSalaryBaseline: eraBaseline });

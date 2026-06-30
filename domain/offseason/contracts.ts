@@ -173,6 +173,14 @@ export type ContractDeadlineWarning =
   | 'deadline_reached'
   | null;
 
+export type ContractAvailabilityMessageInput = {
+  stage: ContractCandidateStage | 'extension';
+  stageIsCurrent: boolean;
+  candidateCount: number;
+  freeAgentPoolCount?: number;
+  fallbackExpiredCount?: number;
+};
+
 const ROLE_SCORE: Readonly<Record<ContractRole, number>> = Object.freeze({
   franchise: 18,
   starter: 12,
@@ -293,6 +301,29 @@ export function selectContractCandidates<T extends ContractCandidatePlayer>(
         }))
     )) as T[],
   );
+}
+
+export function contractAvailabilityMessage(input: ContractAvailabilityMessageInput): string {
+  if (input.candidateCount > 0) return '';
+  if (!input.stageIsCurrent) {
+    if (input.stage === 'free_agency') {
+      return 'Free Agency is not active yet. Players will appear when the offseason reaches this stage.';
+    }
+    if (input.stage === 're_signing') {
+      return 'Re-Signing is not active yet. Expiring contracts will appear when the offseason reaches this stage.';
+    }
+    return 'Extension talks are not open right now.';
+  }
+  if (input.stage === 'free_agency') {
+    if ((input.freeAgentPoolCount || 0) === 0 && (input.fallbackExpiredCount || 0) === 0) {
+      return 'No free agents are seeded for this era yet, and no contracts have expired.';
+    }
+    return 'Free agents are loaded, but none are eligible for offers right now.';
+  }
+  if (input.stage === 're_signing') {
+    return 'Your team has no expiring contracts to decide on right now.';
+  }
+  return 'No players have requested an extension meeting right now.';
 }
 
 export function extensionInterestScore<T extends ContractCandidatePlayer>(

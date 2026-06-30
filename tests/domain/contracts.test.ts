@@ -7,6 +7,7 @@ import {
   expectedExtensionAsk,
   extensionInterestScore,
   expectedAnnualSalary,
+  contractAvailabilityMessage,
   selectInSeasonExtensionCandidates,
   scoreContractOffer,
   selectContractCandidates,
@@ -183,6 +184,32 @@ describe('contract candidate selection', () => {
       ],
       freeAgents: [],
     }).map(player => player.player_id)).toEqual(['deng']);
+  });
+
+  it('explains why a contract stage has no available players', () => {
+    expect(contractAvailabilityMessage({
+      stage: 'free_agency',
+      stageIsCurrent: false,
+      candidateCount: 0,
+      freeAgentPoolCount: 0,
+      fallbackExpiredCount: 0,
+    })).toBe('Free Agency is not active yet. Players will appear when the offseason reaches this stage.');
+
+    expect(contractAvailabilityMessage({
+      stage: 'free_agency',
+      stageIsCurrent: true,
+      candidateCount: 0,
+      freeAgentPoolCount: 0,
+      fallbackExpiredCount: 0,
+    })).toBe('No free agents are seeded for this era yet, and no contracts have expired.');
+
+    expect(contractAvailabilityMessage({
+      stage: 'free_agency',
+      stageIsCurrent: true,
+      candidateCount: 0,
+      freeAgentPoolCount: 8,
+      fallbackExpiredCount: 0,
+    })).toBe('Free agents are loaded, but none are eligible for offers right now.');
   });
 });
 
