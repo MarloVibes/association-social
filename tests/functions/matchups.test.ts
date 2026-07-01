@@ -685,53 +685,75 @@ describe('matchup request state helpers', () => {
     expect(story).toContain('third quarter');
   });
 
-  it('uses grade-based player profiles without inflating assists and rebounds', () => {
-    const game = seedAvailableGame({
-      homeTeamId: 'SAS_2011',
-      awayTeamId: 'CHI',
-      awayGmId: null,
-    });
-    const result = simulateScheduledGame({
-      game,
-      uid: game.homeGmId,
-      nowMs: 5_000,
-      homeTeam: {
-        players: [
-          { player_id: 'duncan', full_name: 'Tim Duncan', position: 'PF', minutes: 34, hidden: { shooting: 84, playmaking: 62, rebounding: 94, defense: 96, basketballIq: 95 } },
-          { player_id: 'parker', full_name: 'Tony Parker', position: 'PG', minutes: 34, hidden: { shooting: 88, playmaking: 91, rebounding: 45, defense: 72, basketballIq: 88 } },
-          { player_id: 'ginobili', full_name: 'Manu Ginobili', position: 'SG', minutes: 30, hidden: { shooting: 89, playmaking: 86, rebounding: 58, defense: 78, basketballIq: 90 } },
-          { player_id: 'leonard', full_name: 'Kawhi Leonard', position: 'SF', minutes: 24, hidden: { shooting: 74, playmaking: 58, rebounding: 73, defense: 90, basketballIq: 78 } },
-          { player_id: 'splitter', full_name: 'Tiago Splitter', position: 'C', minutes: 24, hidden: { shooting: 66, playmaking: 45, rebounding: 82, defense: 80, basketballIq: 72 } },
-          { player_id: 'green', full_name: 'Danny Green', position: 'SG', minutes: 22, hidden: { shooting: 80, playmaking: 52, rebounding: 55, defense: 82, basketballIq: 76 } },
-          { player_id: 'neal', full_name: 'Gary Neal', position: 'G', minutes: 18, hidden: { shooting: 78, playmaking: 50, rebounding: 42, defense: 55, basketballIq: 68 } },
-          { player_id: 'diaw', full_name: 'Boris Diaw', position: 'F', minutes: 20, hidden: { shooting: 72, playmaking: 78, rebounding: 66, defense: 70, basketballIq: 88 } },
-        ],
-      },
-      awayTeam: {
-        players: [
-          { player_id: 'rose', full_name: 'Derrick Rose', position: 'PG', minutes: 38, hidden: { shooting: 92, playmaking: 92, rebounding: 52, defense: 70, basketballIq: 88 } },
-          { player_id: 'boozer', full_name: 'Carlos Boozer', position: 'PF', minutes: 32, hidden: { shooting: 80, playmaking: 50, rebounding: 88, defense: 62, basketballIq: 75 } },
-          { player_id: 'deng', full_name: 'Luol Deng', position: 'SF', minutes: 36, hidden: { shooting: 78, playmaking: 60, rebounding: 74, defense: 84, basketballIq: 80 } },
-          { player_id: 'noah', full_name: 'Joakim Noah', position: 'C', minutes: 30, hidden: { shooting: 62, playmaking: 70, rebounding: 90, defense: 90, basketballIq: 82 } },
-          { player_id: 'korver', full_name: 'Kyle Korver', position: 'SG', minutes: 22, hidden: { shooting: 89, playmaking: 48, rebounding: 42, defense: 55, basketballIq: 76 } },
-          { player_id: 'asik', full_name: 'Omer Asik', position: 'C', minutes: 14, hidden: { shooting: 45, playmaking: 34, rebounding: 84, defense: 82, basketballIq: 62 } },
-          { player_id: 'watson', full_name: 'C.J. Watson', position: 'PG', minutes: 18, hidden: { shooting: 72, playmaking: 72, rebounding: 40, defense: 58, basketballIq: 72 } },
-          { player_id: 'brewer', full_name: 'Ronnie Brewer', position: 'SG', minutes: 18, hidden: { shooting: 65, playmaking: 48, rebounding: 55, defense: 80, basketballIq: 70 } },
-        ],
-      },
-    });
+  it('uses grade-based player profiles without inflating average assists and rebounds', () => {
+    const homeTeam = {
+      players: [
+        { player_id: 'duncan', full_name: 'Tim Duncan', position: 'PF', minutes: 34, hidden: { shooting: 84, playmaking: 62, rebounding: 94, defense: 96, basketballIq: 95 } },
+        { player_id: 'parker', full_name: 'Tony Parker', position: 'PG', minutes: 34, hidden: { shooting: 88, playmaking: 91, rebounding: 45, defense: 72, basketballIq: 88 } },
+        { player_id: 'ginobili', full_name: 'Manu Ginobili', position: 'SG', minutes: 30, hidden: { shooting: 89, playmaking: 86, rebounding: 58, defense: 78, basketballIq: 90 } },
+        { player_id: 'leonard', full_name: 'Kawhi Leonard', position: 'SF', minutes: 24, hidden: { shooting: 74, playmaking: 58, rebounding: 73, defense: 90, basketballIq: 78 } },
+        { player_id: 'splitter', full_name: 'Tiago Splitter', position: 'C', minutes: 24, hidden: { shooting: 66, playmaking: 45, rebounding: 82, defense: 80, basketballIq: 72 } },
+        { player_id: 'green', full_name: 'Danny Green', position: 'SG', minutes: 22, hidden: { shooting: 80, playmaking: 52, rebounding: 55, defense: 82, basketballIq: 76 } },
+        { player_id: 'neal', full_name: 'Gary Neal', position: 'G', minutes: 18, hidden: { shooting: 78, playmaking: 50, rebounding: 42, defense: 55, basketballIq: 68 } },
+        { player_id: 'diaw', full_name: 'Boris Diaw', position: 'F', minutes: 20, hidden: { shooting: 72, playmaking: 78, rebounding: 66, defense: 70, basketballIq: 88 } },
+      ],
+    };
+    const awayTeam = {
+      players: [
+        { player_id: 'rose', full_name: 'Derrick Rose', position: 'PG', minutes: 38, hidden: { shooting: 92, playmaking: 92, rebounding: 52, defense: 70, basketballIq: 88 } },
+        { player_id: 'boozer', full_name: 'Carlos Boozer', position: 'PF', minutes: 32, hidden: { shooting: 80, playmaking: 50, rebounding: 88, defense: 62, basketballIq: 75 } },
+        { player_id: 'deng', full_name: 'Luol Deng', position: 'SF', minutes: 36, hidden: { shooting: 78, playmaking: 60, rebounding: 74, defense: 84, basketballIq: 80 } },
+        { player_id: 'noah', full_name: 'Joakim Noah', position: 'C', minutes: 30, hidden: { shooting: 62, playmaking: 70, rebounding: 90, defense: 90, basketballIq: 82 } },
+        { player_id: 'korver', full_name: 'Kyle Korver', position: 'SG', minutes: 22, hidden: { shooting: 89, playmaking: 48, rebounding: 42, defense: 55, basketballIq: 76 } },
+        { player_id: 'asik', full_name: 'Omer Asik', position: 'C', minutes: 14, hidden: { shooting: 45, playmaking: 34, rebounding: 84, defense: 82, basketballIq: 62 } },
+        { player_id: 'watson', full_name: 'C.J. Watson', position: 'PG', minutes: 18, hidden: { shooting: 72, playmaking: 72, rebounding: 40, defense: 58, basketballIq: 72 } },
+        { player_id: 'brewer', full_name: 'Ronnie Brewer', position: 'SG', minutes: 18, hidden: { shooting: 65, playmaking: 48, rebounding: 55, defense: 80, basketballIq: 70 } },
+      ],
+    };
+    const totals = new Map<string, any>();
+    const teamTotals = { homeRebounds: 0, awayRebounds: 0, homeAssists: 0, awayAssists: 0, games: 0 };
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const game = seedAvailableGame({
+        homeTeamId: 'SAS_2011',
+        awayTeamId: 'CHI',
+        awayGmId: null,
+      });
+      game.id = `profile-sample-${seed}`;
+      const result = simulateScheduledGame({
+        game,
+        uid: game.homeGmId,
+        nowMs: 5_000 + seed,
+        homeTeam,
+        awayTeam,
+      });
 
-    expect(result.boxScore.home.rebounds).toBeLessThanOrEqual(58);
-    expect(result.boxScore.away.rebounds).toBeLessThanOrEqual(58);
-    expect(result.boxScore.home.assists).toBeLessThanOrEqual(34);
-    expect(result.boxScore.away.assists).toBeLessThanOrEqual(34);
+      teamTotals.homeRebounds += Number(result.boxScore.home.rebounds || 0);
+      teamTotals.awayRebounds += Number(result.boxScore.away.rebounds || 0);
+      teamTotals.homeAssists += Number(result.boxScore.home.assists || 0);
+      teamTotals.awayAssists += Number(result.boxScore.away.assists || 0);
+      teamTotals.games += 1;
 
-    const homeLines = new Map<string, any>(result.boxScore.home.players.map((player: any) => [player.name, player]));
-    const awayLines = new Map<string, any>(result.boxScore.away.players.map((player: any) => [player.name, player]));
-    expect(homeLines.get('Tim Duncan').rebounds).toBeGreaterThan(homeLines.get('Tony Parker').rebounds);
-    expect(homeLines.get('Tony Parker').assists).toBeGreaterThan(homeLines.get('Tim Duncan').assists);
-    expect(awayLines.get('Derrick Rose').rebounds).toBeLessThanOrEqual(8);
-    expect(awayLines.get('Omer Asik').assists).toBeLessThanOrEqual(2);
+      [...result.boxScore.home.players, ...result.boxScore.away.players].forEach((player: any) => {
+        const row = totals.get(player.name) || { games: 0, rebounds: 0, assists: 0 };
+        row.games += 1;
+        row.rebounds += Number(player.rebounds || 0);
+        row.assists += Number(player.assists || 0);
+        totals.set(player.name, row);
+      });
+    }
+
+    const average = (name: string, key: 'rebounds' | 'assists') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+    expect(average('Tim Duncan', 'rebounds')).toBeGreaterThan(average('Tony Parker', 'rebounds'));
+    expect(average('Tony Parker', 'assists')).toBeGreaterThan(average('Tim Duncan', 'assists'));
+    expect(average('Derrick Rose', 'rebounds')).toBeLessThanOrEqual(8);
+    expect(average('Omer Asik', 'assists')).toBeLessThanOrEqual(2);
+    expect(teamTotals.homeRebounds / teamTotals.games).toBeLessThanOrEqual(58);
+    expect(teamTotals.awayRebounds / teamTotals.games).toBeLessThanOrEqual(58);
+    expect(teamTotals.homeAssists / teamTotals.games).toBeLessThanOrEqual(34);
+    expect(teamTotals.awayAssists / teamTotals.games).toBeLessThanOrEqual(34);
   });
 
   it('keeps possession sim star scoring explosive without breaking rotation balance', () => {

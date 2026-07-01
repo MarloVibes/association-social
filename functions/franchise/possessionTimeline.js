@@ -594,14 +594,12 @@ function totalsFromPossessionEvents(timeline) {
 
 function boxScoreFromPossessionTimeline(timeline) {
   const totals = totalsFromPossessionEvents(timeline);
-  const homeRows = normalizeTeamAssistHierarchy(totals.players
+  const homePlayers = totals.players
     .filter(player => String(player.teamId) === String(timeline.homeTeamId))
-    .map(player => ({ ...player })));
-  const awayRows = normalizeTeamAssistHierarchy(totals.players
+    .map(player => boxPlayer(player, timeline.homeScore - timeline.awayScore));
+  const awayPlayers = totals.players
     .filter(player => String(player.teamId) === String(timeline.awayTeamId))
-    .map(player => ({ ...player })));
-  const homePlayers = homeRows.map(player => boxPlayer(player, timeline.homeScore - timeline.awayScore));
-  const awayPlayers = awayRows.map(player => boxPlayer(player, timeline.awayScore - timeline.homeScore));
+    .map(player => boxPlayer(player, timeline.awayScore - timeline.homeScore));
   return {
     home: teamBox(timeline.homeTeamId, homePlayers),
     away: teamBox(timeline.awayTeamId, awayPlayers),
@@ -631,8 +629,6 @@ function emptyStats(player, teamId) {
     playerId: player.playerId,
     name: player.playerName || player.name,
     teamId,
-    position: player.position,
-    assistPriority: Number(player.assistPriority || 0),
     points: 0,
     rebounds: 0,
     assists: 0,
@@ -709,42 +705,8 @@ function deltaFor(player, stats) {
     position: player.position,
     minutes: player.minutes,
     starter: !!player.starter,
-    assistPriority: assistDistributionPriority(player),
     stats: cleaned,
   });
-}
-
-function normalizeTeamAssistHierarchy(players) {
-  const primary = players
-    .filter(candidate => candidate.position === 'PG' && Number(candidate.assistPriority || 0) > 0)
-    .sort((left, right) => Number(right.assistPriority || 0) - Number(left.assistPriority || 0))[0];
-  if (!primary) return players;
-  players.forEach((player) => {
-    if (player.playerId === primary.playerId) return;
-    const primaryPriority = Number(primary.assistPriority || 0);
-    const playerPriority = Number(player.assistPriority || 0);
-    if (primaryPriority - playerPriority < 22) return;
-    while (Number(primary.assists || 0) <= Number(player.assists || 0) && Number(player.assists || 0) > 1) {
-      primary.assists = Number(primary.assists || 0) + 1;
-      player.assists = Number(player.assists || 0) - 1;
-    }
-  });
-  return players;
-}
-
-function assistDistributionPriority(player) {
-  if (!player) return 0;
-  const positionBoost = player.position === 'PG'
-    ? 42
-    : player.position === 'SG'
-      ? 16
-      : player.position === 'SF'
-        ? 8
-        : 0;
-  return Number(player.assistWeight || 0) / 12
-    + Number(player.playmaking || 0) * 0.58
-    + Number(player.sourceAssistRole || 0) * 0.54
-    + positionBoost;
 }
 
 function eventFromPossession({ input, period, clockSeconds, possession, elapsedIndex, homeScore, awayScore, home, away }) {
