@@ -25,6 +25,7 @@ export type SkillGrades = Record<SkillGradeKey, SkillGradeValue>;
 
 export type SkillGradeContext = {
   shotVolumeModifier?: number;
+  eliteShooterProof?: boolean;
 };
 
 type AttributeWeights = Partial<Record<keyof AttributeModel | 'shotVolumeModifier', number>>;
@@ -96,7 +97,11 @@ function threePointSkill(attributes: Partial<AttributeModel>, context: SkillGrad
   const hasVolumeProof = Number.isFinite(Number(context.shotVolumeModifier)) && Number(context.shotVolumeModifier) >= 82;
   const supportCapped = !hasVolumeProof && support < 80 ? Math.min(raw, 84.4) : raw;
   const hasEliteVolumeProof = Number.isFinite(Number(context.shotVolumeModifier)) && Number(context.shotVolumeModifier) >= 95;
-  const capped = support < 95 || !hasEliteVolumeProof ? Math.min(supportCapped, 98.4) : supportCapped;
+  const eliteProofCap = context.eliteShooterProof ? 100 : 94.4;
+  const capped = Math.min(
+    support < 95 || !hasEliteVolumeProof ? Math.min(supportCapped, 98.4) : supportCapped,
+    eliteProofCap,
+  );
 
   return {
     rating: Math.round(capped * 10) / 10,

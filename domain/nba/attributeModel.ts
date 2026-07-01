@@ -358,7 +358,11 @@ export function buildAttributeModel({
     + scoringVolume * 0.22
     + eliteShooterBonus;
   const weakEraThreeProof = trustedThreePct < 0.33 && eliteShooterBonus <= 0;
-  const rawThreePoint = weakEraThreeProof ? Math.min(uncappedThreePoint, 79.4) : uncappedThreePoint;
+  const nonEliteShooterCap = eliteShooterBonus <= 0 ? 91.4 : 100;
+  const rawThreePoint = Math.min(
+    weakEraThreeProof ? Math.min(uncappedThreePoint, 79.4) : uncappedThreePoint,
+    nonEliteShooterCap,
+  );
   const rawPerimeterDefense = 56
     + spg * 8
     + defenseSignal * 5.6

@@ -294,6 +294,7 @@ export function buildPlayerRatingProfile({
   const skill_grades = skillGradesFromAttributes(era_adjusted_profiles);
   const category_skill_grades = buildSkillGrades(era_adjusted_profiles, {
     shotVolumeModifier: shotVolumeModifier(resolvedSource),
+    eliteShooterProof: (resolvedSource.scoutingTags || []).some(tag => String(tag).toLowerCase() === 'elite_shooter'),
   });
   const tendencies = buildPlayerTendencies(sourceWithAge);
 

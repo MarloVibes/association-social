@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:domain": "vitest run tests/domain",
     "test:functions": "vitest run tests/functions",
+    "generate:function-baselines": "node scripts/generate-functions-baseline-profiles.mjs",
     "update": "eas update --branch main --auto"
   },
   "dependencies": {

@@ -22,6 +22,35 @@ function normalizeTeam(value) {
   return String(value || '').toUpperCase().trim();
 }
 
+function gradeFromRating(value) {
+  const rating = Number(value);
+  if (!Number.isFinite(rating)) return undefined;
+  if (rating >= 99) return 'S';
+  if (rating >= 95) return 'A+';
+  if (rating >= 92) return 'A';
+  if (rating >= 89) return 'A-';
+  if (rating >= 85) return 'B+';
+  if (rating >= 80) return 'B';
+  if (rating >= 75) return 'B-';
+  if (rating >= 70) return 'C+';
+  if (rating >= 65) return 'C';
+  if (rating >= 60) return 'C-';
+  if (rating >= 57) return 'D+';
+  if (rating >= 53) return 'D';
+  if (rating >= 50) return 'D-';
+  return 'F';
+}
+
+function skillGradesFromProfile(profile) {
+  if (profile && profile.skill_grades) return profile.skill_grades;
+  const attributes = (profile && (profile.era_adjusted_profiles || profile.attribute_model)) || {};
+  return Object.fromEntries(
+    Object.entries(attributes)
+      .map(([key, value]) => [key, gradeFromRating(value)])
+      .filter(([, grade]) => Boolean(grade)),
+  );
+}
+
 function seasonFromContext(player, context = {}) {
   const exactSeason = Number(player && player.season);
   if (Number.isFinite(exactSeason) && exactSeason > 1900) {
@@ -70,6 +99,7 @@ function mergeBaselineRatingProfile(player, context = {}) {
     ...player,
     baselineRatingProfile: profile,
     category_skill_grades: profile.category_skill_grades || player.category_skill_grades,
+    skill_grades: skillGradesFromProfile(profile) || player.skill_grades,
     era_adjusted_profiles: profile.era_adjusted_profiles || player.era_adjusted_profiles,
     attribute_model: profile.attribute_model || player.attribute_model,
     development_curve: profile.development_curve || player.development_curve,

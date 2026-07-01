@@ -236,6 +236,13 @@ describe('rating seed baselines', () => {
     }
   });
 
+  it('does not let high-volume good shooters become all-time elite without elite-shooter proof', () => {
+    const edwards2026 = findProfile('Anthony Edwards', 'MIN', 2026);
+
+    expect(gradeRank(edwards2026.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('A'));
+    expect(gradeRank(edwards2026.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('A'));
+  });
+
   it('audits every baseline profile for obvious rating anomalies', () => {
     const allProfiles = profiles();
     const hasTag = (profile: any, tag: string) => (

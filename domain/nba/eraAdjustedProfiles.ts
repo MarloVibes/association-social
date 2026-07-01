@@ -149,6 +149,11 @@ export function applyEraAdjustment({
     notes.push('capped pure passing to assist-production proof');
   }
 
+  if (!hasTag(source, 'elite_shooter') && profile.threePoint > 94.4) {
+    profile.threePoint = 94.4;
+    notes.push('capped shooting below elite tier without elite-shooter proof');
+  }
+
   return {
     era_adjusted_profiles: rounded(profile),
     era_notes: notes.length > 0 ? notes : ['no major era adjustment'],
