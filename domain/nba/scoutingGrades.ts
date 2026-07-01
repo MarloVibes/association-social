@@ -220,6 +220,22 @@ function hasSourceTag(player: Record<string, any>, profile: Record<string, any> 
   return tags.some(value => String(value).toLowerCase() === target);
 }
 
+function positionText(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  return String(player?.position || profile?.position || '').toUpperCase();
+}
+
+function isBig(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const position = positionText(player, profile);
+  return position.includes('PF') || position.includes('C') || position === 'F-C';
+}
+
+function hasInteriorDefenseProof(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  return hasSourceTag(player, profile, 'all_defense')
+    || hasSourceTag(player, profile, 'defensive_anchor')
+    || hasSourceTag(player, profile, 'rim_protector')
+    || hasSourceTag(player, profile, 'post_defender');
+}
+
 function suspiciousThreePointSample(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
   const pct = statNumber(player, profile, ['threePointPct', 'fg3_pct', 'three_pct']);
   const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
@@ -300,7 +316,7 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['shotVolumeModifier'], weight: 5, fallback: volumeModifier(player, profile) },
         ]) ?? statRatingForKey(player, profile, key);
         if (rating === null) return null;
-        if (suspiciousThreePointSample(player, profile)) return Math.min(rating, 69.4);
+        if (suspiciousThreePointSample(player, profile)) return Math.min(rating, 59.4);
         const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
         if (attempts !== null && attempts < 1 && !hasSourceTag(player, profile, 'elite_shooter')) return Math.min(rating, 59.4);
         return rating;
@@ -341,12 +357,17 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['defenseIq', 'defensiveIq'], weight: 15 },
       ]) ?? statRatingForKey(player, profile, key);
     case 'postDefense':
-      return weightedRating(player, profile, [
+      {
+        const rating = weightedRating(player, profile, [
         { keys: ['postDefense', 'interiorDefense'], weight: 50 },
         { keys: ['blocking', 'block'], weight: 15 },
         { keys: ['strength'], weight: 20 },
         { keys: ['defenseIq'], weight: 15 },
       ]) ?? statRatingForKey(player, profile, key);
+        if (rating === null) return null;
+        if (isBig(player, profile) && !hasInteriorDefenseProof(player, profile)) return Math.min(rating, 84.4);
+        return rating;
+      }
     case 'rebounding':
       return weightedRating(player, profile, [
         { keys: ['rebounding'], weight: 55 },

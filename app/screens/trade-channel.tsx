@@ -2,8 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
-import { getPlaystyle } from '@/constants/playstyle';
-import { getSportArchetype } from '@/constants/sportArchetype';
+import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -11,10 +10,25 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 
 
-function PlaystyleBadge({ player, eraKey, sport }: { player: any; eraKey?: string; sport?: string }) {
-  const style = getSportArchetype(player, sport, eraKey);
+function PlaystyleBadge({
+  player,
+  eraKey,
+  sport,
+  currentYear,
+  leagueDate,
+}: {
+  player: any;
+  eraKey?: string;
+  sport?: string;
+  currentYear?: number | string | null;
+  leagueDate?: string | Date | null;
+}) {
+  const profile = selectRosterRatingProfile(player, {}, { era: eraKey, currentYear, leagueDate });
+  const year = typeof currentYear === 'number' ? currentYear : Number(currentYear) || undefined;
+  const style = getSportArchetypeForYear(player, profile, year, sport);
   return (
     <View style={[badgeStyles.badge, { borderColor: style.color + '88' }]}>
       <Text style={[badgeStyles.badgeText, { color: style.color }]}>{style.label}</Text>
@@ -27,7 +41,7 @@ const badgeStyles = StyleSheet.create({
   badgeText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string; sport?: string }) {
+function PlayerSlot({ player, onPress, empty, style, eraKey, sport, currentYear, leagueDate }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string; sport?: string; currentYear?: number | string | null; leagueDate?: string | Date | null }) {
   if (empty) {
     return (
       <TouchableOpacity style={[styles.playerSlot, styles.playerSlotEmpty, style]} onPress={onPress}>
@@ -47,7 +61,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport }: { player?:
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
-          <PlaystyleBadge player={player} eraKey={eraKey} sport={sport} />
+          <PlaystyleBadge player={player} eraKey={eraKey} sport={sport} currentYear={currentYear} leagueDate={leagueDate} />
         </View>
       </View>
     </TouchableOpacity>
@@ -76,6 +90,9 @@ export default function TradeChannelScreen() {
   const user = auth.currentUser;
   const positionFilters = getPositionFilters(sport);
   const tradePositionFilters = positionFilters.filter(position => position !== 'ALL');
+  const leagueEra = league?.era || 'current';
+  const leagueYear = league?.currentYear || league?.seasonYear || null;
+  const leagueDate = leagueDateFromRecord(league);
 
   useEffect(() => { loadData(); }, []);
 
@@ -317,7 +334,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = tradeBlockPlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} sport={sport} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
+                  ? <PlayerSlot key={i} player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('block')} />;
               })}
             </View>
@@ -341,7 +358,7 @@ export default function TradeChannelScreen() {
                   }
                 }
                 return targetPlayer ? (
-                  <PlayerSlot key={i} player={targetPlayer} eraKey={myTeam?.era} sport={sport} onPress={() => setRosterModal('target')} />
+                  <PlayerSlot key={i} player={targetPlayer} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} onPress={() => setRosterModal('target')} />
                 ) : (
                   <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
                 );
@@ -353,7 +370,7 @@ export default function TradeChannelScreen() {
               {[0,1,2,3,4,5].map(i => {
                 const p = untouchablePlayers[i];
                 return p
-                  ? <PlayerSlot key={i} player={p} eraKey={myTeam?.era} sport={sport} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
+                  ? <PlayerSlot key={i} player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
                   : <PlayerSlot key={i} empty onPress={() => setRosterModal('untouchable')} />;
               })}
             </View>
@@ -417,7 +434,7 @@ export default function TradeChannelScreen() {
                 <View style={styles.listingRow}>
                   <PlayerSlot
                     player={item.player}
-                    eraKey={myTeam?.era} sport={sport}
+                    eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate}
                     style={{ flex: 1 }}
                     onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
                   />
@@ -621,7 +638,7 @@ export default function TradeChannelScreen() {
                 >
                   <Text style={styles.rosterRowPos}>{p.position}</Text>
                   <Text style={styles.rosterRowName}>{p.full_name}{p.teamName ? ' · ' + p.teamName : ''}</Text>
-                  <PlaystyleBadge player={p} eraKey={myTeam?.era} sport={sport} />
+                  <PlaystyleBadge player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} />
                   {isSelected && <Text style={styles.rosterCheck}>✓</Text>}
                 </TouchableOpacity>
               );
@@ -631,11 +648,11 @@ export default function TradeChannelScreen() {
       </Modal>
       <PlayerCard
         player={selectedAvailPlayer?.player || null}
-        era={myTeam?.era || 'current'}
+        era={league?.era || 'current'}
         sport={sport}
         leagueId={leagueId}
         teamId={selectedAvailPlayer?.teamId || ''}
-        leagueDate={leagueDateFromRecord(league)}
+        leagueDate={leagueDate}
         visible={!!selectedAvailPlayer}
         onClose={() => setSelectedAvailPlayer(null)}
         isOwned={selectedAvailPlayer ? false : undefined}

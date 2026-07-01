@@ -285,7 +285,7 @@ export function buildBaselineRatingProfiles(
   ];
 
   return combinedSeeds.map(seed => buildPlayerRatingProfile({
-    source: seed.source,
+    source: sanitizeSeedSource(seed.source),
     source_snapshot_id: seed.snapshotId,
     leagueContext: {
       ...seed.leagueContext,
@@ -302,4 +302,22 @@ function seedKey(seed: BaselineSeed) {
     String(seed.source.full_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(),
     String(seed.source.team || '').toUpperCase().trim(),
   ].join('|');
+}
+
+function sanitizeSeedSource(source: BaselineSeed['source']): BaselineSeed['source'] {
+  const threePointPct = Number(source.threePointPct);
+  const threePointAttempts = Number(source.threePointAttemptsPerGame);
+  const tags = Array.isArray(source.scoutingTags) ? source.scoutingTags : [];
+  const impossibleShootingSample = Number.isFinite(threePointPct)
+    && Number.isFinite(threePointAttempts)
+    && threePointPct >= 0.9
+    && threePointAttempts >= 2
+    && !tags.some(tag => String(tag).toLowerCase() === 'verified_shooting_data');
+
+  if (!impossibleShootingSample) return source;
+
+  return {
+    ...source,
+    scoutingTags: tags.filter(tag => String(tag).toLowerCase() !== 'elite_shooter'),
+  };
 }

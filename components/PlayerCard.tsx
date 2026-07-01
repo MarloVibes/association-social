@@ -175,7 +175,7 @@ function playerName(player: any): string {
 }
 
 function playerTeam(player: any): string {
-  return String(player?.team || player?.teamAbbr || player?.abbreviation || '');
+  return String(player?.team || player?.teamAbbr || player?.abbreviation || player?.teamId || player?.teamName || '');
 }
 
 function formatStatValue(value: any): string {
@@ -736,12 +736,12 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                           <View style={styles.compareHeader}>
                             <View style={styles.compareHeaderSide}>
                               <Text style={styles.compareHeaderName} numberOfLines={1}>{name}</Text>
-                              <Text style={styles.compareHeaderMeta}>{playerTeam(player) || player.position || 'Player'}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(player) || 'Player'}</Text>
                             </View>
                             <Text style={styles.compareVs}>VS</Text>
                             <View style={styles.compareHeaderSide}>
                               <Text style={styles.compareHeaderName} numberOfLines={1}>{playerName(selectedComparePlayer)}</Text>
-                              <Text style={styles.compareHeaderMeta}>{playerTeam(selectedComparePlayer) || selectedComparePlayer.position || 'Player'}</Text>
+                              <Text style={styles.compareHeaderMeta}>{playerTeam(selectedComparePlayer) || 'Player'}</Text>
                             </View>
                           </View>
                           <View style={styles.compareRows}>

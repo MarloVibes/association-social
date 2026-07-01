@@ -197,7 +197,7 @@ function canonicalAttributeValue(player, key) {
 
 function hasThreePointProof(player) {
   if (canonicalAttributeValue(player, 'threePoint') != null) return true;
-  if (categorySkillRating(player, 'threePoint') != null) return true;
+  if (!isBigForSimulation(player) && categorySkillRating(player, 'threePoint') != null) return true;
   const attempts = Number(player && (
     player.threePointAttemptsPerGame
     || player.fg3a
@@ -218,6 +218,22 @@ function hasThreePointProof(player) {
     ...(Array.isArray(player && player.traits) ? player.traits : []),
   ].filter(Boolean).join(' ').toLowerCase();
   return text.includes('shoot') || text.includes('stretch') || text.includes('spacing');
+}
+
+function canonicalTendenciesForSimulation(player) {
+  const tendencies = { ...((player && player.tendencies) || {}) };
+  const profile = player && player.baselineRatingProfile;
+  if (profile && profile.tendencies && typeof profile.tendencies === 'object') {
+    Object.assign(tendencies, profile.tendencies);
+  }
+
+  if (isBigForSimulation(player) && !hasThreePointProof(player)) {
+    tendencies.threePointFrequency = Math.min(numberFrom(tendencies.threePointFrequency, 35), 35);
+    tendencies.catchAndShootFrequency = Math.min(numberFrom(tendencies.catchAndShootFrequency, 35), 35);
+    tendencies.pullUpFrequency = Math.min(numberFrom(tendencies.pullUpFrequency, 30), 30);
+  }
+
+  return tendencies;
 }
 
 function isBigForSimulation(player) {
@@ -303,6 +319,7 @@ function canonicalizePlayerForSimulation(player) {
     ...player,
     hidden: canonicalHiddenForSimulation(player),
     category_skill_grades: canonicalCategoryGradesForSimulation(player),
+    tendencies: canonicalTendenciesForSimulation(player),
   };
 }
 

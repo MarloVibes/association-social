@@ -305,6 +305,31 @@ describe('matchup request state helpers', () => {
     expect(team.players[1].hidden.shooting).toBe(84);
   });
 
+  it('does not treat stale big-man category grades as shooting proof by themselves', () => {
+    const team = canonicalizeTeamForSimulation({
+      players: [
+        {
+          player_id: 'stale-category-center',
+          full_name: 'Stale Category Center',
+          position: 'C',
+          hidden: { shooting: 99, threePoint: 99, defense: 92, rebounding: 94 },
+          category_skill_grades: {
+            threePoint: { rating: 99, grade: 'S' },
+          },
+          tendencies: {
+            threePointFrequency: 99,
+            catchAndShootFrequency: 99,
+          },
+        },
+      ],
+    });
+
+    expect(team.players[0].hidden.threePoint).toBeLessThanOrEqual(49);
+    expect(team.players[0].hidden.shooting).toBeLessThanOrEqual(65);
+    expect(team.players[0].tendencies.threePointFrequency).toBeLessThanOrEqual(35);
+    expect(team.players[0].tendencies.catchAndShootFrequency).toBeLessThanOrEqual(35);
+  });
+
   it('lets baseline category grades override stale saved categories before live simulation', () => {
     const team = canonicalizeTeamForSimulation({
       players: [

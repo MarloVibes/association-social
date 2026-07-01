@@ -2080,16 +2080,12 @@ export default function ChannelScreen() {
           <TouchableOpacity
             style={styles.inputAction}
             onPress={() => {
-              if (!GIPHY_KEY) {
-                Alert.alert('GIF search unavailable', 'The GIF search key is not loaded in this build.');
-                return;
-              }
               setShowGiphy(true);
               setShowEmoji(false);
             }}
           >
-            <View style={[styles.gifBtnBox, !GIPHY_KEY && styles.gifBtnBoxDisabled]}>
-              <Text style={[styles.gifBtnText, !GIPHY_KEY && styles.gifBtnTextDisabled]}>GIF</Text>
+            <View style={styles.gifBtnBox}>
+              <Text style={styles.gifBtnText}>GIF</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity style={styles.inputAction} onPress={pickPhoto}>
@@ -2246,8 +2242,6 @@ const styles = StyleSheet.create({
   inputActionIcon: { fontSize: 20 },
   gifBtnBox: { backgroundColor: '#1a1000', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#F5A623' },
   gifBtnText: { color: '#F5A623', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  gifBtnBoxDisabled: { borderColor: '#555', backgroundColor: '#161616' },
-  gifBtnTextDisabled: { color: '#777' },
   input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(245,166,35,0.25)' },
   sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },

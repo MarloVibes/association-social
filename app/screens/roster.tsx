@@ -906,7 +906,7 @@ export default function RosterScreen() {
           const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
           const isUntouchable = isMine && myUntouchables.includes(pid);
           const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
-          const profile = selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear });
+          const profile = selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear, leagueDate: leagueDateFromRecord(league) });
           const gradeChips = rosterGradeChips(item, profile);
           const bestGrade = strongestGrade(item, profile);
           const archetype = getSportArchetypeForYear(item, profile, currentYear, authoritativeSport);

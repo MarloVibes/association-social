@@ -537,6 +537,9 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('compareHeaderMeta');
     expect(playerCard).toContain('compareGradeColumn');
     expect(playerCard).not.toContain('compareSmallName');
+    expect(playerCard).toContain('teamId');
+    expect(playerCard).toContain('teamName');
+    expect(playerCard).not.toContain("playerTeam(player) || player.position || 'Player'");
     expect(playerCard).toContain('baselineProfile || savedProfile');
     expect(playerCard).toContain('selectedBaselineCompareProfile || selectedSavedCompareProfile');
     expect(playerCard).toContain('Age: {resolvedProfile.display_age || resolvedProfile.age}');
@@ -552,6 +555,36 @@ describe('source safety regressions', () => {
     expect(roster).toContain("PICKS");
     expect(roster).toContain("rosterViewMode === 'picks'");
     expect(roster).not.toContain('DRAFT PICKS ({team.picks.length})</Text>');
+  });
+
+  it('keeps the NBA league hub title and subtitle short enough for mobile cards', () => {
+    const league = source('app/screens/league.tsx');
+
+    expect(league).toContain("nba: 'Inside The NBA'");
+    expect(league).toContain('GM Controls and News');
+    expect(league).not.toContain('League News · Trade Center · Coaching · Front Office');
+  });
+
+  it('keeps GIF access visible in league chat without disabling the button', () => {
+    const channel = source('app/screens/channel.tsx');
+
+    expect(channel).toContain('<Text style={styles.gifBtnText}>GIF</Text>');
+    expect(channel).not.toContain('GIF search unavailable');
+    expect(channel).not.toContain('gifBtnBoxDisabled');
+    expect(channel).not.toContain('gifBtnTextDisabled');
+  });
+
+  it('uses the canonical profile resolver on roster and trade surfaces', () => {
+    const roster = source('app/screens/roster.tsx');
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+
+    expect(roster).toContain('selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear, leagueDate: leagueDateFromRecord(league) })');
+    expect(tradeChannel).toContain('selectRosterRatingProfile');
+    expect(tradeChannel).toContain('getSportArchetypeForYear');
+    expect(tradeChannel).not.toContain('getSportArchetype(player, sport, eraKey)');
+    expect(tradeChannel).not.toContain("import { getPlaystyle }");
+    expect(tradeChannel).toContain("era={league?.era || 'current'}");
+    expect(tradeChannel).not.toContain("era={myTeam?.era || 'current'}");
   });
 
   it('does not present the franchise game as a mini game on the dashboard', () => {

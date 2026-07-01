@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildBaselineRatingProfiles } from '../../domain/nba/ratingSeeds';
 import { gradeRank } from '../../domain/nba/gradeScale';
+import { buildScoutingGrades } from '../../domain/nba/scoutingGrades';
 
 describe('rating seed baselines', () => {
   const profiles = () => buildBaselineRatingProfiles();
@@ -14,6 +15,7 @@ describe('rating seed baselines', () => {
     expect(profile).toBeTruthy();
     return profile!;
   };
+  const publicGrades = (profile: any) => buildScoutingGrades(profile, profile);
 
   it('keeps 2011 LeBron and 2011 Rose as elite potential franchise anchors', () => {
     const profiles = buildBaselineRatingProfiles();
@@ -46,10 +48,13 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeLessThan(gradeRank('A+'));
     expect(gradeRank(rose2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('B+'));
+    expect(gradeRank(publicGrades(rose2011).passing)).toBeLessThan(gradeRank('A+'));
     expect(gradeRank(rose2011?.category_skill_grades.playmaking.grade || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(rose2017.skill_grades.passing || 'F')).toBeLessThanOrEqual(gradeRank('B+'));
+    expect(gradeRank(publicGrades(rose2017).passing)).toBeLessThanOrEqual(gradeRank('B+'));
     expect(gradeRank(lillard2017.skill_grades.passing || 'F')).toBeLessThan(gradeRank('S'));
     expect(gradeRank(paul2011.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A+'));
+    expect(gradeRank(publicGrades(paul2011).passing)).toBeGreaterThanOrEqual(gradeRank('A+'));
   });
 
   it('keeps low-volume rim centers from receiving good three point grades', () => {
@@ -57,6 +62,7 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(gobert2017.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('D+'));
     expect(gradeRank(gobert2017.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(gradeRank(publicGrades(gobert2017).threePoint)).toBeLessThanOrEqual(gradeRank('D+'));
     expect(gradeRank(gobert2017.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(gobert2017.category_skill_grades.rebounding.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
@@ -72,10 +78,13 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(nash2003.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
     expect(gradeRank(kyrie2017.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
+    expect(gradeRank(publicGrades(kyrie2017).perimeterDefense)).toBeLessThan(gradeRank('B'));
     expect(gradeRank(kawhi2017.category_skill_grades.perimeterDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(publicGrades(kawhi2017).perimeterDefense)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(draymond2017.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(dirk2011.category_skill_grades.interiorDefense.grade)).toBeLessThan(gradeRank('A-'));
     expect(gradeRank(love2017.category_skill_grades.interiorDefense.grade)).toBeLessThan(gradeRank('A-'));
+    expect(gradeRank(publicGrades(love2017).postDefense)).toBeLessThanOrEqual(gradeRank('B'));
     expect(gradeRank(bargnani2011.category_skill_grades.rebounding.grade)).toBeLessThan(gradeRank('B'));
   });
 
@@ -113,8 +122,12 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(truckRobinson1984.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('C'));
     expect(gradeRank(truckRobinson1984.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('C'));
+    expect(gradeRank(publicGrades(truckRobinson1984).threePoint)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(truckRobinson1984.source_stat_line.scoutingTags).not.toContain('elite_shooter');
     expect(gradeRank(eddyCurry2003.skill_grades.threePoint || 'F')).toBeLessThanOrEqual(gradeRank('C'));
     expect(gradeRank(eddyCurry2003.category_skill_grades.threePoint.grade)).toBeLessThanOrEqual(gradeRank('C'));
+    expect(gradeRank(publicGrades(eddyCurry2003).threePoint)).toBeLessThanOrEqual(gradeRank('D+'));
+    expect(eddyCurry2003.source_stat_line.scoutingTags).not.toContain('elite_shooter');
   });
 
   it('does not inflate weak era three point profiles into A-level shooters', () => {
@@ -171,6 +184,8 @@ describe('rating seed baselines', () => {
 
     expect(gradeRank(lebron2011.skill_grades.dunking || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(edwards2026.skill_grades.dunking || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(publicGrades(lebron2011).dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(publicGrades(edwards2026).dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(lebron2011.category_skill_grades.finishing.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.skill_grades.drivingDunk || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.category_skill_grades.athleticism.grade)).toBeGreaterThanOrEqual(gradeRank('B+'));
