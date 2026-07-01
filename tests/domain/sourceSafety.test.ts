@@ -625,6 +625,30 @@ describe('source safety regressions', () => {
     expect(rosterCuts).toContain('Grade ');
   });
 
+  it('keeps player-facing NBA grade surfaces free of visible numeric ratings', () => {
+    const playerFacingPaths = [
+      'components/PlayerCard.tsx',
+      'app/screens/team-roster.tsx',
+      'app/screens/league-rosters.tsx',
+      'app/screens/trade-channel.tsx',
+      'app/screens/season/scouting.tsx',
+      'app/screens/season/player-upgrades.tsx',
+    ];
+
+    for (const path of playerFacingPaths) {
+      const file = source(path);
+      expect(file).not.toContain('OVR');
+      expect(file).not.toContain('Overall Rating');
+      expect(file).not.toContain('numeric rating');
+      expect(file).not.toContain('rating number');
+    }
+
+    const upgrades = source('app/screens/season/player-upgrades.tsx');
+    expect(upgrades).toContain('Upgrade Points');
+    expect(upgrades).toContain('One point raises one grade');
+    expect(upgrades).not.toContain('rating');
+  });
+
   it('uses clear Trade Center tab labels', () => {
     const tradeCenter = source('app/screens/trade-channel.tsx');
 
