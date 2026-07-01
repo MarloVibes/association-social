@@ -154,6 +154,43 @@ describe('NBA game simulation', () => {
     expect(result.home.points).toBeGreaterThan(result.away.points - 8);
   });
 
+  it('averages steals and blocks toward defenders instead of random role players', () => {
+    const matchup: SimGameInput = {
+      home: {
+        teamId: 'DEF',
+        players: [
+          { playerId: 'lockdown', name: 'Point Of Attack Wing', position: 'SF', minutes: 34, shooting: 72, playmaking: 68, defense: 94, perimeterDefense: 96, defenseIq: 94, helpDefense: 90, stealsSkill: 92, blocking: 58 },
+          { playerId: 'rim', name: 'Rim Protector', position: 'C', minutes: 32, shooting: 64, playmaking: 50, defense: 94, rebounding: 92, blocking: 96, postDefense: 94, defenseIq: 91 },
+          { playerId: 'shooter', name: 'Spot Shooter', position: 'SG', minutes: 28, shooting: 88, playmaking: 58, defense: 58, perimeterDefense: 54, defenseIq: 58, stealsSkill: 50, blocking: 42 },
+          { playerId: 'guard', name: 'Average Guard', position: 'PG', minutes: 30, shooting: 76, playmaking: 76, defense: 62, perimeterDefense: 62, defenseIq: 62, stealsSkill: 58, blocking: 40 },
+          { playerId: 'forward', name: 'Average Forward', position: 'PF', minutes: 28, shooting: 72, playmaking: 58, defense: 66, rebounding: 68, blocking: 58 },
+        ],
+      },
+      away: fixture.away,
+    };
+
+    const totals = new Map<string, { games: number; steals: number; blocks: number }>();
+    Array.from({ length: 60 }, (_, index) => `defense-sample-${index}`).forEach((seed) => {
+      const result = simulateGame(matchup, seed);
+      result.home.players.forEach((player) => {
+        const row = totals.get(player.name) || { games: 0, steals: 0, blocks: 0 };
+        row.games += 1;
+        row.steals += player.steals;
+        row.blocks += player.blocks;
+        totals.set(player.name, row);
+      });
+    });
+    const average = (name: string, key: 'steals' | 'blocks') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+
+    expect(average('Point Of Attack Wing', 'steals')).toBeGreaterThan(average('Spot Shooter', 'steals') + 0.7);
+    expect(average('Point Of Attack Wing', 'steals')).toBeGreaterThan(average('Average Guard', 'steals') + 0.4);
+    expect(average('Rim Protector', 'blocks')).toBeGreaterThan(average('Spot Shooter', 'blocks') + 0.9);
+    expect(average('Rim Protector', 'blocks')).toBeGreaterThan(average('Average Forward', 'blocks') + 0.5);
+  });
+
   it('uses rating-engine category grades and tendencies to shape player production', () => {
     const result = simulateGame({
       home: {
