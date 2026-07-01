@@ -57,6 +57,27 @@ describe('rating seed baselines', () => {
     expect(gradeRank(publicGrades(paul2011).passing)).toBeGreaterThanOrEqual(gradeRank('A+'));
   });
 
+  it('requires elite assist proof before assigning A+ pure passing grades', () => {
+    for (const profile of profiles()) {
+      const assists = Number(profile.source_stat_line?.assistsPerGame || 0);
+      const assistPct = Number(profile.source_stat_line?.assistPct || 0);
+      const tags = (profile.source_stat_line?.scoutingTags || []).map(value => String(value).toLowerCase());
+      const hasElitePassingProof = assists >= 8.5
+        || (assists >= 8 && assistPct >= 35 && (tags.includes('elite_passer') || tags.includes('floor_general')));
+
+      if (hasElitePassingProof) continue;
+
+      expect(
+        gradeRank(profile.skill_grades.passing || 'F'),
+        `${profile.full_name} ${profile.season} needs elite assist proof for A+ passing`,
+      ).toBeLessThan(gradeRank('A+'));
+      expect(
+        gradeRank(publicGrades(profile).passing),
+        `${profile.full_name} ${profile.season} public passing grade should match assist proof`,
+      ).toBeLessThan(gradeRank('A+'));
+    }
+  });
+
   it('keeps low-volume rim centers from receiving good three point grades', () => {
     const gobert2017 = findProfile('Rudy Gobert', 'UTA', 2017);
 
@@ -189,6 +210,30 @@ describe('rating seed baselines', () => {
     expect(gradeRank(lebron2011.category_skill_grades.finishing.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.skill_grades.drivingDunk || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.category_skill_grades.athleticism.grade)).toBeGreaterThanOrEqual(gradeRank('B+'));
+  });
+
+  it('keeps elite rim-pressure creators from being flattened into average dunking grades', () => {
+    for (const profile of profiles()) {
+      const position = String(profile.position || '').toUpperCase();
+      const tags = (profile.source_stat_line?.scoutingTags || []).map(value => String(value).toLowerCase());
+      const rimRate = Number(profile.source_stat_line?.rimAttemptRate || 0);
+      const dunkRate = Number(profile.source_stat_line?.dunkRate || 0);
+      const isCreatorAthlete = tags.includes('elite_rim_pressure')
+        && (tags.includes('elite_burst') || tags.includes('high_usage_creator'))
+        && (position.includes('PG') || position.includes('SG') || position.includes('SF') || position.includes('F'))
+        && (rimRate >= 0.32 || dunkRate >= 0.08);
+
+      if (!isCreatorAthlete) continue;
+
+      expect(
+        gradeRank(profile.skill_grades.dunking || 'F'),
+        `${profile.full_name} ${profile.season} should show real dunk threat from rim-pressure proof`,
+      ).toBeGreaterThanOrEqual(gradeRank('A-'));
+      expect(
+        gradeRank(publicGrades(profile).dunking),
+        `${profile.full_name} ${profile.season} public card dunking should show rim-pressure proof`,
+      ).toBeGreaterThanOrEqual(gradeRank('A-'));
+    }
   });
 
   it('audits every baseline profile for obvious rating anomalies', () => {

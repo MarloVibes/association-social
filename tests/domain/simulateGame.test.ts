@@ -626,6 +626,47 @@ describe('NBA game simulation', () => {
     expect(avg('Kyle Korver', 'points')).toBeLessThan(avg('Derrick Rose', 'points') - 8);
   });
 
+  it('keeps modern athletic scorers and rim anchors role-correct across a season sample', () => {
+    const matchup: SimGameInput = {
+      home: {
+        teamId: 'MIN',
+        players: [
+          simPlayerFromBaseline('Anthony Edwards', 'MIN', 2026),
+          simPlayerFromBaseline('Rudy Gobert', 'MIN', 2026),
+          { playerId: 'min-pg', name: 'Minnesota Guard', position: 'PG', minutes: 32, shooting: 76, playmaking: 82, defense: 74, rebounding: 46 },
+          { playerId: 'min-wing', name: 'Minnesota Wing', position: 'SF', minutes: 30, shooting: 74, playmaking: 64, defense: 78, rebounding: 58 },
+          { playerId: 'min-forward', name: 'Minnesota Forward', position: 'PF', minutes: 30, shooting: 72, playmaking: 60, defense: 76, rebounding: 74 },
+        ],
+      },
+      away: fixture.away,
+    };
+    const totals = new Map<string, { games: number; points: number; rebounds: number; threesAttempted: number; maxPoints: number; maxRebounds: number }>();
+    Array.from({ length: 82 }, (_, index) => `modern-wolves-season-${index}`).forEach((seed) => {
+      const result = simulateGame(matchup, seed);
+      result.home.players.forEach((player) => {
+        const row = totals.get(player.name) || { games: 0, points: 0, rebounds: 0, threesAttempted: 0, maxPoints: 0, maxRebounds: 0 };
+        row.games += 1;
+        row.points += player.points;
+        row.rebounds += player.rebounds;
+        row.threesAttempted += player.threePointersAttempted;
+        row.maxPoints = Math.max(row.maxPoints, player.points);
+        row.maxRebounds = Math.max(row.maxRebounds, player.rebounds);
+        totals.set(player.name, row);
+      });
+    });
+    const avg = (name: string, key: 'points' | 'rebounds' | 'threesAttempted') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+    const max = (name: string, key: 'maxPoints' | 'maxRebounds') => Number(totals.get(name)?.[key] || 0);
+
+    expect(avg('Anthony Edwards', 'points')).toBeGreaterThan(avg('Rudy Gobert', 'points') + 8);
+    expect(max('Anthony Edwards', 'maxPoints')).toBeGreaterThanOrEqual(40);
+    expect(avg('Rudy Gobert', 'rebounds')).toBeGreaterThan(avg('Minnesota Forward', 'rebounds') + 3);
+    expect(max('Rudy Gobert', 'maxRebounds')).toBeGreaterThanOrEqual(16);
+    expect(avg('Rudy Gobert', 'threesAttempted')).toBeLessThanOrEqual(0.3);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },
