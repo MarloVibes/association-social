@@ -175,7 +175,7 @@ function sourceProductionRating(player, kind) {
   if (kind === 'points') {
     const pointsPerGame = sourceStatOrNull(player, 'pointsPerGame');
     const usagePct = sourceStatOrNull(player, 'usagePct');
-    if (pointsPerGame == null && usagePct == null) return 60;
+    if (pointsPerGame == null && usagePct == null) return 52;
     return clamp(42 + (pointsPerGame ?? 12) * 1.35 + ((usagePct ?? 19) - 19) * 0.75, 35, 100);
   }
   if (kind === 'assists') {
@@ -688,8 +688,10 @@ function distributeTeamPoints(players, minutes, teamPoints, seed) {
       const productionSignal = sourceScoring / 72;
       const productionMultiplier = clamp(0.3 + Math.pow(productionSignal, 2.15), 0.65, 2.35);
       const scoringRole = (
-        (playerSkill(player, 'shooting') + playerSkill(player, 'playmaking') * 0.25 + (hash(`${seed}:${playerKey(player)}`) % 8)) * 0.45
-        + sourceScoring * 0.8
+        playerSkill(player, 'shooting') * 0.25
+        + playerSkill(player, 'playmaking') * 0.12
+        + sourceScoring * 1.15
+        + (hash(`${seed}:${playerKey(player)}`) % 8) * 0.25
       );
       const minutesShare = Math.pow(minutes[index], 0.92);
       return Math.max(
@@ -711,7 +713,24 @@ function distributeTeamPoints(players, minutes, teamPoints, seed) {
     diff -= 1;
     cursor = (cursor + 1) % points.length;
   }
+  rebalanceSourceScoringOrder(players, points);
   return points;
+}
+
+function rebalanceSourceScoringOrder(players, points) {
+  for (let leadIndex = 0; leadIndex < players.length; leadIndex += 1) {
+    for (let otherIndex = 0; otherIndex < players.length; otherIndex += 1) {
+      if (leadIndex === otherIndex) continue;
+      const leadSource = sourceProductionRating(players[leadIndex], 'points');
+      const otherSource = sourceProductionRating(players[otherIndex], 'points');
+      if (leadSource - otherSource < 22 || points[leadIndex] >= points[otherIndex]) continue;
+      const needed = Math.ceil((points[otherIndex] - points[leadIndex]) / 2);
+      const movable = Math.max(0, points[otherIndex] - 8);
+      const shift = Math.min(needed, movable);
+      points[leadIndex] += shift;
+      points[otherIndex] -= shift;
+    }
+  }
 }
 
 function distributeStatTotal(players, minutes, targetTotal, seed, weightForPlayer) {

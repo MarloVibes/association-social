@@ -269,8 +269,8 @@ function buildTeamContext(teamId, team, side, input) {
     const sourceThreeAttemptCap = sourceThreeAttemptBudget(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
     const efficiencyUsageMultiplier = clamp(0.72 + player.sourceEfficiency / 150, 0.72, 1.34);
     const sourceUsageSignal = player.sourceScoringRole / 72;
-    const productionUsageMultiplier = clamp(0.3 + Math.pow(sourceUsageSignal, 2.15), 0.65, 2.35);
-    const scoringRole = player.scoring * 0.45 + player.sourceScoringRole * 0.8;
+    const productionUsageMultiplier = clamp(0.55 + Math.pow(sourceUsageSignal, 1.7) * 0.75, 0.7, 2);
+    const scoringRole = player.scoring * 0.42 + player.sourceScoringRole * 0.85;
     return {
       ...player,
       ...night,
@@ -336,6 +336,7 @@ function normalizePlayer(player, teamId, side, index) {
   const reboundCrash = tendency(player, 'reboundCrash', 55);
   const passFirst = tendency(player, 'passFirst', 50);
   const pickAndRollBallHandler = tendency(player, 'pickAndRollBallHandler', 45);
+  const bigWithoutCreationProof = (position === 'PF' || position === 'C') && !hasSourceAssistProof && playmaking < 68;
   return {
     raw: player,
     index,
@@ -356,11 +357,11 @@ function normalizePlayer(player, teamId, side, index) {
     reboundCrash,
     playmaking,
     assistWeight: (
-      playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48)
+      playmaking * (position === 'PG' ? 3.05 : position === 'SG' ? 1.12 : position === 'SF' ? 0.88 : position === 'PF' ? 0.48 : 0.34)
       + passFirst * 0.7
       + pickAndRollBallHandler * 0.35
       + sourceAssistRole * (hasSourceAssistProof ? 1.15 : 0.35)
-    ) * clamp(0.5 + Math.pow(sourceAssistRole / 72, 2), 0.45, 2.05),
+    ) * clamp(0.5 + Math.pow(sourceAssistRole / 72, 2), 0.45, 2.05) * (bigWithoutCreationProof ? 0.58 : 1),
     defense: clamp(Math.max(defense, perimeterDefense, interiorDefense) * 0.75 + iq * 0.25, 35, 99),
     stealSkill: clamp(Math.max(skill(player, 'stealsSkill', defense), skill(player, 'steal', defense), defensivePlaymaking) * 0.8 + speed * 0.2, 35, 99),
     blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense), interiorDefense) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
@@ -392,9 +393,16 @@ function normalizePlayer(player, teamId, side, index) {
 }
 
 function sourceThreeAttemptBudget(player, minutes, seed) {
-  if (!player || player.sourceThreeAttemptsPerGame == null) return null;
+  if (!player) return null;
+  const position = String(player.position || '').toUpperCase();
+  const isBig = position === 'PF' || position === 'C' || position.includes('C');
+  if (player.sourceThreeAttemptsPerGame == null) {
+    if (isBig && player.threePoint <= 50 && player.threePointFrequency <= 42) return 0;
+    return null;
+  }
   const sourceAttempts = Number(player && player.sourceThreeAttemptsPerGame);
   if (!Number.isFinite(sourceAttempts)) return null;
+  if (sourceAttempts <= 0.15 && player.threePoint < 60) return 0;
   if (player.threePoint < 50 && sourceAttempts <= 0.5) return 0;
   const minuteScale = clamp(Number(minutes || 0) / 36, 0.25, 1.45);
   return Math.max(0, Math.round(sourceAttempts * minuteScale + (hashString(`${seed}:${player.playerId}:three-cap`) % 6 === 0 ? 1 : 0)));
@@ -444,7 +452,7 @@ function sourceProductionRating(player, kind) {
   if (kind === 'points') {
     const pointsPerGame = sourceStatOrNull(player, 'pointsPerGame');
     const usagePct = sourceStatOrNull(player, 'usagePct');
-    if (pointsPerGame == null && usagePct == null) return 60;
+    if (pointsPerGame == null && usagePct == null) return 52;
     return clamp(42 + (pointsPerGame ?? 12) * 1.35 + ((usagePct ?? 19) - 19) * 0.75, 35, 100);
   }
   if (kind === 'assists') {
@@ -497,9 +505,9 @@ function scoringNightContext(player, minutes, seed) {
   const benchSpecialist = minutes >= 12 && minutes <= 26 && specialty >= 88 && player.scoring >= 68;
   const steady = 0.9 + texture / 320;
 
-  if (eliteUsage && roll < 95) return { nightUsageMultiplier: 2.25 + texture / 165, nightMakeBoost: 9 };
-  if (eliteUsage && roll > 905) return { nightUsageMultiplier: 0.44 + texture / 500, nightMakeBoost: -8 };
-  if (benchSpecialist && roll < 85) return { nightUsageMultiplier: 2.65 + texture / 130, nightMakeBoost: 7 };
+  if (eliteUsage && roll < 55) return { nightUsageMultiplier: 1.72 + texture / 240, nightMakeBoost: 7 };
+  if (eliteUsage && roll > 935) return { nightUsageMultiplier: 0.52 + texture / 520, nightMakeBoost: -7 };
+  if (benchSpecialist && roll < 45) return { nightUsageMultiplier: 1.95 + texture / 210, nightMakeBoost: 6 };
   if (benchSpecialist) return { nightUsageMultiplier: 0.82 + texture / 260, nightMakeBoost: 0 };
   if (minutes <= 24 && Math.max(player.scoring, specialty) < 78) return { nightUsageMultiplier: Math.min(steady, 1.12), nightMakeBoost: 0 };
   return { nightUsageMultiplier: steady, nightMakeBoost: 0 };
@@ -586,12 +594,14 @@ function totalsFromPossessionEvents(timeline) {
 
 function boxScoreFromPossessionTimeline(timeline) {
   const totals = totalsFromPossessionEvents(timeline);
-  const homePlayers = totals.players
+  const homeRows = normalizeTeamAssistHierarchy(totals.players
     .filter(player => String(player.teamId) === String(timeline.homeTeamId))
-    .map(player => boxPlayer(player, timeline.homeScore - timeline.awayScore));
-  const awayPlayers = totals.players
+    .map(player => ({ ...player })));
+  const awayRows = normalizeTeamAssistHierarchy(totals.players
     .filter(player => String(player.teamId) === String(timeline.awayTeamId))
-    .map(player => boxPlayer(player, timeline.awayScore - timeline.homeScore));
+    .map(player => ({ ...player })));
+  const homePlayers = homeRows.map(player => boxPlayer(player, timeline.homeScore - timeline.awayScore));
+  const awayPlayers = awayRows.map(player => boxPlayer(player, timeline.awayScore - timeline.homeScore));
   return {
     home: teamBox(timeline.homeTeamId, homePlayers),
     away: teamBox(timeline.awayTeamId, awayPlayers),
@@ -621,6 +631,8 @@ function emptyStats(player, teamId) {
     playerId: player.playerId,
     name: player.playerName || player.name,
     teamId,
+    position: player.position,
+    assistPriority: Number(player.assistPriority || 0),
     points: 0,
     rebounds: 0,
     assists: 0,
@@ -697,8 +709,42 @@ function deltaFor(player, stats) {
     position: player.position,
     minutes: player.minutes,
     starter: !!player.starter,
+    assistPriority: assistDistributionPriority(player),
     stats: cleaned,
   });
+}
+
+function normalizeTeamAssistHierarchy(players) {
+  const primary = players
+    .filter(candidate => candidate.position === 'PG' && Number(candidate.assistPriority || 0) > 0)
+    .sort((left, right) => Number(right.assistPriority || 0) - Number(left.assistPriority || 0))[0];
+  if (!primary) return players;
+  players.forEach((player) => {
+    if (player.playerId === primary.playerId) return;
+    const primaryPriority = Number(primary.assistPriority || 0);
+    const playerPriority = Number(player.assistPriority || 0);
+    if (primaryPriority - playerPriority < 22) return;
+    while (Number(primary.assists || 0) <= Number(player.assists || 0) && Number(player.assists || 0) > 1) {
+      primary.assists = Number(primary.assists || 0) + 1;
+      player.assists = Number(player.assists || 0) - 1;
+    }
+  });
+  return players;
+}
+
+function assistDistributionPriority(player) {
+  if (!player) return 0;
+  const positionBoost = player.position === 'PG'
+    ? 42
+    : player.position === 'SG'
+      ? 16
+      : player.position === 'SF'
+        ? 8
+        : 0;
+  return Number(player.assistWeight || 0) / 12
+    + Number(player.playmaking || 0) * 0.58
+    + Number(player.sourceAssistRole || 0) * 0.54
+    + positionBoost;
 }
 
 function eventFromPossession({ input, period, clockSeconds, possession, elapsedIndex, homeScore, awayScore, home, away }) {

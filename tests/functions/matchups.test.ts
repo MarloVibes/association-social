@@ -734,6 +734,67 @@ describe('matchup request state helpers', () => {
     expect(awayLines.get('Omer Asik').assists).toBeLessThanOrEqual(2);
   });
 
+  it('keeps possession sim star scoring explosive without breaking rotation balance', () => {
+    const player = (full_name: string, team: string, position: string, minutes: number, player_id: string) => ({
+      player_id,
+      full_name,
+      team,
+      position,
+      minutes,
+      season: 2011,
+    });
+    const homeTeam = {
+      players: [
+        player('LeBron James', 'MIA', 'SF', 39, 'lebron'),
+        player('Dwyane Wade', 'MIA', 'SG', 37, 'wade'),
+        player('Chris Bosh', 'MIA', 'PF', 36, 'bosh'),
+        player('Mario Chalmers', 'MIA', 'PG', 29, 'chalmers'),
+        player('Joel Anthony', 'MIA', 'C', 22, 'anthony'),
+        player('Mike Miller', 'MIA', 'SF', 22, 'miller'),
+        player('Udonis Haslem', 'MIA', 'PF', 23, 'haslem'),
+        player('James Jones', 'MIA', 'SG', 16, 'jones'),
+      ],
+    };
+    const awayTeam = {
+      players: [
+        player('Derrick Rose', 'CHI', 'PG', 38, 'rose'),
+        player('Luol Deng', 'CHI', 'SF', 39, 'deng'),
+        player('Carlos Boozer', 'CHI', 'PF', 32, 'boozer'),
+        player('Joakim Noah', 'CHI', 'C', 32, 'noah'),
+        player('Keith Bogans', 'CHI', 'SG', 18, 'bogans'),
+        player('Kyle Korver', 'CHI', 'SG', 20, 'korver'),
+        player('Taj Gibson', 'CHI', 'PF', 21, 'gibson'),
+        player('Omer Asik', 'CHI', 'C', 14, 'asik'),
+      ],
+    };
+
+    let unsupportedBigThreeAttempts = 0;
+    let boshThreeAttempts = 0;
+    [1, 2, 3, 4, 5].forEach((seed) => {
+      const game = seedAvailableGame({ homeTeamId: 'MIA', awayTeamId: 'CHI', awayGmId: null });
+      game.id = `sample-${seed}`;
+      const result = simulateScheduledGame({
+        game,
+        uid: game.homeGmId,
+        nowMs: 10_000 + seed,
+        homeTeam,
+        awayTeam,
+      });
+      const allPlayers = [...result.boxScore.home.players, ...result.boxScore.away.players];
+      const maxScorer = Math.max(...allPlayers.map((boxPlayer: any) => boxPlayer.points));
+      const doubleDigitScorers = allPlayers.filter((boxPlayer: any) => boxPlayer.points >= 10).length;
+      unsupportedBigThreeAttempts += allPlayers
+        .filter((boxPlayer: any) => ['Omer Asik', 'Joel Anthony', 'Taj Gibson'].includes(boxPlayer.name))
+        .reduce((total: number, boxPlayer: any) => total + Number(boxPlayer.threePointersAttempted || 0), 0);
+      boshThreeAttempts += Number(allPlayers.find((boxPlayer: any) => boxPlayer.name === 'Chris Bosh')?.threePointersAttempted || 0);
+
+      expect(maxScorer).toBeLessThanOrEqual(58);
+      expect(doubleDigitScorers).toBeGreaterThanOrEqual(4);
+    });
+    expect(unsupportedBigThreeAttempts).toBe(0);
+    expect(boshThreeAttempts).toBeGreaterThan(0);
+  });
+
   it('uses detailed player grades for server-side shot profiles', () => {
     const game = seedAvailableGame({ homeTeamId: 'SKILL', awayTeamId: 'CPU' });
     const result = simulateScheduledGame({
