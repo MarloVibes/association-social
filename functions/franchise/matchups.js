@@ -131,6 +131,37 @@ function detailedPlayerSkill(player, key, fallbacks = []) {
   return 60;
 }
 
+function sourceStat(player, key, fallback) {
+  const value = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function pct(value, fallback) {
+  if (!Number.isFinite(value)) return fallback;
+  return value > 1 ? value / 100 : value;
+}
+
+function sourceEfficiencyRating(player) {
+  const trueShooting = pct(sourceStat(player, 'trueShootingPct', 0.555), 0.555);
+  const effectiveFieldGoal = pct(sourceStat(player, 'effectiveFieldGoalPct', 0.51), 0.51);
+  const turnoverPct = sourceStat(player, 'turnoverPct', 12.5);
+  return clamp(
+    72
+      + ((trueShooting - 0.555) * 115)
+      + ((effectiveFieldGoal - 0.51) * 85)
+      - ((turnoverPct - 12.5) * 0.7),
+    42,
+    98,
+  );
+}
+
+function sourceShotAttemptAdjustment(player) {
+  const efficiency = sourceEfficiencyRating(player);
+  if (efficiency >= 84) return -1;
+  if (efficiency <= 62) return 1;
+  return 0;
+}
+
 function categorySkillRating(player, key) {
   const entry = player && player.category_skill_grades && player.category_skill_grades[key];
   if (typeof entry === 'number') return clamp(entry, 0, 100);
@@ -561,7 +592,8 @@ function simPlayerValue(player) {
   return playerSkill(player, 'shooting') * 0.45
     + playerSkill(player, 'playmaking') * 0.25
     + playerSkill(player, 'defense') * 0.2
-    + playerSkill(player, 'basketballIq') * 0.1;
+    + playerSkill(player, 'basketballIq') * 0.1
+    + sourceEfficiencyRating(player) * 0.06;
 }
 
 function simPlayersForTeam(team, teamId) {
@@ -599,7 +631,13 @@ function normalizeSimulationMinutes(players) {
 
 function distributeTeamPoints(players, minutes, teamPoints, seed) {
   const weights = players.map((player, index) => (
-    Math.max(1, minutes[index] * (playerSkill(player, 'shooting') + playerSkill(player, 'playmaking') * 0.25 + (hash(`${seed}:${playerKey(player)}`) % 8)) / 100)
+    Math.max(
+      1,
+      minutes[index]
+        * (playerSkill(player, 'shooting') + playerSkill(player, 'playmaking') * 0.25 + (hash(`${seed}:${playerKey(player)}`) % 8))
+        * clamp(0.72 + sourceEfficiencyRating(player) / 150, 0.72, 1.34)
+        / 100,
+    )
   ));
   const total = weights.reduce((sum, value) => sum + value, 0) || 1;
   const points = weights.map(weight => Math.floor((weight / total) * teamPoints));
@@ -681,19 +719,24 @@ function shootingLine(points, variance, player, minutes = 24) {
   if (nonShootingProfile) threePointersMade = 0;
   let remaining = points - (threePointersMade * 3);
   const rimPressure = clamp((closeShot + dunking + postOffense - threePoint + 70) / 260, 0.08, 0.82);
-  let freeThrowsMade = Math.min(remaining, Math.round(((freeThrow + closeShot + dunking) / 240) * ((variance % 5) + rimPressure * 4)));
+  const sourceFreeThrowPressure = clamp(sourceStat(player, 'freeThrowAttemptsPerGame', 4) * 11, 30, 99);
+  let freeThrowsMade = Math.min(remaining, Math.round(((freeThrow + closeShot + dunking + sourceFreeThrowPressure) / 330) * ((variance % 5) + rimPressure * 4)));
   if ((remaining - freeThrowsMade) % 2 !== 0 && freeThrowsMade > 0) freeThrowsMade -= 1;
   remaining -= freeThrowsMade;
   const twoPointersMade = Math.max(0, Math.floor(remaining / 2));
   const fieldGoalsMade = twoPointersMade + threePointersMade;
-  const shotQuality = clamp((shotIq + midRange + freeThrow) / 300, 0.48, 0.9);
+  const shotQuality = clamp((shotIq + midRange + freeThrow + sourceEfficiencyRating(player) * 0.72) / 372, 0.48, 0.92);
   const generatedThreeAttempts = threePointersMade + Math.max(0, Math.round(threeRate * 8) + (variance % 3));
   const volumeCappedThreeAttempts = sourceAttemptCap === null
     ? generatedThreeAttempts
     : Math.min(generatedThreeAttempts, Math.max(sourceAttemptCap, threePointersMade));
+  const fieldGoalAttempts = Math.max(
+    fieldGoalsMade,
+    fieldGoalsMade + 2 + Math.max(0, Math.round((variance % 7) * (1.04 - shotQuality))) + sourceShotAttemptAdjustment(player),
+  );
   return {
     fieldGoalsMade,
-    fieldGoalsAttempted: fieldGoalsMade + 2 + Math.max(0, Math.round((variance % 7) * (1.04 - shotQuality))),
+    fieldGoalsAttempted: fieldGoalAttempts,
     threePointersMade,
     threePointersAttempted: Math.max(threePointersMade, volumeCappedThreeAttempts),
     freeThrowsMade,
@@ -735,7 +778,7 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
       assists: assists[index],
       steals: variance % 3,
       blocks: Math.floor((variance / 7) % 3),
-      turnovers: Math.floor((variance / 11) % 4),
+      turnovers: Math.max(0, Math.floor((variance / 11) % 4) + Math.round((sourceStat(player, 'turnoverPct', 12.5) - 12.5) / 5)),
       ...line,
       offensiveRebounds,
       defensiveRebounds: playerRebounds - offensiveRebounds,

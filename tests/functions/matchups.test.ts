@@ -394,6 +394,70 @@ describe('matchup request state helpers', () => {
     expect(lines.get('Stale Center').threePointersMade).toBe(0);
   });
 
+  it('uses source efficiency signals in live matchup box score distribution', () => {
+    const game = seedAvailableGame({ homeTeamId: 'EFF', awayTeamId: 'CPU' });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {
+        players: [
+          {
+            player_id: 'efficient-primary',
+            full_name: 'Efficient Primary',
+            position: 'SF',
+            minutes: 38,
+            hidden: { shooting: 88, playmaking: 82, defense: 76, shotIq: 84, freeThrow: 84 },
+            baselineRatingProfile: {
+              source_stat_line: {
+                trueShootingPct: 0.635,
+                effectiveFieldGoalPct: 0.585,
+                turnoverPct: 9.5,
+                freeThrowAttemptsPerGame: 7.2,
+              },
+            },
+          },
+          {
+            player_id: 'inefficient-primary',
+            full_name: 'Inefficient Primary',
+            position: 'SF',
+            minutes: 38,
+            hidden: { shooting: 88, playmaking: 82, defense: 76, shotIq: 84, freeThrow: 84 },
+            baselineRatingProfile: {
+              source_stat_line: {
+                trueShootingPct: 0.505,
+                effectiveFieldGoalPct: 0.455,
+                turnoverPct: 15.8,
+                freeThrowAttemptsPerGame: 3.1,
+              },
+            },
+          },
+          { player_id: 'eff-pg', full_name: 'Efficiency PG', position: 'PG', minutes: 34, hidden: { shooting: 76, playmaking: 84, defense: 72 } },
+          { player_id: 'eff-pf', full_name: 'Efficiency PF', position: 'PF', minutes: 30, hidden: { shooting: 72, playmaking: 60, defense: 78, rebounding: 82 } },
+          { player_id: 'eff-c', full_name: 'Efficiency C', position: 'C', minutes: 28, hidden: { shooting: 68, playmaking: 54, defense: 82, rebounding: 88 } },
+        ],
+      },
+      awayTeam: {
+        players: Array.from({ length: 5 }, (_, index) => ({
+          player_id: `plain-eff-${index}`,
+          full_name: `Plain Efficiency ${index}`,
+          minutes: 30,
+          hidden: { shooting: 70, playmaking: 68, defense: 68 },
+        })),
+      },
+    });
+
+    const lines = new Map<string, any>(result.boxScore.home.players.map((player: any) => [player.name, player]));
+    const efficient = lines.get('Efficient Primary');
+    const inefficient = lines.get('Inefficient Primary');
+    const efficientTrueAttempts = efficient.fieldGoalsAttempted + 0.44 * efficient.freeThrowsAttempted;
+    const inefficientTrueAttempts = inefficient.fieldGoalsAttempted + 0.44 * inefficient.freeThrowsAttempted;
+
+    expect(efficient.points).toBeGreaterThanOrEqual(inefficient.points);
+    expect(efficient.points / efficientTrueAttempts).toBeGreaterThan(inefficient.points / inefficientTrueAttempts);
+    expect(efficient.turnovers).toBeLessThanOrEqual(inefficient.turnovers);
+  });
+
   it('uses roster hidden values and stores a box score for simulated games', () => {
     const game = seedAvailableGame();
     const result = simulateScheduledGame({

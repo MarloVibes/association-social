@@ -152,16 +152,18 @@ function resolvePossession(ctx) {
 
   const shotValue = chooseShotValue(shooter, offenseTeam, ctx.rng);
   const shotDifficulty = shotValue === 3 ? 10 : shooter.position === 'C' || shooter.position === 'PF' ? -4 : 0;
+  const efficiencyLift = (shooter.sourceEfficiency - 72) / 410;
   const makeChance = clamp(
     0.53
-      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330,
+      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330
+      + efficiencyLift,
     shotValue === 3 ? 0.28 : 0.36,
     shotValue === 3 ? 0.49 : 0.66,
   );
 
   const foulThreshold = shotValue === 3
-    ? 0.08 + shooter.foulDraw / 1000
-    : 0.13 + shooter.foulDraw / 360;
+    ? 0.08 + shooter.foulDraw / 1000 + shooter.sourceFreeThrowPressure / 2200
+    : 0.13 + shooter.foulDraw / 360 + shooter.sourceFreeThrowPressure / 1350;
   if (roll < foulThreshold) {
     if (shotValue === 3) {
       shooter.threePointAttemptsUsed = Math.max(0, Number(shooter.threePointAttemptsUsed || 0) - 1);
@@ -265,11 +267,12 @@ function buildTeamContext(teamId, team, side, input) {
   const rotation = selected.map((player, index) => {
     const night = scoringNightContext(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
     const sourceThreeAttemptCap = sourceThreeAttemptBudget(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
+    const efficiencyUsageMultiplier = clamp(0.72 + player.sourceEfficiency / 150, 0.72, 1.34);
     return {
       ...player,
       ...night,
       minutes: minutes[index],
-      usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) * night.nightUsageMultiplier / 100),
+      usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) * night.nightUsageMultiplier * efficiencyUsageMultiplier / 100),
       starter: starters.some(starter => starter.playerId === player.playerId),
       sourceThreeAttemptCap,
       threePointAttemptsUsed: 0,
@@ -291,6 +294,9 @@ function buildTeamContext(teamId, team, side, input) {
 function normalizePlayer(player, teamId, side, index) {
   const hidden = player && player.hidden || {};
   const sourceThreeAttempts = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line.threePointAttemptsPerGame);
+  const sourceEfficiency = sourceEfficiencyRating(player);
+  const sourceFreeThrowPressure = clamp(sourceStat(player, 'freeThrowAttemptsPerGame', 4) * 11, 24, 99);
+  const sourceTurnoverPct = sourceStat(player, 'turnoverPct', 12.5);
   const position = normalizePosition(player && player.position, index);
   const shooting = skill(player, 'shooting', 72);
   const closeShot = skill(player, 'closeShot', shooting);
@@ -309,7 +315,7 @@ function normalizePlayer(player, teamId, side, index) {
   const rimFinish = tendency(player, 'rimFinishFrequency', 55);
   const threePointFrequency = tendency(player, 'threePointFrequency', 58);
   const catchAndShoot = tendency(player, 'catchAndShootFrequency', 55);
-  const drawFoulPressure = tendency(player, 'drawFoulPressure', (finishing + paintAttack + skill(player, 'freeThrow', shooting)) / 3);
+  const drawFoulPressure = tendency(player, 'drawFoulPressure', (finishing + paintAttack + skill(player, 'freeThrow', shooting) + sourceFreeThrowPressure) / 4);
   const defensivePlaymaking = tendency(player, 'defensivePlaymaking', defense);
   const reboundCrash = tendency(player, 'reboundCrash', 55);
   const passFirst = tendency(player, 'passFirst', 50);
@@ -339,8 +345,11 @@ function normalizePlayer(player, teamId, side, index) {
     blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense), interiorDefense) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
     rebounding: clamp(rebounding * 0.7 + skill(player, 'strength', 70) * 0.13 + skill(player, 'vertical', 70) * 0.1 + reboundCrash * 0.07, 25, 99),
     freeThrow: skill(player, 'freeThrow', shooting),
-    foulDraw: clamp(drawFoulPressure * 0.38 + finishing * 0.25 + paintAttack * 0.18 + speed * 0.1 + skill(player, 'strength', 70) * 0.09, 25, 99),
+    foulDraw: clamp(drawFoulPressure * 0.34 + finishing * 0.22 + paintAttack * 0.16 + speed * 0.09 + skill(player, 'strength', 70) * 0.08 + sourceFreeThrowPressure * 0.11, 25, 99),
     iq,
+    sourceEfficiency,
+    sourceTurnoverPct,
+    sourceFreeThrowPressure,
     rotationValue: Number(player && (player.minutes || player.rotationMinutes)) || (
       clamp(shooting * 0.2 + playmaking * 0.2 + Math.max(perimeterDefense, interiorDefense) * 0.22 + rebounding * 0.13 + iq * 0.1 + Math.max(threePoint, finishing) * 0.15, 1, 99)
     ),
@@ -376,6 +385,30 @@ function categoryRating(player, key, fallback) {
 function tendency(player, key, fallback) {
   const value = Number(player && player.tendencies && player.tendencies[key]);
   return clamp(Number.isFinite(value) ? value : fallback, 0, 100);
+}
+
+function sourceStat(player, key, fallback) {
+  const value = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function pct(value, fallback) {
+  if (!Number.isFinite(value)) return fallback;
+  return value > 1 ? value / 100 : value;
+}
+
+function sourceEfficiencyRating(player) {
+  const trueShooting = pct(sourceStat(player, 'trueShootingPct', 0.555), 0.555);
+  const effectiveFieldGoal = pct(sourceStat(player, 'effectiveFieldGoalPct', 0.51), 0.51);
+  const turnoverPct = sourceStat(player, 'turnoverPct', 12.5);
+  return clamp(
+    72
+      + ((trueShooting - 0.555) * 115)
+      + ((effectiveFieldGoal - 0.51) * 85)
+      - ((turnoverPct - 12.5) * 0.7),
+    42,
+    98,
+  );
 }
 
 function selectStarters(players) {
@@ -444,7 +477,10 @@ function chooseShotValue(player, team, rng) {
 
 function turnoverChance(shooter, defender, offenseTeam, defenseTeam, winnerBoost, rng) {
   return clamp(
-    0.1 + (defender.stealSkill + defenseTeam.defenseBoost - shooter.playmaking - offenseTeam.offenseBoost - winnerBoost) / 420 + (rng() - 0.5) * 0.03,
+    0.1
+      + (defender.stealSkill + defenseTeam.defenseBoost - shooter.playmaking - offenseTeam.offenseBoost - winnerBoost) / 420
+      + ((Number(shooter.sourceTurnoverPct || 12.5) - 12.5) / 310)
+      + (rng() - 0.5) * 0.03,
     0.055,
     0.18,
   );
