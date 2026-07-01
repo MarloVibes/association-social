@@ -454,6 +454,99 @@ describe('NBA game simulation', () => {
     expect(lines.get('Glass Center')!.rebounds).toBeGreaterThan(lines.get('Primary Creator')!.rebounds);
   });
 
+  it('lets creator and rebound specialists have outlier nights while averages stay role-correct', () => {
+    const varianceFixture: SimGameInput = {
+      home: {
+        teamId: 'ROLEVAR',
+        players: [
+          {
+            playerId: 'elite-creator',
+            name: 'Elite Creator',
+            position: 'PG',
+            minutes: 38,
+            shooting: 83,
+            playmaking: 96,
+            rebounding: 46,
+            defense: 74,
+            passing: 97,
+            basketballIq: 94,
+            category_skill_grades: {
+              playmaking: { rating: 96, grade: 'A+' },
+              basketballIq: { rating: 94, grade: 'A' },
+            },
+            tendencies: {
+              passFirst: 94,
+              pickAndRollBallHandler: 96,
+            },
+            baselineRatingProfile: {
+              source_stat_line: {
+                assistsPerGame: 10.4,
+                assistPct: 44,
+                reboundsPerGame: 3.5,
+              },
+            },
+          },
+          {
+            playerId: 'elite-glass',
+            name: 'Elite Glass',
+            position: 'C',
+            minutes: 34,
+            shooting: 66,
+            playmaking: 48,
+            rebounding: 97,
+            defense: 92,
+            strength: 94,
+            category_skill_grades: {
+              rebounding: { rating: 97, grade: 'A+' },
+              interiorDefense: { rating: 92, grade: 'A' },
+            },
+            tendencies: {
+              reboundCrash: 98,
+            },
+            baselineRatingProfile: {
+              source_stat_line: {
+                assistsPerGame: 1.2,
+                reboundsPerGame: 14.2,
+              },
+            },
+          },
+          { playerId: 'generic-guard', name: 'Generic Guard', position: 'PG', minutes: 30, shooting: 76, playmaking: 72, passing: 72, rebounding: 45, defense: 70 },
+          { playerId: 'generic-big', name: 'Generic Big', position: 'C', minutes: 28, shooting: 66, playmaking: 45, rebounding: 74, defense: 76 },
+          { playerId: 'wing', name: 'Wing', position: 'SF', minutes: 30, shooting: 78, playmaking: 65, rebounding: 60, defense: 76 },
+          { playerId: 'forward', name: 'Forward', position: 'PF', minutes: 28, shooting: 74, playmaking: 58, rebounding: 72, defense: 78 },
+          { playerId: 'reserve', name: 'Reserve', position: 'SG', minutes: 16, shooting: 69, playmaking: 55, rebounding: 46, defense: 62 },
+        ],
+      },
+      away: fixture.away,
+    };
+    const totals = new Map<string, { games: number; assists: number; rebounds: number; maxAssists: number; maxRebounds: number }>();
+    Array.from({ length: 90 }, (_, index) => `domain-stat-variance-${index}`).forEach((seed) => {
+      const result = simulateGame(varianceFixture, seed);
+      result.home.players.forEach((player) => {
+        const row = totals.get(player.name) || { games: 0, assists: 0, rebounds: 0, maxAssists: 0, maxRebounds: 0 };
+        row.games += 1;
+        row.assists += player.assists;
+        row.rebounds += player.rebounds;
+        row.maxAssists = Math.max(row.maxAssists, player.assists);
+        row.maxRebounds = Math.max(row.maxRebounds, player.rebounds);
+        totals.set(player.name, row);
+      });
+    });
+
+    const average = (name: string, key: 'assists' | 'rebounds') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+    const max = (name: string, key: 'maxAssists' | 'maxRebounds') => Number(totals.get(name)?.[key] || 0);
+
+    expect(max('Elite Creator', 'maxAssists')).toBeGreaterThanOrEqual(14);
+    expect(max('Elite Glass', 'maxRebounds')).toBeGreaterThanOrEqual(18);
+    expect(average('Elite Creator', 'assists')).toBeGreaterThan(average('Generic Guard', 'assists') + 3);
+    expect(average('Elite Glass', 'rebounds')).toBeGreaterThan(average('Generic Big', 'rebounds') + 4);
+    expect(average('Elite Creator', 'assists')).toBeLessThanOrEqual(13);
+    expect(average('Elite Glass', 'rebounds')).toBeLessThanOrEqual(18);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },

@@ -308,6 +308,27 @@ function scoringNightMultiplier(player: SimPlayerInput & { minutes: number }, se
   return steady;
 }
 
+function statNightMultiplier(player: SimPlayerInput & { minutes: number }, seed: string, kind: 'assist' | 'rebound') {
+  const roll = hash(`${seed}:${player.playerId}:${kind}-night`) % 1000;
+  const texture = hash(`${seed}:${player.playerId}:${kind}-texture`) % 100;
+  const steady = 0.92 + texture / 420;
+  if (kind === 'assist') {
+    const playmaking = categoryRating(player, 'playmaking', skill(player, 'playmaking'));
+    const sourceAssists = sourceProductionRating(player, 'assists');
+    const specialist = player.minutes >= 30 && (playmaking >= 88 || sourceAssists >= 82);
+    if (specialist && roll < 70) return 1.48 + texture / 280;
+    if (specialist && roll > 940) return 0.58 + texture / 640;
+    return steady;
+  }
+
+  const rebounding = categoryRating(player, 'rebounding', simSkillsFromEvaluation(player as Record<string, unknown>).rebounding);
+  const sourceRebounds = sourceProductionRating(player, 'rebounds');
+  const specialist = player.minutes >= 26 && (rebounding >= 88 || sourceRebounds >= 82);
+  if (specialist && roll < 75) return 1.45 + texture / 260;
+  if (specialist && roll > 935) return 0.62 + texture / 650;
+  return steady;
+}
+
 function normalizeMinutes(players: SimPlayerInput[]): Array<SimPlayerInput & { minutes: number }> {
   const sorted = [...players].sort((a, b) => playerValue(b) - playerValue(a) || a.playerId.localeCompare(b.playerId)).slice(0, 10);
   const raw = sorted.map(player => Math.max(1, Number(player.minutes || 0)));
@@ -468,6 +489,7 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       + tendency(player, 'reboundCrash', 55) * 0.06
       + sourceProductionRating(player, 'rebounds') * 0.18
     )
+    * statNightMultiplier(player, seed, 'rebound')
     * (0.95 + (hash(`${seed}:${index}:rebound-variance`) % 15) / 100)
   ));
   const assists = distributeStatTotal(players, targetTeamAssists(players, fieldGoalsMade, seed), `${seed}:assists`, (player, index) => (
@@ -483,6 +505,7 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       + tendency(player, 'pickAndRollBallHandler', 45) * 0.04
       + sourceProductionRating(player, 'assists') * 0.18
     )
+    * statNightMultiplier(player, seed, 'assist')
     * (0.95 + (hash(`${seed}:${index}:assist-variance`) % 15) / 100)
   ));
   const boxPlayers = players.map((player, index): PlayerBoxScore => {
