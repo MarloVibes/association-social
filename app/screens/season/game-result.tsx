@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacit
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
+import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
@@ -122,79 +123,6 @@ function playerForCard(player: BoxScorePlayer, team: Team | undefined) {
   };
 }
 
-function genericStoredStory(story?: string) {
-  const text = String(story || '').toLowerCase();
-  return text.includes('controlled the decisive stretches')
-    || text.includes('balanced rotation production')
-    || text.includes('roster strength and rotation production');
-}
-
-function buildResultStory({
-  game,
-  awayLabel,
-  homeLabel,
-  awayAbbr,
-  homeAbbr,
-  performers,
-}: {
-  game: ResultGame | null;
-  awayLabel: string;
-  homeLabel: string;
-  awayAbbr: string;
-  homeAbbr: string;
-  performers: Array<BoxScorePlayer & { side: string; sideAbbr: string }>;
-}) {
-  if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') {
-    return game?.story || '';
-  }
-  if (game.story && !genericStoredStory(game.story)) return game.story;
-
-  const awayScore = Number(game.awayScore || 0);
-  const homeScore = Number(game.homeScore || 0);
-  const homeWon = homeScore > awayScore;
-  const winner = homeWon ? homeLabel : awayLabel;
-  const loser = homeWon ? awayLabel : homeLabel;
-  const winnerAbbr = homeWon ? homeAbbr : awayAbbr;
-  const loserAbbr = homeWon ? awayAbbr : homeAbbr;
-  const winnerScore = homeWon ? homeScore : awayScore;
-  const loserScore = homeWon ? awayScore : homeScore;
-  const margin = Math.abs(homeScore - awayScore);
-  const opener = game.quarters?.some(quarter => Number(quarter.quarter) > 4)
-    ? `${winner} outlasted ${loser} in overtime, ${winnerScore}-${loserScore}.`
-    : margin <= 3
-      ? `${winner} survived a one-possession finish against ${loser}, ${winnerScore}-${loserScore}.`
-      : margin <= 9
-        ? `${winner} closed a tight game over ${loser}, ${winnerScore}-${loserScore}.`
-        : margin >= 20
-          ? `${winner} ran away from ${loser}, ${winnerScore}-${loserScore}.`
-          : `${winner} handled the key stretches against ${loser}, ${winnerScore}-${loserScore}.`;
-
-  const leader = performers.find(player => player.sideAbbr === winnerAbbr) || performers[0];
-  const teammate = leader ? performers.find(player => player.sideAbbr === winnerAbbr && player.playerId !== leader.playerId) : null;
-  const opponentLeader = performers.find(player => player.sideAbbr === loserAbbr);
-  const leaderLine = leader
-    ? `${leader.name || 'The top scorer'} set the tone with ${stat(leader.points)} points, ${stat(leader.rebounds)} rebounds, and ${stat(leader.assists)} assists.`
-    : '';
-  const supportLine = teammate
-    ? `${teammate.name || 'A teammate'} added ${stat(teammate.points)}-${stat(teammate.rebounds)}-${stat(teammate.assists)}, while ${opponentLeader?.name || `${loserAbbr}'s top option`} answered with ${stat(opponentLeader?.points)}.`
-    : opponentLeader
-      ? `${opponentLeader.name || `${loserAbbr}'s top option`} kept pressure on with ${stat(opponentLeader.points)} points.`
-      : '';
-  const swing = (game.quarters || [])
-    .map(quarter => {
-      const homeDiff = Number(quarter.home || 0) - Number(quarter.away || 0);
-      const winnerDiff = homeWon ? homeDiff : -homeDiff;
-      return { quarter, winnerDiff };
-    })
-    .filter(item => item.winnerDiff > 0)
-    .sort((left, right) => right.winnerDiff - left.winnerDiff)[0];
-  const swingLine = swing
-    ? `${winnerAbbr}'s biggest push came in ${periodLabel(swing.quarter)}, winning that frame by ${swing.winnerDiff}.`
-    : '';
-
-  return [opener, leaderLine, supportLine, swingLine].filter(Boolean).join(' ');
-}
-
 export default function GameResultScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
   const router = useRouter();
@@ -269,14 +197,20 @@ export default function GameResultScreen() {
     away: [...(game?.boxScore?.away?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
     home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
   }), [game?.boxScore]);
-  const resultStory = useMemo(() => buildResultStory({
-    game,
-    awayLabel,
-    homeLabel,
-    awayAbbr,
-    homeAbbr,
-    performers: topPerformers,
-  }), [awayAbbr, awayLabel, game, homeAbbr, homeLabel, topPerformers]);
+  const resultStory = useMemo(() => {
+    if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return game?.story || '';
+    return buildPostgameStory({
+      storedStory: game.story,
+      awayLabel,
+      homeLabel,
+      awayAbbr,
+      homeAbbr,
+      awayScore: game.awayScore,
+      homeScore: game.homeScore,
+      quarters: game.quarters,
+      performers: topPerformers,
+    });
+  }, [awayAbbr, awayLabel, game, homeAbbr, homeLabel, topPerformers]);
   const isLeagueAdmin = Boolean(
     uid
     && league

@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import { COACHING_PRESETS, buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
+import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
@@ -73,13 +74,6 @@ type BoxScorePlayer = {
   turnovers?: number;
 };
 
-function genericStoredStory(story?: string) {
-  const text = String(story || '').toLowerCase();
-  return text.includes('controlled the decisive stretches')
-    || text.includes('balanced rotation production')
-    || text.includes('roster strength and rotation production');
-}
-
 function playerImpactScore(player: BoxScorePlayer) {
   return Number(player.points || 0) * 2
     + Number(player.rebounds || 0) * 1.15
@@ -87,44 +81,6 @@ function playerImpactScore(player: BoxScorePlayer) {
     + Number(player.steals || 0) * 2
     + Number(player.blocks || 0) * 2
     - Number(player.turnovers || 0) * 0.8;
-}
-
-function buildMatchupResultStory({
-  game,
-  homeLabel,
-  awayLabel,
-  performers,
-}: {
-  game: MatchupGame | null | undefined;
-  homeLabel: string;
-  awayLabel: string;
-  performers: Array<BoxScorePlayer & { side: 'home' | 'away' }>;
-}) {
-  if (!game || typeof game.homeScore !== 'number' || typeof game.awayScore !== 'number') return '';
-  if (game.story && !genericStoredStory(game.story)) return game.story;
-
-  const homeWon = Number(game.homeScore) > Number(game.awayScore);
-  const winner = homeWon ? homeLabel : awayLabel;
-  const loser = homeWon ? awayLabel : homeLabel;
-  const winnerScore = homeWon ? Number(game.homeScore) : Number(game.awayScore);
-  const loserScore = homeWon ? Number(game.awayScore) : Number(game.homeScore);
-  const margin = Math.abs(Number(game.homeScore) - Number(game.awayScore));
-  const opener = game.quarters?.some(quarter => Number(quarter.quarter) > 4)
-    ? `${winner} outlasted ${loser} in overtime, ${winnerScore}-${loserScore}.`
-    : margin <= 3
-      ? `${winner} survived a one-possession finish against ${loser}, ${winnerScore}-${loserScore}.`
-      : margin <= 9
-        ? `${winner} closed a tight game over ${loser}, ${winnerScore}-${loserScore}.`
-        : margin >= 20
-          ? `${winner} ran away from ${loser}, ${winnerScore}-${loserScore}.`
-          : `${winner} handled the key stretches against ${loser}, ${winnerScore}-${loserScore}.`;
-
-  const leader = performers[0];
-  const leaderTeam = leader?.side === 'home' ? homeLabel : awayLabel;
-  const leaderLine = leader
-    ? `${leader.name || 'The top performer'} led ${leaderTeam} with ${Number(leader.points || 0)} points, ${Number(leader.rebounds || 0)} rebounds, and ${Number(leader.assists || 0)} assists.`
-    : '';
-  return [opener, leaderLine].filter(Boolean).join(' ');
 }
 
 export default function MatchupScreen() {
@@ -232,6 +188,8 @@ export default function MatchupScreen() {
   const leftLabel = myTeam ? myTeamLabel : awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
   const rightLabel = myTeam ? opponentLabel : homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const matchupJoinLabel = myTeam ? 'VS' : 'AT';
+  const awayAbbr = displayScheduleAbbr(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
+  const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
   const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
   const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const presets = useMemo(() => {
@@ -346,10 +304,22 @@ export default function MatchupScreen() {
   const canReset = Boolean(isLeagueAdmin && game && game.status !== 'scheduled');
   const hasFinalScore = game?.status === 'final' && typeof game.homeScore === 'number' && typeof game.awayScore === 'number';
   const topPerformers = [
-    ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: 'home' as const })),
-    ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: 'away' as const })),
+    ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: 'home' as const, sideAbbr: homeAbbr })),
+    ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: 'away' as const, sideAbbr: awayAbbr })),
   ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left)).slice(0, 4);
-  const resultStory = buildMatchupResultStory({ game, homeLabel, awayLabel, performers: topPerformers });
+  const resultStory = game && typeof game.homeScore === 'number' && typeof game.awayScore === 'number'
+    ? buildPostgameStory({
+      storedStory: game.story,
+      homeLabel,
+      awayLabel,
+      homeAbbr,
+      awayAbbr,
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      quarters: game.quarters,
+      performers: topPerformers,
+    })
+    : '';
 
   return (
     <View style={styles.screen}>
