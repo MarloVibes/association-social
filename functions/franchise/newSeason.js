@@ -481,13 +481,13 @@ const NBA_CAP_HISTORY = {
   2023: capEntry(2023, 136_021_000),
   2024: capEntry(2024, 140_588_000),
   2025: capEntry(2025, 154_647_000),
-  2026: capEntry(2026, 165_000_000, {
+  2026: capEntry(2026, 164_961_000, {
     seasonYear: 2026,
-    luxuryTaxLine: 201_000_000,
-    firstApron: 209_000_000,
-    secondApron: 222_000_000,
-    nonTaxpayerMidLevelException: 15_050_000,
-    taxpayerMidLevelException: 6_100_000,
+    luxuryTaxLine: 200_428_000,
+    firstApron: 209_015_000,
+    secondApron: 221_686_000,
+    nonTaxpayerMidLevelException: 15_044_000,
+    taxpayerMidLevelException: 6_064_000,
   }),
 };
 
