@@ -102,6 +102,47 @@ const UPGRADE_BUCKETS = {
     ['defenseIq', 0.1],
   ],
 };
+const DETAILED_UPGRADE_KEYS = [
+  'closeShot',
+  'drivingLayup',
+  'drivingDunk',
+  'standingDunk',
+  'drawFoul',
+  'hands',
+  'midRange',
+  'threePoint',
+  'freeThrow',
+  'dunking',
+  'shotIq',
+  'shotConsistency',
+  'passing',
+  'passIq',
+  'passVision',
+  'ballHandle',
+  'speedWithBall',
+  'offenseIq',
+  'clutch',
+  'perimeterDefense',
+  'lateralQuickness',
+  'postDefense',
+  'blocking',
+  'steals',
+  'defenseIq',
+  'helpDefense',
+  'speed',
+  'acceleration',
+  'vertical',
+  'agility',
+  'strength',
+  'rebounding',
+  'offensiveRebound',
+  'defensiveRebound',
+  'postOffense',
+  'stamina',
+  'hustle',
+  'durability',
+  'potential',
+];
 
 function normalizedLabel(label) {
   return String(label || '').trim().toUpperCase();
@@ -178,6 +219,10 @@ function abilityGradesFromCanonicalRatings(player) {
   for (const [ability, bucket] of Object.entries(UPGRADE_BUCKETS)) {
     const grade = weightedBucketGrade(player, bucket);
     if (grade) grades[ability] = grade;
+  }
+  for (const ability of DETAILED_UPGRADE_KEYS) {
+    const rating = firstCanonicalRating(player, ability);
+    if (rating !== null) grades[ability] = gradeFromRating(rating);
   }
   return Object.keys(grades).length > 0 ? grades : null;
 }

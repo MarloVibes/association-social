@@ -8,7 +8,14 @@ import { auth, db, functions } from '@/constants/firebase';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
-import { abilityGradesFromStats, canUpgradePlayerThisSeason, nextGrade, upgradeGradesFromScoutingGrades, type UpgradePlayerLabel } from '@/domain/nba/upgradePoints';
+import {
+  UPGRADE_GRADE_OPTIONS,
+  abilityGradesFromStats,
+  canUpgradePlayerThisSeason,
+  detailedUpgradeGradesFromScoutingGrades,
+  nextGrade,
+  type UpgradePlayerLabel,
+} from '@/domain/nba/upgradePoints';
 import type { NbaGrade } from '@/domain/nba/identity';
 
 type Team = {
@@ -48,16 +55,10 @@ type League = {
   leagueDate?: string;
 };
 
-const ABILITY_LABELS: Record<string, string> = {
-  shooting: 'Shooting',
-  playmaking: 'Playmaking',
-  defense: 'Defense',
-  rebounding: 'Rebounding',
-  athleticism: 'Athleticism',
-  basketballIq: 'Basketball IQ',
-  consistency: 'Consistency',
-  chemistry: 'Chemistry',
-};
+const ABILITY_LABELS: Record<string, string> = Object.fromEntries(
+  UPGRADE_GRADE_OPTIONS.map(option => [option.key, option.label]),
+);
+const UPGRADE_CATEGORY_ORDER = [...new Set(UPGRADE_GRADE_OPTIONS.map(option => option.category))];
 
 function playerId(player: Player) {
   return String(player.id || player.player_id || player.playerId || player.full_name || player.name || '');
@@ -74,9 +75,21 @@ function gradesFor(player: Player, league?: League | null): Record<string, NbaGr
     leagueDate: league?.leagueDate,
   });
   if (profile || player.category_skill_grades || player.attribute_model || player.era_adjusted_profiles || player.hidden) {
-    return upgradeGradesFromScoutingGrades(buildScoutingGrades(player as Record<string, unknown>, profile));
+    return detailedUpgradeGradesFromScoutingGrades(buildScoutingGrades(player as Record<string, unknown>, profile));
   }
   return player.grades || player.abilityGrades || abilityGradesFromStats(player as Record<string, unknown>);
+}
+
+function upgradeSections(grades: Record<string, NbaGrade>) {
+  const known = UPGRADE_CATEGORY_ORDER.map(category => ({
+    category,
+    entries: UPGRADE_GRADE_OPTIONS
+      .filter(option => option.category === category && grades[option.key])
+      .map(option => [option.key, grades[option.key]] as [string, NbaGrade]),
+  })).filter(section => section.entries.length > 0);
+  const knownKeys = new Set(UPGRADE_GRADE_OPTIONS.map(option => option.key));
+  const otherEntries = Object.entries(grades).filter(([key]) => !knownKeys.has(key));
+  return otherEntries.length > 0 ? [...known, { category: 'Other', entries: otherEntries }] : known;
 }
 
 function teamName(team?: Team) {
@@ -225,7 +238,7 @@ export default function PlayerUpgradesScreen() {
           const label = (item.playerLabel || item.tierLabel || item.reputation || style.label) as UpgradePlayerLabel;
           const used = Number(item.upgradeUsage?.[seasonKey] || 0);
           const grades = gradesFor(item, league);
-          const abilityEntries = Object.entries(grades);
+          const sections = upgradeSections(grades);
           return (
             <View style={styles.playerCard}>
               <View style={styles.playerHeader}>
@@ -237,46 +250,51 @@ export default function PlayerUpgradesScreen() {
                   <Text style={[styles.labelText, { color: style.color }]}>{style.label}</Text>
                 </View>
               </View>
-              <View style={styles.abilityGrid}>
-                {abilityEntries.length === 0 ? (
-                  <Text style={styles.noGrades}>No ability grades yet</Text>
-                ) : abilityEntries.map(([ability, grade]) => {
-                  const target = nextGrade(grade, label);
-                  const status = getUpgradeStatus({
-                    grade,
-                    target,
-                    teamPoints: team?.upgradePoints || 0,
-                    label,
-                    used,
-                  });
-                  const key = `${playerId(item)}:${ability}`;
-                  return (
-                    <TouchableOpacity
-                      key={ability}
-                      disabled={!status.canImprove || workingKey === key}
-                      onPress={() => spendPoint(item, ability)}
-                      style={[styles.abilityButton, !status.canImprove && styles.abilityButtonDisabled]}
-                    >
-                      <View style={styles.abilityTopRow}>
-                        <Text style={styles.abilityName} numberOfLines={1}>{ABILITY_LABELS[ability] || ability}</Text>
-                        {status.canImprove ? <Ionicons color="#00e58b" name="arrow-up-circle" size={18} /> : null}
-                      </View>
-                      <View style={styles.gradePath}>
-                        <Text style={styles.abilityGrade}>{grade}</Text>
-                        {target !== grade ? (
-                          <>
-                            <Ionicons color={status.canImprove ? '#00e58b' : '#666'} name="arrow-forward" size={14} />
-                            <Text style={[styles.abilityGrade, status.canImprove && styles.nextGrade]}>{target}</Text>
-                          </>
-                        ) : null}
-                      </View>
-                      <Text style={[styles.abilityStatus, status.canImprove && styles.abilityStatusReady]}>
-                        {status.canImprove ? `1 point upgrades ${grade} to ${target}` : status.text}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {sections.length === 0 ? (
+                <Text style={styles.noGrades}>No ability grades yet</Text>
+              ) : sections.map(section => (
+                <View key={section.category} style={styles.abilitySection}>
+                  <Text style={styles.sectionTitle}>{section.category}</Text>
+                  <View style={styles.abilityGrid}>
+                    {section.entries.map(([ability, grade]) => {
+                      const target = nextGrade(grade, label);
+                      const status = getUpgradeStatus({
+                        grade,
+                        target,
+                        teamPoints: team?.upgradePoints || 0,
+                        label,
+                        used,
+                      });
+                      const key = `${playerId(item)}:${ability}`;
+                      return (
+                        <TouchableOpacity
+                          key={ability}
+                          disabled={!status.canImprove || workingKey === key}
+                          onPress={() => spendPoint(item, ability)}
+                          style={[styles.abilityButton, !status.canImprove && styles.abilityButtonDisabled]}
+                        >
+                          <View style={styles.abilityTopRow}>
+                            <Text style={styles.abilityName} numberOfLines={1}>{ABILITY_LABELS[ability] || ability}</Text>
+                            {status.canImprove ? <Ionicons color="#00e58b" name="arrow-up-circle" size={18} /> : null}
+                          </View>
+                          <View style={styles.gradePath}>
+                            <Text style={styles.abilityGrade}>{grade}</Text>
+                            {target !== grade ? (
+                              <>
+                                <Ionicons color={status.canImprove ? '#00e58b' : '#666'} name="arrow-forward" size={14} />
+                                <Text style={[styles.abilityGrade, status.canImprove && styles.nextGrade]}>{target}</Text>
+                              </>
+                            ) : null}
+                          </View>
+                          <Text style={[styles.abilityStatus, status.canImprove && styles.abilityStatusReady]}>
+                            {status.canImprove ? `1 point upgrades ${grade} to ${target}` : status.text}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           );
         }}
@@ -310,6 +328,8 @@ const styles = StyleSheet.create({
   playerMeta: { color: '#777', fontSize: 11, fontWeight: '800', marginTop: 3, textTransform: 'uppercase' },
   labelBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   labelText: { fontSize: 9, fontWeight: '900' },
+  abilitySection: { marginTop: 8 },
+  sectionTitle: { color: '#777', fontSize: 10, fontWeight: '900', letterSpacing: 0, marginBottom: 7, textTransform: 'uppercase' },
   abilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   abilityButton: { width: '48%', minHeight: 76, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b66', backgroundColor: '#07180f', padding: 8, justifyContent: 'center' },
   abilityButtonDisabled: { opacity: 0.45, borderColor: '#333', backgroundColor: '#151515' },

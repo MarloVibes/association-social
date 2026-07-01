@@ -101,6 +101,38 @@ const AWARD_POINTS: Required<UpgradeAwards> = {
   nba_cup: 1,
 };
 
+export type UpgradeGradeOption = {
+  key: string;
+  label: string;
+  category: string;
+};
+
+export const UPGRADE_GRADE_OPTIONS: UpgradeGradeOption[] = [
+  { key: 'closeShot', label: 'Close Shot', category: 'Scoring' },
+  { key: 'midRange', label: 'Mid Range', category: 'Scoring' },
+  { key: 'threePoint', label: '3PT Shot', category: 'Scoring' },
+  { key: 'freeThrow', label: 'Free Throw', category: 'Scoring' },
+  { key: 'dunking', label: 'Dunking', category: 'Scoring' },
+  { key: 'shotIq', label: 'Shot IQ', category: 'Scoring' },
+  { key: 'passing', label: 'Passing', category: 'Playmaking / IQ' },
+  { key: 'ballHandle', label: 'Ball Handle', category: 'Playmaking / IQ' },
+  { key: 'offenseIq', label: 'Offense IQ', category: 'Playmaking / IQ' },
+  { key: 'clutch', label: 'Clutch', category: 'Playmaking / IQ' },
+  { key: 'perimeterDefense', label: 'Perimeter D', category: 'Defense' },
+  { key: 'postDefense', label: 'Post Defense', category: 'Defense' },
+  { key: 'blocking', label: 'Blocking', category: 'Defense' },
+  { key: 'steals', label: 'Steals', category: 'Defense' },
+  { key: 'defenseIq', label: 'Defense IQ', category: 'Defense' },
+  { key: 'helpDefense', label: 'Help Defense', category: 'Defense' },
+  { key: 'speed', label: 'Speed', category: 'Physical / Interior' },
+  { key: 'acceleration', label: 'Acceleration', category: 'Physical / Interior' },
+  { key: 'strength', label: 'Strength', category: 'Physical / Interior' },
+  { key: 'rebounding', label: 'Rebounding', category: 'Physical / Interior' },
+  { key: 'postOffense', label: 'Post Offense', category: 'Physical / Interior' },
+  { key: 'stamina', label: 'Stamina', category: 'Physical / Interior' },
+  { key: 'potential', label: 'Potential', category: 'Growth' },
+];
+
 function normalizedLabel(label: UpgradePlayerLabel) {
   return String(label || '').trim().toUpperCase();
 }
@@ -202,6 +234,15 @@ export function upgradeGradesFromScoutingGrades(grades: Record<string, NbaGrade>
       { key: 'helpDefense', weight: 20 },
     ]),
   };
+}
+
+export function detailedUpgradeGradesFromScoutingGrades(grades: Record<string, NbaGrade>): Record<string, NbaGrade> {
+  const detailed = UPGRADE_GRADE_OPTIONS.reduce<Record<string, NbaGrade>>((acc, option) => {
+    const grade = grades[option.key];
+    if (grade) acc[option.key] = grade;
+    return acc;
+  }, {});
+  return Object.keys(detailed).length > 0 ? detailed : upgradeGradesFromScoutingGrades(grades);
 }
 
 export function abilityGradesFromStats(player: Record<string, unknown>): Record<string, NbaGrade> {

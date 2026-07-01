@@ -3,7 +3,9 @@ import {
   awardUpgradePoints,
   abilityGradesFromStats,
   canUpgradePlayerThisSeason,
+  detailedUpgradeGradesFromScoutingGrades,
   upgradeGradesFromScoutingGrades,
+  UPGRADE_GRADE_OPTIONS,
   seasonUpgradeGrants,
   nextGrade,
   spendUpgradePoint,
@@ -111,6 +113,52 @@ describe('NBA upgrade points', () => {
     expect(grades.shooting).toMatch(/^B/);
     expect(grades.defense).toBe('A-');
     expect(grades.rebounding).toMatch(/^A/);
+  });
+
+  it('exposes detailed player-card grades as upgrade options', () => {
+    const grades = detailedUpgradeGradesFromScoutingGrades({
+      closeShot: 'A',
+      midRange: 'B',
+      threePoint: 'B-',
+      freeThrow: 'B+',
+      dunking: 'A+',
+      shotIq: 'A-',
+      passing: 'B+',
+      ballHandle: 'B',
+      offenseIq: 'B',
+      clutch: 'C+',
+      perimeterDefense: 'B-',
+      postDefense: 'C',
+      blocking: 'D+',
+      steals: 'B',
+      defenseIq: 'B-',
+      helpDefense: 'B',
+      speed: 'A',
+      acceleration: 'A-',
+      strength: 'B+',
+      rebounding: 'C+',
+      postOffense: 'C',
+      stamina: 'B+',
+      potential: 'A+',
+    });
+
+    expect(Object.keys(grades).slice(0, 6)).toEqual([
+      'closeShot',
+      'midRange',
+      'threePoint',
+      'freeThrow',
+      'dunking',
+      'shotIq',
+    ]);
+    expect(grades.threePoint).toBe('B-');
+    expect(grades.dunking).toBe('A+');
+    expect(grades.perimeterDefense).toBe('B-');
+    expect(grades.postOffense).toBe('C');
+    expect(grades.potential).toBe('A+');
+    expect(UPGRADE_GRADE_OPTIONS.find(option => option.key === 'threePoint')).toMatchObject({
+      label: '3PT Shot',
+      category: 'Scoring',
+    });
   });
 
   it('combines award points and lottery boosts into team grants', () => {

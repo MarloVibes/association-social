@@ -129,6 +129,30 @@ describe('player upgrade callable helpers', () => {
     expect(result.player.grades.rebounding).toBe('S');
   });
 
+  it('spends a point on a detailed canonical player attribute', () => {
+    const result = spendTeamUpgradePoint({
+      team: { upgradePoints: 2 },
+      player: {
+        id: 'wing',
+        playerLabel: 'ROLE PLAYER',
+        category_skill_grades: {
+          threePoint: { grade: 'B-', rating: 78 },
+          midRange: { grade: 'B', rating: 82 },
+          shotIq: { grade: 'B+', rating: 86 },
+        },
+        hidden: { threePoint: 78 },
+        visible: { grades: { threePoint: 'B-' } },
+      },
+      ability: 'threePoint',
+      seasonYear: 2026,
+    });
+
+    expect(result.team.upgradePoints).toBe(1);
+    expect(result.player.grades.threePoint).toBe('B');
+    expect(result.player.visible.grades.threePoint).toBe('B');
+    expect(result.player.hidden.threePoint).toBeGreaterThanOrEqual(80);
+  });
+
   it('applies season grants once per team and season', () => {
     const teams = [
       { id: 'E5', upgradePoints: 1, upgradePointGrants: {} },
