@@ -40,9 +40,10 @@ describe('NBA evaluation v2', () => {
     expect(gradeFromScore(98)).toBe('A+');
     expect(gradeFromScore(91)).toBe('A-');
     expect(gradeFromScore(88)).toBe('B+');
-    expect(gradeFromScore(79)).toBe('C+');
-    expect(gradeFromScore(70)).toBe('D+');
-    expect(gradeFromScore(64)).toBe('D-');
+    expect(gradeFromScore(79)).toBe('B-');
+    expect(gradeFromScore(70)).toBe('C+');
+    expect(gradeFromScore(57)).toBe('D+');
+    expect(gradeFromScore(50)).toBe('D-');
     expect(gradeTier('B+')).toBe('Pro');
   });
 

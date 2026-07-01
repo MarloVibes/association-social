@@ -87,7 +87,7 @@ describe('gradeScale', () => {
 
 Run: `npm test -- tests/domain/gradeScale.test.ts`
 
-Expected: FAIL because the current grade order still includes `D-` and `D+`.
+Expected: FAIL until the shared grade order exactly matches the approved public ladder.
 
 - [ ] **Step 3: Implement the approved grade order**
 

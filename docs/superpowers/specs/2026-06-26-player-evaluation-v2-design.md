@@ -27,16 +27,16 @@ Use a tighter grade ladder so players stop bunching together:
 | A+ | 95-98 | Elite |
 | A | 92-94 | Elite |
 | A- | 89-91 | Elite |
-| B+ | 86-88 | Pro |
-| B | 83-85 | Pro |
-| B- | 80-82 | Pro |
-| C+ | 77-79 | Contributor |
-| C | 74-76 | Contributor |
-| C- | 71-73 | Contributor |
-| D+ | 68-70 | Prospect |
-| D | 65-67 | Prospect |
-| D- | 60-64 | Prospect |
-| F | 0-59 | Development |
+| B+ | 85-88 | Pro |
+| B | 80-84 | Pro |
+| B- | 75-79 | Pro |
+| C+ | 70-74 | Contributor |
+| C | 65-69 | Contributor |
+| C- | 60-64 | Contributor |
+| D+ | 57-59 | Prospect |
+| D | 53-56 | Prospect |
+| D- | 50-52 | Prospect |
+| F | 0-49 | Development |
 
 ## Potential Grade
 

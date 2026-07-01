@@ -8,11 +8,17 @@ const source = (path: string) => readFileSync(resolve(root, path), 'utf8');
 describe('source safety regressions', () => {
   it('documents the full public NBA grade ladder', () => {
     const ratingDesign = source('docs/superpowers/specs/2026-06-27-original-basketball-rating-import-design.md');
+    const evaluationDesign = source('docs/superpowers/specs/2026-06-26-player-evaluation-v2-design.md');
 
-    expect(ratingDesign).toContain('- D+: 57-59');
-    expect(ratingDesign).toContain('- D: 53-56');
-    expect(ratingDesign).toContain('- D-: 50-52');
-    expect(ratingDesign).not.toContain('- D: 50-59');
+    for (const doc of [ratingDesign, evaluationDesign]) {
+      expect(doc).toContain('D+');
+      expect(doc).toContain('D-');
+      expect(doc).toContain('57-59');
+      expect(doc).toContain('53-56');
+      expect(doc).toContain('50-52');
+      expect(doc).not.toContain('50-59');
+      expect(doc).not.toContain('68-70');
+    }
   });
 
   it('uses numeric currentYear for NBA team branding', () => {
