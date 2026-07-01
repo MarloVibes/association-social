@@ -12,6 +12,7 @@ const {
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
+  gameStoryFromResult,
   gameWithCoachingSnapshots,
   gamesForCompetition,
   requestMatchup,
@@ -499,6 +500,44 @@ describe('matchup request state helpers', () => {
     });
     expect(result.quarters).toHaveLength(4);
     expect(result.story).not.toContain('_2011');
+  });
+
+  it('writes a richer postgame story from box score hooks', () => {
+    const story = gameStoryFromResult({
+      homeTeamId: 'MIA',
+      awayTeamId: 'CHI',
+      homeScore: 104,
+      awayScore: 102,
+      winnerTeamId: 'MIA',
+      quarters: [
+        { quarter: 1, home: 24, away: 31 },
+        { quarter: 2, home: 25, away: 22 },
+        { quarter: 3, home: 29, away: 24 },
+        { quarter: 4, home: 26, away: 25 },
+      ],
+      boxScore: {
+        home: {
+          players: [
+            { name: 'LeBron James', starter: true, points: 38, rebounds: 12, assists: 9, steals: 2, blocks: 1, turnovers: 3 },
+            { name: 'Mario Chalmers', starter: true, points: 8, rebounds: 2, assists: 7, steals: 1, blocks: 0, turnovers: 1 },
+            { name: 'Shane Battier', starter: false, points: 17, rebounds: 4, assists: 2, steals: 1, blocks: 0, turnovers: 0 },
+          ],
+        },
+        away: {
+          players: [
+            { name: 'Derrick Rose', starter: true, points: 34, rebounds: 4, assists: 8, steals: 1, blocks: 0, turnovers: 3 },
+            { name: 'Luol Deng', starter: true, points: 18, rebounds: 6, assists: 3, steals: 1, blocks: 1, turnovers: 1 },
+          ],
+        },
+      },
+    });
+
+    expect(story).toContain('survived a one-possession finish');
+    expect(story).toContain('LeBron James powered the win');
+    expect(story).toContain('double-double');
+    expect(story).toContain('Shane Battier gave MIA a bench spark');
+    expect(story).toContain('Derrick Rose answered');
+    expect(story).toContain('third quarter');
   });
 
   it('uses grade-based player profiles without inflating assists and rebounds', () => {

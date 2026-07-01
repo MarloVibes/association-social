@@ -71,6 +71,16 @@ function periodLabel(period) {
   return value === 5 ? 'OT' : `${value - 4}OT`;
 }
 
+function storyPeriodLabel(period) {
+  const value = Number(period || 0);
+  if (value === 1) return 'first quarter';
+  if (value === 2) return 'second quarter';
+  if (value === 3) return 'third quarter';
+  if (value === 4) return 'fourth quarter';
+  if (value === 5) return 'overtime';
+  return periodLabel(value);
+}
+
 function numberFrom(value, fallback = 60) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -977,6 +987,23 @@ function playerImpactScore(player) {
     - Number(player && player.turnovers || 0) * 0.8;
 }
 
+function playerStoryLine(player) {
+  const points = Number(player && player.points || 0);
+  const rebounds = Number(player && player.rebounds || 0);
+  const assists = Number(player && player.assists || 0);
+  const extras = [];
+  if (points >= 10 && rebounds >= 10) extras.push('a double-double');
+  if (points >= 10 && assists >= 10) extras.push(extras.length > 0 ? '10-plus assists' : 'a points-assists double-double');
+  const core = `${points} points, ${rebounds} rebounds, and ${assists} assists`;
+  return extras.length > 0 ? `${core} including ${extras.join(' and ')}` : core;
+}
+
+function benchSparkForTeam(players, teamId) {
+  return players
+    .filter(player => player.side === teamId && !player.starter && Number(player.points || 0) >= 12)
+    .sort((left, right) => Number(right.points || 0) - Number(left.points || 0) || playerImpactScore(right) - playerImpactScore(left))[0];
+}
+
 function gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, quarters, boxScore, winnerTeamId }) {
   const homeWon = homeScore > awayScore;
   const winnerId = winnerTeamId || (homeWon ? homeTeamId : awayTeamId);
@@ -999,13 +1026,19 @@ function gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, qua
     ...((boxScore && boxScore.away && boxScore.away.players) || []).map(player => ({ ...player, side: awayTeamId })),
     ...((boxScore && boxScore.home && boxScore.home.players) || []).map(player => ({ ...player, side: homeTeamId })),
   ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left));
-  const leader = performers[0];
-  const opponentLeader = leader && performers.find(player => player.side !== leader.side);
+  const winnerPlayers = performers.filter(player => player.side === winnerId);
+  const loserPlayers = performers.filter(player => player.side === loserId);
+  const leader = winnerPlayers[0] || performers[0];
+  const opponentLeader = loserPlayers[0] || (leader && performers.find(player => player.side !== leader.side));
+  const benchSpark = benchSparkForTeam(performers, winnerId);
   const leaderLine = leader
-    ? `${leader.name || 'The top performer'} led the night with ${Number(leader.points || 0)} points, ${Number(leader.rebounds || 0)} rebounds, and ${Number(leader.assists || 0)} assists.`
+    ? `${leader.name || 'The top performer'} powered the win with ${playerStoryLine(leader)}.`
     : '';
   const responseLine = opponentLeader
-    ? `${opponentLeader.name || `${loserLabel}'s top option`} kept it competitive with ${Number(opponentLeader.points || 0)} points.`
+    ? `${opponentLeader.name || `${loserLabel}'s top option`} answered with ${Number(opponentLeader.points || 0)} points for ${loserLabel}.`
+    : '';
+  const benchLine = benchSpark
+    ? `${benchSpark.name || 'A reserve'} gave ${winnerLabel} a bench spark with ${Number(benchSpark.points || 0)} points.`
     : '';
   const winnerIsHome = winnerId === homeTeamId;
   const swing = (quarters || [])
@@ -1015,8 +1048,8 @@ function gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, qua
     })
     .filter(item => item.winnerDiff > 0)
     .sort((left, right) => right.winnerDiff - left.winnerDiff)[0];
-  const swingLine = swing ? `${winnerLabel}'s best stretch came in ${periodLabel(swing.period.quarter)}, winning that period by ${swing.winnerDiff}.` : '';
-  return [opener, leaderLine, responseLine, swingLine].filter(Boolean).join(' ');
+  const swingLine = swing ? `${winnerLabel}'s best stretch came in the ${storyPeriodLabel(swing.period.quarter)}, winning that period by ${swing.winnerDiff}.` : '';
+  return [opener, leaderLine, responseLine, benchLine, swingLine].filter(Boolean).join(' ');
 }
 
 function teamStateForFinalization(team) {
@@ -2322,6 +2355,7 @@ module.exports = {
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
+  gameStoryFromResult,
   gameWithCoachingSnapshots,
   gamesForCompetition,
   requestMatchup,
