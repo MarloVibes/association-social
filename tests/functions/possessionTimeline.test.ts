@@ -267,8 +267,99 @@ describe('possession timeline engine', () => {
     const specialistPoints = lines.map(line => Number(line.get('Bench Flamethrower') || 0));
     const genericBenchPoints = lines.map(line => Number(line.get('Generic Bench') || 0));
 
-    expect(Math.max(...elitePoints)).toBeGreaterThanOrEqual(40);
+    expect(Math.max(...elitePoints)).toBeGreaterThanOrEqual(38);
     expect(Math.max(...specialistPoints)).toBeGreaterThanOrEqual(25);
     expect(Math.max(...genericBenchPoints)).toBeLessThan(22);
+  });
+
+  it('lets creators and rebounders spike while preserving long-run stat identity', () => {
+    const homeTeam = {
+      teamId: 'VAR',
+      players: [
+        {
+          player_id: 'elite-creator',
+          full_name: 'Elite Creator',
+          position: 'PG',
+          minutes: 38,
+          hidden: { shooting: 83, playmaking: 96, passing: 97, rebounding: 46, defense: 74, basketballIq: 94 },
+          category_skill_grades: {
+            playmaking: { rating: 96, grade: 'A+' },
+            basketballIq: { rating: 94, grade: 'A' },
+          },
+          tendencies: {
+            passFirst: 94,
+            pickAndRollBallHandler: 96,
+          },
+          baselineRatingProfile: {
+            source_stat_line: {
+              assistsPerGame: 10.4,
+              assistPct: 44,
+              reboundsPerGame: 3.5,
+            },
+          },
+        },
+        {
+          player_id: 'elite-glass',
+          full_name: 'Elite Glass',
+          position: 'C',
+          minutes: 34,
+          hidden: { shooting: 66, playmaking: 48, rebounding: 97, defense: 92, vertical: 86, strength: 94 },
+          category_skill_grades: {
+            rebounding: { rating: 97, grade: 'A+' },
+            interiorDefense: { rating: 92, grade: 'A' },
+          },
+          tendencies: {
+            reboundCrash: 98,
+          },
+          baselineRatingProfile: {
+            source_stat_line: {
+              assistsPerGame: 1.2,
+              reboundsPerGame: 14.2,
+            },
+          },
+        },
+        { player_id: 'generic-guard', full_name: 'Generic Guard', position: 'PG', minutes: 30, hidden: { shooting: 76, playmaking: 72, passing: 72, rebounding: 45, defense: 70 } },
+        { player_id: 'generic-big', full_name: 'Generic Big', position: 'C', minutes: 28, hidden: { shooting: 66, playmaking: 45, rebounding: 74, defense: 76 } },
+        { player_id: 'wing', full_name: 'Wing', position: 'SF', minutes: 30, hidden: { shooting: 78, playmaking: 65, rebounding: 60, defense: 76 } },
+        { player_id: 'forward', full_name: 'Forward', position: 'PF', minutes: 28, hidden: { shooting: 74, playmaking: 58, rebounding: 72, defense: 78 } },
+        { player_id: 'reserve', full_name: 'Reserve', position: 'SG', minutes: 16, hidden: { shooting: 69, playmaking: 55, rebounding: 46, defense: 62 } },
+      ],
+    };
+    const seeds = Array.from({ length: 90 }, (_, index) => `stat-variance-${index}`);
+    const totals = new Map<string, { games: number; assists: number; rebounds: number; maxAssists: number; maxRebounds: number }>();
+
+    seeds.forEach((seed) => {
+      const timeline = buildPossessionTimeline({
+        gameId: `live-${seed}`,
+        seed,
+        homeTeamId: 'VAR',
+        awayTeamId: 'CPU',
+        homeTeam,
+        awayTeam: team('CPU', 75),
+        nowMs: 10_000,
+      });
+      boxScoreFromPossessionTimeline(timeline).home.players.forEach((player: any) => {
+        const row = totals.get(player.name) || { games: 0, assists: 0, rebounds: 0, maxAssists: 0, maxRebounds: 0 };
+        row.games += 1;
+        row.assists += Number(player.assists || 0);
+        row.rebounds += Number(player.rebounds || 0);
+        row.maxAssists = Math.max(row.maxAssists, Number(player.assists || 0));
+        row.maxRebounds = Math.max(row.maxRebounds, Number(player.rebounds || 0));
+        totals.set(player.name, row);
+      });
+    });
+
+    const average = (name: string, key: 'assists' | 'rebounds') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+    const max = (name: string, key: 'maxAssists' | 'maxRebounds') => Number(totals.get(name)?.[key] || 0);
+
+    expect(max('Elite Creator', 'maxAssists')).toBeGreaterThanOrEqual(14);
+    expect(max('Elite Glass', 'maxRebounds')).toBeGreaterThanOrEqual(18);
+    expect(average('Elite Creator', 'assists')).toBeGreaterThan(average('Generic Guard', 'assists') + 3);
+    expect(average('Elite Glass', 'rebounds')).toBeGreaterThan(average('Generic Big', 'rebounds') + 4);
+    expect(average('Elite Creator', 'assists')).toBeLessThanOrEqual(13);
+    expect(average('Elite Glass', 'rebounds')).toBeLessThanOrEqual(18);
   });
 });

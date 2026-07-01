@@ -275,6 +275,7 @@ function buildTeamContext(teamId, team, side, input) {
       ...player,
       ...night,
       minutes: minutes[index],
+      assistWeight: player.assistWeight * (night.nightAssistMultiplier || 1),
       usage: Math.max(
         1,
         Math.pow(minutes[index], 0.92)
@@ -495,6 +496,8 @@ function normalizeMinutes(players) {
 function scoringNightContext(player, minutes, seed) {
   const roll = hashString(`${seed}:${player.playerId}:scoring-night`) % 1000;
   const texture = hashString(`${seed}:${player.playerId}:scoring-texture`) % 100;
+  const assistRoll = hashString(`${seed}:${player.playerId}:assist-night`) % 1000;
+  const reboundRoll = hashString(`${seed}:${player.playerId}:rebound-night`) % 1000;
   const offense = Math.max(player.scoring, player.finishing, player.threePoint, player.midRange);
   const specialty = Math.max(
     player.finishing * 0.72 + player.paintAttack * 0.2 + player.rimFinish * 0.08,
@@ -504,13 +507,27 @@ function scoringNightContext(player, minutes, seed) {
   const eliteUsage = minutes >= 32 && Math.max(offense, specialty) >= 88;
   const benchSpecialist = minutes >= 12 && minutes <= 26 && specialty >= 88 && player.scoring >= 68;
   const steady = 0.9 + texture / 320;
+  const assistSpecialist = minutes >= 30 && (player.playmaking >= 88 || player.sourceAssistRole >= 82);
+  const reboundSpecialist = minutes >= 26 && (player.rebounding >= 88 || player.sourceReboundRole >= 82);
+  const statTexture = 0.92 + texture / 420;
+  const nightAssistMultiplier = assistSpecialist && assistRoll < 70
+    ? 1.48 + texture / 280
+    : assistSpecialist && assistRoll > 940
+      ? 0.58 + texture / 640
+      : statTexture;
+  const nightReboundMultiplier = reboundSpecialist && reboundRoll < 75
+    ? 1.45 + texture / 260
+    : reboundSpecialist && reboundRoll > 935
+      ? 0.62 + texture / 650
+      : statTexture;
+  const statNight = { nightAssistMultiplier, nightReboundMultiplier };
 
-  if (eliteUsage && roll < 55) return { nightUsageMultiplier: 1.72 + texture / 240, nightMakeBoost: 7 };
-  if (eliteUsage && roll > 935) return { nightUsageMultiplier: 0.52 + texture / 520, nightMakeBoost: -7 };
-  if (benchSpecialist && roll < 45) return { nightUsageMultiplier: 1.95 + texture / 210, nightMakeBoost: 6 };
-  if (benchSpecialist) return { nightUsageMultiplier: 0.82 + texture / 260, nightMakeBoost: 0 };
-  if (minutes <= 24 && Math.max(player.scoring, specialty) < 78) return { nightUsageMultiplier: Math.min(steady, 1.12), nightMakeBoost: 0 };
-  return { nightUsageMultiplier: steady, nightMakeBoost: 0 };
+  if (eliteUsage && roll < 55) return { nightUsageMultiplier: 1.72 + texture / 240, nightMakeBoost: 7, ...statNight };
+  if (eliteUsage && roll > 935) return { nightUsageMultiplier: 0.52 + texture / 520, nightMakeBoost: -7, ...statNight };
+  if (benchSpecialist && roll < 45) return { nightUsageMultiplier: 1.95 + texture / 210, nightMakeBoost: 6, ...statNight };
+  if (benchSpecialist) return { nightUsageMultiplier: 0.82 + texture / 260, nightMakeBoost: 0, ...statNight };
+  if (minutes <= 24 && Math.max(player.scoring, specialty) < 78) return { nightUsageMultiplier: Math.min(steady, 1.12), nightMakeBoost: 0, ...statNight };
+  return { nightUsageMultiplier: steady, nightMakeBoost: 0, ...statNight };
 }
 
 function chooseShotValue(player, team, rng) {
@@ -551,7 +568,7 @@ function reboundWeight(player) {
         : player.position === 'SG'
           ? 0.62
           : 0.52;
-  return player.rebounding * positionBoost;
+  return player.rebounding * positionBoost * (player.nightReboundMultiplier || 1);
 }
 
 function buildStarterMatchups(home, away) {
