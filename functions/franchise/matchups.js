@@ -165,6 +165,21 @@ function sourceEfficiencyRating(player) {
   );
 }
 
+function sourceProductionRating(player, kind) {
+  if (kind === 'points') {
+    const pointsPerGame = sourceStat(player, 'pointsPerGame', 12);
+    const usagePct = sourceStat(player, 'usagePct', 19);
+    return clamp(42 + pointsPerGame * 1.35 + (usagePct - 19) * 0.75, 35, 100);
+  }
+  if (kind === 'assists') {
+    const assistsPerGame = sourceStat(player, 'assistsPerGame', 2.2);
+    const assistPct = sourceStat(player, 'assistPct', 14);
+    return clamp(42 + assistsPerGame * 3.6 + (assistPct - 14) * 0.7, 35, 100);
+  }
+  const reboundsPerGame = sourceStat(player, 'reboundsPerGame', 4.5);
+  return clamp(42 + reboundsPerGame * 3.4, 35, 100);
+}
+
 function sourceShotAttemptAdjustment(player) {
   const efficiency = sourceEfficiencyRating(player);
   if (efficiency >= 84) return -1;
@@ -658,13 +673,24 @@ function normalizeSimulationMinutes(players) {
 
 function distributeTeamPoints(players, minutes, teamPoints, seed) {
   const weights = players.map((player, index) => (
-    Math.max(
-      1,
-      minutes[index]
-        * (playerSkill(player, 'shooting') + playerSkill(player, 'playmaking') * 0.25 + (hash(`${seed}:${playerKey(player)}`) % 8))
-        * clamp(0.72 + sourceEfficiencyRating(player) / 150, 0.72, 1.34)
-        / 100,
-    )
+    (() => {
+      const sourceScoring = sourceProductionRating(player, 'points');
+      const productionSignal = sourceScoring / 72;
+      const productionMultiplier = clamp(0.3 + Math.pow(productionSignal, 2.15), 0.65, 2.35);
+      const scoringRole = (
+        (playerSkill(player, 'shooting') + playerSkill(player, 'playmaking') * 0.25 + (hash(`${seed}:${playerKey(player)}`) % 8)) * 0.45
+        + sourceScoring * 0.8
+      );
+      const minutesShare = Math.pow(minutes[index], 0.92);
+      return Math.max(
+        1,
+        minutesShare
+          * scoringRole
+          * clamp(0.72 + sourceEfficiencyRating(player) / 150, 0.72, 1.34)
+          * productionMultiplier
+          / 100,
+      );
+    })()
   ));
   const total = weights.reduce((sum, value) => sum + value, 0) || 1;
   const points = weights.map(weight => Math.floor((weight / total) * teamPoints));
@@ -782,13 +808,24 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
   const rebounds = distributeStatTotal(players, minutes, teamRebounds, `${seed}:rebounds`, (player, playerMinutes, index) => (
     playerMinutes
     * positionFactor(player, 'rebound')
-    * (playerSkill(player, 'rebounding') * 0.64 + playerSkill(player, 'defense') * 0.22 + playerSkill(player, 'athleticism') * 0.14)
+    * (
+      playerSkill(player, 'rebounding') * 0.64
+      + playerSkill(player, 'defense') * 0.22
+      + playerSkill(player, 'athleticism') * 0.14
+      + sourceProductionRating(player, 'rebounds') * 0.18
+    )
     * (0.95 + (hash(`${seed}:${index}:rebound-variance`) % 15) / 100)
   ));
   const assists = distributeStatTotal(players, minutes, teamAssists, `${seed}:assists`, (player, playerMinutes, index) => (
     playerMinutes
     * positionFactor(player, 'assist')
-    * (playerSkill(player, 'playmaking') * 0.72 + playerSkill(player, 'basketballIq') * 0.2 + playerSkill(player, 'shooting') * 0.08)
+    * clamp(0.5 + Math.pow(sourceProductionRating(player, 'assists') / 72, 2), 0.7, 2.05)
+    * (
+      playerSkill(player, 'playmaking') * 0.72
+      + playerSkill(player, 'basketballIq') * 0.2
+      + playerSkill(player, 'shooting') * 0.08
+      + sourceProductionRating(player, 'assists') * 0.18
+    )
     * (0.95 + (hash(`${seed}:${index}:assist-variance`) % 15) / 100)
   ));
   const boxPlayers = players.map((player, index) => {

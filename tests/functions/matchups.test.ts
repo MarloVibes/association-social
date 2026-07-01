@@ -484,6 +484,80 @@ describe('matchup request state helpers', () => {
     expect(efficient.turnovers).toBeLessThanOrEqual(inefficient.turnovers);
   });
 
+  it('uses source production signals in scheduled game box score distribution', () => {
+    const game = seedAvailableGame({ homeTeamId: 'ROLE', awayTeamId: 'CPU' });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: {
+        players: [
+          {
+            player_id: 'primary-creator',
+            full_name: 'Primary Creator',
+            position: 'PG',
+            minutes: 32,
+            hidden: { shooting: 72, playmaking: 82, rebounding: 55, defense: 72 },
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 25,
+                assistsPerGame: 8.2,
+                reboundsPerGame: 4.1,
+                usagePct: 32,
+                assistPct: 40,
+              },
+            },
+          },
+          {
+            player_id: 'secondary-creator',
+            full_name: 'Secondary Creator',
+            position: 'SG',
+            minutes: 38,
+            hidden: { shooting: 91, playmaking: 88, rebounding: 55, defense: 72 },
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 12,
+                assistsPerGame: 3,
+                reboundsPerGame: 3.8,
+                usagePct: 18,
+                assistPct: 16,
+              },
+            },
+          },
+          {
+            player_id: 'glass-center',
+            full_name: 'Glass Center',
+            position: 'C',
+            minutes: 32,
+            hidden: { shooting: 70, playmaking: 54, rebounding: 86, defense: 82 },
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 8,
+                assistsPerGame: 1.2,
+                reboundsPerGame: 12.4,
+              },
+            },
+          },
+          { player_id: 'role-pf', full_name: 'Role PF', position: 'PF', minutes: 30, hidden: { shooting: 72, playmaking: 60, rebounding: 78, defense: 78 } },
+          { player_id: 'role-sf', full_name: 'Role SF', position: 'SF', minutes: 28, hidden: { shooting: 72, playmaking: 62, rebounding: 62, defense: 78 } },
+        ],
+      },
+      awayTeam: {
+        players: Array.from({ length: 5 }, (_, index) => ({
+          player_id: `plain-role-${index}`,
+          full_name: `Plain Role ${index}`,
+          minutes: 30,
+          hidden: { shooting: 70, playmaking: 68, defense: 68 },
+        })),
+      },
+    });
+
+    const lines = new Map<string, any>(result.boxScore.home.players.map((player: any) => [player.name, player]));
+    expect(lines.get('Primary Creator').points).toBeGreaterThanOrEqual(lines.get('Secondary Creator').points);
+    expect(lines.get('Primary Creator').assists).toBeGreaterThan(lines.get('Secondary Creator').assists);
+    expect(lines.get('Glass Center').rebounds).toBeGreaterThan(lines.get('Primary Creator').rebounds);
+  });
+
   it('uses roster hidden values and stores a box score for simulated games', () => {
     const game = seedAvailableGame();
     const result = simulateScheduledGame({

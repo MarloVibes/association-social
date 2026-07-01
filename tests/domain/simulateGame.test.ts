@@ -381,6 +381,79 @@ describe('NBA game simulation', () => {
     expect(efficient.turnovers).toBeLessThanOrEqual(inefficient.turnovers);
   });
 
+  it('uses real production priors so box scores follow player roles within similar grades', () => {
+    const result = simulateGame({
+      home: {
+        teamId: 'ROLE',
+        players: [
+          {
+            playerId: 'primary-creator',
+            name: 'Primary Creator',
+            position: 'PG',
+            minutes: 32,
+            shooting: 78,
+            playmaking: 82,
+            rebounding: 55,
+            defense: 72,
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 25.0,
+                assistsPerGame: 8.2,
+                reboundsPerGame: 4.1,
+                usagePct: 32.0,
+                assistPct: 40.0,
+              },
+            },
+          },
+          {
+            playerId: 'secondary-creator',
+            name: 'Secondary Creator',
+            position: 'SG',
+            minutes: 38,
+            shooting: 86,
+            playmaking: 88,
+            rebounding: 55,
+            defense: 72,
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 12.0,
+                assistsPerGame: 3.0,
+                reboundsPerGame: 3.8,
+                usagePct: 18.0,
+                assistPct: 16.0,
+              },
+            },
+          },
+          {
+            playerId: 'glass-center',
+            name: 'Glass Center',
+            position: 'C',
+            minutes: 32,
+            shooting: 70,
+            playmaking: 54,
+            rebounding: 86,
+            defense: 82,
+            baselineRatingProfile: {
+              source_stat_line: {
+                pointsPerGame: 8.0,
+                assistsPerGame: 1.2,
+                reboundsPerGame: 12.4,
+              },
+            },
+          },
+          { playerId: 'role-pf', name: 'Role PF', position: 'PF', minutes: 30, shooting: 72, playmaking: 60, rebounding: 78, defense: 78 },
+          { playerId: 'role-sf', name: 'Role SF', position: 'SF', minutes: 28, shooting: 72, playmaking: 62, rebounding: 62, defense: 78 },
+        ],
+      },
+      away: fixture.away,
+    }, 'role-production-seed');
+
+    const lines = new Map(result.home.players.map(player => [player.name, player]));
+    expect(lines.get('Primary Creator')!.points).toBeGreaterThanOrEqual(lines.get('Secondary Creator')!.points);
+    expect(lines.get('Primary Creator')!.assists).toBeGreaterThan(lines.get('Secondary Creator')!.assists);
+    expect(lines.get('Glass Center')!.rebounds).toBeGreaterThan(lines.get('Primary Creator')!.rebounds);
+  });
+
   it('keeps raw era ids out of generated game stories', () => {
     const result = simulateGame({
       home: { ...fixture.home, teamId: 'SAS_2011' },

@@ -268,11 +268,22 @@ function buildTeamContext(teamId, team, side, input) {
     const night = scoringNightContext(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
     const sourceThreeAttemptCap = sourceThreeAttemptBudget(player, minutes[index], `${input && (input.seed || input.gameId) || 'game'}:${teamId}`);
     const efficiencyUsageMultiplier = clamp(0.72 + player.sourceEfficiency / 150, 0.72, 1.34);
+    const sourceUsageSignal = player.sourceScoringRole / 72;
+    const productionUsageMultiplier = clamp(0.3 + Math.pow(sourceUsageSignal, 2.15), 0.65, 2.35);
+    const scoringRole = player.scoring * 0.45 + player.sourceScoringRole * 0.8;
     return {
       ...player,
       ...night,
       minutes: minutes[index],
-      usage: Math.max(1, minutes[index] * (player.scoring * 0.58 + player.playmaking * 0.27 + player.iq * 0.15) * night.nightUsageMultiplier * efficiencyUsageMultiplier / 100),
+      usage: Math.max(
+        1,
+        Math.pow(minutes[index], 0.92)
+          * (scoringRole + player.playmaking * 0.12 + player.iq * 0.06)
+          * night.nightUsageMultiplier
+          * efficiencyUsageMultiplier
+          * productionUsageMultiplier
+          / 100,
+      ),
       starter: starters.some(starter => starter.playerId === player.playerId),
       sourceThreeAttemptCap,
       threePointAttemptsUsed: 0,
@@ -295,6 +306,9 @@ function normalizePlayer(player, teamId, side, index) {
   const hidden = player && player.hidden || {};
   const sourceThreeAttempts = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line.threePointAttemptsPerGame);
   const sourceEfficiency = sourceEfficiencyRating(player);
+  const sourceScoringRole = sourceProductionRating(player, 'points');
+  const sourceAssistRole = sourceProductionRating(player, 'assists');
+  const sourceReboundRole = sourceProductionRating(player, 'rebounds');
   const sourceFreeThrowPressure = clamp(sourceStat(player, 'freeThrowAttemptsPerGame', 4) * 11, 24, 99);
   const sourceTurnoverPct = sourceStat(player, 'turnoverPct', 12.5);
   const position = normalizePosition(player && player.position, index);
@@ -339,15 +353,23 @@ function normalizePlayer(player, teamId, side, index) {
     drawFoulPressure,
     reboundCrash,
     playmaking,
-    assistWeight: playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48) + passFirst * 0.7 + pickAndRollBallHandler * 0.35,
+    assistWeight: (
+      playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48)
+      + passFirst * 0.7
+      + pickAndRollBallHandler * 0.35
+      + sourceAssistRole * 1.15
+    ) * clamp(0.5 + Math.pow(sourceAssistRole / 72, 2), 0.7, 2.05),
     defense: clamp(Math.max(defense, perimeterDefense, interiorDefense) * 0.75 + iq * 0.25, 35, 99),
     stealSkill: clamp(Math.max(skill(player, 'stealsSkill', defense), skill(player, 'steal', defense), defensivePlaymaking) * 0.8 + speed * 0.2, 35, 99),
     blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense), interiorDefense) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
-    rebounding: clamp(rebounding * 0.7 + skill(player, 'strength', 70) * 0.13 + skill(player, 'vertical', 70) * 0.1 + reboundCrash * 0.07, 25, 99),
+    rebounding: clamp(rebounding * 0.58 + skill(player, 'strength', 70) * 0.11 + skill(player, 'vertical', 70) * 0.08 + reboundCrash * 0.06 + sourceReboundRole * 0.28, 25, 99),
     freeThrow: skill(player, 'freeThrow', shooting),
     foulDraw: clamp(drawFoulPressure * 0.34 + finishing * 0.22 + paintAttack * 0.16 + speed * 0.09 + skill(player, 'strength', 70) * 0.08 + sourceFreeThrowPressure * 0.11, 25, 99),
     iq,
     sourceEfficiency,
+    sourceScoringRole,
+    sourceAssistRole,
+    sourceReboundRole,
     sourceTurnoverPct,
     sourceFreeThrowPressure,
     rotationValue: Number(player && (player.minutes || player.rotationMinutes)) || (
@@ -409,6 +431,21 @@ function sourceEfficiencyRating(player) {
     42,
     98,
   );
+}
+
+function sourceProductionRating(player, kind) {
+  if (kind === 'points') {
+    const pointsPerGame = sourceStat(player, 'pointsPerGame', 12);
+    const usagePct = sourceStat(player, 'usagePct', 19);
+    return clamp(42 + pointsPerGame * 1.35 + (usagePct - 19) * 0.75, 35, 100);
+  }
+  if (kind === 'assists') {
+    const assistsPerGame = sourceStat(player, 'assistsPerGame', 2.2);
+    const assistPct = sourceStat(player, 'assistPct', 14);
+    return clamp(42 + assistsPerGame * 3.6 + (assistPct - 14) * 0.7, 35, 100);
+  }
+  const reboundsPerGame = sourceStat(player, 'reboundsPerGame', 4.5);
+  return clamp(42 + reboundsPerGame * 3.4, 35, 100);
 }
 
 function selectStarters(players) {

@@ -43,6 +43,11 @@ export type SimPlayerInput = {
     attribute_model?: Record<string, number>;
     era_adjusted_profiles?: Record<string, number>;
     source_stat_line?: {
+      pointsPerGame?: number;
+      assistsPerGame?: number;
+      reboundsPerGame?: number;
+      usagePct?: number;
+      assistPct?: number;
       threePointAttemptsPerGame?: number;
       trueShootingPct?: number;
       effectiveFieldGoalPct?: number;
@@ -187,6 +192,38 @@ function sourceEfficiencyRating(player: SimPlayerInput) {
   );
 }
 
+function sourceProductionRating(player: SimPlayerInput, kind: 'points' | 'assists' | 'rebounds') {
+  if (kind === 'points') {
+    const pointsPerGame = sourceStat(player, 'pointsPerGame', NaN);
+    const usagePct = sourceStat(player, 'usagePct', NaN);
+    if (!Number.isFinite(pointsPerGame) && !Number.isFinite(usagePct)) return 72;
+    return clamp(
+      48
+        + (Number.isFinite(pointsPerGame) ? pointsPerGame * 1.55 : 0)
+        + (Number.isFinite(usagePct) ? usagePct * 0.58 : 0),
+      42,
+      99,
+    );
+  }
+
+  if (kind === 'assists') {
+    const assistsPerGame = sourceStat(player, 'assistsPerGame', NaN);
+    const assistPct = sourceStat(player, 'assistPct', NaN);
+    if (!Number.isFinite(assistsPerGame) && !Number.isFinite(assistPct)) return 72;
+    return clamp(
+      44
+        + (Number.isFinite(assistsPerGame) ? assistsPerGame * 4.5 : 0)
+        + (Number.isFinite(assistPct) ? assistPct * 0.5 : 0),
+      38,
+      99,
+    );
+  }
+
+  const reboundsPerGame = sourceStat(player, 'reboundsPerGame', NaN);
+  if (!Number.isFinite(reboundsPerGame)) return 72;
+  return clamp(45 + reboundsPerGame * 4.2, 38, 99);
+}
+
 function playerValue(player: SimPlayerInput) {
   const sim = simSkillsFromEvaluation(player as Record<string, unknown>);
   const offense = categoryRating(player, 'overallOffense', sim.offensiveImpact);
@@ -294,7 +331,12 @@ function distributePoints(players: Array<SimPlayerInput & { minutes: number }>, 
     const { scorerProfile, specialty, sim } = scorerProfileForPlayer(player);
     const nightMultiplier = scoringNightMultiplier(player, seed, scorerProfile, specialty);
     const efficiencyMultiplier = clamp(0.72 + sourceEfficiencyRating(player) / 150, 0.72, 1.34);
-    return Math.max(1, player.minutes * scorerProfile * efficiencyMultiplier * nightMultiplier * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
+    const sourceScoring = sourceProductionRating(player, 'points');
+    const productionSignal = sourceScoring / 72;
+    const productionMultiplier = clamp(0.3 + Math.pow(productionSignal, 2.15), 0.65, 2.35);
+    const scoringRole = scorerProfile * 0.45 + sourceScoring * 0.8;
+    const minutesShare = Math.pow(player.minutes, 0.92);
+    return Math.max(1, minutesShare * scoringRole * efficiencyMultiplier * productionMultiplier * nightMultiplier * sim.formMultiplier * sim.confidenceMultiplier * sim.fatigueMultiplier / 100 + (hash(`${seed}:${player.playerId}`) % 8));
   });
   const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
   const points = weights.map(weight => Math.floor((weight / totalWeight) * teamPoints));
@@ -424,12 +466,14 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       + categoryRating(player, 'interiorDefense', simSkillsFromEvaluation(player as Record<string, unknown>).postDefense) * 0.2
       + simSkillsFromEvaluation(player as Record<string, unknown>).strength * 0.12
       + tendency(player, 'reboundCrash', 55) * 0.06
+      + sourceProductionRating(player, 'rebounds') * 0.18
     )
     * (0.95 + (hash(`${seed}:${index}:rebound-variance`) % 15) / 100)
   ));
   const assists = distributeStatTotal(players, targetTeamAssists(players, fieldGoalsMade, seed), `${seed}:assists`, (player, index) => (
     player.minutes
     * positionFactor(player, 'assist')
+    * clamp(0.5 + Math.pow(sourceProductionRating(player, 'assists') / 72, 2), 0.7, 2.05)
     * (
       categoryRating(player, 'playmaking', simSkillsFromEvaluation(player as Record<string, unknown>).passing) * 0.5
       + simSkillsFromEvaluation(player as Record<string, unknown>).ballHandle * 0.16
@@ -437,6 +481,7 @@ function buildTeamBox(team: SimTeamInput, targetPoints: number, seed: string, po
       + simSkillsFromEvaluation(player as Record<string, unknown>).shotIq * 0.06
       + tendency(player, 'passFirst', 50) * 0.08
       + tendency(player, 'pickAndRollBallHandler', 45) * 0.04
+      + sourceProductionRating(player, 'assists') * 0.18
     )
     * (0.95 + (hash(`${seed}:${index}:assist-variance`) % 15) / 100)
   ));
