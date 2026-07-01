@@ -6,6 +6,15 @@ const root = resolve(import.meta.dirname, '../..');
 const source = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('source safety regressions', () => {
+  it('documents the full public NBA grade ladder', () => {
+    const ratingDesign = source('docs/superpowers/specs/2026-06-27-original-basketball-rating-import-design.md');
+
+    expect(ratingDesign).toContain('- D+: 57-59');
+    expect(ratingDesign).toContain('- D: 53-56');
+    expect(ratingDesign).toContain('- D-: 50-52');
+    expect(ratingDesign).not.toContain('- D: 50-59');
+  });
+
   it('uses numeric currentYear for NBA team branding', () => {
     const roster = source('app/screens/team-roster.tsx');
     const select = source('app/screens/team-select.tsx');
@@ -506,6 +515,8 @@ describe('source safety regressions', () => {
     expect(upgrades).toContain('selectedTeamId');
     expect(upgrades).toContain('One point raises one grade');
     expect(upgrades).toContain('getUpgradeStatus');
+    expect(upgrades).toContain('arrow-up-circle');
+    expect(upgrades).toContain('arrow-forward');
   });
 
   it('shows archived franchise player seasons in player cards', () => {

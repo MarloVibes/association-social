@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { simulateGame, type SimGameInput } from '@/domain/nba/simulateGame';
+import { buildBaselineRatingProfiles } from '@/domain/nba/ratingSeeds';
 
 const fixture = {
   home: {
@@ -27,6 +28,30 @@ const fixture = {
 };
 
 describe('NBA game simulation', () => {
+  function baselinePlayer(name: string, team: string, season: number) {
+    const profile = buildBaselineRatingProfiles().find(candidate => (
+      candidate.full_name === name
+      && candidate.team === team
+      && candidate.season === season
+    ));
+    expect(profile, `${name} ${team} ${season} baseline profile`).toBeTruthy();
+    return profile!;
+  }
+
+  function simPlayerFromBaseline(name: string, team: string, season: number, minutes?: number) {
+    const profile = baselinePlayer(name, team, season);
+    return {
+      playerId: profile.player_id,
+      name: profile.full_name,
+      position: profile.position,
+      minutes: minutes ?? Math.round(Number(profile.source_stat_line.minutesPerGame || 24)),
+      ...profile.attribute_model,
+      category_skill_grades: profile.category_skill_grades,
+      tendencies: profile.tendencies,
+      baselineRatingProfile: profile,
+    };
+  }
+
   it('refuses to simulate without real players for both teams', () => {
     expect(() => simulateGame({
       home: { teamId: 'BOS', players: [] },
@@ -545,6 +570,60 @@ describe('NBA game simulation', () => {
     expect(average('Elite Glass', 'rebounds')).toBeGreaterThan(average('Generic Big', 'rebounds') + 4);
     expect(average('Elite Creator', 'assists')).toBeLessThanOrEqual(13);
     expect(average('Elite Glass', 'rebounds')).toBeLessThanOrEqual(18);
+  });
+
+  it('keeps real baseline player roles correct across a season sample', () => {
+    const matchup: SimGameInput = {
+      home: {
+        teamId: 'MIA',
+        players: [
+          simPlayerFromBaseline('LeBron James', 'MIA', 2011),
+          simPlayerFromBaseline('Dwyane Wade', 'MIA', 2011),
+          simPlayerFromBaseline('Chris Bosh', 'MIA', 2011),
+          simPlayerFromBaseline('Mario Chalmers', 'MIA', 2011),
+          simPlayerFromBaseline('Udonis Haslem', 'MIA', 2011),
+          simPlayerFromBaseline('Mike Miller', 'MIA', 2011),
+        ],
+      },
+      away: {
+        teamId: 'CHI',
+        players: [
+          simPlayerFromBaseline('Derrick Rose', 'CHI', 2011),
+          simPlayerFromBaseline('Carlos Boozer', 'CHI', 2011),
+          simPlayerFromBaseline('Luol Deng', 'CHI', 2011),
+          simPlayerFromBaseline('Joakim Noah', 'CHI', 2011),
+          simPlayerFromBaseline('Kyle Korver', 'CHI', 2011),
+        ],
+      },
+    };
+    const totals = new Map<string, { games: number; points: number; assists: number; rebounds: number; maxPoints: number }>();
+    Array.from({ length: 82 }, (_, index) => `baseline-season-sample-${index}`).forEach((seed) => {
+      const result = simulateGame(matchup, seed);
+      [...result.home.players, ...result.away.players].forEach((player) => {
+        const row = totals.get(player.name) || { games: 0, points: 0, assists: 0, rebounds: 0, maxPoints: 0 };
+        row.games += 1;
+        row.points += player.points;
+        row.assists += player.assists;
+        row.rebounds += player.rebounds;
+        row.maxPoints = Math.max(row.maxPoints, player.points);
+        totals.set(player.name, row);
+      });
+    });
+    const avg = (name: string, key: 'points' | 'assists' | 'rebounds') => {
+      const row = totals.get(name);
+      return Number(row && row.games ? row[key] / row.games : 0);
+    };
+    const maxPoints = (name: string) => Number(totals.get(name)?.maxPoints || 0);
+
+    expect(avg('Derrick Rose', 'points')).toBeGreaterThan(avg('Carlos Boozer', 'points') + 4);
+    expect(avg('Derrick Rose', 'points')).toBeGreaterThan(avg('Joakim Noah', 'points') + 10);
+    expect(avg('Derrick Rose', 'assists')).toBeGreaterThan(avg('Luol Deng', 'assists') + 2);
+    expect(avg('Joakim Noah', 'rebounds')).toBeGreaterThan(avg('Derrick Rose', 'rebounds') + 2);
+    expect(avg('LeBron James', 'points')).toBeGreaterThan(avg('Chris Bosh', 'points') + 3);
+    expect(avg('Dwyane Wade', 'points')).toBeGreaterThan(avg('Mario Chalmers', 'points') + 7);
+    expect(maxPoints('Derrick Rose')).toBeGreaterThanOrEqual(40);
+    expect(maxPoints('Kyle Korver')).toBeGreaterThanOrEqual(24);
+    expect(avg('Kyle Korver', 'points')).toBeLessThan(avg('Derrick Rose', 'points') - 8);
   });
 
   it('keeps raw era ids out of generated game stories', () => {

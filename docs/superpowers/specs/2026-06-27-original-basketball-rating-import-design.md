@@ -185,7 +185,9 @@ The shared grade conversion function must be used everywhere.
 - C+: 70-74
 - C: 65-69
 - C-: 60-64
-- D: 50-59
+- D+: 57-59
+- D: 53-56
+- D-: 50-52
 - F: 0-49
 
 No screen may assign `S`, `A+`, `A`, or any other grade directly. It must call the shared conversion function.
