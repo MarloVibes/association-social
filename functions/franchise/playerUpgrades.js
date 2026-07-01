@@ -272,6 +272,20 @@ function hiddenFloorForGrade(grade) {
   return GRADE_NUMERIC_FLOOR[grade] || 0;
 }
 
+function syncedRatingSource(source, ability, grade, rating) {
+  if (!source || typeof source !== 'object') return source;
+  const current = source[ability];
+  const nextValue = current && typeof current === 'object'
+    ? { ...current, grade, rating }
+    : typeof current === 'number'
+      ? rating
+      : grade;
+  return {
+    ...source,
+    [ability]: nextValue,
+  };
+}
+
 function accoladeTexts(player) {
   if (Array.isArray(player && player.accolades)) {
     return player.accolades.map(item => String(item || '').toLowerCase());
@@ -334,12 +348,13 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
   if (upgraded === current) {
     throw new PlayerUpgradeError('failed-precondition', 'This grade cannot be upgraded further.');
   }
+  const upgradedFloor = hiddenFloorForGrade(upgraded);
   const nextHidden = player.hidden && typeof player.hidden === 'object'
     ? {
       ...player.hidden,
       [ability]: Math.max(
         numberFrom(player.hidden[ability]),
-        hiddenFloorForGrade(upgraded),
+        upgradedFloor,
       ),
     }
     : player.hidden;
@@ -360,6 +375,10 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
       abilityGrades: player.abilityGrades
         ? { ...player.abilityGrades, [ability]: upgraded }
         : player.abilityGrades,
+      category_skill_grades: syncedRatingSource(player.category_skill_grades, ability, upgraded, upgradedFloor),
+      skill_grades: syncedRatingSource(player.skill_grades, ability, upgraded, upgradedFloor),
+      attribute_model: syncedRatingSource(player.attribute_model, ability, upgraded, upgradedFloor),
+      era_adjusted_profiles: syncedRatingSource(player.era_adjusted_profiles, ability, upgraded, upgradedFloor),
       hidden: nextHidden,
       visible: nextVisible,
       upgradeUsage: { ...upgradeUsage, [usageKey]: used + 1 },

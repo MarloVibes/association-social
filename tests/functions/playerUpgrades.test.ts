@@ -153,6 +153,28 @@ describe('player upgrade callable helpers', () => {
     expect(result.player.hidden.threePoint).toBeGreaterThanOrEqual(80);
   });
 
+  it('keeps upgraded detailed attributes synced for future simulations', () => {
+    const result = spendTeamUpgradePoint({
+      team: { upgradePoints: 2 },
+      player: {
+        id: 'guard',
+        playerLabel: 'ROLE PLAYER',
+        category_skill_grades: {
+          ballHandle: { grade: 'B', rating: 82 },
+        },
+        attribute_model: { ballHandle: 82 },
+        hidden: { ballHandle: 82 },
+      },
+      ability: 'ballHandle',
+      seasonYear: 2026,
+    });
+
+    expect(result.player.grades.ballHandle).toBe('B+');
+    expect(result.player.category_skill_grades.ballHandle).toEqual({ grade: 'B+', rating: 85 });
+    expect(result.player.attribute_model.ballHandle).toBe(85);
+    expect(result.player.hidden.ballHandle).toBe(85);
+  });
+
   it('applies season grants once per team and season', () => {
     const teams = [
       { id: 'E5', upgradePoints: 1, upgradePointGrants: {} },
