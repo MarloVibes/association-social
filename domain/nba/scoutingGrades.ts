@@ -236,6 +236,38 @@ function hasInteriorDefenseProof(player: Record<string, any>, profile: Record<st
     || hasSourceTag(player, profile, 'post_defender');
 }
 
+function hasPerimeterDefenseProof(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  return hasSourceTag(player, profile, 'all_defense')
+    || hasSourceTag(player, profile, 'defensive_wing_assignment')
+    || hasSourceTag(player, profile, 'point_of_attack_defender')
+    || hasSourceTag(player, profile, 'lockdown')
+    || hasSourceTag(player, profile, 'stopper');
+}
+
+function isGuardOrWing(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  const position = positionText(player, profile);
+  return position.includes('PG')
+    || position.includes('SG')
+    || position.includes('SF')
+    || position.includes('G')
+    || position === 'F-G'
+    || position === 'G-F';
+}
+
+function roleShooterWithoutPerimeterProof(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
+  if (!isGuardOrWing(player, profile) || hasPerimeterDefenseProof(player, profile)) return false;
+  const spg = statNumber(player, profile, ['stealsPerGame', 'spg', 'stl', 'steals']) ?? 0;
+  const bpg = statNumber(player, profile, ['blocksPerGame', 'bpg', 'blk', 'blocks']) ?? 0;
+  const rpg = statNumber(player, profile, ['reboundsPerGame', 'rpg', 'rebounds']) ?? 0;
+  const ppg = statNumber(player, profile, ['pointsPerGame', 'ppg', 'points']) ?? 0;
+  const minutes = statNumber(player, profile, ['minutesPerGame', 'mp_per_game', 'mpg']) ?? 0;
+  const threeRate = statNumber(player, profile, ['threePointAttemptRate']) ?? 0;
+  const shootingProfile = hasSourceTag(player, profile, 'elite_shooter') || threeRate >= 0.38;
+  const lightDefensiveEvents = spg < 0.8 && bpg < 0.4;
+  const secondaryRole = ppg < 13 && (minutes < 30 || rpg < 3.5);
+  return shootingProfile && lightDefensiveEvents && secondaryRole;
+}
+
 function suspiciousThreePointSample(player: Record<string, any>, profile: Record<string, any> | null | undefined) {
   const pct = statNumber(player, profile, ['threePointPct', 'fg3_pct', 'three_pct']);
   const attempts = statNumber(player, profile, ['threePointAttemptsPerGame', 'fg3a_per_game', 'three_attempts', 'threePointAttempts', 'fg3a']);
@@ -350,12 +382,17 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['offenseIq'], weight: 5 },
       ]);
     case 'perimeterDefense':
-      return weightedRating(player, profile, [
+      {
+        const rating = weightedRating(player, profile, [
         { keys: ['perimeterDefense'], weight: 55 },
         { keys: ['lateralQuickness', 'speed', 'acceleration'], weight: 15 },
         { keys: ['steals', 'steal'], weight: 15 },
         { keys: ['defenseIq', 'defensiveIq'], weight: 15 },
       ]) ?? statRatingForKey(player, profile, key);
+        if (rating === null) return null;
+        if (roleShooterWithoutPerimeterProof(player, profile)) return Math.min(rating, 74.4);
+        return rating;
+      }
     case 'postDefense':
       {
         const rating = weightedRating(player, profile, [
@@ -383,11 +420,16 @@ function numericRatingForKey(player: Record<string, any>, profile: Record<string
         { keys: ['passIq', 'passing'], weight: 20 },
       ]);
     case 'defenseIq':
-      return weightedRating(player, profile, [
+      {
+        const rating = weightedRating(player, profile, [
         { keys: ['defenseIq', 'defensiveIq'], weight: 60 },
         { keys: ['helpDefense', 'helpDefenseIq'], weight: 25 },
         { keys: ['perimeterDefense', 'postDefense'], weight: 15 },
       ]) ?? statRatingForKey(player, profile, key);
+        if (rating === null) return null;
+        if (roleShooterWithoutPerimeterProof(player, profile)) return Math.min(rating, 74.4);
+        return rating;
+      }
     case 'speed':
       return weightedRating(player, profile, [
         { keys: ['speed'], weight: 70 },

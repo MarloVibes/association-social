@@ -116,6 +116,21 @@ describe('baseline rating profile resolver', () => {
     expect(gradeRank(buildScoutingGrades({ full_name: 'Chris Paul', team: 'NOH' }, chrisPaul).passing)).toBeGreaterThanOrEqual(gradeRank('A'));
   });
 
+  it('does not let 2011 role-shooter defense make Korver outrank Rose', () => {
+    const rose = resolveBaselineRatingProfile({ full_name: 'Derrick Rose', team: 'CHI' }, { era: 'lebron' });
+    const korver = resolveBaselineRatingProfile({ full_name: 'Kyle Korver', team: 'CHI' }, { era: 'lebron' });
+
+    expect(rose?.team).toBe('CHI');
+    expect(korver?.team).toBe('CHI');
+
+    const roseGrades = buildScoutingGrades({ full_name: 'Derrick Rose', team: 'CHI' }, rose);
+    const korverGrades = buildScoutingGrades({ full_name: 'Kyle Korver', team: 'CHI' }, korver);
+
+    expect(gradeRank(roseGrades.overall)).toBeGreaterThan(gradeRank(korverGrades.overall));
+    expect(gradeRank(korverGrades.perimeterDefense)).toBeLessThanOrEqual(gradeRank('C+'));
+    expect(gradeRank(korverGrades.threePoint)).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
   it('maps every historical era key to its generated baseline season', () => {
     expect(resolveBaselineRatingProfile({ full_name: 'Magic Johnson', team: 'LAL' }, { era: 'magic_bird' })?.season).toBe(1984);
     expect(resolveBaselineRatingProfile({ full_name: 'Michael Jordan', team: 'CHI' }, { era: 'jordan' })?.season).toBe(1992);

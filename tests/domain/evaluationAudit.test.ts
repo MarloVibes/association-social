@@ -156,6 +156,45 @@ describe('NBA evaluation audit', () => {
     ]));
   });
 
+  it('downgrades inflated defensive grades for role shooters without stopper proof', () => {
+    const result = auditEraPlayer({
+      full_name: 'Kyle Korver',
+      team: 'CHI',
+      position: 'SG',
+      minutes: 20.1,
+      ppg: 8.3,
+      rpg: 1.8,
+      apg: 1.5,
+      spg: 0.4,
+      bpg: 0.2,
+      hidden: {
+        shooting: 88,
+        threePoint: 90,
+        perimeterDefense: 86,
+        defenseIq: 84,
+        helpDefense: 82,
+      },
+    });
+
+    expect(result.suggestedGradeUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'perimeterDefense',
+        currentGrade: 'B+',
+        suggestedGrade: 'C',
+      }),
+      expect.objectContaining({
+        key: 'defenseIq',
+        currentGrade: 'B',
+        suggestedGrade: 'C+',
+      }),
+      expect.objectContaining({
+        key: 'helpDefense',
+        currentGrade: 'B',
+        suggestedGrade: 'C',
+      }),
+    ]));
+  });
+
   it('raises dunking for explosive downhill athletes with production proof', () => {
     const result = auditEraPlayer({
       full_name: 'Anthony Edwards',

@@ -86,6 +86,22 @@ function isBig(player: EraAuditPlayer) {
   return positionIncludes(player, ['PF', 'C', 'F-C', 'C-F']);
 }
 
+function hasProfileTag(player: EraAuditPlayer, values: string[]) {
+  const rawTags = [
+    player?.sourceTags,
+    player?.source_tags,
+    player?.traits,
+    player?.archetypes,
+    player?.baselineRatingProfile?.sourceTags,
+    player?.baselineRatingProfile?.source_tags,
+  ].flatMap(value => Array.isArray(value) ? value : [value]);
+  const text = rawTags
+    .filter(Boolean)
+    .map(value => String(value).toLowerCase())
+    .join(' ');
+  return values.some(value => text.includes(value));
+}
+
 function salaryCoreSignal(player: EraAuditPlayer) {
   const salary = stat(player, ['salary', 'currentSalary', 'seasonSalary']);
   const salaryRank = stat(player, ['teamSalaryRank', 'salaryRank']);
@@ -104,6 +120,21 @@ function wingDefensiveWorkloadSignal(player: EraAuditPlayer) {
   const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
   const spg = stat(player, ['spg', 'steals', 'stl']);
   return isWing(player) && minutes >= 32 && ppg >= 11 && rpg >= 4 && spg >= 0.7;
+}
+
+function roleShooterWithoutDefensiveProof(player: EraAuditPlayer) {
+  if (!isWing(player)) return false;
+  if (wingDefensiveWorkloadSignal(player)) return false;
+  if (hasProfileTag(player, ['all_defense', 'all defense', 'stopper', 'lockdown', 'point_of_attack', 'defensive wing'])) return false;
+  const minutes = stat(player, ['minutes', 'mpg', 'min']);
+  const ppg = stat(player, ['ppg', 'points', 'pts']);
+  const rpg = stat(player, ['rpg', 'rebounds', 'reb']);
+  const spg = stat(player, ['spg', 'steals', 'stl']);
+  const bpg = stat(player, ['bpg', 'blocks', 'blk']);
+  const shooting = Math.max(hidden(player, 'shooting'), hidden(player, 'threePoint'));
+  const lowDefensiveEvents = spg < 0.8 && bpg < 0.4;
+  const lowDefensiveLoad = minutes < 28 || (rpg < 3.2 && ppg < 13);
+  return shooting >= 84 && lowDefensiveEvents && lowDefensiveLoad;
 }
 
 function inferredDefense(player: EraAuditPlayer) {
@@ -232,6 +263,11 @@ function suggestedGradeUpdates(player: EraAuditPlayer): SuggestedGradeUpdate[] {
     add('perimeterDefense', 'B+', 'trusted wing-stopper workload');
     add('defenseIq', 'B', 'defensive assignment value');
     add('helpDefense', 'B-', 'team-defense connector profile');
+  }
+  if (roleShooterWithoutDefensiveProof(player)) {
+    correctDown('perimeterDefense', 'C', 'shooting-specialist role lacks stopper workload proof');
+    correctDown('defenseIq', 'C+', 'defensive profile should not outrank available role evidence');
+    correctDown('helpDefense', 'C', 'team-defense value needs event or workload proof');
   }
   if (minutes >= 36) add('stamina', 'A-', 'near-40-minute role');
   else if (minutes >= 32) add('stamina', 'B+', 'starter workload');
