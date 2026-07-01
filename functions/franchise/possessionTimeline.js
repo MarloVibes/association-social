@@ -309,6 +309,8 @@ function normalizePlayer(player, teamId, side, index) {
   const sourceScoringRole = sourceProductionRating(player, 'points');
   const sourceAssistRole = sourceProductionRating(player, 'assists');
   const sourceReboundRole = sourceProductionRating(player, 'rebounds');
+  const hasSourceAssistProof = sourceStatOrNull(player, 'assistsPerGame') != null
+    || sourceStatOrNull(player, 'assistPct') != null;
   const sourceFreeThrowPressure = clamp(sourceStat(player, 'freeThrowAttemptsPerGame', 4) * 11, 24, 99);
   const sourceTurnoverPct = sourceStat(player, 'turnoverPct', 12.5);
   const position = normalizePosition(player && player.position, index);
@@ -357,8 +359,8 @@ function normalizePlayer(player, teamId, side, index) {
       playmaking * (position === 'PG' ? 2.35 : position === 'SG' ? 1.35 : position === 'SF' ? 1.05 : position === 'PF' ? 0.62 : 0.48)
       + passFirst * 0.7
       + pickAndRollBallHandler * 0.35
-      + sourceAssistRole * 1.15
-    ) * clamp(0.5 + Math.pow(sourceAssistRole / 72, 2), 0.7, 2.05),
+      + sourceAssistRole * (hasSourceAssistProof ? 1.15 : 0.35)
+    ) * clamp(0.5 + Math.pow(sourceAssistRole / 72, 2), 0.45, 2.05),
     defense: clamp(Math.max(defense, perimeterDefense, interiorDefense) * 0.75 + iq * 0.25, 35, 99),
     stealSkill: clamp(Math.max(skill(player, 'stealsSkill', defense), skill(player, 'steal', defense), defensivePlaymaking) * 0.8 + speed * 0.2, 35, 99),
     blocking: clamp(Math.max(skill(player, 'blocking', defense), skill(player, 'block', defense), interiorDefense) * 0.82 + skill(player, 'vertical', 70) * 0.18, 25, 99),
@@ -414,6 +416,11 @@ function sourceStat(player, key, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function sourceStatOrNull(player, key) {
+  const value = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function pct(value, fallback) {
   if (!Number.isFinite(value)) return fallback;
   return value > 1 ? value / 100 : value;
@@ -435,16 +442,19 @@ function sourceEfficiencyRating(player) {
 
 function sourceProductionRating(player, kind) {
   if (kind === 'points') {
-    const pointsPerGame = sourceStat(player, 'pointsPerGame', 12);
-    const usagePct = sourceStat(player, 'usagePct', 19);
-    return clamp(42 + pointsPerGame * 1.35 + (usagePct - 19) * 0.75, 35, 100);
+    const pointsPerGame = sourceStatOrNull(player, 'pointsPerGame');
+    const usagePct = sourceStatOrNull(player, 'usagePct');
+    if (pointsPerGame == null && usagePct == null) return 60;
+    return clamp(42 + (pointsPerGame ?? 12) * 1.35 + ((usagePct ?? 19) - 19) * 0.75, 35, 100);
   }
   if (kind === 'assists') {
-    const assistsPerGame = sourceStat(player, 'assistsPerGame', 2.2);
-    const assistPct = sourceStat(player, 'assistPct', 14);
-    return clamp(42 + assistsPerGame * 3.6 + (assistPct - 14) * 0.7, 35, 100);
+    const assistsPerGame = sourceStatOrNull(player, 'assistsPerGame');
+    const assistPct = sourceStatOrNull(player, 'assistPct');
+    if (assistsPerGame == null && assistPct == null) return 35;
+    return clamp(42 + (assistsPerGame ?? 2.2) * 3.6 + ((assistPct ?? 14) - 14) * 0.7, 35, 100);
   }
-  const reboundsPerGame = sourceStat(player, 'reboundsPerGame', 4.5);
+  const reboundsPerGame = sourceStatOrNull(player, 'reboundsPerGame');
+  if (reboundsPerGame == null) return 60;
   return clamp(42 + reboundsPerGame * 3.4, 35, 100);
 }
 

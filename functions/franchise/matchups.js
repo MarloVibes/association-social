@@ -1,6 +1,7 @@
 'use strict';
 
 const { buildArenaTheme } = require('./arenaTheme');
+const { mergeBaselineRatingProfile } = require('./baselineResolver');
 const { FinalizeGameError, finalizeGame } = require('./finalizeGame');
 const { buildLiveTimeline } = require('./liveTimeline');
 const {
@@ -146,6 +147,11 @@ function sourceStat(player, key, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function sourceStatOrNull(player, key) {
+  const value = Number(player && player.baselineRatingProfile && player.baselineRatingProfile.source_stat_line && player.baselineRatingProfile.source_stat_line[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function pct(value, fallback) {
   if (!Number.isFinite(value)) return fallback;
   return value > 1 ? value / 100 : value;
@@ -167,16 +173,19 @@ function sourceEfficiencyRating(player) {
 
 function sourceProductionRating(player, kind) {
   if (kind === 'points') {
-    const pointsPerGame = sourceStat(player, 'pointsPerGame', 12);
-    const usagePct = sourceStat(player, 'usagePct', 19);
-    return clamp(42 + pointsPerGame * 1.35 + (usagePct - 19) * 0.75, 35, 100);
+    const pointsPerGame = sourceStatOrNull(player, 'pointsPerGame');
+    const usagePct = sourceStatOrNull(player, 'usagePct');
+    if (pointsPerGame == null && usagePct == null) return 60;
+    return clamp(42 + (pointsPerGame ?? 12) * 1.35 + ((usagePct ?? 19) - 19) * 0.75, 35, 100);
   }
   if (kind === 'assists') {
-    const assistsPerGame = sourceStat(player, 'assistsPerGame', 2.2);
-    const assistPct = sourceStat(player, 'assistPct', 14);
-    return clamp(42 + assistsPerGame * 3.6 + (assistPct - 14) * 0.7, 35, 100);
+    const assistsPerGame = sourceStatOrNull(player, 'assistsPerGame');
+    const assistPct = sourceStatOrNull(player, 'assistPct');
+    if (assistsPerGame == null && assistPct == null) return 35;
+    return clamp(42 + (assistsPerGame ?? 2.2) * 3.6 + ((assistPct ?? 14) - 14) * 0.7, 35, 100);
   }
-  const reboundsPerGame = sourceStat(player, 'reboundsPerGame', 4.5);
+  const reboundsPerGame = sourceStatOrNull(player, 'reboundsPerGame');
+  if (reboundsPerGame == null) return 60;
   return clamp(42 + reboundsPerGame * 3.4, 35, 100);
 }
 
@@ -330,11 +339,12 @@ function canonicalCategoryGradesForSimulation(player) {
 
 function canonicalizePlayerForSimulation(player) {
   if (!player || typeof player !== 'object') return player;
+  const resolvedPlayer = mergeBaselineRatingProfile(player);
   return {
-    ...player,
-    hidden: canonicalHiddenForSimulation(player),
-    category_skill_grades: canonicalCategoryGradesForSimulation(player),
-    tendencies: canonicalTendenciesForSimulation(player),
+    ...resolvedPlayer,
+    hidden: canonicalHiddenForSimulation(resolvedPlayer),
+    category_skill_grades: canonicalCategoryGradesForSimulation(resolvedPlayer),
+    tendencies: canonicalTendenciesForSimulation(resolvedPlayer),
   };
 }
 
@@ -750,6 +760,23 @@ function targetTeamAssists(players, minutes, fieldGoalsMade, seed) {
   return clamp(Math.round(fieldGoalsMade * assistedRate), 12, Math.min(34, Math.max(12, fieldGoalsMade)));
 }
 
+function playerAssistCap(player, minutes) {
+  const assistSource = sourceStatOrNull(player, 'assistsPerGame');
+  const assistPctSource = sourceStatOrNull(player, 'assistPct');
+  const hasAssistProof = assistSource != null || assistPctSource != null;
+  const position = String(player && player.position || '').toUpperCase();
+  const isBig = position.includes('PF') || position.includes('C') || position === 'F-C';
+  const playmaking = detailedPlayerSkill(player, 'playmaking', ['passing']);
+  const passing = detailedPlayerSkill(player, 'passing', ['playmaking']);
+  if (isBig && !hasAssistProof && Math.max(playmaking, passing) < 58) {
+    return Math.max(1, Math.round(Number(minutes || 0) / 16));
+  }
+  if (isBig && hasAssistProof && (assistSource ?? 0) < 1.4 && Math.max(playmaking, passing) < 62) {
+    return Math.max(2, Math.round(Number(minutes || 0) / 12));
+  }
+  return null;
+}
+
 function shootingLine(points, variance, player, minutes = 24) {
   const threePoint = detailedPlayerSkill(player, 'threePoint', ['shooting']);
   const midRange = detailedPlayerSkill(player, 'midRange', ['shooting']);
@@ -819,7 +846,7 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
   const assists = distributeStatTotal(players, minutes, teamAssists, `${seed}:assists`, (player, playerMinutes, index) => (
     playerMinutes
     * positionFactor(player, 'assist')
-    * clamp(0.5 + Math.pow(sourceProductionRating(player, 'assists') / 72, 2), 0.7, 2.05)
+    * clamp(0.5 + Math.pow(sourceProductionRating(player, 'assists') / 72, 2), 0.45, 2.05)
     * (
       playerSkill(player, 'playmaking') * 0.72
       + playerSkill(player, 'basketballIq') * 0.2
@@ -833,13 +860,15 @@ function buildSimulationTeamBox({ team, teamId, targetPoints, seed, pointMargin 
     const playerRebounds = rebounds[index];
     const offensiveRebounds = Math.floor(playerRebounds * (20 + (variance % 18)) / 100);
     const line = shootingLines[index];
+    const assistCap = playerAssistCap(player, minutes[index]);
+    const playerAssists = assistCap == null ? assists[index] : Math.min(assists[index], assistCap);
     return {
       playerId: playerKey(player),
       name: player.full_name || player.name || playerKey(player),
       minutes: minutes[index],
       points: points[index],
       rebounds: playerRebounds,
-      assists: assists[index],
+      assists: playerAssists,
       steals: variance % 3,
       blocks: Math.floor((variance / 7) % 3),
       turnovers: Math.max(0, Math.floor((variance / 11) % 4) + Math.round((sourceStat(player, 'turnoverPct', 12.5) - 12.5) / 5)),

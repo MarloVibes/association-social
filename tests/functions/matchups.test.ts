@@ -359,6 +359,52 @@ describe('matchup request state helpers', () => {
     expect(team.players[0].category_skill_grades.finishing).toEqual({ rating: 78, grade: 'B' });
   });
 
+  it('repairs recognizable old roster snapshots with the canonical baseline before simulation', () => {
+    const team = canonicalizeTeamForSimulation({
+      players: [
+        {
+          player_id: 'old-lebron',
+          full_name: 'LeBron James',
+          team: 'MIA',
+          position: 'SF',
+          hidden: {
+            shooting: 58,
+            closeShot: 58,
+            dunking: 58,
+            playmaking: 58,
+            defense: 58,
+          },
+        },
+      ],
+    });
+
+    expect(team.players[0].baselineRatingProfile).toMatchObject({
+      full_name: 'LeBron James',
+      season: 2011,
+      team: 'MIA',
+    });
+    expect(team.players[0].hidden.closeShot).toBeGreaterThanOrEqual(89);
+    expect(team.players[0].hidden.dunking).toBeGreaterThanOrEqual(89);
+    expect(team.players[0].category_skill_grades.finishing.rating).toBeGreaterThanOrEqual(89);
+  });
+
+  it('respects explicit profile seasons when repairing function-side roster snapshots', () => {
+    const team = canonicalizeTeamForSimulation({
+      players: [
+        {
+          player_id: 'explicit-lebron',
+          full_name: 'LeBron James',
+          team: 'MIA',
+          season: 2011,
+          hidden: { closeShot: 55 },
+        },
+      ],
+    });
+
+    expect(team.players[0].baselineRatingProfile?.season).toBe(2011);
+    expect(team.players[0].baselineRatingProfile?.team).toBe('MIA');
+  });
+
   it('keeps stale center shooting from leaking into scheduled game box scores', () => {
     const game = seedAvailableGame({ homeTeamId: 'AUDIT', awayTeamId: 'CPU' });
     const result = simulateScheduledGame({
