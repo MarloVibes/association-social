@@ -7,14 +7,36 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
+import { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
+import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { gradeRank } from '@/domain/nba/gradeScale';
+import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
+import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
 import { validateTrade } from '@/domain/finance/validateTrade';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
+const TRADE_GRADE_PREVIEW: { key: ScoutingGradeKey; label: string }[] = [
+  { key: 'closeShot', label: 'Fin' },
+  { key: 'midRange', label: 'Mid' },
+  { key: 'threePoint', label: '3PT' },
+  { key: 'dunking', label: 'Dunk' },
+  { key: 'passing', label: 'Pass' },
+  { key: 'ballHandle', label: 'Handle' },
+  { key: 'offenseIq', label: 'Off IQ' },
+  { key: 'perimeterDefense', label: 'Per D' },
+  { key: 'postDefense', label: 'Post D' },
+  { key: 'blocking', label: 'Block' },
+  { key: 'defenseIq', label: 'Def IQ' },
+  { key: 'speed', label: 'Speed' },
+  { key: 'rebounding', label: 'Reb' },
+  { key: 'postOffense', label: 'Post' },
+  { key: 'potential', label: 'Pot' },
+];
 
 function buildRoomId(uidA: string, uidB: string) {
   const [a, b] = [uidA, uidB].sort();
@@ -34,6 +56,125 @@ function pickLabel(pk: any) {
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
 function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
+}
+
+function formatTradeMoney(value: any) {
+  const salary = Number(value);
+  if (!Number.isFinite(salary) || salary <= 0) return '$—';
+  if (salary <= 1_500_000) return '$Min';
+  return '$' + (salary / 1_000_000).toFixed(salary >= 10_000_000 ? 0 : 1) + 'M';
+}
+
+function tradeGradePreview(player: any, profile: any) {
+  const grades = buildScoutingGrades(player || {}, profile || null);
+  return TRADE_GRADE_PREVIEW
+    .map(item => ({
+      ...item,
+      grade: grades[item.key],
+      colors: gradeColors(grades[item.key]),
+    }))
+    .sort((left, right) => (
+      gradeRank(right.grade) - gradeRank(left.grade)
+      || left.label.localeCompare(right.label)
+    ))
+    .slice(0, 3);
+}
+
+function TradePickerPlayerRow({
+  player,
+  index,
+  sport,
+  era,
+  currentYear,
+  leagueDate,
+  overrides,
+  disabled,
+  statusLabels,
+  onPress,
+}: {
+  player: any;
+  index: number;
+  sport: string;
+  era?: string | null;
+  currentYear?: number | string | null;
+  leagueDate?: string | Date | null;
+  overrides: Record<string, number>;
+  disabled?: boolean;
+  statusLabels?: { label: string; tone: 'good' | 'warn' | 'danger' }[];
+  onPress: () => void;
+}) {
+  const effectiveSalary = getEffectiveSalary(player, overrides);
+  const profile = selectRosterRatingProfile(player, {}, { era, currentYear, leagueDate });
+  const gradePreview = sport === 'nba' ? tradeGradePreview(player, profile) : [];
+  const topGrade = gradePreview[0];
+  const accentColor = topGrade?.colors.borderColor || '#00ff87';
+  const archetypeYear = typeof currentYear === 'number' ? currentYear : Number(currentYear);
+  const archetype = getSportArchetypeForYear(player, profile, Number.isFinite(archetypeYear) ? archetypeYear : undefined, sport);
+  return (
+    <TouchableOpacity
+      style={[styles.tradePickerCard, disabled && styles.pickerRowDisabled]}
+      disabled={disabled}
+      onPress={onPress}
+      activeOpacity={0.78}
+    >
+      <View style={[styles.tradePickerAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.tradePickerRank}>
+        <Text style={styles.tradePickerRankText}>{index + 1}</Text>
+      </View>
+      <PlayerHeadshot
+        player={player}
+        sport={sport}
+        imageStyle={[styles.tradePickerPhoto, { borderColor: accentColor }]}
+        fallback={
+          <View style={[styles.tradePickerPhotoFallback, { borderColor: accentColor }]}>
+            <Text style={styles.tradePickerInitial}>{(player?.full_name || '?')[0]}</Text>
+          </View>
+        }
+      />
+      <View style={styles.tradePickerInfo}>
+        <View style={styles.tradePickerHeaderRow}>
+          <Text style={[styles.tradePickerPos, { color: accentColor }]}>{player?.position || '?'}</Text>
+          <View style={[styles.tradePickerTier, { borderColor: archetype.color + '88', backgroundColor: archetype.color + '18' }]}>
+            <Text style={[styles.tradePickerTierText, { color: archetype.color }]} numberOfLines={1}>{archetype.label}</Text>
+          </View>
+        </View>
+        <Text style={styles.tradePickerName} numberOfLines={1}>{player?.full_name || 'Unknown Player'}</Text>
+        <Text style={styles.tradePickerSalary} numberOfLines={1}>{formatTradeMoney(effectiveSalary)} salary</Text>
+        {gradePreview.length > 0 ? (
+          <View style={styles.tradePickerGrades}>
+            {gradePreview.map(item => (
+              <View
+                key={item.key}
+                style={[
+                  styles.tradeGradePill,
+                  { borderColor: item.colors.borderColor, backgroundColor: item.colors.backgroundColor },
+                ]}
+              >
+                <Text style={[styles.tradeGradeLabel, { color: item.colors.textColor }]}>{item.label}</Text>
+                <Text style={[styles.tradeGradeValue, { color: item.colors.textColor }]}>{item.grade}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {statusLabels && statusLabels.length > 0 ? (
+          <View style={styles.tradePickerStatusRow}>
+            {statusLabels.map(status => (
+              <Text
+                key={status.label}
+                style={[
+                  styles.tradePickerStatus,
+                  status.tone === 'danger' ? styles.tradePickerStatusDanger : status.tone === 'warn' ? styles.tradePickerStatusWarn : styles.tradePickerStatusGood,
+                ]}
+              >
+                {status.label}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+      {!disabled ? <Text style={styles.tradePickerAdd}>Add</Text> : null}
+    </TouchableOpacity>
+  );
 }
 
 function PlayerChip({ player, sport, onRemove, locked, overrides }: { player: any; sport: string; onRemove?: () => void; locked?: boolean; overrides?: Record<string, number> }) {
@@ -98,6 +239,8 @@ export default function TradeRoomScreen() {
   const [theirPickerPosFilter, setTheirPickerPosFilter] = useState('ALL');
   const [theirLockedKeys, setTheirLockedKeys] = useState<Set<string>>(new Set());
   const [otherPresenceFresh, setOtherPresenceFresh] = useState(false);
+  const [currentYear, setCurrentYear] = useState<number | undefined>(undefined);
+  const [leagueDate, setLeagueDate] = useState<string | Date | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [pickModalSide, setPickModalSide] = useState<null | 'mine' | 'theirs'>(null);
@@ -267,6 +410,8 @@ export default function TradeRoomScreen() {
         const data = snap.data() as any;
         setLeagueEra(data.era || 'current');
         setLeagueSport(data.sport || 'nba');
+        if (data.currentYear) setCurrentYear(data.currentYear);
+        setLeagueDate(leagueDateFromRecord(data));
         setTradeApronTolerance(typeof data.tradeApronTolerance === 'number' ? data.tradeApronTolerance : 1.25);
         setCommissionerCanOverride(!!data.commissionerCanOverride);
         const comms: string[] = [data.commissionerId, ...(data.coCommissioners || [])].filter(Boolean);
@@ -1266,19 +1411,25 @@ export default function TradeRoomScreen() {
               const lockedElsewhere = theirLockedKeys.has(key);
               const isUntouchable = otherUntouchables.includes(key);
               const disabled = onTable || isUntouchable;
+              const statusLabels = [
+                onTable ? { label: 'On Table', tone: 'good' as const } : null,
+                isUntouchable && !onTable ? { label: 'Untouchable', tone: 'danger' as const } : null,
+                lockedElsewhere && !onTable && !isUntouchable ? { label: 'In Another Trade', tone: 'warn' as const } : null,
+              ].filter(Boolean) as { label: string; tone: 'good' | 'warn' | 'danger' }[];
               return (
-                <TouchableOpacity
+                <TradePickerPlayerRow
                   key={key + i}
-                  style={[styles.pickerRow, disabled && styles.pickerRowDisabled]}
+                  player={p}
+                  index={i}
+                  sport={leagueSport}
+                  era={leagueEra}
+                  currentYear={currentYear}
+                  leagueDate={leagueDate}
+                  overrides={overridesMap}
                   disabled={disabled}
+                  statusLabels={statusLabels}
                   onPress={() => { addPlayerToOffer(p, 'theirs'); }}
-                >
-                  <Text style={styles.pickerPos}>{p.position || '?'}</Text>
-                  <Text style={styles.pickerName}>{p.full_name}</Text>
-                  {onTable ? <Text style={styles.pickerTag}>ON TABLE</Text> : null}
-                  {isUntouchable && !onTable ? <Text style={styles.pickerTagWarn}>🔒 UNTOUCHABLE</Text> : null}
-                  {lockedElsewhere && !onTable && !isUntouchable ? <Text style={styles.pickerTagWarn}>⚠️ IN ANOTHER TRADE</Text> : null}
-                </TouchableOpacity>
+                />
               );
             })}
           </ScrollView>
@@ -1317,18 +1468,24 @@ export default function TradeRoomScreen() {
               const onTable = myOffer.some((mp: any) => getPlayerKey(mp) === key);
               const lockedElsewhere = lockedPlayerKeys.has(key);
               const disabled = onTable;
+              const statusLabels = [
+                onTable ? { label: 'On Table', tone: 'good' as const } : null,
+                lockedElsewhere && !onTable ? { label: 'In Another Trade', tone: 'warn' as const } : null,
+              ].filter(Boolean) as { label: string; tone: 'good' | 'warn' | 'danger' }[];
               return (
-                <TouchableOpacity
+                <TradePickerPlayerRow
                   key={key + i}
-                  style={[styles.pickerRow, disabled && styles.pickerRowDisabled]}
+                  player={p}
+                  index={i}
+                  sport={leagueSport}
+                  era={leagueEra}
+                  currentYear={currentYear}
+                  leagueDate={leagueDate}
+                  overrides={overridesMap}
                   disabled={disabled}
+                  statusLabels={statusLabels}
                   onPress={() => { addPlayerToOffer(p, 'mine'); }}
-                >
-                  <Text style={styles.pickerPos}>{p.position || '?'}</Text>
-                  <Text style={styles.pickerName}>{p.full_name}</Text>
-                  {onTable ? <Text style={styles.pickerTag}>ON TABLE</Text> : null}
-                  {lockedElsewhere && !onTable ? <Text style={styles.pickerTagWarn}>⚠️ IN ANOTHER TRADE</Text> : null}
-                </TouchableOpacity>
+                />
               );
             })}
           </ScrollView>
@@ -1494,6 +1651,30 @@ const styles = StyleSheet.create({
   positionFilterText: { color: '#777', fontSize: 11, fontWeight: '800' },
   positionFilterTextActive: { color: '#00ff87' },
   modalBody: { padding: 16, paddingBottom: 60 },
+  tradePickerCard: { position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 12, paddingLeft: 14, marginBottom: 10, borderWidth: 1, borderColor: '#242424', gap: 10 },
+  tradePickerAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  tradePickerRank: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#1d1d1d', alignItems: 'center', justifyContent: 'center' },
+  tradePickerRankText: { color: '#777', fontSize: 12, fontWeight: '900' },
+  tradePickerPhoto: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, backgroundColor: '#0a0a0a' },
+  tradePickerPhotoFallback: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
+  tradePickerInitial: { color: '#888', fontSize: 18, fontWeight: '900' },
+  tradePickerInfo: { flex: 1, minWidth: 0 },
+  tradePickerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  tradePickerPos: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  tradePickerTier: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, maxWidth: 130 },
+  tradePickerTierText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
+  tradePickerName: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  tradePickerSalary: { color: '#00ff87', fontSize: 12, fontWeight: '800', marginTop: 2 },
+  tradePickerGrades: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 8 },
+  tradeGradePill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, gap: 4 },
+  tradeGradeLabel: { fontSize: 9, fontWeight: '900' },
+  tradeGradeValue: { fontSize: 11, fontWeight: '900' },
+  tradePickerStatusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 7 },
+  tradePickerStatus: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
+  tradePickerStatusGood: { color: '#00ff87' },
+  tradePickerStatusWarn: { color: '#F5A623' },
+  tradePickerStatusDanger: { color: '#ff6464' },
+  tradePickerAdd: { color: '#00ff87', fontSize: 12, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 2 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 10 },
   pickerRowDisabled: { opacity: 0.4 },
   pickerPos: { color: '#888', fontSize: 11, fontWeight: '700', width: 28 },
