@@ -413,6 +413,19 @@ export default function TeamRosterScreen() {
           setSelectedPlayer(null);
           handleProposeTrade(p);
         } : undefined}
+        onEditCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === myUid || isLeagueCommissioner) ? () => {
+          const pid = selectedPlayer.player_id;
+          setSelectedPlayer(null);
+          router.push({
+            pathname: '/screens/create-player',
+            params: { leagueId, era: leagueEra || 'current', sport: sport || 'nba', customId: pid },
+          });
+        } : undefined}
+        onDeleteCustom={selectedPlayer?.isCustom && (selectedPlayer.createdBy === myUid || isLeagueCommissioner) ? () => {
+          const p = selectedPlayer;
+          setSelectedPlayer(null);
+          handleDeleteCustomPlayer(p);
+        } : undefined}
       />
     </ScrollView>
   );

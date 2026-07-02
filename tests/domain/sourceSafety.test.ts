@@ -105,6 +105,14 @@ describe('source safety regressions', () => {
     expect(tradeRoom).toContain("from '@/components/FranchisePlayerRow'");
   });
 
+  it('keeps custom player edit and delete actions wired on team roster cards', () => {
+    const teamRoster = source('app/screens/team-roster.tsx');
+
+    expect(teamRoster).toContain("pathname: '/screens/create-player'");
+    expect(teamRoster).toContain('onDeleteCustom={selectedPlayer?.isCustom');
+    expect(teamRoster).toContain('handleDeleteCustomPlayer(p)');
+  });
+
   it('renders online friends as profile photo bubbles with initials as fallback', () => {
     const dashboard = source('app/(tabs)/dashboard.tsx');
 
