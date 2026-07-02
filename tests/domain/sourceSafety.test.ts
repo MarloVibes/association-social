@@ -61,6 +61,14 @@ describe('source safety regressions', () => {
     expect(profile).toContain("doc(db, 'users', profileUid)");
   });
 
+  it('keeps MVP profile modules hidden from public profile navigation while paused', () => {
+    const profile = source('app/screens/profile.tsx');
+
+    expect(profile).not.toContain('My MVP Players');
+    expect(profile).not.toContain('MVP Players');
+    expect(profile).not.toContain("pathname: '/screens/mvp-players'");
+  });
+
   it('uses supported Firestore snapshot listener signatures', () => {
     for (const path of [
       'app/screens/locker-console-chat.tsx',
