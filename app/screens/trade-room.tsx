@@ -34,7 +34,8 @@ function pickLabel(pk: any) {
 }
 
 function positionFilterLabel(position: string) {
-  return String(position || 'ALL').toUpperCase();
+  const label = String(position || 'ALL').toUpperCase();
+  return label === 'ALL' ? 'ALL' : label;
 }
 
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
@@ -78,6 +79,7 @@ function TradePickerPlayerRow({
       salaryLabel={`${formatFranchisePlayerMoney(effectiveSalary)} salary`}
       statusLabels={statusLabels}
       disabled={disabled}
+      gradeCount={3}
       onPress={onPress}
       action={!disabled ? { label: 'Add', variant: 'primary', onPress } : null}
     />
@@ -1566,9 +1568,9 @@ const styles = StyleSheet.create({
   positionFilterScroll: { backgroundColor: '#0a0a0a', borderBottomWidth: 1, borderBottomColor: '#141414' },
   positionFilterContent: { paddingHorizontal: 16, paddingVertical: 10 },
   positionFilters: { flexDirection: 'row', gap: 8 },
-  positionFilterBtn: { minWidth: 54, height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
+  positionFilterBtn: { minWidth: 50, height: 38, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
   positionFilterBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
-  positionFilterText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
+  positionFilterText: { color: '#777', fontSize: 12, lineHeight: 14, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
   positionFilterTextActive: { color: '#00ff87' },
   modalBody: { padding: 16, paddingBottom: 60 },
   tradePickerCard: { position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 12, paddingLeft: 14, marginBottom: 10, borderWidth: 1, borderColor: '#242424', gap: 10 },

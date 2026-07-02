@@ -859,7 +859,7 @@ export default function RosterScreen() {
               meta={[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
               statusLabels={statusLabels}
               selected={isUntouchable || isOnBlock}
-              gradeCount={3}
+              gradeCount={6}
               onPress={() => setSelectedPlayer(item)}
               onLongPress={() => {
                 const onMyTeam = myPlayerIds.includes(item.player_id || item.id);

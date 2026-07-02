@@ -344,6 +344,17 @@ describe('source safety regressions', () => {
     expect(cpuTrade).toContain('getPosFilter');
   });
 
+  it('keeps roster and trade player cards visually consistent', () => {
+    const roster = source('app/screens/roster.tsx');
+    const teamRoster = source('app/screens/team-roster.tsx');
+    const tradeRoom = source('app/screens/trade-room.tsx');
+
+    expect(roster).toContain('gradeCount={6}');
+    expect(teamRoster).toContain('gradeCount={6}');
+    expect(tradeRoom).toContain('salaryLabel={`${formatFranchisePlayerMoney(effectiveSalary)} salary`}');
+    expect(tradeRoom).toContain('gradeCount={3}');
+  });
+
   it('keeps NBA rotation lineup controlled by row order instead of starter closer toggles', () => {
     const rotation = source('app/screens/season/rotation.tsx');
 

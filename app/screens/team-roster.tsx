@@ -372,7 +372,7 @@ export default function TeamRosterScreen() {
               salaryLabel={contractSummary(p)}
               statusLabels={statuses}
               selected={isUntouchable || isOnBlock || isLocked}
-              gradeCount={3}
+              gradeCount={6}
               onPress={() => setSelectedPlayer(p)}
               action={(canTrade || canCpuTrade)
                 ? {
