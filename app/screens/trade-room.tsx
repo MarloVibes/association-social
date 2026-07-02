@@ -33,6 +33,10 @@ function pickLabel(pk: any) {
   return `${pk?.year} ${ord} Rd${pk?.protection ? ' · ' + pk.protection : ''}`;
 }
 
+function positionFilterLabel(position: string) {
+  return String(position || 'ALL').toUpperCase();
+}
+
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
 function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
@@ -1289,7 +1293,7 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add {otherTeamName} Player</Text>
             <View style={{ width: 50 }} />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll} contentContainerStyle={styles.positionFilterContent}>
             <View style={styles.positionFilters}>
               {positionFilters.map(pos => (
                 <TouchableOpacity
@@ -1297,7 +1301,13 @@ export default function TradeRoomScreen() {
                   style={[styles.positionFilterBtn, theirPickerPosFilter === pos && styles.positionFilterBtnActive]}
                   onPress={() => setTheirPickerPosFilter(pos)}
                 >
-                  <Text style={[styles.positionFilterText, theirPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                  <Text
+                    style={[styles.positionFilterText, theirPickerPosFilter === pos && styles.positionFilterTextActive]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    {positionFilterLabel(pos)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1349,7 +1359,7 @@ export default function TradeRoomScreen() {
             <Text style={styles.modalTitle}>Add to Offer</Text>
             <View style={{ width: 50 }} />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionFilterScroll} contentContainerStyle={styles.positionFilterContent}>
             <View style={styles.positionFilters}>
               {positionFilters.map(pos => (
                 <TouchableOpacity
@@ -1357,7 +1367,13 @@ export default function TradeRoomScreen() {
                   style={[styles.positionFilterBtn, myPickerPosFilter === pos && styles.positionFilterBtnActive]}
                   onPress={() => setMyPickerPosFilter(pos)}
                 >
-                  <Text style={[styles.positionFilterText, myPickerPosFilter === pos && styles.positionFilterTextActive]}>{pos}</Text>
+                  <Text
+                    style={[styles.positionFilterText, myPickerPosFilter === pos && styles.positionFilterTextActive]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    {positionFilterLabel(pos)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1548,10 +1564,11 @@ const styles = StyleSheet.create({
   modalClose: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
   modalTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
   positionFilterScroll: { backgroundColor: '#0a0a0a', borderBottomWidth: 1, borderBottomColor: '#141414' },
-  positionFilters: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
-  positionFilterBtn: { minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center' },
+  positionFilterContent: { paddingHorizontal: 16, paddingVertical: 10 },
+  positionFilters: { flexDirection: 'row', gap: 8 },
+  positionFilterBtn: { minWidth: 54, height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
   positionFilterBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
-  positionFilterText: { color: '#777', fontSize: 11, fontWeight: '800' },
+  positionFilterText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
   positionFilterTextActive: { color: '#00ff87' },
   modalBody: { padding: 16, paddingBottom: 60 },
   tradePickerCard: { position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 12, paddingLeft: 14, marginBottom: 10, borderWidth: 1, borderColor: '#242424', gap: 10 },
