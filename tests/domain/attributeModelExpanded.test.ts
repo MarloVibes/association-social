@@ -77,7 +77,8 @@ describe('expanded attribute model', () => {
     expect(rose.speedWithBall).toBeGreaterThanOrEqual(95);
     expect(rose.potential).toBeGreaterThanOrEqual(95);
     expect(rose.threePoint).toBeLessThan(85);
-    expect(rose.perimeterDefense).toBeLessThan(89);
+    expect(rose.perimeterDefense).toBeLessThanOrEqual(74);
+    expect(rose.defenseIq).toBeLessThanOrEqual(74);
   });
 
   it('does not turn low-volume non-shooting centers into good three point shooters', () => {
@@ -145,8 +146,8 @@ describe('expanded attribute model', () => {
       leagueContext,
     });
 
-    expect(guard.perimeterDefense).toBeLessThan(89);
-    expect(guard.defenseIq).toBeLessThan(89);
+    expect(guard.perimeterDefense).toBeLessThanOrEqual(74);
+    expect(guard.defenseIq).toBeLessThanOrEqual(74);
   });
 
   it('rewards actual rim pressure and dunk frequency instead of only generic efficiency', () => {

@@ -53,6 +53,7 @@ function hasTag(source: PublicStatLine, tag: string) {
 function hasIndividualDefenseProof(source: PublicStatLine) {
   return hasTag(source, 'defensive_wing_assignment')
     || hasTag(source, 'point_of_attack_defender')
+    || hasTag(source, 'all_defense')
     || hasTag(source, 'defensive_anchor')
     || hasTag(source, 'rim_protector');
 }
@@ -147,6 +148,18 @@ export function applyEraAdjustment({
   if (profile.passing > finalPassingCap) {
     profile.passing = finalPassingCap;
     notes.push('capped pure passing to assist-production proof');
+  }
+
+  if ((isGuard(source) || isWing(source))
+    && !hasIndividualDefenseProof(source)
+    && numberFrom(source.stealsPerGame) < 1.4
+    && numberFrom(source.blocksPerGame) < 0.9) {
+    const preserveVeteranIq = hasTag(source, 'generational') || hasTag(source, 'legacy_star') || hasTag(source, 'aging_resistant');
+    profile.perimeterDefense = Math.min(profile.perimeterDefense, 74.4);
+    profile.lateralQuickness = Math.min(profile.lateralQuickness, 74.4);
+    profile.defenseIq = Math.min(profile.defenseIq, preserveVeteranIq ? 88.4 : 74.4);
+    profile.helpDefense = Math.min(profile.helpDefense, 74.4);
+    notes.push('capped guard defense to individual-stopper proof');
   }
 
   if (!hasTag(source, 'elite_shooter') && profile.threePoint > 94.4) {
