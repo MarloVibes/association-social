@@ -140,7 +140,7 @@ function titleFor(type) {
     case 'season_awards':
     case 'awards_finalized': return '🏆 Trophy Case';
     case 'upgrade_points': return '⬆️ Upgrade Points';
-    default: return 'Franchise Social';
+    default: return 'Franchise Mobile';
   }
 }
 

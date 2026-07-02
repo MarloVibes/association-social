@@ -6,6 +6,16 @@ const root = resolve(import.meta.dirname, '../..');
 const source = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('source safety regressions', () => {
+  it('uses Franchise Mobile as the public app title', () => {
+    const appConfig = JSON.parse(source('app.json'));
+    const functions = source('functions/index.js');
+
+    expect(appConfig.expo.name).toBe('Franchise Mobile');
+    expect(appConfig.expo.name).not.toBe('Franchise Social');
+    expect(functions).toContain("default: return 'Franchise Mobile'");
+    expect(functions).not.toContain("default: return 'Franchise Social'");
+  });
+
   it('documents the full public NBA grade ladder', () => {
     const ratingDesign = source('docs/superpowers/specs/2026-06-27-original-basketball-rating-import-design.md');
     const evaluationDesign = source('docs/superpowers/specs/2026-06-26-player-evaluation-v2-design.md');
@@ -67,6 +77,15 @@ describe('source safety regressions', () => {
     expect(profile).not.toContain('My MVP Players');
     expect(profile).not.toContain('MVP Players');
     expect(profile).not.toContain("pathname: '/screens/mvp-players'");
+  });
+
+  it('renders online friends as profile photo bubbles with initials as fallback', () => {
+    const dashboard = source('app/(tabs)/dashboard.tsx');
+
+    expect(dashboard).toContain("Image source={{ uri: f.photoUrl }}");
+    expect(dashboard).toContain('styles.onlinePreviewImage');
+    expect(dashboard).toContain('styles.onlineSheetAvatarImage');
+    expect(dashboard).toContain("f.photoUrl ? (");
   });
 
   it('uses supported Firestore snapshot listener signatures', () => {

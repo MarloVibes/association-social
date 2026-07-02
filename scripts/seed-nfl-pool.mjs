@@ -1,4 +1,4 @@
-// Seed the NFL player pool for Franchise Social (Madden leagues).
+// Seed the NFL player pool for Franchise Mobile NFL Franchise leagues.
 //
 // Source:  nflverse open data (CSV on GitHub releases) — free, automated, no key.
 // Writes:  era_player_pools/madden  (same shape as the NBA/MLB pools, so

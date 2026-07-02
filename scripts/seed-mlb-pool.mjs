@@ -1,4 +1,4 @@
-// Seed the MLB player pool for Franchise Social leagues.
+// Seed the MLB player pool for Franchise Mobile leagues.
 //
 // Source:  MLB's official free Stats API (statsapi.mlb.com) — no key needed.
 // Writes:  era_player_pools/mlb  (same shape as the NBA pools, so team-select

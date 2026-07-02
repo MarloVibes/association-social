@@ -1,4 +1,4 @@
-// MLB team data for Franchise Social leagues.
+// MLB team data for Franchise Mobile leagues.
 // Same SportTeam shape as the NFL table. Abbreviations follow the MLB Stats API
 // team codes so they line up with the seeded player pool.
 

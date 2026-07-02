@@ -1,4 +1,4 @@
-// NFL team data for Franchise Social leagues.
+// NFL team data for Franchise Mobile leagues.
 // Mirrors the shape used by basketball's teamColors.ts so the same team cards
 // (gradient + title/border accents) render unchanged. Abbreviations follow the
 // nflverse standard so they line up with the seeded player pool.

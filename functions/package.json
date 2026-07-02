@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Cloud Functions for Franchise Social",
+  "description": "Cloud Functions for Franchise Mobile",
   "engines": { "node": "22" },
   "main": "index.js",
   "dependencies": {

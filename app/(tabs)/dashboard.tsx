@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { arrayRemove, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import GlobalNav from '@/components/GlobalNav';
@@ -303,7 +303,11 @@ export default function DashboardScreen() {
             <View style={styles.onlinePreviewBubbles}>
               {onlinePreviewFriends.map((f: any, index: number) => (
                 <View key={f.uid} style={[styles.onlinePreviewBubble, { marginLeft: index === 0 ? 0 : -8 }]}>
-                  <Text style={styles.onlinePreviewBubbleText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                  {f.photoUrl ? (
+                    <Image source={{ uri: f.photoUrl }} style={styles.onlinePreviewImage} />
+                  ) : (
+                    <Text style={styles.onlinePreviewBubbleText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                  )}
                 </View>
               ))}
               {onlineFriends.length > onlinePreviewFriends.length ? (
@@ -428,7 +432,11 @@ export default function DashboardScreen() {
                   >
                     <View style={styles.onlineSheetAvatarWrap}>
                       <View style={styles.onlineSheetAvatar}>
-                        <Text style={styles.onlineSheetAvatarText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                        {f.photoUrl ? (
+                          <Image source={{ uri: f.photoUrl }} style={styles.onlineSheetAvatarImage} />
+                        ) : (
+                          <Text style={styles.onlineSheetAvatarText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                        )}
                       </View>
                       <View style={styles.onlineSheetDot} />
                     </View>
@@ -495,6 +503,7 @@ const styles = StyleSheet.create({
   onlinePreviewTitle: { color: '#ffffff', fontSize: 16, fontWeight: '900', marginTop: 4 },
   onlinePreviewBubbles: { flexDirection: 'row', alignItems: 'center', minWidth: 56, justifyContent: 'flex-end' },
   onlinePreviewBubble: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0b2a1b', borderWidth: 2, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  onlinePreviewImage: { width: '100%', height: '100%', borderRadius: 18 },
   onlinePreviewMore: { backgroundColor: '#171717', borderColor: '#3a3a3a' },
   onlinePreviewBubbleText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
@@ -524,6 +533,7 @@ const styles = StyleSheet.create({
   onlineSheetFriend: { width: '30%', minWidth: 84, alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: '#242424', backgroundColor: '#151515', padding: 12 },
   onlineSheetAvatarWrap: { position: 'relative', marginBottom: 8 },
   onlineSheetAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#0b2a1b', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#00ff87' },
+  onlineSheetAvatarImage: { width: '100%', height: '100%', borderRadius: 27 },
   onlineSheetAvatarText: { color: '#fff', fontSize: 20, fontWeight: '900' },
   onlineSheetDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00ff87', borderWidth: 2, borderColor: '#101010' },
   onlineSheetName: { color: '#ffffff', fontSize: 12, fontWeight: '800', textAlign: 'center' },
