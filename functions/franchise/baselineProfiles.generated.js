@@ -637,7 +637,7 @@ const baselineProfiles = [
       "blocking": 66,
       "steals": 74,
       "defenseIq": 87,
-      "helpDefense": 74,
+      "helpDefense": 85,
       "speed": 58,
       "acceleration": 62,
       "vertical": 60,
@@ -678,7 +678,7 @@ const baselineProfiles = [
       "blocking": "C",
       "steals": "C+",
       "defenseIq": "B+",
-      "helpDefense": "C+",
+      "helpDefense": "B+",
       "speed": "D+",
       "acceleration": "C-",
       "vertical": "C-",
@@ -715,7 +715,7 @@ const baselineProfiles = [
         "grade": "C+"
       },
       "interiorDefense": {
-        "rating": 75.5,
+        "rating": 76.9,
         "grade": "B-"
       },
       "athleticism": {
@@ -727,8 +727,8 @@ const baselineProfiles = [
         "grade": "B-"
       },
       "basketballIq": {
-        "rating": 90.8,
-        "grade": "A-"
+        "rating": 92.1,
+        "grade": "A"
       },
       "postOffense": {
         "rating": 84.6,

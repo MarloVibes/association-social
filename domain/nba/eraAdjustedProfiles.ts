@@ -158,7 +158,7 @@ export function applyEraAdjustment({
     profile.perimeterDefense = Math.min(profile.perimeterDefense, 74.4);
     profile.lateralQuickness = Math.min(profile.lateralQuickness, 74.4);
     profile.defenseIq = Math.min(profile.defenseIq, preserveVeteranIq ? 88.4 : 74.4);
-    profile.helpDefense = Math.min(profile.helpDefense, 74.4);
+    profile.helpDefense = Math.min(profile.helpDefense, preserveVeteranIq ? 88.4 : 74.4);
     notes.push('capped guard defense to individual-stopper proof');
   }
 
