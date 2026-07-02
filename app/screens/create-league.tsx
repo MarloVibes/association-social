@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { draftBaseYearFor } from '@/constants/draftPicks';
 import { useState } from 'react';
@@ -54,9 +54,13 @@ const VOTE_THRESHOLDS = [
 ];
 
 export default function CreateLeagueScreen() {
+  const params = useLocalSearchParams<{ sport?: string }>();
+  const selectedSport = ['nba', 'madden', 'mlb'].includes(String(params.sport || ''))
+    ? String(params.sport)
+    : '';
   const [step, setStep] = useState(1);
   const [leagueName, setLeagueName] = useState('');
-  const [sport, setSport] = useState('');
+  const [sport, setSport] = useState(selectedSport);
   const [mode, setMode] = useState('');
   const [era, setEra] = useState('');
   const [teamMode, setTeamMode] = useState('');
@@ -206,6 +210,7 @@ export default function CreateLeagueScreen() {
     if (step === 1) router.back();
     else setStep(step - 1);
   };
+  const selectedSportOption = sports.find(s => s.value === sport);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
@@ -229,19 +234,36 @@ export default function CreateLeagueScreen() {
               onChangeText={setLeagueName}
               autoFocus
             />
-            <Text style={styles.label}>Select Sport</Text>
-            <View style={styles.optionList}>
-              {sports.map(s => (
-                <TouchableOpacity
-                  key={s.value}
-                  style={[styles.sportCard, sport === s.value && styles.sportCardActive]}
-                  onPress={() => { setSport(s.value); setMode(''); setEra(''); setTeamMode(''); }}
-                >
-                  <Text style={styles.sportCardEmoji}>{s.emoji}</Text>
-                  <Text style={[styles.sportCardLabel, sport === s.value && styles.sportCardLabelActive]}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {selectedSport ? (
+              <>
+                <Text style={styles.label}>Franchise Mode</Text>
+                <View style={[styles.sportCard, styles.sportCardActive]}>
+                  <Text style={styles.sportCardEmoji}>{selectedSportOption?.emoji || '🏆'}</Text>
+                  <View style={styles.lockedSportText}>
+                    <Text style={[styles.sportCardLabel, styles.sportCardLabelActive]}>
+                      {selectedSportOption?.label || 'Franchise'}
+                    </Text>
+                    <Text style={styles.lockedSportHint}>Selected from Main Menu</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Select Sport</Text>
+                <View style={styles.optionList}>
+                  {sports.map(s => (
+                    <TouchableOpacity
+                      key={s.value}
+                      style={[styles.sportCard, sport === s.value && styles.sportCardActive]}
+                      onPress={() => { setSport(s.value); setMode(''); setEra(''); setTeamMode(''); }}
+                    >
+                      <Text style={styles.sportCardEmoji}>{s.emoji}</Text>
+                      <Text style={[styles.sportCardLabel, sport === s.value && styles.sportCardLabelActive]}>{s.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
             <TouchableOpacity
               style={[styles.primaryButton, (!leagueName.trim() || !sport) && styles.primaryButtonDisabled]}
               onPress={() => setStep(2)}
@@ -594,6 +616,8 @@ const styles = StyleSheet.create({
   sportCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', gap: 14 },
   sportCardActive: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
   sportCardEmoji: { fontSize: 24 },
+  lockedSportText: { flex: 1, gap: 3 },
+  lockedSportHint: { color: '#66c695', fontSize: 12, fontWeight: '700' },
   sportCardLabel: { color: '#888888', fontSize: 16, fontWeight: '600' },
   sportCardLabelActive: { color: '#00ff87' },
   modeCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 2 },
