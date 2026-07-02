@@ -91,6 +91,7 @@ describe('rating seed baselines', () => {
   it('keeps defense and rebounding grades tied to role proof instead of synthetic team signals', () => {
     const nash2003 = findProfile('Steve Nash', 'PHX', 2003);
     const kyrie2017 = findProfile('Kyrie Irving', 'CLE', 2017);
+    const rose2011 = findProfile('Derrick Rose', 'CHI', 2011);
     const kawhi2017 = findProfile('Kawhi Leonard', 'SAS', 2017);
     const draymond2017 = findProfile('Draymond Green', 'GSW', 2017);
     const dirk2011 = findProfile('Dirk Nowitzki', 'DAL', 2011);
@@ -100,6 +101,10 @@ describe('rating seed baselines', () => {
     expect(gradeRank(nash2003.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
     expect(gradeRank(kyrie2017.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B'));
     expect(gradeRank(publicGrades(kyrie2017).perimeterDefense)).toBeLessThan(gradeRank('B'));
+    expect(gradeRank(rose2011.category_skill_grades.perimeterDefense.grade)).toBeLessThan(gradeRank('B+'));
+    expect(gradeRank(publicGrades(rose2011).perimeterDefense)).toBeLessThan(gradeRank('B+'));
+    expect(gradeRank(publicGrades(rose2011).postDefense)).toBeLessThanOrEqual(gradeRank('C+'));
+    expect(gradeRank(publicGrades(rose2011).blocking)).toBeLessThanOrEqual(gradeRank('C+'));
     expect(gradeRank(kawhi2017.category_skill_grades.perimeterDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(publicGrades(kawhi2017).perimeterDefense)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(draymond2017.category_skill_grades.interiorDefense.grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
@@ -207,6 +212,8 @@ describe('rating seed baselines', () => {
     expect(gradeRank(edwards2026.skill_grades.dunking || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(publicGrades(lebron2011).dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
     expect(gradeRank(publicGrades(edwards2026).dunking)).toBeGreaterThanOrEqual(gradeRank('A-'));
+    expect(gradeRank(publicGrades(lebron2011).dunking)).toBeGreaterThanOrEqual(gradeRank('A'));
+    expect(gradeRank(publicGrades(edwards2026).dunking)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(lebron2011.category_skill_grades.finishing.grade)).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.skill_grades.drivingDunk || 'F')).toBeGreaterThanOrEqual(gradeRank('A'));
     expect(gradeRank(edwards2026.category_skill_grades.athleticism.grade)).toBeGreaterThanOrEqual(gradeRank('B+'));
