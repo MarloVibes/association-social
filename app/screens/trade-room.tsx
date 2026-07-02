@@ -7,36 +7,16 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { auth, db, functions } from '@/constants/firebase';
 import { stepienViolation, DRAFT_YEARS } from '@/constants/draftPicks';
 import GlobalNav from '@/components/GlobalNav';
+import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/FranchisePlayerRow';
 import { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
-import { gradeRank } from '@/domain/nba/gradeScale';
-import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
-import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
 import { validateTrade } from '@/domain/finance/validateTrade';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
-const TRADE_GRADE_PREVIEW: { key: ScoutingGradeKey; label: string }[] = [
-  { key: 'closeShot', label: 'Fin' },
-  { key: 'midRange', label: 'Mid' },
-  { key: 'threePoint', label: '3PT' },
-  { key: 'dunking', label: 'Dunk' },
-  { key: 'passing', label: 'Pass' },
-  { key: 'ballHandle', label: 'Handle' },
-  { key: 'offenseIq', label: 'Off IQ' },
-  { key: 'perimeterDefense', label: 'Per D' },
-  { key: 'postDefense', label: 'Post D' },
-  { key: 'blocking', label: 'Block' },
-  { key: 'defenseIq', label: 'Def IQ' },
-  { key: 'speed', label: 'Speed' },
-  { key: 'rebounding', label: 'Reb' },
-  { key: 'postOffense', label: 'Post' },
-  { key: 'potential', label: 'Pot' },
-];
 
 function buildRoomId(uidA: string, uidB: string) {
   const [a, b] = [uidA, uidB].sort();
@@ -56,28 +36,6 @@ function pickLabel(pk: any) {
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
 function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
-}
-
-function formatTradeMoney(value: any) {
-  const salary = Number(value);
-  if (!Number.isFinite(salary) || salary <= 0) return '$—';
-  if (salary <= 1_500_000) return '$Min';
-  return '$' + (salary / 1_000_000).toFixed(salary >= 10_000_000 ? 0 : 1) + 'M';
-}
-
-function tradeGradePreview(player: any, profile: any) {
-  const grades = buildScoutingGrades(player || {}, profile || null);
-  return TRADE_GRADE_PREVIEW
-    .map(item => ({
-      ...item,
-      grade: grades[item.key],
-      colors: gradeColors(grades[item.key]),
-    }))
-    .sort((left, right) => (
-      gradeRank(right.grade) - gradeRank(left.grade)
-      || left.label.localeCompare(right.label)
-    ))
-    .slice(0, 3);
 }
 
 function TradePickerPlayerRow({
@@ -104,76 +62,21 @@ function TradePickerPlayerRow({
   onPress: () => void;
 }) {
   const effectiveSalary = getEffectiveSalary(player, overrides);
-  const profile = selectRosterRatingProfile(player, {}, { era, currentYear, leagueDate });
-  const gradePreview = sport === 'nba' ? tradeGradePreview(player, profile) : [];
-  const topGrade = gradePreview[0];
-  const accentColor = topGrade?.colors.borderColor || '#00ff87';
-  const archetypeYear = typeof currentYear === 'number' ? currentYear : Number(currentYear);
-  const archetype = getSportArchetypeForYear(player, profile, Number.isFinite(archetypeYear) ? archetypeYear : undefined, sport);
   return (
-    <TouchableOpacity
-      style={[styles.tradePickerCard, disabled && styles.pickerRowDisabled]}
+    <FranchisePlayerRow
+      player={player}
+      index={index}
+      sport={sport}
+      era={era}
+      currentYear={currentYear}
+      leagueDate={leagueDate}
+      salary={effectiveSalary}
+      salaryLabel={`${formatFranchisePlayerMoney(effectiveSalary)} salary`}
+      statusLabels={statusLabels}
       disabled={disabled}
       onPress={onPress}
-      activeOpacity={0.78}
-    >
-      <View style={[styles.tradePickerAccent, { backgroundColor: accentColor }]} />
-      <View style={styles.tradePickerRank}>
-        <Text style={styles.tradePickerRankText}>{index + 1}</Text>
-      </View>
-      <PlayerHeadshot
-        player={player}
-        sport={sport}
-        imageStyle={[styles.tradePickerPhoto, { borderColor: accentColor }]}
-        fallback={
-          <View style={[styles.tradePickerPhotoFallback, { borderColor: accentColor }]}>
-            <Text style={styles.tradePickerInitial}>{(player?.full_name || '?')[0]}</Text>
-          </View>
-        }
-      />
-      <View style={styles.tradePickerInfo}>
-        <View style={styles.tradePickerHeaderRow}>
-          <Text style={[styles.tradePickerPos, { color: accentColor }]}>{player?.position || '?'}</Text>
-          <View style={[styles.tradePickerTier, { borderColor: archetype.color + '88', backgroundColor: archetype.color + '18' }]}>
-            <Text style={[styles.tradePickerTierText, { color: archetype.color }]} numberOfLines={1}>{archetype.label}</Text>
-          </View>
-        </View>
-        <Text style={styles.tradePickerName} numberOfLines={1}>{player?.full_name || 'Unknown Player'}</Text>
-        <Text style={styles.tradePickerSalary} numberOfLines={1}>{formatTradeMoney(effectiveSalary)} salary</Text>
-        {gradePreview.length > 0 ? (
-          <View style={styles.tradePickerGrades}>
-            {gradePreview.map(item => (
-              <View
-                key={item.key}
-                style={[
-                  styles.tradeGradePill,
-                  { borderColor: item.colors.borderColor, backgroundColor: item.colors.backgroundColor },
-                ]}
-              >
-                <Text style={[styles.tradeGradeLabel, { color: item.colors.textColor }]}>{item.label}</Text>
-                <Text style={[styles.tradeGradeValue, { color: item.colors.textColor }]}>{item.grade}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        {statusLabels && statusLabels.length > 0 ? (
-          <View style={styles.tradePickerStatusRow}>
-            {statusLabels.map(status => (
-              <Text
-                key={status.label}
-                style={[
-                  styles.tradePickerStatus,
-                  status.tone === 'danger' ? styles.tradePickerStatusDanger : status.tone === 'warn' ? styles.tradePickerStatusWarn : styles.tradePickerStatusGood,
-                ]}
-              >
-                {status.label}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-      </View>
-      {!disabled ? <Text style={styles.tradePickerAdd}>Add</Text> : null}
-    </TouchableOpacity>
+      action={!disabled ? { label: 'Add', variant: 'primary', onPress } : null}
+    />
   );
 }
 

@@ -1,16 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
 import { loadSalaryOverrides, getEffectiveSalary } from '@/utils/salaryOverrides';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
+import FranchisePlayerRow from '@/components/FranchisePlayerRow';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
-import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { comparePlayersByTierForYear } from '@/constants/playstyle';
-import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
-import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
-import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
-import { gradeRank } from '@/domain/nba/gradeScale';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -21,39 +17,6 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { pickLabel } from '@/constants/draftPicks';
 
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
-
-const ROSTER_GRADE_PREVIEW: { key: ScoutingGradeKey; label: string }[] = [
-  { key: 'closeShot', label: 'Fin' },
-  { key: 'midRange', label: 'Mid' },
-  { key: 'threePoint', label: '3PT' },
-  { key: 'dunking', label: 'Dunk' },
-  { key: 'passing', label: 'Pass' },
-  { key: 'ballHandle', label: 'Handle' },
-  { key: 'offenseIq', label: 'Off IQ' },
-  { key: 'perimeterDefense', label: 'Per D' },
-  { key: 'postDefense', label: 'Post D' },
-  { key: 'blocking', label: 'Block' },
-  { key: 'defenseIq', label: 'Def IQ' },
-  { key: 'speed', label: 'Speed' },
-  { key: 'rebounding', label: 'Reb' },
-  { key: 'postOffense', label: 'Post' },
-  { key: 'potential', label: 'Pot' },
-];
-
-function rosterGradePreview(player: any, profile: any) {
-  const grades = buildScoutingGrades(player || {}, profile || null);
-  return ROSTER_GRADE_PREVIEW
-    .map(item => ({
-      ...item,
-      grade: grades[item.key],
-      colors: gradeColors(grades[item.key]),
-    }))
-    .sort((left, right) => (
-      gradeRank(right.grade) - gradeRank(left.grade)
-      || left.label.localeCompare(right.label)
-    ))
-    .slice(0, 3);
-}
 
 function formatRosterMoney(value: any) {
   const salary = Number(value);
@@ -390,87 +353,38 @@ export default function TeamRosterScreen() {
         const isUntouchable = untouchables.includes(pid);
         const isLocked = lockedKeys.has(pid);
         const isOnBlock = tradeBlock.includes(pid);
-        // Extract bref_id from various player_id patterns: current_X, pool_YYYY_X, etc.
-            let brefId = p.bref_id || '';
-            if (!brefId && p.player_id) {
-              const pid = String(p.player_id);
-              const m = pid.match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i);
-              if (m) brefId = m[1];
-            }
         const canTrade = isOwned && !isMyTeam && !isUntouchable && !isLocked;
         const canCpuTrade = !team.gmId && !isMyTeam;
-        const playerProfile = selectRosterRatingProfile(p, profilesByName, { era: leagueEra, currentYear, leagueDate });
-        const archetype = getSportArchetypeForYear(p, playerProfile, currentYear, sport);
-        const gradePreview = isNBARoster ? rosterGradePreview(p, playerProfile) : [];
-        const topGrade = gradePreview[0];
         const statuses = rosterStatusBadges({ isUntouchable, isOnBlock, isLocked });
-        const accentColor = topGrade?.colors.borderColor || colors[0] || '#00ff87';
         return (
           <Fragment key={pid + i}>
             {showHeader ? <Text style={styles.posGroupHeader}>{grpLabel}</Text> : null}
-            <TouchableOpacity
-              style={[
-                styles.playerRow,
-                isUntouchable && styles.playerRowUntouchable,
-                !isUntouchable && isOnBlock && styles.playerRowOnBlock,
-                isLocked && !isUntouchable && !isOnBlock && styles.playerRowLocked,
-              ]}
+            <FranchisePlayerRow
+              player={p}
+              index={i}
+              sport={sport || 'nba'}
+              era={leagueEra}
+              currentYear={currentYear}
+              leagueDate={leagueDate}
+              profilesByName={profilesByName}
+              salary={p.salary || p.contract?.salary || p.currentSalary}
+              salaryLabel={contractSummary(p)}
+              statusLabels={statuses}
+              selected={isUntouchable || isOnBlock || isLocked}
+              gradeCount={3}
               onPress={() => setSelectedPlayer(p)}
-              activeOpacity={0.78}
-            >
-              <View style={[styles.playerAccent, { backgroundColor: accentColor }]} />
-              <View style={styles.playerRankBadge}>
-                <Text style={styles.playerRankText}>{i + 1}</Text>
-              </View>
-              <PlayerHeadshot
-                player={p}
-                sport={sport || 'nba'}
-                imageStyle={[styles.photo, { borderColor: accentColor }]}
-                fallback={<View style={[styles.photoFallback, { borderColor: accentColor }]}><Text style={styles.photoInitial}>{(p.full_name || '?')[0]}</Text></View>}
-              />
-              <View style={styles.playerInfo}>
-                <View style={styles.playerHeaderRow}>
-                  <Text style={[styles.playerPos, { color: accentColor }]}>{p.position || '?'}</Text>
-                  <View style={[styles.tierBadge, { borderColor: archetype.color + '88', backgroundColor: archetype.color + '18' }]}>
-                    <Text style={[styles.tierBadgeText, { color: archetype.color }]} numberOfLines={1}>{archetype.label}</Text>
-                  </View>
-                </View>
-                <Text style={styles.playerName} numberOfLines={1}>{p.full_name}</Text>
-                <Text style={styles.playerSalary} numberOfLines={1}>{contractSummary(p)}</Text>
-                {gradePreview.length > 0 ? (
-                  <View style={styles.gradePreviewRow}>
-                    {gradePreview.map(item => (
-                      <View
-                        key={item.key}
-                        style={[
-                          styles.gradePill,
-                          { borderColor: item.colors.borderColor, backgroundColor: item.colors.backgroundColor },
-                        ]}
-                      >
-                        <Text style={[styles.gradePillLabel, { color: item.colors.textColor }]}>{item.label}</Text>
-                        <Text style={[styles.gradePillValue, { color: item.colors.textColor }]}>{item.grade}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {statuses.length > 0 ? (
-                  <View style={styles.statusRow}>
-                    {statuses.map(status => (
-                      <Text key={status.label} style={[styles.statusText, { color: status.color }]}>
-                        {status.label}
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-              {(canTrade || canCpuTrade) ? (
-                <TouchableOpacity style={styles.tradeBtn} onPress={(e) => { e.stopPropagation?.(); handleProposeTrade(p); }}>
-                  <Text style={styles.tradeBtnText}>Trade</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.openCardHint}>›</Text>
-              )}
-            </TouchableOpacity>
+              action={(canTrade || canCpuTrade)
+                ? {
+                    label: 'Trade',
+                    variant: 'primary',
+                    onPress: () => handleProposeTrade(p),
+                  }
+                : {
+                    label: '›',
+                    variant: 'ghost',
+                    onPress: () => setSelectedPlayer(p),
+                  }}
+            />
           </Fragment>
         );
        });

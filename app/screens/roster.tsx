@@ -1,96 +1,16 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
-import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc, query, where } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import FranchisePlayerRow from '@/components/FranchisePlayerRow';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
-import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { gradeFromNumeric } from '@/domain/nba/gradeScale';
-import type { NbaGrade } from '@/domain/nba/identity';
-import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
-import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
-
-const ROSTER_GRADE_KEYS = [
-  { key: 'finishing', label: 'FIN' },
-  { key: 'threePoint', label: '3PT' },
-  { key: 'playmaking', label: 'PLY' },
-  { key: 'perimeterDefense', label: 'DEF' },
-  { key: 'athleticism', label: 'ATH' },
-  { key: 'potential', label: 'POT' },
-] as const;
-
-const GRADE_COLORS: Record<NbaGrade, string> = {
-  S: '#f6d365',
-  'A+': '#00ff87',
-  A: '#18e08a',
-  'A-': '#33c783',
-  'B+': '#5fd38d',
-  B: '#74c99b',
-  'B-': '#8fc6a8',
-  'C+': '#d5b85a',
-  C: '#b99f4d',
-  'C-': '#a48942',
-  'D+': '#ff8a5c',
-  D: '#ff6b6b',
-  'D-': '#e95360',
-  F: '#c83a4a',
-};
-
-function gradeFromAny(value: any): NbaGrade | null {
-  if (!value && value !== 0) return null;
-  if (typeof value === 'string') return value as NbaGrade;
-  if (typeof value === 'number') return gradeFromNumeric(value);
-  if (typeof value === 'object') {
-    if (value.grade) return String(value.grade) as NbaGrade;
-    if (value.rating !== undefined) return gradeFromNumeric(value.rating);
-  }
-  return null;
-}
-
-function rosterGradeChips(player: any, profile: any) {
-  const categoryGrades = profile?.category_skill_grades || player?.category_skill_grades || {};
-  const visibleGrades = profile?.visibleIdentity?.grades || profile?.identity?.grades || player?.visibleIdentity?.grades || player?.identity?.grades || {};
-  const attributes = profile?.era_adjusted_profiles || profile?.attribute_model || player?.era_adjusted_profiles || player?.attribute_model || {};
-  const scoutingGrades = buildScoutingGrades(player || {}, profile || null);
-
-  return ROSTER_GRADE_KEYS.map(({ key, label }) => {
-    const directGrade = gradeFromAny(categoryGrades[key]);
-    const visibleGrade = gradeFromAny(visibleGrades[key]);
-    const scoutingGrade = key === 'finishing'
-      ? gradeFromAny(scoutingGrades.dunking) || gradeFromAny(scoutingGrades.closeShot)
-      : key === 'athleticism'
-        ? gradeFromAny(scoutingGrades.speed) || gradeFromAny(scoutingGrades.acceleration)
-        : gradeFromAny(scoutingGrades[key as keyof typeof scoutingGrades]);
-    const attrGrade = key === 'threePoint'
-      ? gradeFromAny(attributes.threePoint)
-      : key === 'perimeterDefense'
-        ? gradeFromAny(attributes.perimeterDefense)
-        : gradeFromAny(attributes[key]);
-    return {
-      key,
-      label,
-      grade: directGrade || visibleGrade || scoutingGrade || attrGrade || null,
-    };
-  }).filter(item => item.grade);
-}
-
-function strongestGrade(player: any, profile: any): { label: string; grade: NbaGrade } | null {
-  const chips = rosterGradeChips(player, profile);
-  if (chips.length === 0) return null;
-  const rank: Record<NbaGrade, number> = {
-    F: 0, 'D-': 1, D: 2, 'D+': 3, 'C-': 4, C: 5, 'C+': 6,
-    'B-': 7, B: 8, 'B+': 9, 'A-': 10, A: 11, 'A+': 12, S: 13,
-  };
-  const best = [...chips].sort((left, right) => rank[right.grade as NbaGrade] - rank[left.grade as NbaGrade])[0];
-  return best?.grade ? { label: best.label, grade: best.grade as NbaGrade } : null;
-}
 
 export default function RosterScreen() {
   const { leagueId, sport, teamId, era } = useLocalSearchParams<{
@@ -898,7 +818,7 @@ export default function RosterScreen() {
             )}
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
           const pid = item.player_id || item.id;
           const isMine = activeTab === 'my_team';
@@ -906,91 +826,44 @@ export default function RosterScreen() {
           const myTradeBlock: string[] = (team?.tradeBlock || []) as string[];
           const isUntouchable = isMine && myUntouchables.includes(pid);
           const isOnBlock = isMine && !isUntouchable && myTradeBlock.includes(pid);
-          const profile = selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear, leagueDate: leagueDateFromRecord(league) });
-          const gradeChips = rosterGradeChips(item, profile);
-          const bestGrade = strongestGrade(item, profile);
-          const archetype = getSportArchetypeForYear(item, profile, currentYear, authoritativeSport);
+          const isRetiring = item.retirement_year && item.birth_year && item.age && item.age >= (item.retirement_year - item.birth_year - 1);
+          const statusLabels = [
+            isUntouchable ? { label: 'Untouchable', tone: 'danger' as const } : null,
+            isOnBlock ? { label: 'On Block', tone: 'info' as const } : null,
+            isRetiring ? { label: 'Retiring', tone: 'danger' as const } : null,
+          ].filter(Boolean) as { label: string; tone: 'danger' | 'info' }[];
           return (
-            <TouchableOpacity
-              style={[
-                styles.playerCard,
-                isUntouchable && styles.playerCardUntouchable,
-                isOnBlock && styles.playerCardOnBlock,
-              ]}
+            <FranchisePlayerRow
+              player={item}
+              index={index}
+              sport={authoritativeSport}
+              era={eraKey}
+              currentYear={currentYear}
+              leagueDate={leagueDateFromRecord(league)}
+              profilesByName={profilesByName}
+              salary={item.salary || item.contract?.salary || item.currentSalary}
+              meta={[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
+              statusLabels={statusLabels}
+              selected={isUntouchable || isOnBlock}
+              gradeCount={6}
               onPress={() => setSelectedPlayer(item)}
               onLongPress={() => {
                 const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
                 const isOpponent = !onMyTeam && (item.teamName || (item.team && item.team !== ''));
                 handlePlayerAction(item, !isOpponent);
               }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.playerPortraitWrap}>
-                <PlayerHeadshot
-                  player={item}
-                  sport={authoritativeSport}
-                  imageStyle={styles.playerHeadshot}
-                  fallback={
-                    <View style={styles.playerAvatar}>
-                      <Text style={styles.playerAvatarText}>{item.position || '?'}</Text>
-                    </View>
+              action={activeTab === 'my_team'
+                ? {
+                    label: '⇄',
+                    variant: 'neutral',
+                    onPress: () => handlePlayerAction(item, true),
                   }
-                />
-                {bestGrade ? (
-                  <View style={[styles.bestGradeBadge, { borderColor: GRADE_COLORS[bestGrade.grade] + 'aa' }]}>
-                    <Text style={[styles.bestGradeText, { color: GRADE_COLORS[bestGrade.grade] }]}>{bestGrade.grade}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.playerInfo}>
-                <View style={styles.playerNameRow}>
-                  <Text style={styles.playerName}>{item.full_name || item.name}</Text>
-                  <View style={[styles.tierBadge, { borderColor: archetype.color + '88' }]}>
-                    <Text style={[styles.tierBadgeText, { color: archetype.color }]}>{archetype.label}</Text>
-                  </View>
-                </View>
-                {isUntouchable ? <Text style={styles.playerStatusRed}>🔒 Untouchable</Text> : null}
-                {isOnBlock ? <Text style={styles.playerStatusBlue}>💼 On Block</Text> : null}
-                <View style={styles.playerMetaRow}>
-                  <Text style={styles.playerMeta}>
-                    {[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
-                  </Text>
-                  {item.retirement_year && item.birth_year && item.age && item.age >= (item.retirement_year - item.birth_year - 1) && (
-                    <View style={styles.retireBadge}>
-                      <Text style={styles.retireBadgeText}>Retiring</Text>
-                    </View>
-                  )}
-                </View>
-                {gradeChips.length > 0 ? (
-                  <View style={styles.gradeChipRow}>
-                    {gradeChips.map(chip => {
-                      const grade = chip.grade as NbaGrade;
-                      const color = GRADE_COLORS[grade] || '#888';
-                      return (
-                        <View key={chip.key} style={[styles.gradeChip, { borderColor: color + '99', backgroundColor: color + '18' }]}>
-                          <Text style={styles.gradeChipLabel}>{chip.label}</Text>
-                          <Text style={[styles.gradeChipValue, { color }]}>{grade}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <Text style={styles.gradeFallback}>Tap to view full player card</Text>
-                )}
-              </View>
-              {activeTab === 'my_team' ? (
-                <TouchableOpacity style={styles.moveBtn} onPress={(e) => { e.stopPropagation?.(); handlePlayerAction(item, true); }}>
-                  <Text style={styles.moveBtnText}>⇄</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.addBtn} onPress={(e) => {
-                  e.stopPropagation?.();
-                  handleAddPlayer(item);
-                }}>
-                  <Text style={styles.addBtnText}>+ Sign</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
+                : {
+                    label: '+ Sign',
+                    variant: 'primary',
+                    onPress: () => handleAddPlayer(item),
+                  }}
+            />
           );
         }}
       />

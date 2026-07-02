@@ -86,6 +86,22 @@ describe('source safety regressions', () => {
     expect(profile).toContain('Help / FAQ');
   });
 
+  it('uses one shared franchise player card row across roster and trade surfaces', () => {
+    const sharedRow = source('components/FranchisePlayerRow.tsx');
+    const roster = source('app/screens/roster.tsx');
+    const teamRoster = source('app/screens/team-roster.tsx');
+    const tradeRoom = source('app/screens/trade-room.tsx');
+
+    expect(sharedRow).toContain('export default function FranchisePlayerRow');
+    expect(sharedRow).toContain('PlayerHeadshot');
+    expect(sharedRow).toContain('buildScoutingGrades');
+    expect(sharedRow).toContain('gradeBadge');
+    expect(sharedRow).toContain('salaryLabel');
+    expect(roster).toContain("from '@/components/FranchisePlayerRow'");
+    expect(teamRoster).toContain("from '@/components/FranchisePlayerRow'");
+    expect(tradeRoom).toContain("from '@/components/FranchisePlayerRow'");
+  });
+
   it('renders online friends as profile photo bubbles with initials as fallback', () => {
     const dashboard = source('app/(tabs)/dashboard.tsx');
 
@@ -601,7 +617,8 @@ describe('source safety regressions', () => {
     const roster = source('app/screens/team-roster.tsx');
 
     expect(roster).toContain("rosterViewMode, setRosterViewMode");
-    expect(roster).toContain('selectRosterRatingProfile(p, profilesByName');
+    expect(roster).toContain('<FranchisePlayerRow');
+    expect(roster).toContain('profilesByName={profilesByName}');
     expect(roster).toContain("ROSTER");
     expect(roster).toContain("PICKS");
     expect(roster).toContain("rosterViewMode === 'picks'");
@@ -627,9 +644,13 @@ describe('source safety regressions', () => {
 
   it('uses the canonical profile resolver on roster and trade surfaces', () => {
     const roster = source('app/screens/roster.tsx');
+    const sharedRow = source('components/FranchisePlayerRow.tsx');
     const tradeChannel = source('app/screens/trade-channel.tsx');
 
-    expect(roster).toContain('selectRosterRatingProfile(item, profilesByName, { era: eraKey, currentYear, leagueDate: leagueDateFromRecord(league) })');
+    expect(roster).toContain('<FranchisePlayerRow');
+    expect(roster).toContain('profilesByName={profilesByName}');
+    expect(sharedRow).toContain('selectRosterRatingProfile(player, profilesByName, { era, currentYear, leagueDate })');
+    expect(sharedRow).toContain('getSportArchetypeForYear');
     expect(tradeChannel).toContain('selectRosterRatingProfile');
     expect(tradeChannel).toContain('getSportArchetypeForYear');
     expect(tradeChannel).not.toContain('getSportArchetype(player, sport, eraKey)');
