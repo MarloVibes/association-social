@@ -824,6 +824,20 @@ describe('source safety regressions', () => {
     expect(offseasonView).not.toContain("label: team.name || team.abbreviation || 'Claimed team'");
   });
 
+  it('cleans era-suffixed team labels in league chat surfaces', () => {
+    const channel = source('app/screens/channel.tsx');
+
+    expect(channel).toContain("from '@/domain/nba/scheduleView'");
+    expect(channel).toContain('channelTeamName(team)');
+    expect(channel).toContain('channelTeamAbbr(team)');
+    expect(channel).toContain('channelTeamName(myTeam)');
+    expect(channel).toContain('cleanChannelTeamLabel(item.teamName');
+    expect(channel).not.toContain("teamName: team?.name || ''");
+    expect(channel).not.toContain("teamAbbr: team?.abbreviation || ''");
+    expect(channel).not.toContain("teamName: myTeam.name || ''");
+    expect(channel).not.toContain("teamAbbr: myTeam.abbreviation || ''");
+  });
+
   it('uses neutral franchise labels for public sport modes', () => {
     const createLeague = source('app/screens/create-league.tsx');
     const dashboard = source('app/(tabs)/dashboard.tsx');

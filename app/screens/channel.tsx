@@ -12,6 +12,7 @@ import {
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
 import SportBackground from '@/components/channel/SportBackground';
+import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
@@ -21,6 +22,20 @@ const EMOJI_LIST = [
   '🤝','💀','😭','🙏','⚡','🎮','🏀','🏈','⚾','👏',
   '😅','🤣','😬','🫡','💥','🎉','😤','🔒','💸','🤯',
 ];
+
+function cleanChannelTeamLabel(value?: string | null, fallback?: string | null) {
+  return displayScheduleTeamLabel(value, fallback);
+}
+
+function channelTeamName(team?: any) {
+  if (!team) return '';
+  return cleanChannelTeamLabel(team.name || team.abbreviation, team.teamId || team.id || '');
+}
+
+function channelTeamAbbr(team?: any) {
+  if (!team) return '';
+  return displayScheduleAbbr(team.abbreviation || team.abbr || team.teamId || team.id || '');
+}
 
 export default function ChannelScreen() {
   const { leagueId, leagueName, channelId, channelLabel, channelIcon, commissionerId, coCommissioners, sport } =
@@ -195,7 +210,7 @@ export default function ChannelScreen() {
         const snap = await getDoc(doc(db, 'users', uid));
         const team = teamsByGm[uid];
         return snap.exists()
-          ? { uid, ...snap.data(), teamName: team?.name || '', teamAbbr: team?.abbreviation || '' }
+          ? { uid, ...snap.data(), teamName: channelTeamName(team), teamAbbr: channelTeamAbbr(team) }
           : { uid, displayName: 'Unknown GM', teamName: '', teamAbbr: '' };
       })
     );
@@ -676,7 +691,7 @@ export default function ChannelScreen() {
     const isMe = item.uid === user?.uid;
     const sender = members[item.uid];
     const senderName = sender?.displayName || 'GM';
-    const teamName = sender?.teamName || '';
+    const teamName = cleanChannelTeamLabel(sender?.teamName, sender?.teamAbbr);
     const label = teamName ? senderName + ' (' + teamName + ')' : senderName;
     const chip = reactionChip(item);
     return (
@@ -1567,7 +1582,7 @@ export default function ChannelScreen() {
                   <Text style={styles.bulletinCardText}>{item.text}</Text>
                   {item.photoUrl && <Image source={{ uri: item.photoUrl }} style={styles.bulletinPhoto} />}
                   <View style={styles.bulletinCardFooter}>
-                    <Text style={styles.bulletinCardAuthor}>— {sender?.displayName || 'Commissioner'}{sender?.teamName ? ' · ' + sender.teamName : ''}</Text>
+                    <Text style={styles.bulletinCardAuthor}>— {sender?.displayName || 'Commissioner'}{sender?.teamName ? ' · ' + cleanChannelTeamLabel(sender.teamName, sender.teamAbbr) : ''}</Text>
                     <Text style={styles.bulletinCardTime}>{formatTime(item.createdAt)}</Text>
                   </View>
                 </TouchableOpacity>
@@ -1645,8 +1660,8 @@ export default function ChannelScreen() {
           opponent: hlOpponent,
           result: hlResult,
           postedBy: user?.uid,
-          teamName: myTeam.name || '',
-          teamAbbr: myTeam.abbreviation || '',
+          teamName: channelTeamName(myTeam),
+          teamAbbr: channelTeamAbbr(myTeam),
           createdAt: serverTimestamp(),
           featured: false,
         });
@@ -1697,7 +1712,7 @@ export default function ChannelScreen() {
       setHlCommentSending(true);
       try {
         const myTeam = leagueTeams.find((t: any) => t.gmId === user?.uid) || {};
-        const authorName = myTeam.name || members[user.uid]?.displayName || 'GM';
+        const authorName = channelTeamName(myTeam) || members[user.uid]?.displayName || 'GM';
         const postRef = doc(db, 'leagues', leagueId, 'channels', 'highlights', 'posts', commentPost.id);
         // Full comment record lives in the subcollection (with a server timestamp).
         await addDoc(collection(postRef, 'comments'), {
@@ -1757,7 +1772,7 @@ export default function ChannelScreen() {
 
                   {/* Card header */}
                   <View style={styles.hlCardHeader}>
-                    <Text style={styles.hlCardTeam}>{item.teamName || sender?.displayName || 'GM'}</Text>
+                    <Text style={styles.hlCardTeam}>{cleanChannelTeamLabel(item.teamName, item.teamAbbr) || sender?.displayName || 'GM'}</Text>
                     <Text style={styles.hlCardTime}>{item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : ''}</Text>
                     {isCommOrCoComm && (
                       <TouchableOpacity onPress={async () => {
@@ -1772,7 +1787,7 @@ export default function ChannelScreen() {
                   {item.type === 'boxscore' && (
                     <View style={styles.hlScoreboard}>
                       <View style={styles.hlScoreTeam}>
-                        <Text style={styles.hlScoreTeamName}>{item.teamName || 'My Team'}</Text>
+                        <Text style={styles.hlScoreTeamName}>{cleanChannelTeamLabel(item.teamName, item.teamAbbr) || 'My Team'}</Text>
                         <Text style={[styles.hlScoreNum, { color: item.result === 'W' ? '#00cc66' : '#ff4444' }]}>{item.myScore}</Text>
                       </View>
                       <View style={styles.hlScoreVs}>
