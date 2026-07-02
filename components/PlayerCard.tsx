@@ -532,7 +532,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                   {evaluationLayers && (
                     <View style={styles.evaluationSummary}>
                       {[
-                        { label: 'Overall Talent', value: evaluationLayers.overallTalent },
+                        { label: 'Talent Grade', value: evaluationLayers.overallTalent },
                         { label: 'Current Form', value: evaluationLayers.currentForm },
                         { label: 'Potential', value: { grade: playerGrades?.potential || evaluationLayers.potential.grade } },
                       ].map(item => {

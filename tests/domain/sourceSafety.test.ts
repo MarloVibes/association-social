@@ -779,6 +779,10 @@ describe('source safety regressions', () => {
       expect(file).not.toContain('rating number');
     }
 
+    const playerCard = source('components/PlayerCard.tsx');
+    expect(playerCard).not.toContain('Overall Talent');
+    expect(playerCard).toContain('Talent Grade');
+
     const upgrades = source('app/screens/season/player-upgrades.tsx');
     expect(upgrades).toContain('Upgrade Points');
     expect(upgrades).toContain('One point raises one grade');
@@ -794,6 +798,15 @@ describe('source safety regressions', () => {
     expect(tradeCenter).not.toContain('MY TRADE BLOCK');
     expect(tradeCenter).not.toContain('ON THE BLOCK');
     expect(tradeCenter).not.toContain('>PROPOSE<');
+  });
+
+  it('keeps trade-room player pickers readable like roster filters', () => {
+    const tradeRoom = source('app/screens/trade-room.tsx');
+
+    expect(tradeRoom).toContain('positionFilterLabel(pos)');
+    expect(tradeRoom).toContain('minWidth: 54');
+    expect(tradeRoom).toContain('paddingHorizontal: 14');
+    expect(tradeRoom).not.toContain("positionFilterBtn: { minWidth: 50");
   });
 
   it('uses neutral franchise labels for public sport modes', () => {
