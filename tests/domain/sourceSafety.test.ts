@@ -489,7 +489,15 @@ describe('source safety regressions', () => {
     expect(indexes).toContain('"collectionGroup": "contract_offers"');
     expect(indexes).toContain('"collectionGroup": "draft_sessions"');
     expect(indexes).toContain('"collectionGroup": "mvp_players"');
+    expect(indexes).toContain('"collectionGroup": "players"');
+    expect(indexes).toContain('"collectionGroup": "leagues"');
+    expect(indexes).toContain('"collectionGroup": "teams"');
     expect(indexes).toContain('"fieldPath": "ownerUid"');
+    expect(indexes).toContain('"fieldPath": "is_custom"');
+    expect(indexes).toContain('"fieldPath": "created_by_league"');
+    expect(indexes).toContain('"fieldPath": "sport"');
+    expect(indexes).toContain('"fieldPath": "offseason.stageEndsAt"');
+    expect(indexes).toContain('"fieldPath": "gmId"');
     expect(indexes).toContain('"fieldOverrides"');
     expect(indexes).toContain('"fieldPath": "status"');
     expect(indexes).toContain('"queryScope": "COLLECTION_GROUP"');
@@ -501,6 +509,7 @@ describe('source safety regressions', () => {
     expect(qa).toContain('NBA schedule creation');
     expect(qa).toContain('Player upgrades');
     expect(qa).toContain('Expansion');
+    expect(qa).toContain('Versioned index coverage');
     expect(qa).toContain('Functions deploy');
   });
 
@@ -853,6 +862,33 @@ describe('source safety regressions', () => {
     expect(finalizeTrade).toContain('teamALabel: displayTeamLabel(teamA, source.hostTeamName ||');
     expect(finalizeTrade).toContain('teamBLabel: displayTeamLabel(teamB, source.guestTeamName ||');
     expect(draftLottery).toContain('name: displayTeamLabel(team, teamId)');
+  });
+
+  it('cleans era-suffixed team labels in remaining roster and offseason surfaces', () => {
+    const roster = source('app/screens/roster.tsx');
+    const teamRoster = source('app/screens/team-roster.tsx');
+    const offseasonIndex = source('app/screens/offseason/index.tsx');
+    const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+
+    expect(roster).toContain('activityTeamLabel()');
+    expect(roster).not.toContain("teamName: team?.name || ''");
+    expect(roster).not.toContain("message: (team?.name || 'A GM')");
+
+    expect(teamRoster).toContain('tradeRouteTeamLabel');
+    expect(teamRoster).not.toContain("cpuName: team.name || ''");
+    expect(teamRoster).not.toContain("otherTeamName: team.name || ''");
+
+    expect(offseasonIndex).toContain("from '@/domain/nba/scheduleView'");
+    expect(offseasonIndex).toContain('displayScheduleTeamLabel(team.name || team.abbreviation');
+    expect(offseasonIndex).not.toContain('{team.abbreviation || team.name || team.teamId}');
+
+    expect(rosterCuts).toContain("from '@/domain/nba/scheduleView'");
+    expect(rosterCuts).toContain('displayScheduleTeamLabel(team.name');
+    expect(rosterCuts).not.toContain("{team.name || 'Your Team'}");
+
+    expect(tradeChannel).toContain('displayScheduleTeamLabel(t.name || t.abbreviation');
+    expect(tradeChannel).not.toContain('teamName: t.name, teamId: t.id');
   });
 
   it('uses neutral franchise labels for public sport modes', () => {

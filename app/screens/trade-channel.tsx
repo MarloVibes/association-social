@@ -220,7 +220,12 @@ export default function TradeChannelScreen() {
   const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
   const allTradeBlockAcrossLeague = allTeams.flatMap((t: any) => {
     const tb = t.tradeBlock || [];
-    return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({ ...p, teamName: t.name, teamId: t.id, gmId: t.gmId }));
+    return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({
+      ...p,
+      teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || ''),
+      teamId: t.id,
+      gmId: t.gmId,
+    }));
   }).sort((a: any, b: any) => (a.teamName || '').localeCompare(b.teamName || '') || compareRosterPlayersByValue(a, b));
   const claimedTradeTeams = allTeams
     .filter((t: any) => t.gmId && t.gmId !== user?.uid)

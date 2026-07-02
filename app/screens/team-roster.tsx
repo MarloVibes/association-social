@@ -189,6 +189,10 @@ export default function TeamRosterScreen() {
   const tradeBlock: string[] = team.tradeBlock || [];
   const players: any[] = team.players || [];
   const positionFilters = getPositionFilters(sport);
+  const tradeRouteTeamLabel = displayScheduleTeamLabel(
+    team.name || team.abbreviation,
+    team.teamId || team.id || eraTeamId || 'Team',
+  );
 
   const handleDeleteCustomPlayer = async (p: any) => {
     try {
@@ -244,7 +248,7 @@ export default function TeamRosterScreen() {
         leagueId,
         cpuTeamId: String(eraTeamId || team.teamId || ''),
         cpuAbbr: team.abbreviation || '',
-        cpuName: team.name || '',
+        cpuName: tradeRouteTeamLabel,
         prefillGet: pid,
       } });
       return;
@@ -260,7 +264,7 @@ export default function TeamRosterScreen() {
         leagueId,
         otherUid: team.gmId,
         otherTeamId: team.id,
-        otherTeamName: team.name || '',
+        otherTeamName: tradeRouteTeamLabel,
         prefillPlayer: pid,
       } as any,
     });

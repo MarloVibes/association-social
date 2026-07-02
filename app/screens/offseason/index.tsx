@@ -23,6 +23,7 @@ import {
   getUnresolvedOffseasonTeams,
   isOffseasonTeamActionStage,
 } from '@/domain/offseason/viewModel';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 type LeagueData = {
   id: string;
@@ -427,7 +428,7 @@ export default function OffseasonScreen() {
                     {lotteryWheelTeams.map((team, index) => (
                       <View key={`${team.teamId}:${index}`} style={styles.lotteryWheelSlot}>
                         <Text style={styles.lotteryWheelText} numberOfLines={1}>
-                          {team.abbreviation || team.name || team.teamId}
+                          {displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId)}
                         </Text>
                       </View>
                     ))}

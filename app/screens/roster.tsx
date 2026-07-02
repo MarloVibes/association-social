@@ -39,6 +39,10 @@ export default function RosterScreen() {
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
   const authoritativeSport = league?.sport || sport || 'nba';
   const positionFilters = getPositionFilters(authoritativeSport);
+  const activityTeamLabel = () => displayScheduleTeamLabel(
+    team?.name || team?.abbreviation,
+    team?.teamId || teamId || 'Team',
+  );
 
   useEffect(() => { loadData(); }, [teamId, eraKey]);
 
@@ -655,8 +659,8 @@ export default function RosterScreen() {
         type: 'pickup',
         playerName: player.full_name || player.name,
         uid: auth.currentUser?.uid,
-        teamName: team?.name || '',
-        message: (team?.name || 'A GM') + ' signed ' + (player.full_name || player.name),
+        teamName: activityTeamLabel(),
+        message: activityTeamLabel() + ' signed ' + (player.full_name || player.name),
         createdAt: serverTimestamp(),
       });
       setMyPlayerIds(prev => [...prev, pid]);
@@ -682,8 +686,8 @@ export default function RosterScreen() {
             type: 'drop',
             playerName: player.full_name || player.name,
             uid: auth.currentUser?.uid,
-            teamName: team?.name || '',
-            message: (team?.name || 'A GM') + ' dropped ' + (player.full_name || player.name),
+            teamName: activityTeamLabel(),
+            message: activityTeamLabel() + ' dropped ' + (player.full_name || player.name),
             createdAt: serverTimestamp(),
           });
           setMyPlayerIds(prev => prev.filter(id => id !== pid));

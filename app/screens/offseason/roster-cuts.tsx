@@ -15,6 +15,7 @@ import {
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
 import { gradeFromHiddenValue } from '@/domain/nba/identity';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { rosterCompliance, rosterPayroll } from '@/domain/offseason/rosterCuts';
 import type { OffseasonState } from '@/domain/offseason/types';
 
@@ -35,6 +36,8 @@ type Player = {
 type Team = {
   id: string;
   name?: string;
+  abbreviation?: string;
+  teamId?: string;
   gmId?: string;
   players?: Player[];
   salaryCap?: number;
@@ -186,7 +189,7 @@ export default function RosterCutsScreen() {
               <>
                 <View style={styles.summary}>
                   <View>
-                    <Text style={styles.teamName}>{team.name || 'Your Team'}</Text>
+                    <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Your Team')}</Text>
                     <Text style={styles.summaryMeta}>
                       {isNba
                         ? `${standardPlayers.length}/${compliance.rosterLimit} standard · ${twoWayPlayers.length}/${compliance.twoWayLimit} Two-way`

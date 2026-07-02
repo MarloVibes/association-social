@@ -19,6 +19,7 @@ Use this checklist before merging or deploying the franchise-engine branch.
 
 - [ ] Functions deploy: `npx firebase-tools deploy --only functions --project association-social`
 - [ ] Index deploy: `npx firebase-tools deploy --only firestore:indexes --project association-social`
+- [ ] Versioned index coverage includes `players`, `leagues`, `teams`, `preparation`, `draft_sessions`, `contract_offers`, and `trade_rooms`.
 - [ ] Deploy prompts do not ask to delete the existing `mvp_players` index or `trade_rooms.status` field override.
 - [ ] Firebase Console shows all function updates complete.
 - [ ] Firestore rules remain published for league schedules, teams, offseason, draft classes, draft sessions, and preparation docs.
