@@ -105,7 +105,7 @@ export default function LockerGroupChatScreen() {
     });
 
     return () => { unsubChat(); unsubMsgs(); };
-  }, [chatId]);
+  }, [chatId, router]);
 
   async function handleSend(gifUrl?: string, imageUrl?: string) {
     const trimmed = text.trim();

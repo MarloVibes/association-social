@@ -4,7 +4,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Alert, Dimensions, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db, functions } from '@/constants/firebase';
@@ -143,8 +143,6 @@ export default function TeamSelectScreen() {
   const isNBA = sportResolved === 'nba';
   const poolKey = isNBA ? eraKey : sportResolved;
 
-  useEffect(() => { loadTeams(); }, []);
-
   // Live league state so the spin/face-down switch and collision-avoidance stay current.
   useEffect(() => {
     if (!leagueId) return;
@@ -156,7 +154,7 @@ export default function TeamSelectScreen() {
     return () => unsub();
   }, [leagueId]);
 
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     setLoading(true);
     try {
       // Resolve sport from the league doc (the nav param can arrive empty from some
@@ -215,7 +213,9 @@ export default function TeamSelectScreen() {
       } catch (e) { console.warn('Failed to restore spins', e); }
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [eraKey, leagueId, sport, user]);
+
+  useEffect(() => { loadTeams(); }, [loadTeams]);
 
   // Persist this GM's spin results to the league so they survive an app restart.
   const persistSpins = async (results: any[]) => {

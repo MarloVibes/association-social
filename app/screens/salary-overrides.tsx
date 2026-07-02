@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -26,9 +26,7 @@ export default function SalaryOverridesScreen() {
   const [editingPlayer, setEditingPlayer] = useState<any>(null);
   const [editingSalary, setEditingSalary] = useState('');
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       // Check commissioner status
@@ -59,7 +57,9 @@ export default function SalaryOverridesScreen() {
       Alert.alert('Error loading', e.message);
     }
     setLoading(false);
-  }
+  }, [leagueId, router]);
+
+  useEffect(() => { load(); }, [load]);
 
   // Filtered player search results (max 8)
   const searchResults = useMemo(() => {

@@ -5,7 +5,7 @@ import { deleteUser } from 'firebase/auth';
 import { blockUser } from '@/constants/moderation';
 import { isMutuallyBlocked } from '@/utils/blockCheck';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -48,8 +48,6 @@ export default function ProfileScreen() {
   const profileUid = viewUid || user?.uid;
   const isOwnProfile = !viewUid || viewUid === user?.uid;
 
-  useEffect(() => { loadProfile(); }, []);
-
   // Silent block check: when viewing someone else, check if either party
   // has blocked the other. If so, render the silent 'user not found' state.
   useEffect(() => {
@@ -67,7 +65,7 @@ export default function ProfileScreen() {
 
 
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!profileUid) return;
     setLoading(true);
     try {
@@ -105,7 +103,9 @@ export default function ProfileScreen() {
       }
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [profileUid]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
   const saveProfile = async () => {
     if (!user?.uid || profileUid !== user.uid) return;

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { arrayUnion, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { auth, db } from '@/constants/firebase';
@@ -125,23 +125,10 @@ export default function NotificationsScreen() {
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadAll();
-    setRefreshing(false);
-  };
   const [loading, setLoading] = useState(true);
   const user = auth.currentUser;
 
-  useEffect(() => { loadAll(); }, []);
-  useEffect(() => {
-    if (!user) return;
-    const timer = setTimeout(() => markAllRead(), 2000);
-    return () => clearTimeout(timer);
-  }, [user]);
-
-
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -165,7 +152,30 @@ export default function NotificationsScreen() {
       setJoinRequests(allRequests);
     } catch (e) { console.error(e); }
     setLoading(false);
+  }, [user]);
+
+  const markAllRead = useCallback(async () => {
+    if (!user) return;
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const notifs = snap.data()?.notifications || [];
+      const updated = notifs.map((n: any) => ({ ...n, read: true }));
+      await updateDoc(doc(db, 'users', user.uid), { notifications: updated });
+    } catch (e) { console.error(e); }
+  }, [user]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
   };
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(() => markAllRead(), 2000);
+    return () => clearTimeout(timer);
+  }, [markAllRead, user]);
 
   const acceptInvite = async (invite: any) => {
     if (!user) return;
@@ -261,14 +271,6 @@ export default function NotificationsScreen() {
         { text: 'Decline', style: 'destructive', onPress: () => denyJoinRequest(req) },
       ]
     );
-  };
-
-  const markAllRead = async () => {
-    if (!user) return;
-    const snap = await getDoc(doc(db, 'users', user.uid));
-    const notifs = snap.data()?.notifications || [];
-    const updated = notifs.map((n: any) => ({ ...n, read: true }));
-    await updateDoc(doc(db, 'users', user.uid), { notifications: updated });
   };
 
   const deleteNotification = async (n: any, idx: number) => {

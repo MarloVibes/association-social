@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { setDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
@@ -32,16 +32,7 @@ export default function JoinLeagueScreen() {
   const [joining, setJoining] = useState(false);
   const user = auth.currentUser;
 
-  useEffect(() => {
-    if (leagueId) {
-      // Direct link to specific league
-      loadSpecificLeague();
-    } else {
-      loadAllLeagues();
-    }
-  }, []);
-
-  const loadAllLeagues = async () => {
+  const loadAllLeagues = useCallback(async () => {
     setLoading(true);
     if (!user) {
       setLoading(false);
@@ -85,16 +76,25 @@ export default function JoinLeagueScreen() {
       setLeagues(enriched);
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [user]);
 
-  const loadSpecificLeague = async () => {
+  const loadSpecificLeague = useCallback(async () => {
     setLoading(true);
     try {
       const snap = await getDoc(doc(db, 'leagues', leagueId!));
       if (snap.exists()) setSelectedLeague({ id: snap.id, ...snap.data() });
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [leagueId]);
+
+  useEffect(() => {
+    if (leagueId) {
+      // Direct link to specific league
+      loadSpecificLeague();
+    } else {
+      loadAllLeagues();
+    }
+  }, [leagueId, loadAllLeagues, loadSpecificLeague]);
 
   const loadLeagueRules = async (id: string) => {
     try {

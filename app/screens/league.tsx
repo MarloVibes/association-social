@@ -126,7 +126,7 @@ export default function LeagueScreen() {
     }, err => { if (err.code !== 'permission-denied') console.error(err); });
 
     return () => { unsubLeague(); };
-  }, [leagueId]);
+  }, [leagueId, user?.uid]);
 
   const handleLeaveLeague = async () => {
     if (!user) return;

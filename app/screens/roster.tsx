@@ -320,7 +320,7 @@ export default function RosterScreen() {
       }
       return compareRosterPlayersByValue(a, b);
     });
-  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, search, posFilter, sortBy]);
+  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, league?.mode, search, posFilter, sortBy]);
 
   const handlePlayerAction = (player: any, isOwned: boolean | undefined = true) => {
     if (isOwned === undefined) {

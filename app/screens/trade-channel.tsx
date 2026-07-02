@@ -4,7 +4,7 @@ import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/Fra
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, arrayUnion } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -96,8 +96,6 @@ export default function TradeChannelScreen() {
   const leagueYear = league?.currentYear || league?.seasonYear || null;
   const leagueDate = leagueDateFromRecord(league);
 
-  useEffect(() => { loadData(); }, []);
-
   useEffect(() => {
     const q = query(
       collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'),
@@ -155,7 +153,7 @@ export default function TradeChannelScreen() {
     return () => { unsubHost(); unsubGuest(); };
   }, [leagueId, user?.uid]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
@@ -205,7 +203,9 @@ export default function TradeChannelScreen() {
       }
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [leagueId, user?.uid]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const getPlayerById = (pid: string) => myRoster.find((p: any) => (p.player_id || p.full_name) === pid);
   const playerSalary = (player: any) => player?.salary ?? player?.contract?.salary ?? player?.currentSalary ?? 0;

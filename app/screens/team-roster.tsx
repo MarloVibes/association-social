@@ -168,7 +168,7 @@ export default function TeamRosterScreen() {
       } catch (e) { console.error(e); }
       setLoading(false);
     })();
-  }, [leagueId, teamId]);
+  }, [cpuAbbr, eraTeamId, isCpu, leagueId, teamId]);
 
   // Resolve the owner's display name (team docs only store gmId)
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
@@ -53,9 +53,7 @@ export default function MVPPlayerViewScreen() {
 
   const isOwn = player && player.ownerUid === auth.currentUser?.uid;
 
-  useEffect(() => { load(); }, [playerId]);
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!playerId) { Alert.alert('Error', 'Missing playerId'); router.back(); return; }
     setLoading(true);
     try {
@@ -70,7 +68,9 @@ export default function MVPPlayerViewScreen() {
       Alert.alert('Error', e.message);
     }
     setLoading(false);
-  }
+  }, [playerId, router]);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading || !player) {
     return <View style={[styles.container, styles.center]}><ActivityIndicator color='#22c55e' /></View>;

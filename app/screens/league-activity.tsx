@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { db } from '@/constants/firebase';
@@ -79,12 +79,12 @@ export default function LeagueActivityScreen() {
   const [filter, setFilter] = useState<ActivityFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadActivity = async () => {
+  const loadActivity = useCallback(async () => {
     if (!leagueId) return;
     const q = query(collection(db, 'leagues', leagueId, 'activity'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityItem)));
-  };
+  }, [leagueId]);
 
   const onRefresh = async () => {
     if (!leagueId) return;
@@ -121,7 +121,7 @@ export default function LeagueActivityScreen() {
       setLoading(false);
     };
     load();
-  }, [leagueId]);
+  }, [leagueId, loadActivity]);
 
   const getDeepLink = (item: ActivityItem) => {
     if (!league) return null;

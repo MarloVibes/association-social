@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { arrayRemove, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
@@ -37,6 +37,8 @@ export default function DashboardScreen() {
   const [leagueInvites, setLeagueInvites] = useState<any[]>([]);
   const [onlineFriends, setOnlineFriends] = useState<any[]>([]);
   const [showOnlineOverlay, setShowOnlineOverlay] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const [modeGridY, setModeGridY] = useState(0);
 
   const loadData = useCallback(async (uid: string) => {
     try {
@@ -139,6 +141,9 @@ export default function DashboardScreen() {
       { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); } },
     ]);
   };
+  const focusFranchiseModes = () => {
+    scrollRef.current?.scrollTo({ y: Math.max(0, modeGridY - 24), animated: true });
+  };
 
   const homeModel = buildDashboardHomeModel({
     leagues,
@@ -201,6 +206,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.wrapper}>
       <ScrollView
+        ref={scrollRef}
         style={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#00ff87' colors={['#00ff87']} />}
       >
@@ -260,7 +266,7 @@ export default function DashboardScreen() {
             ))}
           </View>
 
-          <View style={styles.modeGrid}>
+          <View style={styles.modeGrid} onLayout={(event) => setModeGridY(event.nativeEvent.layout.y)}>
             {homeModel.modeCards.map((mode) => (
               <TouchableOpacity
                 key={mode.sport}
@@ -345,8 +351,8 @@ export default function DashboardScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Leagues</Text>
-            <TouchableOpacity onPress={() => router.push('/screens/create-league')}>
-              <Text style={styles.sectionAction}>+ Create</Text>
+            <TouchableOpacity onPress={focusFranchiseModes}>
+              <Text style={styles.sectionAction}>Choose Franchise</Text>
             </TouchableOpacity>
           </View>
 
@@ -356,8 +362,8 @@ export default function DashboardScreen() {
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>{"You haven't joined any leagues yet."}</Text>
               <View style={styles.emptyButtons}>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/screens/create-league')}>
-                  <Text style={styles.primaryButtonText}>Create League</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={focusFranchiseModes}>
+                  <Text style={styles.primaryButtonText}>Choose Franchise</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/screens/join-league')}>
                   <Text style={styles.secondaryButtonText}>Join League</Text>

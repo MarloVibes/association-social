@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -43,7 +43,7 @@ export default function PendingPlayersScreen() {
   const [isCommissioner, setIsCommissioner] = useState(false);
   const [leagueSport, setLeagueSport] = useState('nba');
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -61,9 +61,9 @@ export default function PendingPlayersScreen() {
       console.error('pending load failed', e);
     }
     setLoading(false);
-  }
+  }, [leagueId]);
 
-  useEffect(() => { load(); }, [leagueId]);
+  useEffect(() => { load(); }, [load]);
 
   async function approve(p: any) {
     Alert.alert('Approve Player', `Approve ${p.full_name}?`, [

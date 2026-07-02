@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -60,9 +60,7 @@ export default function LeagueSettingsScreen() {
   const [scheduleGamesPerTeam, setScheduleGamesPerTeam] = useState('29');
   const [draftTimerSeconds, setDraftTimerSeconds] = useState('120');
 
-  useEffect(() => { loadData(); }, [leagueId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!leagueId) return;
     setLoading(true);
     try {
@@ -110,7 +108,9 @@ export default function LeagueSettingsScreen() {
       setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
-  };
+  }, [leagueId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const isFounder = league?.commissionerId === user?.uid;
   const [pendingCount, setPendingCount] = useState(0);

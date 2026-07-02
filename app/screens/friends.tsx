@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
@@ -14,9 +14,7 @@ export default function FriendsScreen() {
 
   const user = auth.currentUser;
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -42,7 +40,9 @@ export default function FriendsScreen() {
       setRequests(requestProfiles.filter((r): r is any => !!r && !blockedIds.includes(r.uid)));
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const acceptRequest = async (fromUid: string) => {
     if (!user) return;

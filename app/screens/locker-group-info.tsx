@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, getDocs, writeBatch } from 'firebase/firestore';
@@ -46,9 +46,7 @@ export default function LockerGroupInfoScreen() {
   const myUid = auth.currentUser?.uid;
   const isCreator = chat?.creatorUid === myUid;
 
-  useEffect(() => { load(); }, [chatId]);
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!chatId) return;
     setLoading(true);
     try {
@@ -79,7 +77,9 @@ export default function LockerGroupInfoScreen() {
       Alert.alert('Error', e.message);
     }
     setLoading(false);
-  }
+  }, [chatId, router]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function loadFriendsForAdd() {
     if (!myUid) return;

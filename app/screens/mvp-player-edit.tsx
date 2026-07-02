@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
@@ -94,9 +94,7 @@ export default function MVPPlayerEditScreen() {
   const [attributes, setAttributes] = useState<Record<string, string>>({});
   const [attrsOpen, setAttrsOpen] = useState(false);
 
-  useEffect(() => { init(); }, []);
-
-  async function init() {
+  const init = useCallback(async () => {
     if (!auth.currentUser) return;
     if (isEdit && playerId) {
       try {
@@ -136,7 +134,9 @@ export default function MVPPlayerEditScreen() {
         }
       } catch { /* ignore */ }
     }
-  }
+  }, [isEdit, playerId, router]);
+
+  useEffect(() => { init(); }, [init]);
 
   async function handleSave() {
     if (!playerName.trim()) { Alert.alert('Required', 'Player name is required.'); return; }

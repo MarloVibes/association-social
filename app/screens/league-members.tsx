@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
@@ -14,11 +14,7 @@ export default function LeagueMembersScreen() {
   const [commissionerId, setCommissionerId] = useState('');
   const user = auth.currentUser;
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -37,7 +33,11 @@ export default function LeagueMembersScreen() {
       setTeams(teamsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [leagueId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const coComms: string[] = league?.coCommissioners || [];
   const isFounder = commissionerId === user?.uid || league?.commissionerId === user?.uid;

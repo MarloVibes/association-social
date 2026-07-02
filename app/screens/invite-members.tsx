@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
@@ -21,8 +21,6 @@ export default function InviteMembersScreen() {
   const [sending, setSending] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'invite' | 'invitations'>(tab === 'invitations' || tab === 'pending' ? 'invitations' : 'invite');
   const user = auth.currentUser;
-
-  useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
     if (tab === 'invitations' || tab === 'pending') setActiveTab('invitations');
@@ -96,7 +94,7 @@ export default function InviteMembersScreen() {
     return () => { unsubR(); unsubS(); };
   }, [leagueId]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -116,7 +114,9 @@ export default function InviteMembersScreen() {
       setFriends(friendProfiles.filter(d => d.exists()).map(d => ({ uid: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [leagueId, user]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleSearch = async (text: string) => {
     setSearch(text);

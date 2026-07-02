@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
@@ -19,11 +19,7 @@ export default function MVPPlayersScreen() {
   const [ownerName, setOwnerName] = useState('');
   const [blockedState, setBlockedState] = useState<'unknown' | 'blocked' | 'ok'>('unknown');
 
-  useEffect(() => {
-    load();
-  }, [targetUid]);
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       if (!targetUid) { setPlayers([]); setLoading(false); return; }
@@ -52,7 +48,11 @@ export default function MVPPlayersScreen() {
       setPlayers([]);
     }
     setLoading(false);
-  }
+  }, [isOwnList, targetUid]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Silent block: render generic 'not available' state if mutually blocked
   if (blockedState === 'blocked') {

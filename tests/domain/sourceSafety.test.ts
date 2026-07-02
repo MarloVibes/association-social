@@ -750,6 +750,9 @@ describe('source safety regressions', () => {
     expect(dashboard).not.toContain('MINI GAME');
     expect(dashboard).not.toContain('Mini Games are on the way');
     expect(dashboard).not.toContain('miniGameCard');
+    expect(dashboard).toContain('focusFranchiseModes');
+    expect(dashboard).toContain('Choose Franchise');
+    expect(dashboard).toContain("params: { sport: mode.sport }");
     expect(createLeague).not.toContain('coming soon');
   });
 
