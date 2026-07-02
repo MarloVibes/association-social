@@ -4,6 +4,12 @@ const REGULATION_PERIOD_SECONDS = 720;
 const OVERTIME_PERIOD_SECONDS = 300;
 const LIVE_MODE_SPEED_MULTIPLIER = 3;
 
+function displayTimelineTeam(teamId) {
+  const key = String(teamId || '').trim().toUpperCase();
+  const eraSuffixMatch = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraSuffixMatch ? eraSuffixMatch[1] : key;
+}
+
 function periodLabel(period) {
   if (period <= 4) return `Q${period}`;
   const overtimeNumber = period - 4;
@@ -97,7 +103,7 @@ function buildLiveTimeline(input) {
       awayScore,
       eventType: 'period_end',
       actingTeamId: null,
-      text: `End of ${period.label}: ${input.awayTeamId} ${awayScore} - ${input.homeTeamId} ${homeScore}`,
+      text: `End of ${period.label}: ${displayTimelineTeam(input.awayTeamId)} ${awayScore} - ${displayTimelineTeam(input.homeTeamId)} ${homeScore}`,
       tags: ['period_end', String(period.label).toLowerCase()],
     }));
   });
@@ -113,7 +119,7 @@ function buildLiveTimeline(input) {
     awayScore: input.awayScore,
     eventType: 'final_buzzer',
     actingTeamId: input.homeScore === input.awayScore ? null : input.homeScore > input.awayScore ? input.homeTeamId : input.awayTeamId,
-    text: `Final: ${input.awayTeamId} ${input.awayScore} - ${input.homeTeamId} ${input.homeScore}`,
+    text: `Final: ${displayTimelineTeam(input.awayTeamId)} ${input.awayScore} - ${displayTimelineTeam(input.homeTeamId)} ${input.homeScore}`,
     tags: ['final'],
     x: 50,
     y: 50,

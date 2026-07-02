@@ -171,6 +171,19 @@ describe('Live Mode timeline', () => {
     expect(periodLabel(7)).toBe('3OT');
   });
 
+  it('keeps raw era team ids out of generated period and final event text', () => {
+    const timeline = buildLiveTimeline({
+      ...baseInput,
+      homeTeamId: 'LAL',
+      awayTeamId: 'MIN_2003',
+    });
+
+    const eventText = timeline.events.map(event => event.text).join('\n');
+    expect(eventText).not.toContain('MIN_2003');
+    expect(timeline.events.find(event => event.eventType === 'period_end')?.text).toContain('MIN ');
+    expect(timeline.events.at(-1)?.text).toContain('Final: MIN 101 - LAL 104');
+  });
+
   it('creates overtime events when regulation ends tied', () => {
     const timeline = buildLiveTimeline({
       ...baseInput,
