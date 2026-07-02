@@ -829,9 +829,10 @@ describe('source safety regressions', () => {
     const tradeRoom = source('app/screens/trade-room.tsx');
 
     expect(tradeRoom).toContain('positionFilterLabel(pos)');
-    expect(tradeRoom).toContain('minWidth: 62');
+    expect(tradeRoom).toContain('minWidth: 54');
     expect(tradeRoom).toContain('flexShrink: 0');
     expect(tradeRoom).toContain('paddingHorizontal: 14');
+    expect(tradeRoom).toContain('height: 36');
     expect(tradeRoom).not.toContain("positionFilterBtn: { minWidth: 50");
   });
 
