@@ -8,6 +8,7 @@ const { validateTrade } = require('./domain/validateTrade');
 const {
   authorizeFinalization,
   canonicalCpuTeams,
+  evaluateCpuTrade,
   matchesCpuIdentity,
   resolveCpuIdentity,
   swapAssets,
@@ -171,6 +172,21 @@ function newNotifications(before, after) {
     seen.set(key, count - 1);
     return false;
   });
+}
+
+function assetKey(asset) {
+  return String(asset && (asset.player_id || asset.id || asset.bref_id || asset.full_name) || '');
+}
+
+function assetsByKeys(assets, keys) {
+  const wanted = new Set((keys || []).map((key) => String(key)));
+  return (assets || []).filter((asset) => wanted.has(assetKey(asset)));
+}
+
+function cpuStatusForDecision(decision) {
+  if (decision === 'accept') return 'cpu_accepted';
+  if (decision === 'decline') return 'declined';
+  return 'pending';
 }
 
 exports.pushOnNotification = onDocumentUpdated('users/{uid}', async (event) => {
@@ -561,6 +577,181 @@ exports.saveTeamCoachingPreset = onCall(createSaveTeamCoachingPresetHandler({
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
 }));
+
+exports.submitCpuTradeRequest = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+  const data = request.data || {};
+  const leagueId = data.leagueId ? String(data.leagueId) : '';
+  const proposerTeamId = data.proposerTeamId ? String(data.proposerTeamId) : '';
+  const rawCpuId = data.cpuTeamId ? String(data.cpuTeamId).replace(/^cpu_/, '') : '';
+  const requestedCpuAbbr = data.cpuAbbr ? String(data.cpuAbbr) : '';
+  const giveKeys = Array.isArray(data.giveKeys) ? data.giveKeys.map(String).filter(Boolean) : [];
+  const getKeys = Array.isArray(data.getKeys) ? data.getKeys.map(String).filter(Boolean) : [];
+  if (!leagueId || !proposerTeamId || (!rawCpuId && !requestedCpuAbbr)) {
+    throw new HttpsError('invalid-argument', 'Provide league, team, and CPU team.');
+  }
+  if (giveKeys.length === 0 && getKeys.length === 0) {
+    throw new HttpsError('invalid-argument', 'Pick at least one trade asset.');
+  }
+
+  const db = getFirestore();
+  const leagueRef = db.collection('leagues').doc(leagueId);
+  const proposerTeamRef = leagueRef.collection('teams').doc(proposerTeamId);
+  const userRef = db.collection('users').doc(uid);
+  const requestRef = leagueRef.collection('cpu_trade_requests').doc();
+  const createdAt = new Date().toISOString();
+
+  return db.runTransaction(async (tx) => {
+    const [leagueSnap, proposerTeamSnap, userSnap] = await Promise.all([
+      tx.get(leagueRef),
+      tx.get(proposerTeamRef),
+      tx.get(userRef),
+    ]);
+    if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+    if (!proposerTeamSnap.exists) throw new HttpsError('failed-precondition', 'Your team was not found.');
+    const league = leagueSnap.data() || {};
+    const proposerTeam = proposerTeamSnap.data() || {};
+    const commissioner = league.commissionerId === uid || (league.coCommissioners || []).includes(uid);
+    const inactive = league.paused === true || league.archived === true || league.status === 'archived';
+    if (inactive) throw new HttpsError('failed-precondition', 'This league is not accepting trades right now.');
+    if (proposerTeam.gmId !== uid) throw new HttpsError('permission-denied', 'You can only trade from your own team.');
+    if (league.allowCpuTrades !== true && !commissioner) {
+      throw new HttpsError('failed-precondition', 'CPU trades are disabled for this league.');
+    }
+
+    const sport = league.sport === 'nfl' ? 'madden' : (league.sport || 'nba');
+    const eraKey = league.era || 'current';
+    const poolKey = sport === 'madden' || sport === 'mlb' ? sport : eraKey;
+    const poolRef = db.collection('era_player_pools').doc(poolKey);
+    const eraTeamsRef = db.collection('era_rosters').doc(eraKey).collection('teams');
+    const liveTeamsRef = leagueRef.collection('teams');
+    const reads = [tx.get(poolRef), tx.get(liveTeamsRef)];
+    if (sport === 'nba') reads.push(tx.get(eraTeamsRef));
+    const [poolSnap, liveTeamsSnap, eraTeamsSnap] = await Promise.all(reads);
+    const poolPlayers = poolSnap.exists && Array.isArray(poolSnap.data().players)
+      ? poolSnap.data().players
+      : null;
+    if (!poolPlayers) {
+      throw new HttpsError('failed-precondition', 'Trusted CPU roster or identity is unavailable.', {
+        errors: ['cpu_identity_unavailable'],
+      });
+    }
+    const eraTeams = eraTeamsSnap
+      ? eraTeamsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      : [];
+    const canonicalTeams = canonicalCpuTeams(sport, poolPlayers, eraTeams);
+    const liveTeamDocs = liveTeamsSnap.docs.map((doc) => ({ ref: doc.ref, id: doc.id, ...doc.data() }));
+    const liveTeams = liveTeamDocs.map(({ ref, ...team }) => team);
+    const cpuIdentity = resolveCpuIdentity({
+      requestedId: rawCpuId,
+      requestedAbbr: requestedCpuAbbr,
+      eraTeams: canonicalTeams,
+      liveTeams,
+    });
+    const cpuAbbr = cpuIdentity && String(cpuIdentity.abbreviation || cpuIdentity.abbr || '').toUpperCase();
+    const trustedPlayers = poolPlayers && cpuAbbr
+      ? poolPlayers.filter((player) => String(player.team || '').toUpperCase() === cpuAbbr)
+      : [];
+    if (!cpuIdentity || trustedPlayers.length === 0) {
+      throw new HttpsError('failed-precondition', 'Trusted CPU roster or identity is unavailable.', {
+        errors: ['cpu_identity_unavailable'],
+      });
+    }
+    const existingCpu = liveTeamDocs.find((team) => matchesCpuIdentity(team, cpuIdentity) && !team.gmId);
+    if (existingCpu && existingCpu.gmId) {
+      throw new HttpsError('permission-denied', 'The requested CPU team is already claimed.');
+    }
+    const cpuTeam = existingCpu || {
+      players: trustedPlayers,
+      picks: [],
+      teamId: cpuIdentity.id || cpuIdentity.teamId || rawCpuId,
+      name: cpuIdentity.full_name || cpuIdentity.name || data.cpuName || requestedCpuAbbr || '',
+      abbreviation: cpuIdentity.abbreviation || cpuIdentity.abbr || requestedCpuAbbr || '',
+    };
+    const give = assetsByKeys(proposerTeam.players || [], giveKeys);
+    const get = assetsByKeys(cpuTeam.players || trustedPlayers, getKeys);
+    if (give.length !== giveKeys.length || get.length !== getKeys.length) {
+      throw new HttpsError('failed-precondition', 'One or more selected players no longer belongs to that team.', {
+        errors: ['asset_missing'],
+      });
+    }
+
+    const user = userSnap.exists ? (userSnap.data() || {}) : {};
+    const source = {
+      give,
+      get,
+      givePicks: [],
+      getPicks: [],
+    };
+    const cpuDecision = evaluateCpuTrade({
+      league,
+      source,
+      proposerTeam,
+      cpuTeam,
+    });
+    const status = cpuStatusForDecision(cpuDecision.decision);
+    const timestamp = FieldValue.serverTimestamp();
+    const proposerName = user.displayName || user.username || 'A GM';
+    const requestDoc = {
+      leagueId,
+      proposerUid: uid,
+      proposerName,
+      proposerTeamId,
+      proposerTeamName: proposerTeam.name || '',
+      cpuTeamId: rawCpuId || cpuIdentity.id || cpuIdentity.teamId || '',
+      cpuAbbr: cpuIdentity.abbreviation || cpuIdentity.abbr || requestedCpuAbbr || '',
+      cpuName: cpuIdentity.full_name || cpuIdentity.name || data.cpuName || requestedCpuAbbr || '',
+      cpuRoster: cpuTeam.players || trustedPlayers,
+      give,
+      get,
+      givePicks: [],
+      getPicks: [],
+      status,
+      cpuDecision,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    if (status === 'declined') {
+      requestDoc.resolvedAt = timestamp;
+      requestDoc.resolvedBy = 'cpu';
+    }
+    tx.set(requestRef, requestDoc);
+
+    if (status === 'pending' && league.commissionerId) {
+      tx.set(db.collection('users').doc(league.commissionerId), {
+        notifications: FieldValue.arrayUnion({
+          id: `cpu-trade-review:${leagueId}:${requestRef.id}`,
+          type: 'cpu_trade_request',
+          leagueId,
+          leagueName: league.name || '',
+          requestId: requestRef.id,
+          fromUid: uid,
+          fromName: proposerName,
+          createdAt,
+          message: `${proposerName} requested a close CPU trade for your approval.`,
+        }),
+      }, { merge: true });
+    } else if (status === 'declined') {
+      tx.set(userRef, {
+        notifications: FieldValue.arrayUnion({
+          id: `cpu-trade-declined:${leagueId}:${requestRef.id}`,
+          type: 'cpu_trade_result',
+          leagueId,
+          requestId: requestRef.id,
+          createdAt,
+          message: `The CPU declined your trade with ${requestDoc.cpuName || requestDoc.cpuAbbr || 'that team'}.`,
+        }),
+      }, { merge: true });
+    }
+
+    return {
+      requestId: requestRef.id,
+      status,
+      cpuDecision,
+    };
+  });
+});
 
 exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (request) => {
   const uid = request.auth && request.auth.uid;

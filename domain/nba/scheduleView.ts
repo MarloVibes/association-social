@@ -42,12 +42,12 @@ export function normalizeScheduleKey(value?: string | null) {
 
 export function displayScheduleAbbr(value?: string | null) {
   const key = normalizeScheduleKey(value);
-  const eraSuffixMatch = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  const eraSuffixMatch = key.match(/^([A-Z]{2,4})_\d{4}$/);
   return eraSuffixMatch ? eraSuffixMatch[1] : key;
 }
 
 export function displayScheduleEventText(value?: string | null) {
-  return String(value || '').replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayScheduleAbbr(match));
+  return String(value || '').replace(/\b[A-Z]{2,4}_\d{4}\b/gi, match => displayScheduleAbbr(match));
 }
 
 export function displayScheduleTeamLabel(teamName?: string | null, fallbackTeamId?: string | null) {

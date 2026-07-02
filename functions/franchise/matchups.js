@@ -1880,7 +1880,9 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
       ]);
       let nextGame;
       try {
-        nextGame = mutate({ game, uid, nowMs: now() });
+        nextGame = mutate({
+          game, uid, nowMs: now(), league,
+        });
       } catch (error) {
         throw mapError(error, HttpsError);
       }
@@ -1905,6 +1907,18 @@ function isCommissioner(uid, league) {
       || (league.coCommissioners || []).includes(uid)
     )
   );
+}
+
+function isCpuScheduledGame(game) {
+  return !!game && (!game.homeGmId || !game.awayGmId);
+}
+
+function canUserSimulateVsCpu({ game, uid, league }) {
+  if (!isCpuScheduledGame(game)) return { allowed: true };
+  if (isCommissioner(uid, league)) return { allowed: true };
+  if (!participatingGms(game).includes(uid)) return { allowed: false, reason: 'not_participant' };
+  if (league && league.allowCpuGameSimulation === true) return { allowed: true };
+  return { allowed: false, reason: 'cpu_sim_disabled' };
 }
 
 function normalizeScheduleKey(value) {
@@ -2110,7 +2124,9 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       ]);
       let nextGame;
       try {
-        nextGame = mutate({ game, uid, nowMs: now() });
+        nextGame = mutate({
+          game, uid, nowMs: now(), league,
+        });
       } catch (error) {
         throw mapError(error, HttpsError);
       }
@@ -2191,7 +2207,19 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
 function createRequestMatchupHandler(deps) {
   return createGameMutationHandler({
     ...deps,
-    mutate: ({ game, uid, nowMs }) => requestMatchup({ game, uid, nowMs }),
+    mutate: ({ game, uid, nowMs, league }) => {
+      const cpuGate = canUserSimulateVsCpu({ game, uid, league });
+      if (!cpuGate.allowed) {
+        throw new MatchupError(
+          'permission-denied',
+          cpuGate.reason === 'not_participant'
+            ? 'Only a participating GM can manage this matchup.'
+            : 'CPU game simulation is disabled for this league.',
+          { reason: cpuGate.reason },
+        );
+      }
+      return requestMatchup({ game, uid, nowMs });
+    },
   });
 }
 
@@ -2222,6 +2250,16 @@ function createSimulateScheduledGameHandler(deps) {
       const gameIndex = games.findIndex(game => game.id === gameId);
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
+      const cpuGate = canUserSimulateVsCpu({ game, uid, league });
+      if (!cpuGate.allowed) {
+        throw new HttpsError(
+          'permission-denied',
+          cpuGate.reason === 'not_participant'
+            ? 'Only a participating GM can manage this matchup.'
+            : 'CPU game simulation is disabled for this league.',
+          { reason: cpuGate.reason },
+        );
+      }
       const [homeTeam, awayTeam] = await Promise.all([
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
@@ -2448,6 +2486,7 @@ module.exports = {
   canonicalizeTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   createAcceptMatchupHandler,
+  canUserSimulateVsCpu,
   createExpireMatchupRequestHandler,
   createReportGameScoreHandler,
   createRequestMatchupHandler,

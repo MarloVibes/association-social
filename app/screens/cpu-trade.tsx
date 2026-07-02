@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '@/constants/firebase';
+import { auth, db, functions } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
@@ -22,11 +23,12 @@ export default function CpuTradeScreen() {
   const [givePosFilter, setGivePosFilter] = useState('ALL');
   const [getPosFilter, setGetPosFilter] = useState('ALL');
   const user = auth.currentUser;
+  const userId = user?.uid;
   const sport = league?.sport || 'nba';
   const positionFilters = getPositionFilters(sport);
 
   useEffect(() => {
-    if (!leagueId || !user) return;
+    if (!leagueId || !userId) return;
     (async () => {
       try {
         const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -35,7 +37,7 @@ export default function CpuTradeScreen() {
         const eraKey = ld.era || 'current';
         const poolKey = (ld.sport && ld.sport !== 'nba') ? ld.sport : eraKey;
 
-        const mySnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', leagueId + '_' + user.uid));
+        const mySnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', leagueId + '_' + userId));
         if (mySnap.exists()) {
           const md = mySnap.data() as any;
           setMyTeam({ id: mySnap.id, ...md });
@@ -54,7 +56,7 @@ export default function CpuTradeScreen() {
       } catch (e) { console.error(e); }
       setLoading(false);
     })();
-  }, [leagueId, cpuTeamId]);
+  }, [leagueId, cpuTeamId, cpuAbbr, userId]);
 
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, k: string) => {
     const next = new Set(set);
@@ -68,41 +70,26 @@ export default function CpuTradeScreen() {
     if (!myTeam) { Alert.alert('No team', 'You need a team in this league to propose a trade.'); return; }
     setSending(true);
     try {
-      const giveP = myRoster.filter(p => give.has(keyOf(p)));
-      const getP = cpuRoster.filter(p => get.has(keyOf(p)));
-      const myData = (await getDoc(doc(db, 'users', user.uid))).data() || {};
-      const reqRef = await addDoc(collection(db, 'leagues', leagueId, 'cpu_trade_requests'), {
-        proposerUid: user.uid,
-        proposerName: myData.displayName || myData.username || 'A GM',
+      const submitCpuTrade = httpsCallable(functions, 'submitCpuTradeRequest');
+      const result: any = await submitCpuTrade({
+        leagueId,
         proposerTeamId: myTeam.id,
-        proposerTeamName: myTeam.name || '',
         cpuTeamId,
         cpuAbbr,
         cpuName: cpuName || cpuAbbr,
-        cpuRoster, // snapshot used for validation / materialization at approval
-        give: giveP,
-        get: getP,
-        status: 'pending',
-        createdAt: serverTimestamp(),
+        giveKeys: Array.from(give),
+        getKeys: Array.from(get),
       });
-      try {
-        const commId = league?.commissionerId;
-        if (commId) {
-          await updateDoc(doc(db, 'users', commId), {
-            notifications: arrayUnion({
-              type: 'cpu_trade_request',
-              leagueId,
-              leagueName: league?.name || '',
-              requestId: reqRef.id,
-              fromUid: user.uid,
-              fromName: myData.displayName || 'A GM',
-              createdAt: new Date().toISOString(),
-              message: (myData.displayName || 'A GM') + ' requested a CPU trade for your approval.',
-            }),
-          });
-        }
-      } catch {}
-      Alert.alert('Sent for Approval', 'Your CPU trade was sent to the commissioner to approve.', [{ text: 'OK', onPress: () => router.back() }]);
+      const payload = result.data || {};
+      if (payload.status === 'cpu_accepted') {
+        const finalize = httpsCallable(functions, 'finalizeTrade');
+        await finalize({ leagueId, cpuRequestId: payload.requestId });
+        Alert.alert('CPU Accepted', 'The trade was accepted and rosters have been updated.', [{ text: 'OK', onPress: () => router.back() }]);
+      } else if (payload.status === 'declined') {
+        Alert.alert('CPU Declined', 'The CPU front office did not like enough value in that deal.');
+      } else {
+        Alert.alert('Sent for Review', 'The CPU saw this as close, so it went to the commissioner for approval.', [{ text: 'OK', onPress: () => router.back() }]);
+      }
     } catch (e: any) { Alert.alert('Error', e.message); }
     setSending(false);
   };
@@ -126,7 +113,7 @@ export default function CpuTradeScreen() {
 
       {loading ? <ActivityIndicator color='#00ff87' style={{ marginTop: 24 }} /> : (
         <ScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.note}>Build a trade with {cpuName || cpuAbbr} (CPU). {"It's sent to the commissioner to approve before rosters change."}</Text>
+          <Text style={styles.note}>Build a trade with {cpuName || cpuAbbr} (CPU). The CPU can accept, decline, or send close calls to commissioner review.</Text>
 
           <Text style={styles.section}>📤 You give ({give.size}) — from {myTeam?.name || 'your team'}</Text>
           <PositionFilterRow filters={positionFilters} selected={givePosFilter} onChange={setGivePosFilter} />
@@ -145,7 +132,7 @@ export default function CpuTradeScreen() {
               .map((p, i) => <Row key={keyOf(p) + i} p={p} selected={get.has(keyOf(p))} onPress={() => toggle(get, setGet, keyOf(p))} />)}
 
           <TouchableOpacity style={[styles.submit, (sending || (give.size === 0 && get.size === 0)) && { opacity: 0.5 }]} onPress={submit} disabled={sending || (give.size === 0 && get.size === 0)}>
-            {sending ? <ActivityIndicator color='#000' /> : <Text style={styles.submitText}>Send to Commissioner</Text>}
+            {sending ? <ActivityIndicator color='#000' /> : <Text style={styles.submitText}>Submit to CPU</Text>}
           </TouchableOpacity>
           <View style={{ height: 80 }} />
         </ScrollView>

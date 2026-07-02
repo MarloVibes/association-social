@@ -52,6 +52,8 @@ export default function LeagueSettingsScreen() {
   const [votePassThreshold, setVotePassThreshold] = useState('majority');
   const [voteDeadlineDays, setVoteDeadlineDays] = useState('2');
   const [commissionerCanOverride, setCommissionerCanOverride] = useState(false);
+  const [allowCpuGameSimulation, setAllowCpuGameSimulation] = useState(false);
+  const [allowCpuTrades, setAllowCpuTrades] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -101,6 +103,9 @@ export default function LeagueSettingsScreen() {
       setVotePassThreshold(data.votePassThreshold || 'majority');
       setVoteDeadlineDays(String(data.voteDeadlineDays || 2));
       setCommissionerCanOverride(!!data.commissionerCanOverride);
+      const soloDefault = !Array.isArray(data.members) || data.members.length <= 1;
+      setAllowCpuGameSimulation(typeof data.allowCpuGameSimulation === 'boolean' ? data.allowCpuGameSimulation : soloDefault);
+      setAllowCpuTrades(typeof data.allowCpuTrades === 'boolean' ? data.allowCpuTrades : soloDefault);
       setScheduleGamesPerTeam(String(data.gamesPerTeam || 29));
       setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
@@ -251,6 +256,8 @@ export default function LeagueSettingsScreen() {
       votePassThreshold,
       voteDeadlineDays: Math.max(1, Math.min(14, parseInt(voteDeadlineDays, 10) || 2)),
       commissionerCanOverride,
+      allowCpuGameSimulation,
+      allowCpuTrades,
     }, 'League settings updated.');
   };
 
@@ -454,6 +461,36 @@ export default function LeagueSettingsScreen() {
             placeholderTextColor='#555'
           />
           <Text style={styles.helper}>How long each team has to make a live draft pick (30-600 seconds).</Text>
+        </View>
+
+        <Text style={styles.sectionLabel}>CPU TEAMS / SOLO PLAY</Text>
+        <View style={styles.card}>
+          <Text style={styles.helper}>Vacant teams can act as CPU front offices for solo leagues or partially filled leagues.</Text>
+          <View style={[styles.toggleRow, { marginTop: 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Allow GMs to Sim vs CPU</Text>
+              <Text style={styles.toggleDesc}>A GM can play out scheduled games when the opponent team has no user.</Text>
+            </View>
+            <Switch
+              value={allowCpuGameSimulation}
+              onValueChange={setAllowCpuGameSimulation}
+              trackColor={{ false: '#333', true: '#00ff8788' }}
+              thumbColor={allowCpuGameSimulation ? '#00ff87' : '#666'}
+            />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Allow CPU Trades</Text>
+              <Text style={styles.toggleDesc}>Vacant teams evaluate offers before accepting, declining, or sending close calls to review.</Text>
+            </View>
+            <Switch
+              value={allowCpuTrades}
+              onValueChange={setAllowCpuTrades}
+              trackColor={{ false: '#333', true: '#00ff8788' }}
+              thumbColor={allowCpuTrades ? '#00ff87' : '#666'}
+            />
+          </View>
         </View>
 
         {/* League finances */}

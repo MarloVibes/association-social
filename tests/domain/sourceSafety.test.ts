@@ -97,6 +97,13 @@ describe('source safety regressions', () => {
     expect(profile).toContain('Help / FAQ');
   });
 
+  it('links Help / FAQ from the public title screen', () => {
+    const landing = source('app/(tabs)/index.tsx');
+
+    expect(landing).toContain("router.push('/screens/faq-help')");
+    expect(landing).toContain('Help / FAQ');
+  });
+
   it('uses one shared franchise player card row across roster and trade surfaces', () => {
     const sharedRow = source('components/FranchisePlayerRow.tsx');
     const roster = source('app/screens/roster.tsx');
@@ -248,6 +255,23 @@ describe('source safety regressions', () => {
     expect(createLeague).toContain("gamesPerTeam: sport === 'nba'");
     expect(teamSelect).toContain('scheduleCreationFailed');
     expect(teamSelect).toContain('The team was claimed, but the schedule did not lock');
+  });
+
+  it('keeps CPU team controls server-backed for solo leagues', () => {
+    const settings = source('app/screens/league-settings.tsx');
+    const cpuTrade = source('app/screens/cpu-trade.tsx');
+    const functionsIndex = source('functions/index.js');
+    const matchups = source('functions/franchise/matchups.js');
+
+    expect(settings).toContain('allowCpuGameSimulation');
+    expect(settings).toContain('allowCpuTrades');
+    expect(settings).toContain('CPU TEAMS / SOLO PLAY');
+    expect(cpuTrade).toContain("httpsCallable(functions, 'submitCpuTradeRequest')");
+    expect(cpuTrade).toContain("httpsCallable(functions, 'finalizeTrade')");
+    expect(cpuTrade).not.toContain("addDoc(collection(db, 'leagues', leagueId, 'cpu_trade_requests')");
+    expect(functionsIndex).toContain('exports.submitCpuTradeRequest');
+    expect(functionsIndex).toContain('evaluateCpuTrade');
+    expect(matchups).toContain('canUserSimulateVsCpu');
   });
 
   it('routes fantasy draft leagues into a startup draft room before the season begins', () => {
@@ -648,6 +672,10 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('compareHeaderName');
     expect(playerCard).toContain('compareHeaderMeta');
     expect(playerCard).toContain('compareGradeColumn');
+    expect(playerCard).toContain("compareVs: { width: 44");
+    expect(playerCard).toContain("compareAbilityLabel: { width: 112");
+    expect(playerCard).not.toContain('model.left.name');
+    expect(playerCard).not.toContain('model.right.name');
     expect(playerCard).not.toContain('compareSmallName');
     expect(playerCard).toContain('teamId');
     expect(playerCard).toContain('teamName');

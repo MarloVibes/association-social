@@ -143,6 +143,13 @@ export default function LandingScreen() {
         >
           <Text style={styles.signInBtnText}>Sign In</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.helpBtn}
+          onPress={() => router.push('/screens/faq-help')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.helpBtnText}>Help / FAQ</Text>
+        </TouchableOpacity>
         <Text style={styles.footerText}>EST · 2026</Text>
       </Animated.View>
     </View>
@@ -168,5 +175,7 @@ const styles = StyleSheet.create({
   createBtnText: { color: '#000000', fontSize: 15, fontWeight: '900', letterSpacing: 2 },
   signInBtn: { backgroundColor: 'transparent', borderRadius: 16, paddingVertical: 18, alignItems: 'center', borderWidth: 1, borderColor: '#333333' },
   signInBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 1 },
+  helpBtn: { alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: '#234637', backgroundColor: 'rgba(0,255,135,0.06)' },
+  helpBtnText: { color: '#9ce8bf', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   footerText: { color: '#444', fontSize: 10, textAlign: 'center', marginTop: 12, letterSpacing: 4, fontWeight: '700' },
 });

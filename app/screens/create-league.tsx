@@ -157,6 +157,8 @@ export default function CreateLeagueScreen() {
         twoWayLimit: defaults.twoWayLimit,
         draftRounds: defaults.draftRounds,
         draftTimerSeconds: defaults.draftTimerSeconds,
+        allowCpuGameSimulation: true,
+        allowCpuTrades: true,
         draftStatus: finalMode === 'draft' ? 'setup' : 'none',
         draftSeasonYear: leagueSeasonYear,
         startupDraftRounds: defaults.rosterLimit,

@@ -9,6 +9,7 @@ const {
   canonicalizeTeamForSimulation,
   coachingGradeAdjustmentsForPlayer,
   createResetScheduledGameHandler,
+  canUserSimulateVsCpu,
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
@@ -146,6 +147,31 @@ describe('matchup request state helpers', () => {
     });
     expect(result.homeScore).not.toBe(result.awayScore);
     expect([game.homeTeamId, game.awayTeamId]).toContain(result.winnerTeamId);
+  });
+
+  it('lets commissioners control whether GMs can sim against vacant CPU teams', () => {
+    const cpuGame = seedAvailableGame({ awayGmId: null });
+
+    expect(canUserSimulateVsCpu({
+      game: cpuGame,
+      uid: 'home-gm',
+      league: { commissionerId: 'comm', allowCpuGameSimulation: false },
+    })).toEqual({ allowed: false, reason: 'cpu_sim_disabled' });
+    expect(canUserSimulateVsCpu({
+      game: cpuGame,
+      uid: 'home-gm',
+      league: { commissionerId: 'comm', allowCpuGameSimulation: true },
+    })).toEqual({ allowed: true });
+    expect(canUserSimulateVsCpu({
+      game: cpuGame,
+      uid: 'comm',
+      league: { commissionerId: 'comm', allowCpuGameSimulation: false },
+    })).toEqual({ allowed: true });
+    expect(canUserSimulateVsCpu({
+      game: cpuGame,
+      uid: 'outsider',
+      league: { commissionerId: 'comm', allowCpuGameSimulation: true },
+    })).toEqual({ allowed: false, reason: 'not_participant' });
   });
 
   it('refuses to simulate when a team roster cannot be resolved', () => {

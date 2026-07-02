@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   authorizeFinalization,
   canonicalCpuTeams,
+  evaluateCpuTrade,
   matchesCpuIdentity,
   validateTeamBindings,
   resolveCpuIdentity,
@@ -48,6 +49,33 @@ describe('finalizeTrade domain', () => {
       source: { status: 'pending' },
       type: 'cpu',
     })).toBe(true);
+  });
+
+  it('allows a proposer to finalize a CPU-accepted trade when CPU trades are enabled', () => {
+    const source = {
+      status: 'cpu_accepted',
+      proposerUid: 'gm-1',
+      cpuDecision: { decision: 'accept' },
+    };
+
+    expect(authorizeFinalization({
+      uid: 'gm-1',
+      league: { commissionerId: 'comm', allowCpuTrades: true },
+      source,
+      type: 'cpu',
+    })).toBe(true);
+    expect(authorizeFinalization({
+      uid: 'gm-1',
+      league: { commissionerId: 'comm', allowCpuTrades: false },
+      source,
+      type: 'cpu',
+    })).toBe(false);
+    expect(authorizeFinalization({
+      uid: 'other-gm',
+      league: { commissionerId: 'comm', allowCpuTrades: true },
+      source,
+      type: 'cpu',
+    })).toBe(false);
   });
 
   it('allows vote-passed rooms only for league members, commissioners, or participants', () => {
@@ -282,5 +310,61 @@ describe('finalizeTrade domain', () => {
       ...source,
       guestOffer: [{ player_id: 'changed' }],
     }));
+  });
+
+  it('makes CPU teams reject star-steal offers', () => {
+    const decision = evaluateCpuTrade({
+      league: { sport: 'nba' },
+      proposerTeam: {
+        players: [
+          { player_id: 'bench', full_name: 'Bench Guard', position: 'PG', overall: 70, age: 28 },
+        ],
+      },
+      cpuTeam: {
+        wins: 42,
+        losses: 20,
+        players: [
+          { player_id: 'star', full_name: 'CPU Star', position: 'SF', overall: 94, age: 27 },
+          { player_id: 'starter', full_name: 'CPU Starter', position: 'C', overall: 80, age: 29 },
+        ],
+      },
+      source: {
+        give: [{ player_id: 'bench', full_name: 'Bench Guard', position: 'PG', overall: 70, age: 28 }],
+        get: [{ player_id: 'star', full_name: 'CPU Star', position: 'SF', overall: 94, age: 27 }],
+        givePicks: [],
+        getPicks: [],
+      },
+    });
+
+    expect(decision.decision).toBe('decline');
+    expect(decision.reasons.join(' ')).toContain('star');
+  });
+
+  it('lets rebuilding CPU teams accept fair young-player and pick value', () => {
+    const decision = evaluateCpuTrade({
+      league: { sport: 'nba' },
+      proposerTeam: {
+        players: [
+          { player_id: 'young', full_name: 'Young Wing', position: 'SF', overall: 82, potential: 90, age: 22 },
+        ],
+      },
+      cpuTeam: {
+        wins: 14,
+        losses: 48,
+        players: [
+          { player_id: 'vet', full_name: 'Veteran Guard', position: 'SG', overall: 85, age: 33 },
+          { player_id: 'big', full_name: 'Backup Big', position: 'C', overall: 74, age: 25 },
+        ],
+      },
+      source: {
+        give: [{ player_id: 'young', full_name: 'Young Wing', position: 'SF', overall: 82, potential: 90, age: 22 }],
+        get: [{ player_id: 'vet', full_name: 'Veteran Guard', position: 'SG', overall: 85, age: 33 }],
+        givePicks: [{ id: 'pick-1', round: 1, year: 2027 }],
+        getPicks: [],
+      },
+    });
+
+    expect(decision.decision).toBe('accept');
+    expect(decision.identity).toBe('rebuilding');
   });
 });
