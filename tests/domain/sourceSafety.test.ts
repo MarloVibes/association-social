@@ -348,11 +348,17 @@ describe('source safety regressions', () => {
     const roster = source('app/screens/roster.tsx');
     const teamRoster = source('app/screens/team-roster.tsx');
     const tradeRoom = source('app/screens/trade-room.tsx');
+    const tradeChannel = source('app/screens/trade-channel.tsx');
 
     expect(roster).toContain('gradeCount={6}');
     expect(teamRoster).toContain('gradeCount={6}');
     expect(tradeRoom).toContain('salaryLabel={`${formatFranchisePlayerMoney(effectiveSalary)} salary`}');
     expect(tradeRoom).toContain('gradeCount={3}');
+    expect(tradeChannel).toContain("from '@/components/FranchisePlayerRow'");
+    expect(tradeChannel).toContain('salaryLabel={`${formatFranchisePlayerMoney(playerSalary(p))} salary`}');
+    expect(tradeChannel).toContain('salaryLabel={`${formatFranchisePlayerMoney(playerSalary(item.player))} salary`}');
+    expect(tradeChannel).toContain('gradeCount={3}');
+    expect(tradeChannel).not.toContain('styles.rosterRowName');
   });
 
   it('keeps NBA rotation lineup controlled by row order instead of starter closer toggles', () => {

@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
+import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/FranchisePlayerRow';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
@@ -207,6 +208,7 @@ export default function TradeChannelScreen() {
   };
 
   const getPlayerById = (pid: string) => myRoster.find((p: any) => (p.player_id || p.full_name) === pid);
+  const playerSalary = (player: any) => player?.salary ?? player?.contract?.salary ?? player?.currentSalary ?? 0;
 
   const toggleUntouchable = async (pid: string) => {
     const newList = untouchables.includes(pid) ? untouchables.filter(p => p !== pid) : [...untouchables, pid];
@@ -433,16 +435,22 @@ export default function TradeChannelScreen() {
               <View key={item.key} style={styles.listingCard}>
                 <Text style={styles.listingTeam}>{item.teamName}</Text>
                 <View style={styles.listingRow}>
-                  <PlayerSlot
-                    player={item.player}
-                    eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate}
-                    style={{ flex: 1 }}
-                    onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
-                  />
+                  <View style={styles.listingPlayerCardWrap}>
+                    <FranchisePlayerRow
+                      player={item.player}
+                      sport={sport}
+                      era={leagueEra}
+                      currentYear={leagueYear}
+                      leagueDate={leagueDate}
+                      salary={playerSalary(item.player)}
+                      salaryLabel={`${formatFranchisePlayerMoney(playerSalary(item.player))} salary`}
+                      meta={[item.player?.position, item.teamName].filter(Boolean).join(' · ')}
+                      gradeCount={3}
+                      action={{ label: 'Offer', onPress: item.onOffer, variant: 'primary' }}
+                      onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
+                    />
+                  </View>
                   <View style={styles.listingBtns}>
-                    <TouchableOpacity style={styles.proposeBtn} onPress={item.onOffer}>
-                      <Text style={styles.proposeBtnText}>🤝 Offer</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity style={styles.dmBtn} onPress={item.onDM}>
                       <Text style={styles.dmBtnText}>💬 DM</Text>
                     </TouchableOpacity>
@@ -546,102 +554,110 @@ export default function TradeChannelScreen() {
               return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
               const isSelected = rosterModal === 'block' ? tradeBlock.includes(pid) : rosterModal === 'target' ? (myTeam?.targetList || []).includes(pid) : untouchables.includes(pid);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.rosterRow, isSelected && (rosterModal === 'block' ? styles.rosterRowBlock : rosterModal === 'target' ? styles.rosterRowTarget : styles.rosterRowUntouchable)]}
-                  onPress={async () => {
-                    if (rosterModal === 'block') {
-                      const wasOnBlock = tradeBlock.includes(pid);
-                      const newList = wasOnBlock ? tradeBlock.filter(x => x !== pid) : [...tradeBlock, pid];
-                      setTradeBlock(newList);
-                      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { tradeBlock: newList });
+              const selectedLabel = rosterModal === 'block' ? 'On Block' : rosterModal === 'target' ? 'Targeted' : 'Locked';
+              const togglePlayer = async () => {
+                if (rosterModal === 'block') {
+                  const wasOnBlock = tradeBlock.includes(pid);
+                  const newList = wasOnBlock ? tradeBlock.filter(x => x !== pid) : [...tradeBlock, pid];
+                  setTradeBlock(newList);
+                  await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { tradeBlock: newList });
 
-                      // On ADD only: log to activity + notify all league members
-                      if (!wasOnBlock) {
-                        const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
-                        const playerName = player?.full_name || player?.name || 'a player';
-                        const myTeamName = myTeam?.name || 'A GM';
+                  // On ADD only: log to activity + notify all league members
+                  if (!wasOnBlock) {
+                    const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
+                    const playerName = player?.full_name || player?.name || 'a player';
+                    const myTeamName = myTeam?.name || 'A GM';
 
-                        // Activity log
+                    // Activity log
+                    try {
+                      await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
+                        type: 'tradeblock',
+                        message: myTeamName + ' added ' + playerName + ' to the trade block',
+                        leagueId,
+                        uid: user?.uid,
+                        createdAt: serverTimestamp(),
+                      });
+                    } catch (e) { console.warn('activity log failed', e); }
+
+                    // Notify all league members
+                    try {
+                      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+                      const memberIds: string[] = leagueSnap.data()?.members || [];
+                      const leagueNameFetched = leagueSnap.data()?.name || '';
+                      for (const memberId of memberIds) {
+                        if (memberId === user?.uid) continue;
                         try {
-                          await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-                            type: 'tradeblock',
-                            message: myTeamName + ' added ' + playerName + ' to the trade block',
-                            leagueId,
-                            uid: user?.uid,
-                            createdAt: serverTimestamp(),
+                          await updateDoc(doc(db, 'users', memberId), {
+                            notifications: arrayUnion({
+                              type: 'tradeblock',
+                              leagueId,
+                              leagueName: leagueNameFetched,
+                              message: myTeamName + ' added ' + playerName + ' to the trade block',
+                              createdAt: new Date().toISOString(),
+                            })
                           });
-                        } catch (e) { console.warn('activity log failed', e); }
-
-                        // Notify all league members
-                        try {
-                          const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-                          const memberIds: string[] = leagueSnap.data()?.members || [];
-                          const leagueNameFetched = leagueSnap.data()?.name || '';
-                          for (const memberId of memberIds) {
-                            if (memberId === user?.uid) continue;
-                            try {
-                              await updateDoc(doc(db, 'users', memberId), {
-                                notifications: arrayUnion({
-                                  type: 'tradeblock',
-                                  leagueId,
-                                  leagueName: leagueNameFetched,
-                                  message: myTeamName + ' added ' + playerName + ' to the trade block',
-                                  createdAt: new Date().toISOString(),
-                                })
-                              });
-                            } catch (innerErr) {
-                              console.warn('tradeblock notify failed for', memberId, innerErr);
-                            }
-                          }
-                        } catch (e) { console.warn('tradeblock notify outer fail', e); }
-                      }
-                    } else if (rosterModal === 'target') {
-                      const currentTargets = myTeam?.targetList || [];
-                      const isAdding = !currentTargets.includes(pid);
-                      const newTargets = isAdding ? [...currentTargets, pid] : currentTargets.filter((x: string) => x !== pid);
-                      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { targetList: newTargets });
-                      setMyTeam((prev: any) => ({ ...prev, targetList: newTargets }));
-
-                      // On ADD only: notify owning team's GM if player is on a team (not free agent)
-                      if (isAdding) {
-                        const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
-                        const ownerTeam = allTeams.find((t: any) =>
-                          (t.players || []).some((p: any) => (p.player_id || p.full_name) === pid)
-                        );
-                        if (ownerTeam && ownerTeam.gmId && ownerTeam.gmId !== user?.uid) {
-                          try {
-                            await updateDoc(doc(db, 'users', ownerTeam.gmId), {
-                              notifications: arrayUnion({
-                                type: 'target_interest',
-                                leagueId,
-                                fromTeamId: myTeamId,
-                                fromTeamName: myTeam?.name || 'A team',
-                                playerName: player?.full_name || 'a player',
-                                createdAt: new Date().toISOString(),
-                                message: (myTeam?.name || 'A team') + ' is interested in ' + (player?.full_name || 'a player'),
-                                read: false,
-                              }),
-                            });
-                          } catch (e) {
-                            console.warn('Failed to notify target owner', e);
-                          }
+                        } catch (innerErr) {
+                          console.warn('tradeblock notify failed for', memberId, innerErr);
                         }
                       }
-                    } else {
-                      // Untouchables
-                      const newList = untouchables.includes(pid) ? untouchables.filter((x: string) => x !== pid) : [...untouchables, pid];
-                      setUntouchables(newList);
-                      await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
+                    } catch (e) { console.warn('tradeblock notify outer fail', e); }
+                  }
+                } else if (rosterModal === 'target') {
+                  const currentTargets = myTeam?.targetList || [];
+                  const isAdding = !currentTargets.includes(pid);
+                  const newTargets = isAdding ? [...currentTargets, pid] : currentTargets.filter((x: string) => x !== pid);
+                  await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { targetList: newTargets });
+                  setMyTeam((prev: any) => ({ ...prev, targetList: newTargets }));
+
+                  // On ADD only: notify owning team's GM if player is on a team (not free agent)
+                  if (isAdding) {
+                    const player = allLeaguePlayers.find((p: any) => (p.player_id || p.full_name) === pid);
+                    const ownerTeam = allTeams.find((t: any) =>
+                      (t.players || []).some((p: any) => (p.player_id || p.full_name) === pid)
+                    );
+                    if (ownerTeam && ownerTeam.gmId && ownerTeam.gmId !== user?.uid) {
+                      try {
+                        await updateDoc(doc(db, 'users', ownerTeam.gmId), {
+                          notifications: arrayUnion({
+                            type: 'target_interest',
+                            leagueId,
+                            fromTeamId: myTeamId,
+                            fromTeamName: myTeam?.name || 'A team',
+                            playerName: player?.full_name || 'a player',
+                            createdAt: new Date().toISOString(),
+                            message: (myTeam?.name || 'A team') + ' is interested in ' + (player?.full_name || 'a player'),
+                            read: false,
+                          }),
+                        });
+                      } catch (e) {
+                        console.warn('Failed to notify target owner', e);
+                      }
                     }
-                  }}
-                >
-                  <Text style={styles.rosterRowPos}>{p.position}</Text>
-                  <Text style={styles.rosterRowName}>{p.full_name}{p.teamName ? ' · ' + p.teamName : ''}</Text>
-                  <PlaystyleBadge player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} />
-                  {isSelected && <Text style={styles.rosterCheck}>✓</Text>}
-                </TouchableOpacity>
+                  }
+                } else {
+                  const newList = untouchables.includes(pid) ? untouchables.filter((x: string) => x !== pid) : [...untouchables, pid];
+                  setUntouchables(newList);
+                  await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
+                }
+              };
+              return (
+                <FranchisePlayerRow
+                  key={pid || i}
+                  player={p}
+                  index={i}
+                  sport={sport}
+                  era={leagueEra}
+                  currentYear={leagueYear}
+                  leagueDate={leagueDate}
+                  salary={playerSalary(p)}
+                  salaryLabel={`${formatFranchisePlayerMoney(playerSalary(p))} salary`}
+                  meta={[p.position, p.teamName].filter(Boolean).join(' · ')}
+                  selected={isSelected}
+                  gradeCount={3}
+                  statusLabels={isSelected ? [{ label: selectedLabel, tone: rosterModal === 'untouchable' ? 'danger' : 'good' }] : []}
+                  action={{ label: isSelected ? 'Remove' : 'Add', onPress: togglePlayer, variant: isSelected ? 'neutral' : 'primary' }}
+                  onPress={togglePlayer}
+                />
               );
             });})()}
           </ScrollView>
@@ -711,9 +727,8 @@ const styles = StyleSheet.create({
   listingCard: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#222' },
   listingTeam: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
   listingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  listingPlayerCardWrap: { flex: 1, minWidth: 0 },
   listingBtns: { gap: 6 },
-  proposeBtn: { backgroundColor: '#0a2a1a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#00ff87', alignItems: 'center' },
-  proposeBtnText: { color: '#00ff87', fontSize: 11, fontWeight: '700' },
   dmBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', alignItems: 'center' },
   dmBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
   proposeTeamCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#222', gap: 12 },
@@ -745,13 +760,6 @@ const styles = StyleSheet.create({
   wantCard: { backgroundColor: '#1a1a1a', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#00ff87' },
   wantName: { color: '#fff', fontSize: 16, fontWeight: '800' },
   wantTeam: { color: '#666', fontSize: 12, marginTop: 2 },
-  rosterRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 8 },
-  rosterRowBlock: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
-  rosterRowTarget: { borderColor: '#4444ff', backgroundColor: '#0a0a2a' },
-  rosterRowUntouchable: { borderColor: '#ff4444', backgroundColor: '#2a0a0a' },
-  rosterRowPos: { color: '#888', fontSize: 11, fontWeight: '700', width: 28 },
-  rosterRowName: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
-  rosterCheck: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
   offerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#2a2a2a', gap: 8 },
   offerRowSelected: { borderColor: '#00ff87', backgroundColor: '#0a2a1a' },
   offerPos: { color: '#888', fontSize: 11, fontWeight: '700', width: 28 },

@@ -847,7 +847,9 @@ function shortName(name) {
 }
 
 function displayTeam(team) {
-  return String(team && (team.abbreviation || team.name || team.teamId) || 'TEAM');
+  const raw = String(team && (team.abbreviation || team.name || team.teamId) || 'TEAM').trim();
+  const eraMatch = raw.toUpperCase().match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraMatch ? eraMatch[1] : raw;
 }
 
 function weightedPick(items, weightForItem, rng) {

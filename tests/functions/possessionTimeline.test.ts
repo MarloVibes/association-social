@@ -73,6 +73,24 @@ describe('possession timeline engine', () => {
     expect(timeline.homeScore).not.toBe(timeline.awayScore);
   });
 
+  it('uses clean team abbreviations in final and period text for era-suffixed teams', () => {
+    const timeline = buildPossessionTimeline({
+      gameId: 'game-era-labels',
+      seed: 'seed-era-labels',
+      homeTeamId: 'LAL_2003',
+      awayTeamId: 'MIN_2003',
+      homeTeam: team('LAL_2003', 84),
+      awayTeam: team('MIN_2003', 78),
+      nowMs: 10_000,
+    });
+    const text = timeline.events.map((event: any) => event.text).join('\n');
+
+    expect(text).not.toContain('MIN_2003');
+    expect(text).not.toContain('LAL_2003');
+    expect(timeline.events.find((event: any) => event.eventType === 'period_end')?.text).toMatch(/^End of Q1: MIN \d+ - LAL \d+$/);
+    expect(timeline.events.at(-1)?.text).toMatch(/^Final: MIN \d+ - LAL \d+$/);
+  });
+
   it('keeps assists, rebounds, and steals attached to valid possession actions', () => {
     const timeline = buildPossessionTimeline({
       gameId: 'game-2',
