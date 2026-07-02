@@ -813,9 +813,19 @@ describe('source safety regressions', () => {
     const tradeRoom = source('app/screens/trade-room.tsx');
 
     expect(tradeRoom).toContain('positionFilterLabel(pos)');
-    expect(tradeRoom).toContain('minWidth: 54');
+    expect(tradeRoom).toContain('minWidth: 62');
+    expect(tradeRoom).toContain('flexShrink: 0');
     expect(tradeRoom).toContain('paddingHorizontal: 14');
     expect(tradeRoom).not.toContain("positionFilterBtn: { minWidth: 50");
+  });
+
+  it('keeps trade center filter chips from collapsing into unreadable labels', () => {
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+
+    expect(tradeChannel).toContain('minWidth: 54');
+    expect(tradeChannel).toContain('flexShrink: 0');
+    expect(tradeChannel).toContain('textAlign:');
+    expect(tradeChannel).not.toContain("sortBtn: { borderRadius: 6, paddingHorizontal: 12");
   });
 
   it('cleans era-suffixed team labels in offseason draft surfaces', () => {

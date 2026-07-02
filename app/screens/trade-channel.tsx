@@ -773,9 +773,9 @@ const styles = StyleSheet.create({
 
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#111' },
   sortLabel: { color: '#555', fontSize: 12 },
-  sortBtn: { borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#1a1a1a' },
+  sortBtn: { minWidth: 54, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   sortBtnActive: { borderColor: '#F5A623', backgroundColor: '#2a1a00' },
-  sortBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
+  sortBtnText: { color: '#666', fontSize: 12, fontWeight: '600', textAlign: 'center', flexShrink: 0 },
   sortBtnTextActive: { color: '#F5A623', fontWeight: '700' },
 
   modalSearchRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
