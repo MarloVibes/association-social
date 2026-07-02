@@ -11,7 +11,7 @@ import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
 import { buildLiveCourtState } from '@/domain/nba/liveCourt';
 import { currentTimelineEvent, livePlayerStatsAt, starterMatchupsForTimeline, type LiveTimeline, type LiveTimelineEvent, type LiveTimelineStarterMatchup } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
 type Team = {
   id: string;
@@ -312,7 +312,7 @@ export default function LiveModeScreen() {
                 <View style={styles.logoDisc}>
                   <SportTeamLogo sport="nba" abbr={awayAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
                 </View>
-                <Text numberOfLines={1} style={styles.teamName}>{awayLabel}</Text>
+                <Text numberOfLines={1} style={styles.teamName}>{awayAbbr}</Text>
                 <Text style={[styles.teamScore, { color: awayScore > homeScore ? '#ffffff' : '#b8b8b8' }]}>{numberText(awayScore)}</Text>
               </View>
               <View style={styles.scoreCenter}>
@@ -323,7 +323,7 @@ export default function LiveModeScreen() {
                 <View style={[styles.logoDisc, { borderColor: arenaTheme.secondary }]}>
                   <SportTeamLogo sport="nba" abbr={homeAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
                 </View>
-                <Text numberOfLines={1} style={styles.teamName}>{homeLabel}</Text>
+                <Text numberOfLines={1} style={styles.teamName}>{homeAbbr}</Text>
                 <Text style={[styles.teamScore, { color: homeScore >= awayScore ? arenaTheme.text : '#b8b8b8' }]}>{numberText(homeScore)}</Text>
               </View>
             </View>
@@ -363,7 +363,7 @@ export default function LiveModeScreen() {
                 <Text style={styles.panelTitle}>Possession</Text>
                 <Text style={[styles.panelPill, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{eventSide(currentEvent, game)}</Text>
               </View>
-              <Text style={styles.eventText}>{currentEvent?.text || 'Live timeline is loading.'}</Text>
+              <Text style={styles.eventText}>{displayScheduleEventText(currentEvent?.text) || 'Live timeline is loading.'}</Text>
               <View style={styles.momentumRow}>
                 <Text style={styles.momentumLabel}>Momentum</Text>
                 <Text style={[styles.momentumValue, { color: arenaTheme.text }]}>{momentumText}</Text>
@@ -391,7 +391,7 @@ export default function LiveModeScreen() {
                   <View style={[styles.feedDot, { backgroundColor: normalizeScheduleKey(event.actingTeamId || '') === normalizeScheduleKey(game.homeTeamId) ? arenaTheme.primary : '#f1f1f1' }]} />
                   <View style={styles.feedCopy}>
                     <Text style={styles.feedMeta}>{event.periodLabel} · {clockText(event)}</Text>
-                    <Text style={styles.feedText}>{event.text}</Text>
+                    <Text style={styles.feedText}>{displayScheduleEventText(event.text)}</Text>
                   </View>
                   <Text style={styles.feedScore}>{event.awayScore}-{event.homeScore}</Text>
                 </View>

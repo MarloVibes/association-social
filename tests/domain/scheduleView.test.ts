@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   displayScheduleAbbr,
+  displayScheduleEventText,
   displayScheduleName,
   gameMatchesMyTeam,
   liveScheduleScore,
@@ -115,5 +116,10 @@ describe('NBA schedule view helpers', () => {
       periodLabel: 'Q2',
     });
     expect(liveScheduleScore(game, 70_000)).toBeNull();
+  });
+
+  it('cleans raw era schedule ids from live event text', () => {
+    expect(displayScheduleEventText('Final: MIN_2003 90 - LAL 101')).toBe('Final: MIN 90 - LAL 101');
+    expect(displayScheduleEventText('End of Q1: SAS_2011 33 - BOS_1986 31')).toBe('End of Q1: SAS 33 - BOS 31');
   });
 });

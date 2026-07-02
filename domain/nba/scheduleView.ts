@@ -46,6 +46,10 @@ export function displayScheduleAbbr(value?: string | null) {
   return eraSuffixMatch ? eraSuffixMatch[1] : key;
 }
 
+export function displayScheduleEventText(value?: string | null) {
+  return String(value || '').replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayScheduleAbbr(match));
+}
+
 const TEAM_ALIASES: Record<string, string[]> = {
   NOH: ['NOP', 'NOK'],
   NOK: ['NOH', 'NOP'],
