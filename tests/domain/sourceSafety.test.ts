@@ -653,6 +653,17 @@ describe('source safety regressions', () => {
     expect(league).not.toContain('League News · Trade Center · Coaching · Front Office');
   });
 
+  it('cleans era-suffixed team labels on the league home card', () => {
+    const league = source('app/screens/league.tsx');
+
+    expect(league).toContain("from '@/domain/nba/scheduleView'");
+    expect(league).toContain('const myTeamAbbr = displayScheduleAbbr');
+    expect(league).toContain('const myTeamName = displayScheduleTeamLabel');
+    expect(league).toContain('{myTeamName}');
+    expect(league).toContain('{myTeamAbbr} · {myTeam.players?.length || 0} players');
+    expect(league).not.toContain('{myTeam.name}</Text>');
+  });
+
   it('keeps GIF access visible in league chat without disabling the button', () => {
     const channel = source('app/screens/channel.tsx');
 

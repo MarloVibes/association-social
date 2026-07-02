@@ -14,6 +14,7 @@ import { setLastLeagueId } from '@/utils/lastLeague';
 import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
 import { playerJerseyDisplay } from '@/domain/sports/playerDisplay';
 import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 
 
@@ -51,7 +52,10 @@ export default function LeagueScreen() {
   const user = auth.currentUser;
   const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
   const currentYear = league?.currentYear || 2024;
-  const teamAbbr = myTeam?.abbreviation || '';
+  const rawTeamAbbr = myTeam?.abbreviation || myTeam?.teamId || '';
+  const myTeamAbbr = displayScheduleAbbr(rawTeamAbbr);
+  const myTeamName = displayScheduleTeamLabel(myTeam?.name || myTeamAbbr, rawTeamAbbr || myTeam?.id);
+  const teamAbbr = myTeamAbbr;
   const leagueSport = league?.sport || 'nba';
   const isNBASport = leagueSport === 'nba';
   const teamColors = isNBASport
@@ -75,8 +79,8 @@ export default function LeagueScreen() {
   };
   // Per-team theme overrides (button labels, borders, tints)
   const teamTheme = isNBASport
-    ? getTeamTheme(myTeam?.abbreviation || teamAbbr, league?.era)
-    : getSportTeamTheme(leagueSport, myTeam?.abbreviation || teamAbbr);
+    ? getTeamTheme(teamAbbr, league?.era)
+    : getSportTeamTheme(leagueSport, teamAbbr);
   const titleColor = teamTheme.titleColor;
   const tintColor = teamTheme.tintColor;
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
@@ -278,10 +282,10 @@ export default function LeagueScreen() {
         </View>
 
         <View style={styles.leagueNameRow}>
-          {myTeam?.abbreviation ? (
+          {myTeamAbbr ? (
             <SportTeamLogo
               sport={leagueSport}
-              abbr={myTeam.abbreviation}
+              abbr={myTeamAbbr}
               era={league.era}
               style={styles.leagueNameLogo}
               textColor="#ffffff"
@@ -340,8 +344,8 @@ export default function LeagueScreen() {
             <View style={styles.myTeamCardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.myTeamCardLabel}>MY TEAM</Text>
-                <Text style={[styles.myTeamCardName, { color: titleColor }]}>{myTeam.name}</Text>
-                <Text style={styles.myTeamCardSub}>{myTeam.abbreviation} · {myTeam.players?.length || 0} players</Text>
+                <Text style={[styles.myTeamCardName, { color: titleColor }]}>{myTeamName}</Text>
+                <Text style={styles.myTeamCardSub}>{myTeamAbbr} · {myTeam.players?.length || 0} players</Text>
               </View>
               <Text style={[styles.myTeamChevron, { color: teamText }]}>›</Text>
             </View>
