@@ -8,6 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
 import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 type Player = {
   id?: string;
@@ -29,6 +30,7 @@ type Player = {
 
 type Team = {
   id: string;
+  teamId?: string;
   name?: string;
   abbreviation?: string;
   gmId?: string;
@@ -171,7 +173,7 @@ export default function FinancesScreen() {
                   }}
                 >
                   <SportTeamLogo sport="nba" abbr={team.abbreviation || team.id} era={league?.currentYear} style={styles.chipLogo} fontSize={8} />
-                  <Text style={[styles.teamChipText, selectedTeam.id === team.id && styles.teamChipTextActive]} numberOfLines={1}>{team.abbreviation || team.name || 'TEAM'}</Text>
+                  <Text style={[styles.teamChipText, selectedTeam.id === team.id && styles.teamChipTextActive]} numberOfLines={1}>{displayScheduleTeamLabel(team.abbreviation || team.name, team.teamId || team.id || 'TEAM')}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -181,7 +183,7 @@ export default function FinancesScreen() {
                 <SportTeamLogo sport="nba" abbr={selectedTeam.abbreviation || selectedTeam.id} era={league?.currentYear} style={styles.teamLogo} fontSize={12} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.teamName}>{selectedTeam.name || selectedTeam.abbreviation || 'Team'}</Text>
+                <Text style={styles.teamName}>{displayScheduleTeamLabel(selectedTeam.name || selectedTeam.abbreviation, selectedTeam.teamId || selectedTeam.id || 'Team')}</Text>
                 <Text style={styles.teamMeta}>{players.length} contracts</Text>
               </View>
             </View>
@@ -205,7 +207,7 @@ export default function FinancesScreen() {
                 <TouchableOpacity
                   key={player.player_id || player.id || playerName(player)}
                   style={styles.contractRowCompact}
-                  onPress={() => setSelectedPlayer({ ...player, team: selectedTeam.abbreviation || selectedTeam.name })}
+                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id) })}
                 >
                   <Text style={styles.contractName} numberOfLines={1}>{playerName(player)}</Text>
                   <Text style={styles.contractAmount}>{money(playerSalary(player))}</Text>
@@ -224,7 +226,7 @@ export default function FinancesScreen() {
                 <TouchableOpacity
                   key={player.player_id || player.id || playerName(player)}
                   style={styles.contractRow}
-                  onPress={() => setSelectedPlayer({ ...player, team: selectedTeam.abbreviation || selectedTeam.name })}
+                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id) })}
                 >
                   <Text style={[styles.contractName, styles.nameCol]} numberOfLines={1}>{playerName(player)}</Text>
                   <Text style={[styles.contractMeta, styles.posCol]}>{player.position || '-'}</Text>

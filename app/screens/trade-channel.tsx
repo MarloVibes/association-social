@@ -11,6 +11,7 @@ import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 
 function PlaystyleBadge({
@@ -352,7 +353,7 @@ export default function TradeChannelScreen() {
                     const found = (t.players || []).find((p: any) => (p.player_id || p.full_name) === pid);
                     if (found) {
                       targetPlayer = found;
-                      ownerTeamName = t.name || t.abbreviation || '';
+                      ownerTeamName = displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || '');
                       break;
                     }
                   }
@@ -383,7 +384,7 @@ export default function TradeChannelScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
               <Text style={styles.sortLabel}>Team:</Text>
-              {['All', ...allTeams.filter((t: any) => t.gmId !== user?.uid).map((t: any) => t.abbreviation || t.name?.slice(0,3).toUpperCase())].map(tm => (
+              {['All', ...allTeams.filter((t: any) => t.gmId !== user?.uid).map((t: any) => displayScheduleTeamLabel(t.abbreviation || t.name, t.teamId || t.id).slice(0, 3).toUpperCase())].map(tm => (
                 <TouchableOpacity key={tm} style={[styles.sortBtn, (blockSort === tm || (tm === 'All' && blockSort === 'team')) && styles.sortBtnActive]} onPress={() => setBlockSort(tm === 'All' ? 'team' : tm)}>
                   <Text style={[styles.sortBtnText, (blockSort === tm || (tm === 'All' && blockSort === 'team')) && styles.sortBtnTextActive]}>{tm}</Text>
                 </TouchableOpacity>
@@ -403,12 +404,12 @@ export default function TradeChannelScreen() {
           {(() => {
             const allAvail = [
               ...listings.filter((l: any) => l.fromUid !== user?.uid).map((l: any) => ({
-                key: l.id, teamName: l.fromTeamName, teamId: l.fromTeamId, player: l.player, uid: l.fromUid,
+                key: l.id, teamName: displayScheduleTeamLabel(l.fromTeamName, l.fromTeamId), teamId: l.fromTeamId, player: l.player, uid: l.fromUid,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: l.fromUid, otherTeamId: l.fromTeamId, otherTeamName: l.fromTeamName || '', prefillPlayer: JSON.stringify(l.player || {}) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: l.fromUid, name: l.fromTeamName } }),
               })),
               ...allTradeBlockAcrossLeague.filter((p: any) => p.gmId !== user?.uid).map((p: any, i: number) => ({
-                key: 'tb_' + i, teamName: p.teamName, teamId: p.teamId, player: p, uid: p.gmId,
+                key: 'tb_' + i, teamName: displayScheduleTeamLabel(p.teamName, p.teamId), teamId: p.teamId, player: p, uid: p.gmId,
                 onOffer: () => router.push({ pathname: '/screens/trade-room', params: { leagueId, otherUid: p.gmId, otherTeamId: p.teamId, otherTeamName: p.teamName || '', prefillPlayer: JSON.stringify(p) } }),
                 onDM: () => router.push({ pathname: '/screens/dm', params: { uid: p.gmId, name: p.teamName } }),
               })),
@@ -481,15 +482,15 @@ export default function TradeChannelScreen() {
                     leagueId,
                     otherUid: team.gmId,
                     otherTeamId: team.id,
-                    otherTeamName: team.name || team.abbreviation || '',
+                    otherTeamName: displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || ''),
                   },
                 })}
               >
                 <View style={styles.proposeTeamAvatar}>
-                  <Text style={styles.proposeTeamAvatarText}>{(team.abbreviation || team.name || '?').slice(0, 3).toUpperCase()}</Text>
+                  <Text style={styles.proposeTeamAvatarText}>{displayScheduleTeamLabel(team.abbreviation || team.name || '?', team.teamId || team.id || '?').slice(0, 3).toUpperCase()}</Text>
                 </View>
                 <View style={styles.proposeTeamInfo}>
-                  <Text style={styles.proposeTeamName}>{team.name || team.abbreviation || 'Team'}</Text>
+                  <Text style={styles.proposeTeamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Team')}</Text>
                   <Text style={styles.proposeTeamMeta}>{(team.players || []).length} players · Start trade room</Text>
                 </View>
                 <Text style={styles.proposeTeamChevron}>›</Text>
@@ -534,7 +535,7 @@ export default function TradeChannelScreen() {
             {(() => {
               const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
               const allLeaguePlayers = rosterModal === 'target'
-                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: t.name || t.abbreviation || 'Unknown' })))
+                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Unknown') })))
                     .filter((p: any) => {
                       const matchSearch = !targetSearch || (p.full_name || '').toLowerCase().includes(targetSearch.toLowerCase());
                       const matchPos = matchesRosterPosition(p, targetPosFilter);

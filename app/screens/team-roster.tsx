@@ -15,6 +15,7 @@ import { getTeamColors } from '@/constants/teamColors';
 import { getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { pickLabel } from '@/constants/draftPicks';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
 
@@ -277,7 +278,7 @@ export default function TeamRosterScreen() {
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
         <SportTeamLogo sport={sport || 'nba'} abbr={abbr} era={currentYear} style={styles.teamLogo} textColor="#ffffff" fontSize={16} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.teamName}>{team.name || team.abbreviation}</Text>
+          <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || eraTeamId)}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>
           <Text style={styles.teamGm}>{isOwned ? (team.gmName || 'GM') : 'Unowned'}</Text>
         </View>

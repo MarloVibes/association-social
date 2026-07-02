@@ -9,7 +9,7 @@ import { auth, db, functions } from '@/constants/firebase';
 import { COACHING_PRESETS, buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 
 type Team = {
@@ -308,7 +308,7 @@ export default function MatchupScreen() {
     ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: 'away' as const, sideAbbr: awayAbbr })),
   ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left)).slice(0, 4);
   const resultStory = game && typeof game.homeScore === 'number' && typeof game.awayScore === 'number'
-    ? buildPostgameStory({
+    ? displayScheduleEventText(buildPostgameStory({
       storedStory: game.story,
       homeLabel,
       awayLabel,
@@ -318,7 +318,7 @@ export default function MatchupScreen() {
       awayScore: game.awayScore,
       quarters: game.quarters,
       performers: topPerformers,
-    })
+    }))
     : '';
 
   return (

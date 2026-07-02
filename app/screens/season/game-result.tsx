@@ -9,7 +9,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { displayScheduleAbbr, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
 type Team = {
   id: string;
@@ -198,8 +198,8 @@ export default function GameResultScreen() {
     home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
   }), [game?.boxScore]);
   const resultStory = useMemo(() => {
-    if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return game?.story || '';
-    return buildPostgameStory({
+    if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return displayScheduleEventText(game?.story);
+    return displayScheduleEventText(buildPostgameStory({
       storedStory: game.story,
       awayLabel,
       homeLabel,
@@ -209,7 +209,7 @@ export default function GameResultScreen() {
       homeScore: game.homeScore,
       quarters: game.quarters,
       performers: topPerformers,
-    });
+    }));
   }, [awayAbbr, awayLabel, game, homeAbbr, homeLabel, topPerformers]);
   const isLeagueAdmin = Boolean(
     uid

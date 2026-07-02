@@ -81,4 +81,20 @@ describe('basketball player leaderboards', () => {
 
     expect(leaders).toEqual([]);
   });
+
+  it('cleans raw era ids from player leaderboard team labels', () => {
+    const [leader] = buildBasketballPlayerLeaderboard({
+      teams: [{
+        id: 'MIN_2003',
+        teamId: 'MIN_2003',
+        name: 'MIN_2003',
+        abbreviation: 'MIN_2003',
+        players: [{ full_name: 'Kevin Garnett', position: 'PF', seasonStats: { games: 1, points: 28 } }],
+      }],
+      stat: 'ppg',
+    });
+
+    expect(leader.teamName).toBe('MIN');
+    expect(leader.teamAbbreviation).toBe('MIN');
+  });
 });

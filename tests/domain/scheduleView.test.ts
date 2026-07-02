@@ -3,6 +3,7 @@ import {
   displayScheduleAbbr,
   displayScheduleEventText,
   displayScheduleName,
+  displayScheduleTeamLabel,
   gameMatchesMyTeam,
   liveScheduleScore,
   isLiveResultRevealed,
@@ -35,6 +36,7 @@ describe('NBA schedule view helpers', () => {
     expect(displayScheduleAbbr('SAS_2011')).toBe('SAS');
     expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011' })).toBe('SAS');
     expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011', name: 'San Antonio Spurs' })).toBe('San Antonio Spurs');
+    expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', name: 'SAS_2011' })).toBe('SAS');
   });
 
   it('matches my games by normalized team id or stored GM id', () => {
@@ -121,5 +123,12 @@ describe('NBA schedule view helpers', () => {
   it('cleans raw era schedule ids from live event text', () => {
     expect(displayScheduleEventText('Final: MIN_2003 90 - LAL 101')).toBe('Final: MIN 90 - LAL 101');
     expect(displayScheduleEventText('End of Q1: SAS_2011 33 - BOS_1986 31')).toBe('End of Q1: SAS 33 - BOS 31');
+  });
+
+  it('prefers real team names but replaces raw era ids in team labels', () => {
+    expect(displayScheduleTeamLabel('Los Angeles Lakers', 'LAL_2003')).toBe('Los Angeles Lakers');
+    expect(displayScheduleTeamLabel('MIN_2003', 'MIN_2003')).toBe('MIN');
+    expect(displayScheduleTeamLabel('', 'SAS_2011')).toBe('SAS');
+    expect(displayScheduleTeamLabel('Final: MIN_2003 90 - LAL 101')).toBe('Final: MIN 90 - LAL 101');
   });
 });

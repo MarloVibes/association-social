@@ -6,6 +6,7 @@ import { type ComponentProps, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { NBA_AWARD_CATEGORIES, recordsForAward, type NbaAwardCategory, type NbaAwardRecord } from '@/domain/nba/awards';
+import { displayScheduleEventText } from '@/domain/nba/scheduleView';
 import { buildNbaStandings } from '@/domain/nba/standings';
 import { seasonUpgradeGrants, type AwardUpgradeInput } from '@/domain/nba/upgradePoints';
 
@@ -50,7 +51,7 @@ function recordLabel(record: NbaAwardRecord) {
   const team = record.teamAbbr || record.teamName;
   const season = record.season ? String(record.season) : '';
   const parts = [season, winner, team && team !== winner ? team : '', record.note || ''].filter(Boolean);
-  return parts.join(' · ');
+  return displayScheduleEventText(parts.join(' · '));
 }
 
 function awardIconName(item: NbaAwardCategory): ComponentProps<typeof Ionicons>['name'] {

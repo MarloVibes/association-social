@@ -6,6 +6,7 @@ import type { VisibleNbaIdentity } from '@/domain/nba/identity';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { playerProfileWithLeagueDateAge } from '@/domain/nba/ratingProfile';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import {
   buildScoutingGrades,
   compareScoutingGrades,
@@ -175,7 +176,10 @@ function playerName(player: any): string {
 }
 
 function playerTeam(player: any): string {
-  return String(player?.team || player?.teamAbbr || player?.abbreviation || player?.teamId || player?.teamName || '');
+  return displayScheduleTeamLabel(
+    player?.team || player?.teamName || player?.teamAbbr || player?.abbreviation,
+    player?.teamId || player?.teamAbbr || player?.abbreviation,
+  );
 }
 
 function formatStatValue(value: any): string {

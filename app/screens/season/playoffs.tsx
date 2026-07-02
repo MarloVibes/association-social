@@ -9,7 +9,7 @@ import { auth, db, functions } from '@/constants/firebase';
 import { buildConferencePlayoffPicture, buildPlayoffPicture, regularSeasonCompletion } from '@/domain/nba/playoffPicture';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
-import { displayScheduleAbbr } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { buildNbaStandings } from '@/domain/nba/standings';
 
 type Team = {
@@ -34,11 +34,11 @@ type ScheduleDoc = {
 };
 
 function formatSeries(series: PlayoffSeries) {
-  return `${series.homeSeed}. ${series.homeTeamName || displayScheduleAbbr(series.homeTeamId)} vs ${series.awaySeed}. ${series.awayTeamName || displayScheduleAbbr(series.awayTeamId)}`;
+  return `${series.homeSeed}. ${teamLabel(series.homeTeamId, series.homeTeamName)} vs ${series.awaySeed}. ${teamLabel(series.awayTeamId, series.awayTeamName)}`;
 }
 
 function teamLabel(teamId: string, teamName?: string | null) {
-  return teamName || displayScheduleAbbr(teamId);
+  return displayScheduleTeamLabel(teamName, teamId);
 }
 
 export default function PlayoffsScreen() {

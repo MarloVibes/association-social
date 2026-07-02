@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import type { InjuryEvent, InjurySeverity } from '@/domain/nba/injuries';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 type Player = {
   id?: string;
@@ -34,7 +35,7 @@ function playerName(player: Player) {
 }
 
 function teamLabel(team?: Team | null) {
-  return team?.abbreviation || team?.name || team?.teamId || team?.id || 'Team';
+  return displayScheduleTeamLabel(team?.abbreviation || team?.name, team?.teamId || team?.id || 'Team');
 }
 
 export default function InjuriesScreen() {

@@ -10,6 +10,7 @@ import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 
 export default function RosterScreen() {
@@ -458,7 +459,7 @@ export default function RosterScreen() {
         return;
       }
       const buttons: any[] = otherTeams.map((t: any) => ({
-        text: t.name || t.abbreviation || 'Team',
+        text: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Team'),
         onPress: () => {
           router.push({
             pathname: '/screens/trade-room',
@@ -466,7 +467,7 @@ export default function RosterScreen() {
               leagueId,
               otherUid: t.gmId,
               otherTeamId: t.id,
-              otherTeamName: t.name || 'Opponent',
+              otherTeamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Opponent'),
               prefillMyPlayer: JSON.stringify(player),
             },
           });

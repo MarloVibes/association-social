@@ -8,6 +8,7 @@ import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/tea
 import { getSportTeams, getSportTeamTheme, getSportLogoUrl } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 // Adjust hex color brightness by percentage. Negative = darker, positive = lighter.
 function adjustColor(hex: string, percent: number): string {
@@ -186,7 +187,7 @@ export default function LeagueRostersScreen() {
               <SportTeamLogo sport={sport} abbr={abbr} era={era} style={styles.teamLogo} textColor={textColor} fontSize={15} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
-                  <Text style={[styles.teamName, { color: textColor }]}>{team.name || team.abbreviation}</Text>
+                  <Text style={[styles.teamName, { color: textColor }]}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id)}</Text>
                   {team.gmId === auth.currentUser?.uid ? (
                     <View style={styles.yourTeamBadge}><Text style={styles.yourTeamBadgeText}>YOUR TEAM</Text></View>
                   ) : null}

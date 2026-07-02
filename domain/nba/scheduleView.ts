@@ -50,6 +50,13 @@ export function displayScheduleEventText(value?: string | null) {
   return String(value || '').replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayScheduleAbbr(match));
 }
 
+export function displayScheduleTeamLabel(teamName?: string | null, fallbackTeamId?: string | null) {
+  const name = String(teamName || '').trim();
+  const cleanedName = displayScheduleEventText(name);
+  if (cleanedName) return cleanedName;
+  return displayScheduleAbbr(fallbackTeamId);
+}
+
 const TEAM_ALIASES: Record<string, string[]> = {
   NOH: ['NOP', 'NOK'],
   NOK: ['NOH', 'NOP'],
@@ -80,7 +87,7 @@ export function displayScheduleName(team: {
   teamId?: string | null;
   id?: string | null;
 }) {
-  const name = String(team.name || team.full_name || '').trim();
+  const name = displayScheduleEventText(String(team.name || team.full_name || '').trim());
   if (name) return name;
   return displayScheduleAbbr(team.abbreviation || team.abbr || team.scheduleTeamId || team.teamId || team.id);
 }

@@ -1,3 +1,5 @@
+import { displayScheduleAbbr, displayScheduleTeamLabel } from './scheduleView';
+
 export type BasketballPlayerLeaderboardStat = 'ppg' | 'rpg' | 'apg' | 'spg' | 'bpg';
 
 export type BasketballPlayerLeaderboardRow = {
@@ -93,8 +95,8 @@ export function buildBasketballPlayerLeaderboard({
         name: String(player.full_name || player.name || 'Unknown Player'),
         position: String(player.position || '?'),
         teamId: String(team.id || team.teamId || team.abbreviation || ''),
-        teamName: String(team.name || team.abbreviation || 'Team'),
-        teamAbbreviation: String(team.abbreviation || team.teamId || team.id || 'TEAM'),
+        teamName: displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Team'),
+        teamAbbreviation: displayScheduleAbbr(team.abbreviation || team.teamId || team.id || 'TEAM'),
         games: average.games,
         value: average.value,
         valueText: average.value.toFixed(1),
