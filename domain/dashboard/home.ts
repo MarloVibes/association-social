@@ -11,7 +11,7 @@ export type DashboardHomeInput = {
 
 export type DashboardAction = {
   label: string;
-  route: '/screens/create-league' | '/screens/join-league' | '/screens/search-users';
+  route: '/screens/join-league' | '/screens/search-users' | '/screens/faq-help';
   tone: 'primary' | 'secondary';
 };
 
@@ -32,9 +32,9 @@ export function buildDashboardHomeModel(input: DashboardHomeInput) {
       { label: 'Alerts', value: String(input.pendingInviteCount) },
     ],
     quickActions: [
-      { label: 'Create League', route: '/screens/create-league', tone: 'primary' },
       { label: 'Join League', route: '/screens/join-league', tone: 'secondary' },
       { label: 'Find GMs', route: '/screens/search-users', tone: 'secondary' },
+      { label: 'Help / FAQ', route: '/screens/faq-help', tone: 'secondary' },
     ] satisfies DashboardAction[],
     modeCards: [
       {

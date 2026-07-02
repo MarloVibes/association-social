@@ -1,12 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { arrayRemove, collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { arrayRemove, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
-import { getTeamColors, getTeamLogoUrl, getCurrentTeamAbbr } from '@/constants/teamColors';
 import GlobalNav from '@/components/GlobalNav';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePresence } from '@/hooks/usePresence';
@@ -31,14 +30,13 @@ export default function DashboardScreen() {
 
   const [profile, setProfile] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loadingLeagues, setLoadingLeagues] = useState(true);
-  const signingOut = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingInvites, setPendingInvites] = useState(0);
   const [leagueInvites, setLeagueInvites] = useState<any[]>([]);
   const [onlineFriends, setOnlineFriends] = useState<any[]>([]);
+  const [showOnlineOverlay, setShowOnlineOverlay] = useState(false);
 
   const loadData = useCallback(async (uid: string) => {
     try {
@@ -87,7 +85,6 @@ export default function DashboardScreen() {
       const leagueIds: string[] = profileData.leagues || [];
       if (leagueIds.length === 0) {
         setLeagues([]);
-        setRecentActivity([]);
         setLoadingLeagues(false);
         return;
       }
@@ -101,32 +98,6 @@ export default function DashboardScreen() {
         .map((d) => { return { id: d.id, ...d.data() }; });
 
       setLeagues(leagueData);
-
-      const allActivity: any[] = [];
-      await Promise.all(
-        leagueData.map(async (league: any) => {
-          try {
-            const actSnap = await getDocs(
-              query(
-                collection(db, 'leagues', league.id, 'activity'),
-                orderBy('createdAt', 'desc')
-              )
-            );
-            actSnap.docs.slice(0, 5).forEach((d) => {
-              allActivity.push({
-                id: d.id,
-                leagueId: league.id,
-                leagueName: league.name,
-                sport: league.sport,
-                ...d.data(),
-              });
-            });
-          } catch (e) {}
-        })
-      );
-
-      allActivity.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setRecentActivity(allActivity.slice(0, 10));
       setLoadingLeagues(false);
     } catch (e) {
       console.error(e);
@@ -169,20 +140,12 @@ export default function DashboardScreen() {
     ]);
   };
 
-  const formatTime = (ts: any) => {
-    if (!ts?.seconds) return '';
-    const diff = Math.floor((Date.now() - ts.seconds * 1000) / 1000);
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-    return Math.floor(diff / 86400) + 'd ago';
-  };
-
   const homeModel = buildDashboardHomeModel({
     leagues,
     onlineFriendCount: onlineFriends.length,
     pendingInviteCount: pendingInvites,
   });
+  const onlinePreviewFriends = onlineFriends.slice(0, 5);
 
 
   const handleAcceptInvite = async (invite: any) => {
@@ -289,10 +252,10 @@ export default function DashboardScreen() {
             {homeModel.quickActions.map((action) => (
               <TouchableOpacity
                 key={action.label}
-                style={action.tone === 'primary' ? styles.quickActionPrimary : styles.quickAction}
+                style={styles.quickAction}
                 onPress={() => router.push(action.route)}
               >
-                <Text style={action.tone === 'primary' ? styles.quickActionPrimaryText : styles.quickActionText}>{action.label}</Text>
+                <Text style={styles.quickActionText}>{action.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -327,16 +290,28 @@ export default function DashboardScreen() {
           ) : null}
 
           <TouchableOpacity
-            onPress={() => router.push('/screens/my-mvp')}
-            activeOpacity={0.85}
-            style={styles.mvpEntry}
+            activeOpacity={0.88}
+            style={styles.onlinePreviewCard}
+            onPress={() => setShowOnlineOverlay(true)}
           >
-            <Text style={styles.mvpEntryIcon}>⭐</Text>
-            <View style={styles.mvpEntryText}>
-              <Text style={styles.mvpEntryTitle}>My MVP</Text>
-              <Text style={styles.mvpEntryDesc}>Player identity, stats, and progress</Text>
+            <View style={styles.onlinePreviewText}>
+              <Text style={styles.onlinePreviewLabel}>Online Friends</Text>
+              <Text style={styles.onlinePreviewTitle}>
+                {onlineFriends.length > 0 ? `${onlineFriends.length} GM${onlineFriends.length === 1 ? '' : 's'} online` : 'No friends online'}
+              </Text>
             </View>
-            <Text style={styles.mvpEntryArrow}>›</Text>
+            <View style={styles.onlinePreviewBubbles}>
+              {onlinePreviewFriends.map((f: any, index: number) => (
+                <View key={f.uid} style={[styles.onlinePreviewBubble, { marginLeft: index === 0 ? 0 : -8 }]}>
+                  <Text style={styles.onlinePreviewBubbleText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                </View>
+              ))}
+              {onlineFriends.length > onlinePreviewFriends.length ? (
+                <View style={[styles.onlinePreviewBubble, styles.onlinePreviewMore, { marginLeft: onlinePreviewFriends.length === 0 ? 0 : -8 }]}>
+                  <Text style={styles.onlinePreviewBubbleText}>+{onlineFriends.length - onlinePreviewFriends.length}</Text>
+                </View>
+              ) : null}
+            </View>
           </TouchableOpacity>
 
           {leagueInvites.length > 0 ? (
@@ -363,32 +338,6 @@ export default function DashboardScreen() {
               ))}
             </View>
           ) : null}
-
-          {onlineFriends.length > 0 && (
-            <View style={styles.onlineSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>🟢 Online Now</Text>
-                <Text style={styles.onlineCount}>{onlineFriends.length}</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 4 }}>
-                {onlineFriends.map((f: any) => (
-                  <TouchableOpacity
-                    key={f.uid}
-                    style={styles.onlineFriendCard}
-                    onPress={() => router.push({ pathname: '/screens/profile', params: { uid: f.uid } })}
-                  >
-                    <View style={styles.onlineAvatarWrap}>
-                      <View style={styles.onlineAvatar}>
-                        <Text style={styles.onlineAvatarText}>{(f.displayName || '?')[0].toUpperCase()}</Text>
-                      </View>
-                      <View style={styles.onlineDot} />
-                    </View>
-                    <Text style={styles.onlineName} numberOfLines={1}>{f.displayName || f.username || 'GM'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Leagues</Text>
@@ -444,6 +393,53 @@ export default function DashboardScreen() {
           <View style={{ height: 20 }} />
         </View>
       </ScrollView>
+      <Modal
+        visible={showOnlineOverlay}
+        transparent
+        animationType='fade'
+        onRequestClose={() => setShowOnlineOverlay(false)}
+      >
+        <View style={styles.onlineModalBackdrop}>
+          <View style={styles.onlineSheet}>
+            <View style={styles.onlineSheetHeader}>
+              <View>
+                <Text style={styles.onlineSheetEyebrow}>Who is online</Text>
+                <Text style={styles.onlineSheetTitle}>Online Friends</Text>
+              </View>
+              <TouchableOpacity style={styles.onlineSheetClose} onPress={() => setShowOnlineOverlay(false)}>
+                <Text style={styles.onlineSheetCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            {onlineFriends.length === 0 ? (
+              <View style={styles.onlineEmptyState}>
+                <Text style={styles.onlineEmptyTitle}>No friends online</Text>
+                <Text style={styles.onlineEmptyText}>When your friends are active, their profiles will show here.</Text>
+              </View>
+            ) : (
+              <View style={styles.onlineSheetGrid}>
+                {onlineFriends.map((f: any) => (
+                  <TouchableOpacity
+                    key={f.uid}
+                    style={styles.onlineSheetFriend}
+                    onPress={() => {
+                      setShowOnlineOverlay(false);
+                      router.push({ pathname: '/screens/profile', params: { uid: f.uid } });
+                    }}
+                  >
+                    <View style={styles.onlineSheetAvatarWrap}>
+                      <View style={styles.onlineSheetAvatar}>
+                        <Text style={styles.onlineSheetAvatarText}>{(f.displayName || f.username || 'G')[0].toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.onlineSheetDot} />
+                    </View>
+                    <Text style={styles.onlineSheetName} numberOfLines={1}>{f.displayName || f.username || 'GM'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
       <GlobalNav pendingRequests={pendingRequests} pendingInvites={pendingInvites} />
     </View>
   );
@@ -479,8 +475,6 @@ const styles = StyleSheet.create({
   heroStatValue: { color: '#ffffff', fontSize: 20, fontWeight: '900' },
   heroStatLabel: { color: '#7f8a85', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginTop: 3 },
   quickGrid: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  quickActionPrimary: { flex: 1, backgroundColor: '#00ff87', borderRadius: 12, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  quickActionPrimaryText: { color: '#00160b', fontSize: 13, fontWeight: '900', textAlign: 'center' },
   quickAction: { flex: 1, backgroundColor: '#151515', borderRadius: 12, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderWidth: 1, borderColor: '#2c2c2c' },
   quickActionText: { color: '#ffffff', fontSize: 13, fontWeight: '800', textAlign: 'center' },
   modeGrid: { gap: 10, marginBottom: 14 },
@@ -495,12 +489,14 @@ const styles = StyleSheet.create({
   gmCardMeta: { fontSize: 13, color: '#bdbdbd', fontWeight: '700' },
   findGMsBtn: { backgroundColor: '#1a3a1a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#00ff87' },
   findGMsBtnText: { color: '#00ff87', fontSize: 13, fontWeight: '600' },
-  mvpEntry: { marginBottom: 20, borderRadius: 14, backgroundColor: '#17130a', borderWidth: 1, borderColor: '#5f4610', padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  mvpEntryIcon: { fontSize: 24 },
-  mvpEntryText: { flex: 1 },
-  mvpEntryTitle: { color: '#facc15', fontSize: 16, fontWeight: '900' },
-  mvpEntryDesc: { color: '#a99b78', fontSize: 12, fontWeight: '700', marginTop: 2 },
-  mvpEntryArrow: { color: '#facc15', fontSize: 24, fontWeight: '800' },
+  onlinePreviewCard: { marginBottom: 20, borderRadius: 14, backgroundColor: '#101010', borderWidth: 1, borderColor: '#234d39', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  onlinePreviewText: { flex: 1 },
+  onlinePreviewLabel: { color: '#777', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+  onlinePreviewTitle: { color: '#ffffff', fontSize: 16, fontWeight: '900', marginTop: 4 },
+  onlinePreviewBubbles: { flexDirection: 'row', alignItems: 'center', minWidth: 56, justifyContent: 'flex-end' },
+  onlinePreviewBubble: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0b2a1b', borderWidth: 2, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
+  onlinePreviewMore: { backgroundColor: '#171717', borderColor: '#3a3a3a' },
+  onlinePreviewBubbleText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
   invitesSection: { marginBottom: 24 },
@@ -514,14 +510,23 @@ const styles = StyleSheet.create({
   inviteAcceptText: { color: '#000', fontWeight: '700', fontSize: 14 },
   inviteDeclineBtn: { flex: 1, backgroundColor: '#1a1a1a', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   inviteDeclineText: { color: '#888', fontWeight: '600', fontSize: 14 },
-  onlineSection: { marginBottom: 24 },
-  onlineCount: { color: '#00ff87', fontSize: 14, fontWeight: '700' },
-  onlineFriendCard: { alignItems: 'center', width: 70 },
-  onlineAvatarWrap: { position: 'relative' },
-  onlineAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#00ff87' },
-  onlineAvatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00ff87', borderWidth: 2, borderColor: '#000' },
-  onlineName: { color: '#ccc', fontSize: 11, marginTop: 6, fontWeight: '600', textAlign: 'center' },
+  onlineModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.78)', justifyContent: 'flex-end', padding: 18 },
+  onlineSheet: { backgroundColor: '#101010', borderRadius: 22, borderWidth: 1, borderColor: '#2f4c3d', padding: 18, maxHeight: '76%' },
+  onlineSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
+  onlineSheetEyebrow: { color: '#00ff87', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+  onlineSheetTitle: { color: '#ffffff', fontSize: 24, fontWeight: '900', marginTop: 2 },
+  onlineSheetClose: { borderRadius: 999, borderWidth: 1, borderColor: '#2d2d2d', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#171717' },
+  onlineSheetCloseText: { color: '#00ff87', fontSize: 13, fontWeight: '800' },
+  onlineEmptyState: { borderRadius: 16, backgroundColor: '#151515', borderWidth: 1, borderColor: '#242424', padding: 18 },
+  onlineEmptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '900', marginBottom: 5 },
+  onlineEmptyText: { color: '#8b8b8b', fontSize: 13, fontWeight: '700', lineHeight: 19 },
+  onlineSheetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  onlineSheetFriend: { width: '30%', minWidth: 84, alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: '#242424', backgroundColor: '#151515', padding: 12 },
+  onlineSheetAvatarWrap: { position: 'relative', marginBottom: 8 },
+  onlineSheetAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#0b2a1b', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#00ff87' },
+  onlineSheetAvatarText: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  onlineSheetDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00ff87', borderWidth: 2, borderColor: '#101010' },
+  onlineSheetName: { color: '#ffffff', fontSize: 12, fontWeight: '800', textAlign: 'center' },
   sectionAction: { color: '#00ff87', fontSize: 14, fontWeight: '600' },
   loadingCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 32, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
   emptyCard: { backgroundColor: '#1a1a1a', borderRadius: 14, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#2a2a2a' },

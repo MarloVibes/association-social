@@ -26,6 +26,7 @@ describe('dashboard home model', () => {
       'MLB Franchise',
     ]);
     expect(JSON.stringify(model).toLowerCase()).not.toContain('mini');
+    expect(JSON.stringify(model).toLowerCase()).not.toContain('mvp');
   });
 
   it('keeps quick actions focused on franchise workflows', () => {
@@ -36,9 +37,9 @@ describe('dashboard home model', () => {
     });
 
     expect(model.quickActions).toEqual([
-      { label: 'Create League', route: '/screens/create-league', tone: 'primary' },
       { label: 'Join League', route: '/screens/join-league', tone: 'secondary' },
       { label: 'Find GMs', route: '/screens/search-users', tone: 'secondary' },
+      { label: 'Help / FAQ', route: '/screens/faq-help', tone: 'secondary' },
     ]);
   });
 });
