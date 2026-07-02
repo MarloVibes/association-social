@@ -13,6 +13,7 @@ import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { validateTrade } from '@/domain/finance/validateTrade';
+import { isTradeRoomExpired, tradeRoomExpiryFromNow } from '@/domain/tradeRoomExpiry';
 
 const MAX_PER_SIDE = 6;
 const PRESENCE_LIVE_THRESHOLD_MS = 30 * 1000;
@@ -41,6 +42,17 @@ function positionFilterLabel(position: string) {
 // Strip undefined values (Firestore rejects them) by round-tripping through JSON.
 function cleanForFirestore(obj: any) {
   return JSON.parse(JSON.stringify(obj ?? {}));
+}
+
+function expiredRoomPatch() {
+  return {
+    status: 'cancelled',
+    cancelReason: 'expired',
+    hostConfirmed: false,
+    guestConfirmed: false,
+    expiredAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
 }
 
 function TradePickerPlayerRow({
@@ -142,7 +154,7 @@ export default function TradeRoomScreen() {
   const [leagueMembers, setLeagueMembers] = useState<string[]>([]);
   const [votePassThreshold, setVotePassThreshold] = useState<string>('majority');
   const [voteDeadlineDays, setVoteDeadlineDays] = useState<number>(2);
-  const [overrideAppliedLocal, setOverrideAppliedLocal] = useState<boolean>(false);
+  const [overrideAppliedLocal] = useState<boolean>(false);
   const [theirPickerOpen, setTheirPickerOpen] = useState(false);
   const [myPickerPosFilter, setMyPickerPosFilter] = useState('ALL');
   const [theirPickerPosFilter, setTheirPickerPosFilter] = useState('ALL');
@@ -153,9 +165,6 @@ export default function TradeRoomScreen() {
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [pickModalSide, setPickModalSide] = useState<null | 'mine' | 'theirs'>(null);
-  const [pickRound, setPickRound] = useState<1 | 2>(1);
-  const [pickYear, setPickYear] = useState('');
-  const [pickProtection, setPickProtection] = useState('');
   const [otherTeamPicks, setOtherTeamPicks] = useState<any[]>([]);
   const [stepienRule, setStepienRule] = useState(false);
   const [draftBaseYear, setDraftBaseYear] = useState<number>(new Date().getFullYear() + 1);
@@ -227,6 +236,7 @@ export default function TradeRoomScreen() {
             guestPresence: serverTimestamp(),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+            ...tradeRoomExpiryFromNow(),
           });
           // If a prefill player was requested via deep link, add them to the other side's offer
           if (params.prefillPlayer && theirs) {
@@ -237,7 +247,7 @@ export default function TradeRoomScreen() {
                 const d = newRoomData.data() as any;
                 const theirIsHost = d.hostUid === otherUid;
                 const fieldKey = theirIsHost ? 'hostOffer' : 'guestOffer';
-                await updateDoc(roomRef, { [fieldKey]: [found], updatedAt: serverTimestamp() });
+                await updateDoc(roomRef, { [fieldKey]: [found], updatedAt: serverTimestamp(), ...tradeRoomExpiryFromNow() });
               }
             }
           }
@@ -263,7 +273,7 @@ export default function TradeRoomScreen() {
         } else {
           // Auto-reset terminal rooms when re-entered (cancelled or executed)
           const existingData = roomSnap.data() as any;
-          if (existingData.status === 'cancelled' || existingData.status === 'executed') {
+          if (existingData.status === 'cancelled' || existingData.status === 'executed' || isTradeRoomExpired(existingData)) {
             await updateDoc(roomRef, {
               status: 'open',
               hostOffer: [],
@@ -280,6 +290,7 @@ export default function TradeRoomScreen() {
               overrideRequestedBy: null,
               overrideApprovedBy: null,
               updatedAt: serverTimestamp(),
+              ...tradeRoomExpiryFromNow(),
             });
           }
         }
@@ -301,6 +312,7 @@ export default function TradeRoomScreen() {
           const data = d.data() as any;
           if (d.id === roomId) return;
           if (!ACTIVE.includes(data.status)) return;
+          if (isTradeRoomExpired(data)) return;
           const myOffer = data.hostUid === myUid ? (data.hostOffer || []) : (data.guestOffer || []);
           myOffer.forEach((p: any) => locked.add(getPlayerKey(p)));
         });
@@ -347,8 +359,15 @@ export default function TradeRoomScreen() {
   useEffect(() => {
     if (!leagueId || !roomId) return;
     let prevStatus: string | null = null;
-    const unsub = onSnapshot(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), snap => {
+    const roomRef = doc(db, 'leagues', leagueId, 'trade_rooms', roomId);
+    const unsub = onSnapshot(roomRef, snap => {
       const snapData = snap.data() as any;
+      if (snap.exists() && isTradeRoomExpired(snapData)) {
+        updateDoc(roomRef, expiredRoomPatch()).catch(() => {});
+        Alert.alert('Trade room expired', 'This trade room sat unused for 15 minutes, so it was closed. You can start a new one when ready.', [{ text: 'OK', onPress: () => router.back() }]);
+        setRoom({ id: snap.id, ...snapData, status: 'cancelled', cancelReason: 'expired' });
+        return;
+      }
       if (snapData?.status === 'executed' && prevStatus && prevStatus !== 'executed') {
         const localFinalizeWillAlert = finalizeInFlightRef.current || localFinalizeSuccessPendingRef.current;
         if (!localFinalizeWillAlert) {
@@ -359,6 +378,9 @@ export default function TradeRoomScreen() {
       if (snapData?.status === 'cancelled' && snapData?.cancelReason === 'roster_changed' && prevStatus && prevStatus !== 'cancelled') {
         // Trade voided because a player in it was traded elsewhere first
         Alert.alert('Trade voided', 'A player in this deal was traded to another team first, so this trade could not go through.', [{ text: 'OK', onPress: () => router.back() }]);
+      }
+      if (snapData?.status === 'cancelled' && snapData?.cancelReason === 'expired' && prevStatus && prevStatus !== 'cancelled') {
+        Alert.alert('Trade room expired', 'This trade room sat unused for 15 minutes, so it was closed. You can start a new one when ready.', [{ text: 'OK', onPress: () => router.back() }]);
       }
       if (snapData?.status === 'rejected' && prevStatus && prevStatus !== 'rejected') {
         Alert.alert('Trade rejected', 'The league voted this trade down. No players moved.', [{ text: 'OK', onPress: () => router.back() }]);
@@ -406,8 +428,9 @@ export default function TradeRoomScreen() {
       updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
         [offerKey]: [...current, pre],
         updatedAt: serverTimestamp(),
+        ...tradeRoomExpiryFromNow(),
       });
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     // Only run on first room load when prefillPlayer is present
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!room, params.prefillPlayer]);
@@ -429,8 +452,9 @@ export default function TradeRoomScreen() {
       updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
         [offerKey]: [...current, pre],
         updatedAt: serverTimestamp(),
+        ...tradeRoomExpiryFromNow(),
       });
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!room, params.prefillMyPlayer]);
 
@@ -441,7 +465,7 @@ export default function TradeRoomScreen() {
       try {
         const field = isHost ? 'hostPresence' : 'guestPresence';
         await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), { [field]: serverTimestamp() });
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     };
     tick();
     presenceTimerRef.current = setInterval(tick, HEARTBEAT_INTERVAL_MS);
@@ -466,10 +490,8 @@ export default function TradeRoomScreen() {
     );
   }
 
-  const MIN_SALARY = 1272870;
   const sumSalary = (offer: any[]) => (offer || []).reduce((s: number, p: any) => s + getEffectiveSalary(p, overridesMap), 0);
   const fmtMoney = (n: number) => '$' + (n / 1000000).toFixed(1) + 'M';
-  const fmtChipMoney = (n: number) => (n <= MIN_SALARY ? '$Min' : '$' + (n / 1000000).toFixed(1) + 'M');
   const withEffectiveSalaries = (players: any[]) => (players || []).map((player: any) => ({
     ...player,
     salary: getEffectiveSalary(player, overridesMap),
@@ -539,6 +561,7 @@ export default function TradeRoomScreen() {
     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
       ...patch,
       updatedAt: serverTimestamp(),
+      ...tradeRoomExpiryFromNow(),
     });
   };
 
@@ -614,6 +637,7 @@ export default function TradeRoomScreen() {
         overrideRequestedBy: myUid,
         overrideRequestedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...tradeRoomExpiryFromNow(),
       });
       // Notify all commissioners of the league
       const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
@@ -635,7 +659,7 @@ export default function TradeRoomScreen() {
       };
       for (const cid of commIds) {
         if (cid === myUid) continue;
-        try { await updateDoc(doc(db, 'users', cid), { notifications: arrayUnion(note) }); } catch (e) {}
+        try { await updateDoc(doc(db, 'users', cid), { notifications: arrayUnion(note) }); } catch {}
       }
       Alert.alert('Sent', 'Commissioner has been notified for review.');
     } catch (e: any) { Alert.alert('Error', e.message); }
@@ -774,7 +798,7 @@ export default function TradeRoomScreen() {
           });
           return { finalize: true, trade: data };
         } else {
-          tx.update(ref, { [myConfirmKey]: true, updatedAt: serverTimestamp() });
+          tx.update(ref, { [myConfirmKey]: true, updatedAt: serverTimestamp(), ...tradeRoomExpiryFromNow() });
           return { executed: false };
         }
       });
@@ -1070,6 +1094,7 @@ export default function TradeRoomScreen() {
                   const data = d.data() as any;
                   if (d.id === roomId) return;
                   if (!ACTIVE.includes(data.status)) return;
+                  if (isTradeRoomExpired(data)) return;
                   const theirOffer = data.hostUid === otherUid ? (data.hostOffer || []) : (data.guestOffer || []);
                   theirOffer.forEach((p: any) => locked.add(getPlayerKey(p)));
                 });
@@ -1089,7 +1114,7 @@ export default function TradeRoomScreen() {
             </View>
           ))}
           {canEditOtherSide ? (
-            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('theirs'); setPickRound(1); setPickYear(''); setPickProtection(''); }}>
+            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('theirs'); }}>
               <Text style={styles.addPickBtnText}>+ ADD PICK</Text>
             </TouchableOpacity>
           ) : null}
@@ -1136,6 +1161,7 @@ export default function TradeRoomScreen() {
                     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
                       chat: newChat,
                       updatedAt: serverTimestamp(),
+                      ...tradeRoomExpiryFromNow(),
                     });
                     setChatInput('');
                   } catch (e: any) {
@@ -1216,7 +1242,7 @@ export default function TradeRoomScreen() {
             </View>
           ))}
           {canEditMySide ? (
-            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('mine'); setPickRound(1); setPickYear(''); setPickProtection(''); }}>
+            <TouchableOpacity style={styles.addPickBtn} onPress={() => { setPickModalSide('mine'); }}>
               <Text style={styles.addPickBtnText}>+ ADD PICK</Text>
             </TouchableOpacity>
           ) : null}

@@ -2,17 +2,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/FranchisePlayerRow';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
-import { addDoc, arrayRemove, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, writeBatch, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, arrayUnion } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
+import { isTradeRoomExpired } from '@/domain/tradeRoomExpiry';
 
 
 function PlaystyleBadge({
@@ -71,7 +71,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport, currentYear,
 }
 
 export default function TradeChannelScreen() {
-  const { leagueId, channelId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
+  const { leagueId } = useLocalSearchParams<{ leagueId: string; channelId: string }>();
   const [activeTab, setActiveTab] = useState<'block' | 'available' | 'propose'>('block');
   const [myTeam, setMyTeam] = useState<any>(null);
   const [league, setLeague] = useState<any>(null);
@@ -126,7 +126,7 @@ export default function TradeChannelScreen() {
     let hostRooms: any[] = [];
     let guestRooms: any[] = [];
     const merge = () => {
-      const all = [...hostRooms, ...guestRooms].filter(r => ACTIVE.includes(r.status));
+      const all = [...hostRooms, ...guestRooms].filter(r => ACTIVE.includes(r.status) && !isTradeRoomExpired(r));
       // Priority: pushed-to-me=0, live=1, pushed-by-me/countered=2, open=3
       const priority = (r: any) => {
         if ((r.status === 'pushed' || r.status === 'countered') && r.senderUid && r.senderUid !== user.uid) return 0;
@@ -210,12 +210,6 @@ export default function TradeChannelScreen() {
   const getPlayerById = (pid: string) => myRoster.find((p: any) => (p.player_id || p.full_name) === pid);
   const playerSalary = (player: any) => player?.salary ?? player?.contract?.salary ?? player?.currentSalary ?? 0;
 
-  const toggleUntouchable = async (pid: string) => {
-    const newList = untouchables.includes(pid) ? untouchables.filter(p => p !== pid) : [...untouchables, pid];
-    setUntouchables(newList);
-    await updateDoc(doc(db, 'leagues', leagueId, 'teams', myTeamId), { untouchables: newList });
-  };
-
   const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
   const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
   const allTradeBlockAcrossLeague = allTeams.flatMap((t: any) => {
@@ -232,43 +226,6 @@ export default function TradeChannelScreen() {
     .sort((a: any, b: any) => (a.name || a.abbreviation || '').localeCompare(b.name || b.abbreviation || ''));
 
   if (loading) return <View style={styles.container}><ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 100 }} /></View>;
-
-  async function handleDeleteCustomPlayer(p: any) {
-    try {
-      const scan = await scanCustomPlayerReferences(leagueId, p);
-      const refLines: string[] = [];
-      if (scan.references.length > 0) {
-        scan.references.forEach(r => {
-          const flags = [
-            r.onRoster && 'roster',
-            r.onBlock && 'trade block',
-            r.untouchable && 'untouchables',
-            r.onTargetList && 'targets',
-          ].filter(Boolean).join(', ');
-          refLines.push('\u2022 ' + r.teamName + ' (' + flags + ')');
-        });
-      }
-      if (scan.activeTradeRooms > 0) {
-        refLines.push('\u2022 ' + scan.activeTradeRooms + ' active trade room' + (scan.activeTradeRooms === 1 ? '' : 's'));
-      }
-      const msg = refLines.length > 0
-        ? 'This player is referenced in:\n\n' + refLines.join('\n') + '\n\nThey will be removed from all of these. Cannot be undone.'
-        : 'This player has no roster or trade references. Cannot be undone.';
-      Alert.alert(
-        'Delete ' + p.full_name + '?',
-        msg,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: async () => {
-            try {
-              await executeCustomPlayerDelete(leagueId, p);
-              Alert.alert('Deleted', p.full_name + ' has been removed.');
-            } catch (e: any) { Alert.alert('Error', e.message); }
-          }},
-        ]
-      );
-    } catch (e: any) { Alert.alert('Error', e.message); }
-  }
 
   return (
     <View style={styles.container}>
@@ -354,13 +311,11 @@ export default function TradeChannelScreen() {
                 const pid = targetIds[i];
                 // Find player across all teams
                 let targetPlayer: any = null;
-                let ownerTeamName = '';
                 if (pid) {
                   for (const t of allTeams) {
                     const found = (t.players || []).find((p: any) => (p.player_id || p.full_name) === pid);
                     if (found) {
                       targetPlayer = found;
-                      ownerTeamName = displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || '');
                       break;
                     }
                   }

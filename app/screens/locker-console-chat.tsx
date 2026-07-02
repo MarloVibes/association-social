@@ -80,7 +80,7 @@ export default function LockerConsoleChatScreen() {
       try {
         const snap = await getDoc(doc(db, 'users', auth.currentUser!.uid));
         if (snap.exists()) setUserInfo(snap.data());
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     })();
 
     const q = query(
@@ -140,7 +140,7 @@ export default function LockerConsoleChatScreen() {
       );
       const data = await res.json();
       setGifs(data.data || []);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     setGiphyLoading(false);
   };
 

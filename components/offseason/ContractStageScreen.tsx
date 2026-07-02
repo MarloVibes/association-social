@@ -146,7 +146,7 @@ function preferenceBadges(preferences: PlayerContractPreferences): string[] {
     market: 'Market',
     security: 'Security',
   };
-  return (Object.entries(preferences) as Array<[keyof PlayerContractPreferences, number]>)
+  return (Object.entries(preferences) as [keyof PlayerContractPreferences, number][])
     .sort((left, right) => right[1] - left[1])
     .slice(0, 3)
     .map(([key]) => labels[key]);
@@ -503,7 +503,7 @@ export default function ContractStageScreen({ stage }: Props) {
             ['available', 'Available'],
             ['offers', 'My Offers'],
             ['decisions', 'Decisions'],
-          ] as Array<[Tab, string]>).map(([value, label]) => (
+          ] as [Tab, string][]).map(([value, label]) => (
             <TouchableOpacity
               key={value}
               onPress={() => setTab(value)}

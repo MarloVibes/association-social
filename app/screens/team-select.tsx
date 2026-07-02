@@ -122,7 +122,6 @@ export default function TeamSelectScreen() {
 
   const [teams, setTeams] = useState<any[]>([]);
   const [takenTeams, setTakenTeams] = useState<string[]>([]);
-  const [members, setMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
@@ -152,7 +151,6 @@ export default function TeamSelectScreen() {
     const unsub = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
       const data = snap.data() || {};
       setTakenTeams(data.takenTeams || []);
-      setMembers(data.members || []);
       setSpinChoices(data.spinChoices || 1);
     });
     return () => unsub();

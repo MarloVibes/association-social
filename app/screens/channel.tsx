@@ -2,11 +2,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc, collection, doc, getDoc, onSnapshot,
-  orderBy, query, serverTimestamp, updateDoc, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, getDocs, where } from 'firebase/firestore';
+  orderBy, query, serverTimestamp, updateDoc, arrayUnion, increment, deleteField, deleteDoc, getDocs, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
-  Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
+  Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { auth, db } from '@/constants/firebase';
@@ -17,12 +17,6 @@ import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/sche
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
 
 const MESSAGE_REACTIONS = ['👍', '❤️', '😂', '😱', '‼️', '💯', '🤯'];
-const EMOJI_LIST = [
-  '😂','🔥','💯','👀','😤','🏆','💪','🎯','👑','😎',
-  '🤝','💀','😭','🙏','⚡','🎮','🏀','🏈','⚾','👏',
-  '😅','🤣','😬','🫡','💥','🎉','😤','🔒','💸','🤯',
-];
-
 function cleanChannelTeamLabel(value?: string | null, fallback?: string | null) {
   return displayScheduleTeamLabel(value, fallback);
 }
@@ -75,7 +69,6 @@ export default function ChannelScreen() {
   const [members, setMembers] = useState<Record<string, any>>({});
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [showEmoji, setShowEmoji] = useState(false);
   const [msgReaction, setMsgReaction] = useState<any | null>(null); // chat message being reacted to
   const [editingMsg, setEditingMsg] = useState<any | null>(null); // chat message being edited
   const [showGiphy, setShowGiphy] = useState(false);
@@ -102,7 +95,6 @@ export default function ChannelScreen() {
   const [banProfileResults, setBanProfileResults] = useState<any[]>([]);
   const [banLinkedProfile, setBanLinkedProfile] = useState<any>(null);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
-  const [newResetRequest, setNewResetRequest] = useState('');
   const [showResetForm, setShowResetForm] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputingReq, setDisputingReq] = useState<any>(null);
@@ -377,22 +369,6 @@ export default function ChannelScreen() {
     setResetRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  const submitResetRequest = async () => {
-    if (!newResetRequest.trim()) return;
-    await addDoc(collection(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests'), {
-        gameDate: resetGameDate,
-        opponent: resetOpponent,
-        reason: resetReason === 'Other' ? resetCustomReason : resetReason,
-        proofUrl: resetProofUrl || null,
-      description: newResetRequest.trim(),
-      requestedBy: user?.uid,
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    });
-    setNewResetRequest('');
-    loadResetRequests();
-  };
-
   const approveResetRequest = async (requestId: string) => {
     await updateDoc(
       doc(db, 'leagues', leagueId, 'channels', 'reset-requests', 'requests', requestId),
@@ -620,7 +596,7 @@ export default function ChannelScreen() {
             createdAt: new Date().toISOString(),
           }),
         });
-      } catch (e) { /* non-fatal */ }
+      } catch { /* non-fatal */ }
     }
   };
 
@@ -1764,7 +1740,6 @@ export default function ChannelScreen() {
             </View>
           ) : (
             highlights.map(item => {
-              const isMe = item.postedBy === user?.uid;
               const sender = members[item.postedBy];
               return (
                 <View key={item.id} style={[styles.hlCard, item.featured && styles.hlCardFeatured]}>
@@ -1808,7 +1783,7 @@ export default function ChannelScreen() {
 
                   {/* Clip URL */}
                   {item.clipUrl && (
-                    <TouchableOpacity style={styles.hlClipCard} onPress={() => { const { Linking } = require('react-native'); Linking.openURL(item.clipUrl); }}>
+                    <TouchableOpacity style={styles.hlClipCard} onPress={() => { Linking.openURL(item.clipUrl); }}>
                       <Text style={styles.hlClipIcon}>▶️</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.hlClipLabel}>VIDEO CLIP</Text>
@@ -2096,7 +2071,6 @@ export default function ChannelScreen() {
             style={styles.inputAction}
             onPress={() => {
               setShowGiphy(true);
-              setShowEmoji(false);
             }}
           >
             <View style={styles.gifBtnBox}>

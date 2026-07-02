@@ -25,16 +25,16 @@ export default function LandingScreen() {
       try {
         const s = await getCountFromServer(collection(db, 'users'));
         next.gms = s.data().count;
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
       try {
         const s = await getCountFromServer(collection(db, 'leagues'));
         next.leagues = s.data().count;
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
       try {
         const q1 = query(collectionGroup(db, 'trade_rooms'), where('status', '==', 'executed'));
         const s = await getCountFromServer(q1);
         next.tradesAll = s.data().count;
-      } catch (e) { /* ignore - needs index */ }
+      } catch { /* ignore - needs index */ }
       try {
         const start = new Date();
         start.setHours(0, 0, 0, 0);
@@ -45,7 +45,7 @@ export default function LandingScreen() {
         );
         const s = await getCountFromServer(q2);
         next.tradesToday = s.data().count;
-      } catch (e) { /* ignore - needs index */ }
+      } catch { /* ignore - needs index */ }
       setStats(next);
     })();
   }, []);
@@ -80,7 +80,7 @@ export default function LandingScreen() {
         Animated.spring(buttonsY, { toValue: 0, tension: 50, friction: 8, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [accentPulse, buttonsOpacity, buttonsY, gradAnim, tickerX, titleOpacity, titleY]);
 
   const tickerItems = [
     'TOTAL GMs · ' + stats.gms,

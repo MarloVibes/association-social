@@ -25,6 +25,12 @@ const {
   verifyAuthorizationReceipt,
 } = require('./domain/tradeAuthorization');
 const {
+  activeTradeRoomStatuses,
+  buildExpiredTradeRoomUpdate,
+  isTradeRoomExpired,
+  tradeRoomExpiryFromNow,
+} = require('./domain/tradeRoomExpiry');
+const {
   createAdvanceOffseasonHandler,
   createAdvanceDueOffseasonsHandler,
 } = require('./franchise/offseasonCallable');
@@ -413,6 +419,41 @@ exports.resolveDueExtensions = onSchedule('every 10 minutes', createResolveDueEx
   FieldValue,
 }));
 
+exports.expireStaleTradeRooms = onSchedule('every 1 minutes', async () => {
+  const db = getFirestore();
+  const now = Date.now();
+  const cutoff = new Date(now - (15 * 60 * 1000));
+  const [explicitSnap, fallbackSnap] = await Promise.all([
+    db.collectionGroup('trade_rooms').where('expiresAtMs', '<=', now).limit(300).get(),
+    db.collectionGroup('trade_rooms').where('updatedAt', '<=', cutoff).limit(300).get(),
+  ]);
+  const seen = new Set();
+  const docs = [];
+  explicitSnap.docs.concat(fallbackSnap.docs).forEach((snap) => {
+    if (seen.has(snap.ref.path)) return;
+    seen.add(snap.ref.path);
+    const data = snap.data() || {};
+    if (activeTradeRoomStatuses().includes(data.status) && isTradeRoomExpired(data, now)) {
+      docs.push(snap);
+    }
+  });
+  if (docs.length === 0) return { expired: 0 };
+
+  let batch = db.batch();
+  let count = 0;
+  const update = buildExpiredTradeRoomUpdate(FieldValue.serverTimestamp());
+  for (const snap of docs) {
+    batch.update(snap.ref, update);
+    count += 1;
+    if (count % 450 === 0) {
+      await batch.commit();
+      batch = db.batch();
+    }
+  }
+  await batch.commit();
+  return { expired: docs.length };
+});
+
 exports.resolveFreeAgencyRound = onCall(createResolveContractRoundHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
@@ -797,6 +838,11 @@ exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (requ
     if (!sourceSnap.exists) throw new HttpsError('not-found', 'Trade not found.');
     const league = leagueSnap.data() || {};
     const source = sourceSnap.data() || {};
+    const timestamp = FieldValue.serverTimestamp();
+    if (!isCpu && isTradeRoomExpired(source, Date.now())) {
+      tx.update(sourceRef, buildExpiredTradeRoomUpdate(timestamp));
+      return { action, roomId, expired: true };
+    }
     const authorization = authorizeTradeAction({
       action, uid, league, source, forceResolve,
     });
@@ -806,7 +852,6 @@ exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (requ
       });
     }
 
-    const timestamp = FieldValue.serverTimestamp();
     if (action === 'cast_vote') {
       const nextSource = forceResolve
         ? source
@@ -861,6 +906,7 @@ exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (requ
         overrideApprovedBy: uid,
         overrideApprovedAt: timestamp,
         updatedAt: timestamp,
+        ...tradeRoomExpiryFromNow(),
       });
     } else if (action === 'deny_override') {
       tx.delete(overrideAuthorizationRef);
@@ -870,6 +916,7 @@ exports.updateTradeDecision = onCall({ secrets: [tradeAuthSecret] }, async (requ
         overrideDeniedBy: uid,
         overrideDeniedAt: timestamp,
         updatedAt: timestamp,
+        ...tradeRoomExpiryFromNow(),
       });
     } else if (action === 'veto_trade') {
       tx.delete(overrideAuthorizationRef);
@@ -969,6 +1016,16 @@ exports.finalizeTrade = onCall({ secrets: [tradeAuthSecret] }, async (request) =
 
     const league = leagueSnap.data() || {};
     const source = sourceSnap.data() || {};
+    if (type === 'room' && isTradeRoomExpired(source, Date.now())) {
+      tx.update(sourceRef, buildExpiredTradeRoomUpdate(FieldValue.serverTimestamp()));
+      return {
+        executed: false,
+        expired: true,
+        sourceType: type,
+        activityId: `trade_${type}_${String(roomId)}`,
+        notifiedUserIds: [source.hostUid, source.guestUid].filter(Boolean),
+      };
+    }
     if (
       (type === 'room' && source.status === 'executed')
       || (type === 'cpu' && source.status === 'approved')

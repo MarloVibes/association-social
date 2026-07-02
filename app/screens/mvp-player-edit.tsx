@@ -134,7 +134,7 @@ export default function MVPPlayerEditScreen() {
         if (userSnap.exists()) {
           setGamerTag(userSnap.data().gamerTag || '');
         }
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
   }
 

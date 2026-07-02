@@ -18,7 +18,7 @@ const ERA_LABELS: Record<string, string> = {
 };
 
 export default function JoinLeagueScreen() {
-  const { leagueId, leagueName } = useLocalSearchParams<{ leagueId?: string; leagueName?: string }>();
+  const { leagueId } = useLocalSearchParams<{ leagueId?: string; leagueName?: string }>();
   const [leagues, setLeagues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -100,7 +100,7 @@ export default function JoinLeagueScreen() {
     try {
       const snap = await getDoc(doc(db, 'leagues', id, 'channels', 'league-rules'));
       setLeagueRules(snap.exists() ? snap.data()?.content || '' : '');
-    } catch (e) { setLeagueRules(''); }
+    } catch { setLeagueRules(''); }
   };
 
   const joinLeague = async (league: any) => {

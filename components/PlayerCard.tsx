@@ -118,7 +118,6 @@ function formatAccolade(text: string): string {
 
 function groupAccolades(accolades: string[]): { icon: string; label: string; years: string }[] {
   const map: Record<string, string[]> = {};
-  const champYears: string[] = [];
 
   for (const a of accolades) {
     const formatted = formatAccolade(a);

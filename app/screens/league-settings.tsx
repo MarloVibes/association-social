@@ -78,7 +78,7 @@ export default function LeagueSettingsScreen() {
       try {
         const ps = await getDocs(collection(db, 'leagues', leagueId, 'pending_players'));
         setPendingCount(ps.size);
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
       setName(data.name || '');
       setPhotoUrl(data.photoUrl || '');
       setDescription(data.description || '');

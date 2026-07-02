@@ -1,5 +1,4 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc, query, where } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -22,7 +21,6 @@ export default function RosterScreen() {
   const [allEraPlayers, setAllEraPlayers] = useState<any[]>([]);
   const [takenPlayerIds, setTakenPlayerIds] = useState<Set<string>>(new Set());
   const [takenPlayerNames, setTakenPlayerNames] = useState<Set<string>>(new Set());
-  const [claimedTeamAbbrs, setClaimedTeamAbbrs] = useState<Set<string>>(new Set());
   const [droppedPlayerNames, setDroppedPlayerNames] = useState<Set<string>>(new Set());
   const [myPlayerIds, setMyPlayerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,19 +78,16 @@ export default function RosterScreen() {
       const docPoolKey = isNBADoc ? eraKey : docSport;
 
       const allTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const claimedAbbrs = new Set<string>();
       const claimedPlayerIds = new Set<string>();
       const claimedPlayerNames = new Set<string>();
       allTeamsSnap.docs.forEach(d => {
         const teamData = d.data();
-        if (teamData.abbreviation) claimedAbbrs.add(teamData.abbreviation);
         (teamData.players || []).forEach((p: any) => {
           const pid = p.player_id;
           if (pid) claimedPlayerIds.add(pid);
           if (p.full_name) claimedPlayerNames.add(p.full_name);
         });
       });
-      setClaimedTeamAbbrs(claimedAbbrs);
       // Note: 'taken' and 'takenNames' are populated after we load the pool + free agents below.
       // We defer this until pool data is available.
 
@@ -299,7 +294,6 @@ export default function RosterScreen() {
         || (p.full_name || '').toLowerCase().startsWith(q)
         || (p.first_name || '').toLowerCase().startsWith(q)
         || (p.last_name || '').toLowerCase().startsWith(q);
-      const pos = p.position || '';
       const matchesPos = matchesRosterPosition(p, posFilter);
       // In draft mode - show ALL players not already on a roster
       if (isDraftMode) {
@@ -515,65 +509,6 @@ export default function RosterScreen() {
           prefillPlayer: JSON.stringify(player),
         },
       });
-    } catch (e: any) { Alert.alert('Error', e.message); }
-  };
-
-  const postToTradeChannel = async (player: any) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      // Get user profile for display name
-      const userSnap = await getDoc(doc(db, 'users', user.uid));
-      const username = userSnap.data()?.username || userSnap.data()?.displayName || 'A GM';
-      const playerName = player.full_name || player.name || 'Unknown';
-      const teamName = team?.name || 'Unknown Team';
-
-      // Post to trade-center channel
-      const listingRef = await addDoc(collection(db, 'leagues', leagueId, 'channels', 'trade-center', 'messages'), {
-        type: 'trade_listing',
-        player,
-        fromUid: user.uid,
-        fromTeamId: teamId,
-        fromTeamName: teamName,
-        createdAt: serverTimestamp(),
-        status: 'available',
-      });
-
-      // Add to league activity feed
-      const activityRef = await addDoc(collection(db, 'leagues', leagueId, 'activity'), {
-        type: 'trade_listing',
-        message: teamName + ' (' + username + ') added ' + playerName + ' to Trade Center',
-        playerName,
-        playerData: player,
-        teamName,
-        fromUid: user.uid,
-        fromTeamId: teamId,
-        listingId: listingRef.id,
-        leagueId,
-        createdAt: serverTimestamp(),
-      });
-
-      // Notify all league members
-      const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
-      const members = leagueSnap.data()?.members || [];
-      for (const memberId of members) {
-        if (memberId === user.uid) continue;
-        await updateDoc(doc(db, 'users', memberId), {
-          notifications: arrayUnion({
-            type: 'trade_listing',
-            leagueId,
-            listingId: listingRef.id,
-            activityId: activityRef.id,
-            message: teamName + ' added ' + playerName + ' to Trade Center',
-            playerName,
-            teamName,
-            createdAt: new Date().toISOString(),
-          }),
-        });
-      }
-
-      Alert.alert('Posted!', playerName + ' posted to Trade channel.');
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -837,7 +772,6 @@ export default function RosterScreen() {
           </View>
         }
         renderItem={({ item, index }) => {
-          const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
           const pid = item.player_id || item.id;
           const isMine = activeTab === 'my_team';
           const myUntouchables: string[] = (team?.untouchables || []) as string[];

@@ -45,7 +45,6 @@ export default function LeagueScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [league, setLeague] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
-  const [teams, setTeams] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +61,6 @@ export default function LeagueScreen() {
     ? getTeamColors(teamAbbr || 'ATL', currentYear)
     : [getSportTeamTheme(leagueSport, teamAbbr).tintColor, getSportTeamTheme(leagueSport, teamAbbr).titleColor];
   const teamPrimary = teamColors[0] || '#1a1a1a';
-  const teamSecondary = teamColors[1] || '#ffffff';
   const scrollY = useRef(new Animated.Value(0)).current;
   const stickyOpacity = scrollY.interpolate({
     inputRange: [100, 180],
@@ -109,8 +107,6 @@ export default function LeagueScreen() {
       setMembers(memberProfiles);
 
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
-      const allTeams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      setTeams(allTeams);
       const myT = teamsSnap.docs.find(d => d.data().gmId === user?.uid);
       if (myT) setMyTeam({ id: myT.id, ...myT.data() });
 

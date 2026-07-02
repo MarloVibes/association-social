@@ -154,7 +154,7 @@ export default function LockerGroupChatScreen() {
       );
       const data = await res.json();
       setGifs(data.data || []);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     setGiphyLoading(false);
   };
 

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';

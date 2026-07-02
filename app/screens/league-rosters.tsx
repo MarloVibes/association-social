@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
-import { getTeamColors, getTeamLogoUrl, getTeamLogoLocal } from '@/constants/teamColors';
-import { getSportTeams, getSportTeamTheme, getSportLogoUrl } from '@/constants/sportTeams';
+import { getTeamColors } from '@/constants/teamColors';
+import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
@@ -146,8 +146,6 @@ export default function LeagueRostersScreen() {
         const isNBASport = sport === 'nba';
         const sportTheme = isNBASport ? null : getSportTeamTheme(sport, abbr);
         const colors = isNBASport ? getTeamColors(abbr, era) : [sportTheme?.tintColor || '#1a1a1a'];
-        const logoLocal = isNBASport ? getTeamLogoLocal(abbr, era) : null;
-        const logoUri = isNBASport ? getTeamLogoUrl(abbr, era) : '';
         const isOwned = !!team.gmId;
         // Luminance check for text contrast on bold solid team-color background
         const hex = (colors[0] || '#222').replace('#', '');
