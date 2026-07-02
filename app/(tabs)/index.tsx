@@ -114,7 +114,7 @@ export default function LandingScreen() {
         <Animated.View style={{ opacity: titleOpacity, transform: [{ translateY: titleY }] }}>
           <Text style={styles.titleTop} numberOfLines={1} adjustsFontSizeToFit>FRANCHISE</Text>
           <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={[styles.titleBottom, { transform: [{ scale: accentPulse }] }]}>
-            SOCIAL
+            MOBILE
           </Animated.Text>
           <View style={styles.divider} />
           <Text style={styles.tagline}>RUN YOUR LEAGUE. OWN YOUR ERA.</Text>

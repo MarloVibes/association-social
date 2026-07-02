@@ -9,11 +9,14 @@ describe('source safety regressions', () => {
   it('uses Franchise Mobile as the public app title', () => {
     const appConfig = JSON.parse(source('app.json'));
     const functions = source('functions/index.js');
+    const landing = source('app/(tabs)/index.tsx');
 
     expect(appConfig.expo.name).toBe('Franchise Mobile');
     expect(appConfig.expo.name).not.toBe('Franchise Social');
     expect(functions).toContain("default: return 'Franchise Mobile'");
     expect(functions).not.toContain("default: return 'Franchise Social'");
+    expect(landing).toContain('MOBILE');
+    expect(landing).not.toContain('SOCIAL');
   });
 
   it('documents the full public NBA grade ladder', () => {
