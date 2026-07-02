@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
+import { displayScheduleAbbr, displayScheduleName } from '@/domain/nba/scheduleView';
 
 type League = {
   name?: string;
@@ -305,7 +306,7 @@ export default function LiveDraftScreen() {
               <Text style={styles.teamName}>
                 {session.status === 'complete'
                   ? `${session.picks.length} selections recorded`
-                  : currentTeam?.name || currentTeam?.abbreviation || 'Current Team'}
+                  : currentTeam ? displayScheduleName(currentTeam) : 'Current Team'}
               </Text>
               {session.status === 'live' && (
                 <Text style={styles.gmStatus}>
@@ -342,7 +343,7 @@ export default function LiveDraftScreen() {
                   <View key={pick.overall} style={styles.historyRow}>
                     <Text style={styles.historyNumber}>#{pick.overall}</Text>
                     <Text style={styles.historyPlayer}>{prospectName(pick.prospect)}</Text>
-                    <Text style={styles.historyTeam}>{team?.abbreviation || team?.name || pick.teamId}</Text>
+                    <Text style={styles.historyTeam}>{team ? displayScheduleAbbr(team.abbreviation || team.name || pick.teamId) : displayScheduleAbbr(pick.teamId)}</Text>
                   </View>
                 );
               })}

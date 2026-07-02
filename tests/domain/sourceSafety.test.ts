@@ -809,6 +809,21 @@ describe('source safety regressions', () => {
     expect(tradeRoom).not.toContain("positionFilterBtn: { minWidth: 50");
   });
 
+  it('cleans era-suffixed team labels in offseason draft surfaces', () => {
+    const liveDraft = source('app/screens/offseason/live-draft.tsx');
+    const offseasonView = source('domain/offseason/viewModel.ts');
+
+    expect(liveDraft).toContain("from '@/domain/nba/scheduleView'");
+    expect(liveDraft).toContain('displayScheduleName(currentTeam)');
+    expect(liveDraft).toContain('displayScheduleAbbr(pick.teamId)');
+    expect(liveDraft).not.toContain("currentTeam?.name || currentTeam?.abbreviation || 'Current Team'");
+    expect(liveDraft).not.toContain("team?.abbreviation || team?.name || pick.teamId");
+
+    expect(offseasonView).toContain("from '@/domain/nba/scheduleView'");
+    expect(offseasonView).toContain('displayScheduleTeamLabel(team.name || team.abbreviation, team.id)');
+    expect(offseasonView).not.toContain("label: team.name || team.abbreviation || 'Claimed team'");
+  });
+
   it('uses neutral franchise labels for public sport modes', () => {
     const createLeague = source('app/screens/create-league.tsx');
     const dashboard = source('app/(tabs)/dashboard.tsx');

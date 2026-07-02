@@ -1,3 +1,4 @@
+import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { getSportRules } from '@/domain/sports/rules';
 import type { OffseasonStage, OffseasonState } from './types';
 
@@ -81,6 +82,6 @@ export function getUnresolvedOffseasonTeams(
     .filter(team => team.gmId && !completed.has(String(team.id)))
     .map(team => ({
       id: String(team.id),
-      label: team.name || team.abbreviation || 'Claimed team',
+      label: displayScheduleTeamLabel(team.name || team.abbreviation, team.id) || 'Claimed team',
     }));
 }
