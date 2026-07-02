@@ -642,7 +642,7 @@ export function gradeColors(grade: NbaGrade): GradeColorStyle {
   if (grade === 'S') return { textColor: '#f5c451', backgroundColor: '#261f0c', borderColor: '#f5c451' };
   if (grade.startsWith('A')) return { textColor: '#00ff87', backgroundColor: '#062416', borderColor: '#00ff87' };
   if (grade.startsWith('B')) return { textColor: '#54a3ff', backgroundColor: '#071a2e', borderColor: '#2477d8' };
-  if (grade.startsWith('C')) return { textColor: '#f7d154', backgroundColor: '#241f08', borderColor: '#c99c20' };
+  if (grade.startsWith('C')) return { textColor: '#cbd5e1', backgroundColor: '#15181d', borderColor: '#64748b' };
   if (grade.startsWith('D')) return { textColor: '#ff9f43', backgroundColor: '#2a1605', borderColor: '#cc7420' };
   return { textColor: '#ff4d5e', backgroundColor: '#2d080d', borderColor: '#bf2636' };
 }

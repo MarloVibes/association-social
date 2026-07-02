@@ -11,10 +11,14 @@ import {
 import { buildBaselineRatingProfiles } from '@/domain/nba/ratingSeeds';
 
 describe('NBA scouting grades', () => {
-  it('maps grade colors from red through gold', () => {
+  it('maps grade colors with a neutral C tier distinct from high grades', () => {
     expect(gradeColors('S').textColor).toBe('#f5c451');
     expect(gradeColors('A').textColor).toBe('#00ff87');
     expect(gradeColors('B+').textColor).toBe('#54a3ff');
+    expect(gradeColors('C').textColor).toBe('#cbd5e1');
+    expect(gradeColors('C').borderColor).toBe('#64748b');
+    expect(gradeColors('C').textColor).not.toBe(gradeColors('A').textColor);
+    expect(gradeColors('C').borderColor).not.toBe(gradeColors('A').borderColor);
     expect(gradeColors('D').textColor).toBe('#ff9f43');
     expect(gradeColors('F').textColor).toBe('#ff4d5e');
   });
