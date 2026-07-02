@@ -26,6 +26,17 @@ function playerKey(player) {
   return String(player && (player.player_id || player.id || player.bref_id || player.full_name) || '');
 }
 
+function displayTeamAbbr(value) {
+  const key = String(value || '').trim().toUpperCase();
+  const eraSuffix = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraSuffix ? eraSuffix[1] : key;
+}
+
+function displayTeamLabel(team, fallback) {
+  const raw = String(team && (team.name || team.full_name || team.abbreviation || team.abbr) || fallback || '').trim();
+  return raw.replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayTeamAbbr(match));
+}
+
 function isFreeAgencyEligible(player) {
   if (!player || player.retired) return false;
   if (player.freeAgent === true || player.isFreeAgent === true) return true;
@@ -52,7 +63,7 @@ function materializeFreeAgencyPool(teams, seasonYear, existingFreeAgents = []) {
           ...player,
           team: '',
           previousTeamId: team.id,
-          previousTeamName: team.name || team.abbreviation || team.id,
+          previousTeamName: displayTeamLabel(team),
           freeAgent: true,
           freeAgencySeason: seasonYear,
         });
@@ -1270,7 +1281,7 @@ function createContractDeadlineWarningsHandler({
             `deadline:${leagueId}:${key}`,
             'contract_deadline',
             leagueId,
-            deadlineMessage(kind, warning, team.name || team.abbreviation || team.id),
+            deadlineMessage(kind, warning, displayTeamLabel(team)),
             {
               createdAt,
               teamId: team.id,
@@ -1433,7 +1444,7 @@ function createSubmitContractOfferHandler({
             `contract-offer:${offerId}`,
             'contract_offer_submitted',
             leagueId,
-            `${team.name || 'A team'} offered ${authoritativePlayer.full_name || authoritativePlayer.name || 'a player'} a ${years}-year contract.`,
+            `${displayTeamLabel(team)} offered ${authoritativePlayer.full_name || authoritativePlayer.name || 'a player'} a ${years}-year contract.`,
             {
               createdAt: new Date().toISOString(),
               stage: expectedStage,

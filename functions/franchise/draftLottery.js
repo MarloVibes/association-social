@@ -30,12 +30,23 @@ function key(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function displayTeamAbbr(value) {
+  const teamKey = key(value);
+  const eraSuffix = teamKey.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraSuffix ? eraSuffix[1] : teamKey;
+}
+
+function displayTeamLabel(team, fallback) {
+  const raw = String(team && (team.name || team.full_name || team.abbreviation || team.abbr || team.teamId || team.id) || fallback || '').trim();
+  return raw.replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayTeamAbbr(match));
+}
+
 function teamIdFor(team) {
   return key(team && (team.teamId || team.abbreviation || team.abbr || team.id));
 }
 
 function displayName(team, fallback) {
-  return team && (team.name || team.full_name || team.abbreviation || team.abbr || team.teamId || team.id) || fallback;
+  return displayTeamLabel(team, fallback);
 }
 
 function baseRows(teams) {
@@ -43,8 +54,8 @@ function baseRows(teams) {
     const teamId = teamIdFor(team);
     return [teamId, {
       teamId,
-      abbreviation: key(team && (team.abbreviation || team.abbr || teamId)),
-      name: displayName(team, teamId),
+      abbreviation: displayTeamAbbr(team && (team.abbreviation || team.abbr || teamId)),
+      name: displayTeamLabel(team, teamId),
       gmId: team && team.gmId || null,
       wins: 0,
       losses: 0,

@@ -838,6 +838,23 @@ describe('source safety regressions', () => {
     expect(channel).not.toContain("teamAbbr: myTeam.abbreviation || ''");
   });
 
+  it('cleans era-suffixed team labels before server notifications', () => {
+    const contracts = source('functions/franchise/contracts.js');
+    const finalizeTrade = source('functions/domain/finalizeTrade.js');
+    const draftLottery = source('functions/franchise/draftLottery.js');
+
+    for (const file of [contracts, finalizeTrade, draftLottery]) {
+      expect(file).toContain('displayTeamLabel');
+      expect(file).toContain('displayTeamAbbr');
+    }
+    expect(contracts).toContain('previousTeamName: displayTeamLabel(team)');
+    expect(contracts).toContain('deadlineMessage(kind, warning, displayTeamLabel(team))');
+    expect(contracts).toContain('`${displayTeamLabel(team)} offered');
+    expect(finalizeTrade).toContain('teamALabel: displayTeamLabel(teamA, source.hostTeamName ||');
+    expect(finalizeTrade).toContain('teamBLabel: displayTeamLabel(teamB, source.guestTeamName ||');
+    expect(draftLottery).toContain('name: displayTeamLabel(team, teamId)');
+  });
+
   it('uses neutral franchise labels for public sport modes', () => {
     const createLeague = source('app/screens/create-league.tsx');
     const dashboard = source('app/(tabs)/dashboard.tsx');
