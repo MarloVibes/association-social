@@ -7,6 +7,7 @@ import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getEraCap } from '@/constants/eraCaps';
 import { buildLeagueDefaults, seasonLabel } from '@/domain/sports/rules';
+import { getCreateLeagueIntro, shouldShowSportPicker } from '@/domain/createLeague/flow';
 import GlobalNav from '@/components/GlobalNav';
 
 const NBA_ERAS = [
@@ -192,9 +193,6 @@ export default function CreateLeagueScreen() {
     return m ? m.label : '';
   };
 
-  const canAdvanceStep2 = sport === 'nba' ? !!era : !!mode;
-  const canAdvanceStep3 = sport === 'nba' ? !!teamMode : true;
-
   const StepDots = () => (
     <View style={styles.stepIndicator}>
       {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s, i) => (
@@ -210,7 +208,8 @@ export default function CreateLeagueScreen() {
     if (step === 1) router.back();
     else setStep(step - 1);
   };
-  const selectedSportOption = sports.find(s => s.value === sport);
+  const intro = getCreateLeagueIntro(selectedSport);
+  const showSportPicker = shouldShowSportPicker(selectedSport);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 90 }}>
@@ -223,8 +222,8 @@ export default function CreateLeagueScreen() {
 
         {step === 1 && (
           <>
-            <Text style={styles.title}>Name Your League</Text>
-            <Text style={styles.subtitle}>What do you want to call your association?</Text>
+            <Text style={styles.title}>{intro.title}</Text>
+            <Text style={styles.subtitle}>{intro.subtitle}</Text>
             <Text style={styles.label}>League Name</Text>
             <TextInput
               style={styles.input}
@@ -234,20 +233,7 @@ export default function CreateLeagueScreen() {
               onChangeText={setLeagueName}
               autoFocus
             />
-            {selectedSport ? (
-              <>
-                <Text style={styles.label}>Franchise Mode</Text>
-                <View style={[styles.sportCard, styles.sportCardActive]}>
-                  <Text style={styles.sportCardEmoji}>{selectedSportOption?.emoji || '🏆'}</Text>
-                  <View style={styles.lockedSportText}>
-                    <Text style={[styles.sportCardLabel, styles.sportCardLabelActive]}>
-                      {selectedSportOption?.label || 'Franchise'}
-                    </Text>
-                    <Text style={styles.lockedSportHint}>Selected from Main Menu</Text>
-                  </View>
-                </View>
-              </>
-            ) : (
+            {showSportPicker && (
               <>
                 <Text style={styles.label}>Select Sport</Text>
                 <View style={styles.optionList}>
