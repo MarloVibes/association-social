@@ -11,6 +11,7 @@ import GlobalNav from '@/components/GlobalNav';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePresence } from '@/hooks/usePresence';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
+import { buildDashboardHomeModel } from '@/domain/dashboard/home';
 
 const SPORT_LABELS: Record<string, string> = {
   nba: 'NBA Franchise',
@@ -177,6 +178,12 @@ export default function DashboardScreen() {
     return Math.floor(diff / 86400) + 'd ago';
   };
 
+  const homeModel = buildDashboardHomeModel({
+    leagues,
+    onlineFriendCount: onlineFriends.length,
+    pendingInviteCount: pendingInvites,
+  });
+
 
   const handleAcceptInvite = async (invite: any) => {
     const u = auth.currentUser;
@@ -235,10 +242,6 @@ export default function DashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#00ff87' colors={['#00ff87']} />}
       >
         <View style={styles.inner}>
-          <View style={styles.titleBlock}>
-            <Text style={styles.appTitle} numberOfLines={1} adjustsFontSizeToFit>Franchise Social</Text>
-            <Text style={styles.appSubtitle}>Main Menu</Text>
-          </View>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.push('/screens/profile')}>
               <View style={styles.avatar}>
@@ -254,11 +257,68 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
 
+          <LinearGradient
+            colors={['#061a12', '#0b1118', '#101010']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            <View style={styles.heroTopRow}>
+              <View>
+                <Text style={styles.heroEyebrow}>Main Menu</Text>
+                <Text style={styles.heroTitle}>{homeModel.heroTitle}</Text>
+              </View>
+              {profile?.gamerTag ? (
+                <View style={styles.gmPill}>
+                  <Text style={styles.gmPillText}>{profile.gamerTag}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.heroSubtitle}>{homeModel.heroSubtitle}</Text>
+            <View style={styles.heroStatsRow}>
+              {homeModel.stats.map((stat) => (
+                <View key={stat.label} style={styles.heroStat}>
+                  <Text style={styles.heroStatValue}>{stat.value}</Text>
+                  <Text style={styles.heroStatLabel}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
+          </LinearGradient>
+
+          <View style={styles.quickGrid}>
+            {homeModel.quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.label}
+                style={action.tone === 'primary' ? styles.quickActionPrimary : styles.quickAction}
+                onPress={() => router.push(action.route)}
+              >
+                <Text style={action.tone === 'primary' ? styles.quickActionPrimaryText : styles.quickActionText}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.modeGrid}>
+            {homeModel.modeCards.map((mode) => (
+              <TouchableOpacity
+                key={mode.sport}
+                activeOpacity={0.86}
+                style={[styles.modeCard, { borderColor: mode.accent }]}
+                onPress={() => router.push({ pathname: '/screens/create-league', params: { sport: mode.sport } })}
+              >
+                <Text style={[styles.modeIcon, { color: mode.accent }]}>{SPORT_EMOJI[mode.sport]}</Text>
+                <View style={styles.modeTextWrap}>
+                  <Text style={styles.modeTitle}>{mode.title}</Text>
+                  <Text style={styles.modeDesc} numberOfLines={2}>{mode.description}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {profile?.gamerTag ? (
             <View style={styles.gmCard}>
               <View style={styles.gmCardLeft}>
-                <Text style={styles.gmCardTag}>{profile.gamerTag}</Text>
-                <Text style={styles.gmCardMeta}>{[profile.console, profile.favSport].filter(Boolean).join('  ·  ')}</Text>
+                <Text style={styles.gmCardLabel}>GM Profile</Text>
+                <Text style={styles.gmCardMeta}>{[profile.console, profile.favSport].filter(Boolean).join('  ·  ') || 'Ready to manage'}</Text>
               </View>
               <TouchableOpacity style={styles.findGMsBtn} onPress={() => router.push('/screens/search-users')}>
                 <Text style={styles.findGMsBtnText}>Find GMs</Text>
@@ -269,29 +329,40 @@ export default function DashboardScreen() {
           <TouchableOpacity
             onPress={() => router.push('/screens/my-mvp')}
             activeOpacity={0.85}
-            style={styles.mvpButtonShadow}
+            style={styles.mvpEntry}
           >
-            <LinearGradient
-              colors={['#facc15', '#f59e0b', '#b45309']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.mvpButton}
-            >
-              <LinearGradient
-                colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 0.6 }}
-                style={styles.mvpButtonGloss}
-                pointerEvents='none'
-              />
-              <Text style={styles.mvpButtonStar}>⭐</Text>
-              <View style={styles.mvpButtonInfo}>
-                <Text style={styles.mvpButtonTitle}>MY MVP</Text>
-                <Text style={styles.mvpButtonDesc}>Your players, your stats, your team</Text>
-              </View>
-              <Text style={styles.mvpButtonStar}>⭐</Text>
-            </LinearGradient>
+            <Text style={styles.mvpEntryIcon}>⭐</Text>
+            <View style={styles.mvpEntryText}>
+              <Text style={styles.mvpEntryTitle}>My MVP</Text>
+              <Text style={styles.mvpEntryDesc}>Player identity, stats, and progress</Text>
+            </View>
+            <Text style={styles.mvpEntryArrow}>›</Text>
           </TouchableOpacity>
+
+          {leagueInvites.length > 0 ? (
+            <View style={styles.invitesSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>League Invites</Text>
+                <Text style={styles.invitesCount}>{leagueInvites.length}</Text>
+              </View>
+              {leagueInvites.map((invite: any) => (
+                <View key={invite.leagueId} style={styles.inviteCard}>
+                  <View style={styles.inviteInfo}>
+                    <Text style={styles.inviteLeagueName}>{invite.leagueName || 'League invite'}</Text>
+                    <Text style={styles.inviteFrom}>From {invite.fromName || 'Commissioner'}</Text>
+                  </View>
+                  <View style={styles.inviteBtnRow}>
+                    <TouchableOpacity style={styles.inviteAcceptBtn} onPress={() => handleAcceptInvite(invite)}>
+                      <Text style={styles.inviteAcceptText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.inviteDeclineBtn} onPress={() => handleDeclineInvite(invite)}>
+                      <Text style={styles.inviteDeclineText}>Decline</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {onlineFriends.length > 0 && (
             <View style={styles.onlineSection}>
@@ -381,56 +452,55 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#0a0a0a' },
   container: { flex: 1 },
-  inner: { padding: 20, paddingTop: 60 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 10 },
+  inner: { padding: 20, paddingTop: 58 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, gap: 10 },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#1a1a1a', borderWidth: 2, borderColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, fontWeight: '700', color: '#00ff87' },
   headerCenter: { flex: 1 },
-  titleBlock: { alignItems: 'center', marginBottom: 20 },
-  appTitle: { color: '#00ff87', fontSize: 22, fontWeight: '800', letterSpacing: 0, textAlign: 'center' },
-  appSubtitle: { color: '#666', fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 4 },
   greeting: { fontSize: 12, color: '#888888' },
   name: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
   signOutBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
   signOutText: { fontSize: 16, color: '#666' },
-  gmCard: { backgroundColor: '#0a1a0a', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#1a3a1a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroCard: {
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#12452f',
+  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  heroEyebrow: { color: '#00ff87', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.1, marginBottom: 4 },
+  heroTitle: { color: '#ffffff', fontSize: 30, fontWeight: '900', letterSpacing: 0 },
+  heroSubtitle: { color: '#b7c8be', fontSize: 14, fontWeight: '600', marginTop: 8, lineHeight: 20 },
+  gmPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(0,255,135,0.1)', borderWidth: 1, borderColor: 'rgba(0,255,135,0.35)' },
+  gmPillText: { color: '#00ff87', fontSize: 12, fontWeight: '800' },
+  heroStatsRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  heroStat: { flex: 1, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.06)', paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  heroStatValue: { color: '#ffffff', fontSize: 20, fontWeight: '900' },
+  heroStatLabel: { color: '#7f8a85', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginTop: 3 },
+  quickGrid: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  quickActionPrimary: { flex: 1, backgroundColor: '#00ff87', borderRadius: 12, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  quickActionPrimaryText: { color: '#00160b', fontSize: 13, fontWeight: '900', textAlign: 'center' },
+  quickAction: { flex: 1, backgroundColor: '#151515', borderRadius: 12, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderWidth: 1, borderColor: '#2c2c2c' },
+  quickActionText: { color: '#ffffff', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  modeGrid: { gap: 10, marginBottom: 14 },
+  modeCard: { backgroundColor: '#101010', borderRadius: 14, borderWidth: 1, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modeIcon: { fontSize: 26 },
+  modeTextWrap: { flex: 1 },
+  modeTitle: { color: '#ffffff', fontSize: 16, fontWeight: '900', marginBottom: 3 },
+  modeDesc: { color: '#818181', fontSize: 12, fontWeight: '600', lineHeight: 17 },
+  gmCard: { backgroundColor: '#111111', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#272727', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   gmCardLeft: { flex: 1 },
-  gmCardTag: { fontSize: 16, fontWeight: '700', color: '#00ff87', marginBottom: 2 },
-  gmCardMeta: { fontSize: 13, color: '#4a8a4a' },
+  gmCardLabel: { fontSize: 12, fontWeight: '800', color: '#777', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
+  gmCardMeta: { fontSize: 13, color: '#bdbdbd', fontWeight: '700' },
   findGMsBtn: { backgroundColor: '#1a3a1a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#00ff87' },
   findGMsBtnText: { color: '#00ff87', fontSize: 13, fontWeight: '600' },
-  mvpButtonShadow: {
-    marginBottom: 20,
-    borderRadius: 16,
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  mvpButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#fde68a',
-    overflow: 'hidden',
-  },
-  mvpButtonGloss: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '60%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  mvpButtonStar: { fontSize: 24 },
-  mvpButtonInfo: { flex: 1, alignItems: 'center', marginHorizontal: 12 },
-  mvpButtonTitle: { color: '#000', fontSize: 22, fontWeight: '900', letterSpacing: 4, marginBottom: 2 },
-  mvpButtonDesc: { color: 'rgba(0,0,0,0.7)', fontSize: 12, fontWeight: '600' },
+  mvpEntry: { marginBottom: 20, borderRadius: 14, backgroundColor: '#17130a', borderWidth: 1, borderColor: '#5f4610', padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mvpEntryIcon: { fontSize: 24 },
+  mvpEntryText: { flex: 1 },
+  mvpEntryTitle: { color: '#facc15', fontSize: 16, fontWeight: '900' },
+  mvpEntryDesc: { color: '#a99b78', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  mvpEntryArrow: { color: '#facc15', fontSize: 24, fontWeight: '800' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
   invitesSection: { marginBottom: 24 },
