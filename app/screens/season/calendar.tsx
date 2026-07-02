@@ -8,7 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advanceNbaCupStage, buildNbaCupSchedule, decorateScheduleGames, supportsNbaCupSchedule, type NbaScheduleParticipant } from '@/domain/nba/scheduleSetup';
-import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, isLiveResultRevealed, liveScheduleScore, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 import { previewNbaScheduleOwnershipRepair, repairNbaScheduleOwnershipLocally } from '@/utils/repairNbaScheduleOwnership';
 
@@ -555,6 +555,7 @@ export default function CalendarScreen() {
               const resultRevealed = isLiveResultRevealed(item, nowMs);
               const needsReset = isLeagueAdmin && item.status !== 'scheduled' && resultRevealed;
               const finalScore = resultRevealed ? formatFinalScore(item) : '';
+              const liveScore = liveScheduleScore(item, nowMs);
               const statusLabel = item.status === 'final' && !resultRevealed
                 ? 'Live'
                 : item.status === 'final'
@@ -602,7 +603,14 @@ export default function CalendarScreen() {
                       <View style={styles.versusPill}>
                         <Text style={styles.versusText}>AT</Text>
                       </View>
-                      {finalScore ? <Text style={styles.tileScore}>{finalScore}</Text> : null}
+                      {liveScore ? (
+                        <View style={styles.liveScoreStack}>
+                          <Text style={styles.tileScore}>{liveScore.label}</Text>
+                          <Text style={styles.liveScoreMeta}>{liveScore.periodLabel}</Text>
+                        </View>
+                      ) : finalScore ? (
+                        <Text style={styles.tileScore}>{finalScore}</Text>
+                      ) : null}
                     </View>
                     <View style={styles.tileTeam}>
                       <View style={[styles.tileLogoDisc, styles.homeLogoDisc]}>
@@ -706,6 +714,8 @@ const styles = StyleSheet.create({
   versusPill: { width: 28, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#080808', borderWidth: 1, borderColor: '#2a2a2a' },
   versusText: { color: '#777', fontSize: 9, fontWeight: '900' },
   tileScore: { color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  liveScoreStack: { alignItems: 'center', gap: 1 },
+  liveScoreMeta: { color: '#00e58b', fontSize: 8, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   tileFooter: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 },
   tileHint: { color: '#555', fontSize: 9, fontWeight: '800' },
   finalText: { color: '#fff' },

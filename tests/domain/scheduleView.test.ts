@@ -3,6 +3,7 @@ import {
   displayScheduleAbbr,
   displayScheduleName,
   gameMatchesMyTeam,
+  liveScheduleScore,
   isLiveResultRevealed,
   normalizeScheduleKey,
   scheduleKeyAliases,
@@ -89,5 +90,30 @@ describe('NBA schedule view helpers', () => {
       finalAtMs: 10_000,
       liveTimeline: { version: 1, revealDurationMs: 30_000 },
     }, 40_000)).toBe(true);
+  });
+
+  it('shows the current live score without exposing the final result early', () => {
+    const game = {
+      status: 'final',
+      awayScore: 101,
+      homeScore: 104,
+      liveMode: { simulationStartedAtMs: 10_000, simulationEndsAtMs: 70_000 },
+      liveTimeline: {
+        revealDurationMs: 60_000,
+        events: [
+          { elapsedMs: 5_000, awayScore: 2, homeScore: 0, periodLabel: 'Q1', clockSeconds: 690 },
+          { elapsedMs: 35_000, awayScore: 40, homeScore: 38, periodLabel: 'Q2', clockSeconds: 420 },
+          { elapsedMs: 60_000, awayScore: 101, homeScore: 104, periodLabel: 'Q4', clockSeconds: 0, eventType: 'final_buzzer' },
+        ],
+      },
+    };
+
+    expect(liveScheduleScore(game, 45_000)).toMatchObject({
+      awayScore: 40,
+      homeScore: 38,
+      label: '40-38',
+      periodLabel: 'Q2',
+    });
+    expect(liveScheduleScore(game, 70_000)).toBeNull();
   });
 });

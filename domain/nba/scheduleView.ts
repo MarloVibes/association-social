@@ -5,16 +5,28 @@ export type ScheduleViewTeam = {
   gmId?: string | null;
 };
 
+type ScheduleLiveEvent = {
+  elapsedMs?: number | null;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  periodLabel?: string | null;
+  clockSeconds?: number | null;
+  eventType?: string | null;
+};
+
 export type ScheduleViewGame = {
   homeTeamId: string;
   awayTeamId: string;
   homeGmId?: string | null;
   awayGmId?: string | null;
   status?: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
   finalAtMs?: number | null;
   simulationStartedAtMs?: number | null;
   liveTimeline?: {
     revealDurationMs?: number | null;
+    events?: ScheduleLiveEvent[];
   } | unknown;
   liveMode?: {
     simulationEndsAtMs?: number | null;
@@ -96,6 +108,38 @@ export function isLiveResultRevealed(game?: (Partial<ScheduleViewGame> & {
     return nowMs >= simulationStartedAtMs + revealDurationMs;
   }
   return false;
+}
+
+export function liveScheduleScore(game?: Partial<ScheduleViewGame> | null, nowMs = Date.now()) {
+  const liveTimeline = game?.liveTimeline;
+  const events: ScheduleLiveEvent[] = typeof liveTimeline === 'object' && liveTimeline
+    ? ((liveTimeline as { events?: ScheduleLiveEvent[] }).events || [])
+    : [];
+  if (!events.length || isLiveResultRevealed(game, nowMs)) return null;
+
+  const startedAt = Number(
+    game?.liveMode?.simulationStartedAtMs
+    || game?.simulationStartedAtMs
+    || game?.finalAtMs
+    || 0,
+  );
+  const revealDurationMs = Number(
+    typeof liveTimeline === 'object' && liveTimeline
+      ? (liveTimeline as { revealDurationMs?: number | null }).revealDurationMs || 0
+      : 0,
+  );
+  const elapsedMs = Math.max(0, Math.min(startedAt > 0 ? nowMs - startedAt : 0, revealDurationMs || Number.MAX_SAFE_INTEGER));
+  const currentIndex = events.findLastIndex(event => Number(event.elapsedMs || 0) <= elapsedMs);
+  const current = currentIndex >= 0 ? events[currentIndex] : null;
+  const awayScore = Number(current?.awayScore || 0);
+  const homeScore = Number(current?.homeScore || 0);
+  return {
+    awayScore,
+    homeScore,
+    label: `${awayScore}-${homeScore}`,
+    periodLabel: current?.periodLabel || 'Live',
+    clockSeconds: typeof current?.clockSeconds === 'number' ? current.clockSeconds : null,
+  };
 }
 
 export function teamScheduleKeys(team?: ScheduleViewTeam | null) {

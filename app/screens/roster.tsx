@@ -2,7 +2,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getPlaystyle, getPlaystyleForYear, comparePlayersByTierForYear } from '@/constants/playstyle';
 import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc, query, where } from 'firebase/firestore';
 import { useCallback, useMemo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import FranchisePlayerRow from '@/components/FranchisePlayerRow';
@@ -762,17 +762,30 @@ export default function RosterScreen() {
               />
             </>
           ) : null}
-          <View style={styles.posFilters}>
-            {positionFilters.map(pos => (
-              <TouchableOpacity
-                key={pos}
-                style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
-                onPress={() => setPosFilter(pos)}
-              >
-                <Text style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}>{pos}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.posFilterScroll}
+            contentContainerStyle={styles.posFilterContent}
+          >
+            <View style={styles.posFilters}>
+              {positionFilters.map(pos => (
+                <TouchableOpacity
+                  key={pos}
+                  style={[styles.posBtn, posFilter === pos && styles.posBtnActive]}
+                  onPress={() => setPosFilter(pos)}
+                >
+                  <Text
+                    style={[styles.posBtnText, posFilter === pos && styles.posBtnTextActive]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    {String(pos).toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
           <View style={styles.sortRow}>
             <Text style={styles.sortLabel}>SORT</Text>
             {[
@@ -845,7 +858,7 @@ export default function RosterScreen() {
               meta={[item.position, item.jersey_number ? '#' + item.jersey_number : null, item.age ? 'Age ' + item.age : null].filter(Boolean).join(' · ')}
               statusLabels={statusLabels}
               selected={isUntouchable || isOnBlock}
-              gradeCount={6}
+              gradeCount={3}
               onPress={() => setSelectedPlayer(item)}
               onLongPress={() => {
                 const onMyTeam = myPlayerIds.includes(item.player_id || item.id);
@@ -932,10 +945,12 @@ const styles = StyleSheet.create({
   tabText: { color: '#666', fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: '#00ff87' },
   searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 10 },
-  posFilters: { flexDirection: 'row', paddingHorizontal: 20, gap: 6, marginBottom: 10, flexWrap: 'wrap' },
-  posBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
-  posBtnActive: { backgroundColor: '#0a2a1a', borderColor: '#00ff87' },
-  posBtnText: { color: '#666', fontSize: 12, fontWeight: '600' },
+  posFilterScroll: { marginBottom: 10 },
+  posFilterContent: { paddingHorizontal: 20 },
+  posFilters: { flexDirection: 'row', gap: 8 },
+  posBtn: { minWidth: 54, height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
+  posBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
+  posBtnText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
   posBtnTextActive: { color: '#00ff87' },
   sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   sortLabel: { color: '#666', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 4 },
