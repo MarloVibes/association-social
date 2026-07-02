@@ -44,6 +44,14 @@ describe('source safety regressions', () => {
     expect(select).toContain('currentYear={currentYear}');
   });
 
+  it('sorts enriched team rosters with the freshly loaded league year', () => {
+    const roster = source('app/screens/team-roster.tsx');
+
+    expect(roster).toContain('let loadedCurrentYear');
+    expect(roster).toContain('comparePlayersByTierForYear({}, loadedCurrentYear)');
+    expect(roster).not.toContain('comparePlayersByTierForYear({}, currentYear)');
+  });
+
   it('uses sport-aware team logos in the team picker', () => {
     const select = source('app/screens/team-select.tsx');
 

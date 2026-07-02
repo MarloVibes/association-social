@@ -69,11 +69,18 @@ export default function TeamRosterScreen() {
           getDoc(doc(db, 'leagues', leagueId)),
           getDoc(doc(db, 'leagues', leagueId, 'teams', teamId)),
         ]);
+        let loadedCurrentYear: number | undefined;
+        let loadedEra = 'current';
+        let loadedSport = 'nba';
         if (leagueSnap.exists()) {
           const d = leagueSnap.data() as any;
-          if (d.currentYear) setCurrentYear(d.currentYear);
-          setLeagueEra(d.era || 'current');
-          setSport(d.sport || 'nba');
+          const numericYear = Number(d.currentYear);
+          loadedCurrentYear = Number.isFinite(numericYear) ? numericYear : undefined;
+          loadedEra = d.era || 'current';
+          loadedSport = d.sport || 'nba';
+          if (loadedCurrentYear) setCurrentYear(loadedCurrentYear);
+          setLeagueEra(loadedEra);
+          setSport(loadedSport);
           setLeagueDate(leagueDateFromRecord(d));
           const myUid_ = auth.currentUser?.uid;
           const commUids_ = [d.commissionerId, ...(d.coCommissioners || [])].filter(Boolean);
@@ -121,7 +128,7 @@ export default function TeamRosterScreen() {
 
         // Enrich team players with era_stats so playstyles compute correctly
         try {
-          const eraKey = leagueSnap.exists() ? ((leagueSnap.data() as any).era || 'current') : 'current';
+          const eraKey = loadedEra;
           const statsSnap = await getDoc(doc(db, 'era_stats', eraKey));
           const statsMap: Record<string, any> = {};
           if (statsSnap.exists()) {
@@ -132,10 +139,10 @@ export default function TeamRosterScreen() {
             const enrichedPlayers = (teamData.players || []).map((p: any) => ({
               ...p, ...(statsMap[p.full_name] || {}),
             }));
-            enrichedPlayers.sort(comparePlayersByTierForYear({}, currentYear));
-        const _overrides = await loadSalaryOverrides(leagueId);
-        const _playersWithOverrides = (enrichedPlayers || []).map((_p: any) => ({ ..._p, salary: getEffectiveSalary(_p, _overrides) }));
-        setTeam({ id: teamSnap.id, ...teamData, players: _playersWithOverrides });
+            enrichedPlayers.sort(comparePlayersByTierForYear({}, loadedCurrentYear));
+            const _overrides = await loadSalaryOverrides(leagueId);
+            const _playersWithOverrides = (enrichedPlayers || []).map((_p: any) => ({ ..._p, salary: getEffectiveSalary(_p, _overrides) }));
+            setTeam({ id: teamSnap.id, ...teamData, sport: loadedSport, players: _playersWithOverrides });
 
             // Fetch vault data for year-specific tier badges
             const brefIds: string[] = enrichedPlayers
