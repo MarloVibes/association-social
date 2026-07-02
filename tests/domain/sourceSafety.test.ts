@@ -79,6 +79,13 @@ describe('source safety regressions', () => {
     expect(profile).not.toContain("pathname: '/screens/mvp-players'");
   });
 
+  it('links Help / FAQ from the profile settings area', () => {
+    const profile = source('app/screens/profile.tsx');
+
+    expect(profile).toContain("router.push('/screens/faq-help')");
+    expect(profile).toContain('Help / FAQ');
+  });
+
   it('renders online friends as profile photo bubbles with initials as fallback', () => {
     const dashboard = source('app/(tabs)/dashboard.tsx');
 

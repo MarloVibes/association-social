@@ -556,6 +556,16 @@ export default function ProfileScreen() {
     {isOwnProfile && (
       <TouchableOpacity
         style={styles.redeemRow}
+        onPress={() => router.push('/screens/faq-help')}
+      >
+        <Text style={styles.redeemRowIcon}>❔</Text>
+        <Text style={styles.redeemRowText}>Help / FAQ</Text>
+        <Text style={styles.redeemRowChevron}>›</Text>
+      </TouchableOpacity>
+    )}
+    {isOwnProfile && (
+      <TouchableOpacity
+        style={styles.redeemRow}
         onPress={() => router.push('/screens/redeem-code')}
       >
         <Text style={styles.redeemRowIcon}>🎟️</Text>
