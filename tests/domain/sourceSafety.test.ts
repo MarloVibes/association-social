@@ -1390,6 +1390,15 @@ describe('source safety regressions', () => {
     expect(sourceText).toContain('Locker');
   });
 
+  it('uses NBA broadcast live mode while preserving the visual board fallback', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+
+    expect(liveMode).toContain('NbaBroadcastLiveMode');
+    expect(liveMode).toContain('buildBroadcastActorsForLineup');
+    expect(liveMode).toContain('NbaLiveVisualBoard');
+    expect(liveMode).toContain('elapsedAfterFinalMs');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

@@ -65,7 +65,7 @@ function sceneTypeFor(event: LiveTimelineEvent | null | undefined): Pick<Broadca
   const text = String(event.text || '').toLowerCase();
   const points = Number(event.points || event.statDelta?.points || 0);
   if (event.eventType === 'block' || text.includes('block')) return { type: 'block', jumbotronCue: 'BLOCK', crowdEnergy: 'swell' };
-  if (event.eventType === 'steal' || text.includes('steal')) return { type: 'steal', jumbotronCue: 'STEAL', crowdEnergy: 'swell' };
+  if (text.includes('steal')) return { type: 'steal', jumbotronCue: 'STEAL', crowdEnergy: 'swell' };
   if (event.eventType === 'turnover' || text.includes('turnover')) return { type: 'turnover', jumbotronCue: 'TURNOVER', crowdEnergy: 'dip' };
   if (event.eventType === 'free_throw_trip' || text.includes('free throw')) return { type: 'free_throw', jumbotronCue: 'AT THE LINE', crowdEnergy: 'idle', shotValue: 1 };
   if (text.includes('rebound') || event.statDelta?.rebounds) return { type: 'rebound', jumbotronCue: 'REBOUND', crowdEnergy: 'swell' };

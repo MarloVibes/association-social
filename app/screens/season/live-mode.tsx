@@ -3,15 +3,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
-import SportTeamLogo from '@/components/SportTeamLogo';
+import NbaBroadcastLiveMode from '@/components/season/NbaBroadcastLiveMode';
+import NbaLiveVisualBoard from '@/components/season/NbaLiveVisualBoard';
 import { db } from '@/constants/firebase';
 import { buildArenaTheme, type ArenaTheme } from '@/domain/nba/arenaTheme';
-import { buildLiveCourtState } from '@/domain/nba/liveCourt';
-import { currentTimelineEvent, livePlayerStatsAt, starterMatchupsForTimeline, type LiveTimeline, type LiveTimelineEvent, type LiveTimelineStarterMatchup } from '@/domain/nba/liveTimeline';
+import { buildBroadcastActorsForLineup } from '@/domain/nba/broadcastActors';
+import { buildLiveVisualBoardState } from '@/domain/nba/liveVisualBoard';
+import { currentTimelineEvent, livePlayerStatsAt, playableLiveTimeline, starterMatchupsForTimeline, type LiveTimeline, type LiveTimelineEvent, type LiveTimelineStarterMatchup } from '@/domain/nba/liveTimeline';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { periodLabelForSport, scorePeriodsForSport } from '@/domain/sports/gamePeriods';
 
 type Team = {
   id: string;
@@ -31,6 +33,8 @@ type LiveGame = NbaScheduleGame & {
   seriesId?: string;
   playoffGame?: number;
   quarters?: { quarter: number; home: number; away: number }[];
+  innings?: { inning: number; period?: number; label?: string; home: number; away: number }[];
+  periods?: { period: number; label?: string; home: number; away: number }[];
   liveTimeline?: LiveTimeline;
   liveMode?: {
     status?: string;
@@ -41,6 +45,11 @@ type LiveGame = NbaScheduleGame & {
   arenaTheme?: ArenaTheme;
   finalAtMs?: number;
   simulationStartedAtMs?: number;
+  sport?: string;
+  homeCoachingPresetName?: string | null;
+  awayCoachingPresetName?: string | null;
+  homeFirstHalfCoachingPresetName?: string | null;
+  awayFirstHalfCoachingPresetName?: string | null;
 };
 
 type ScheduleDoc = {
@@ -57,10 +66,13 @@ type ScheduleDoc = {
   } | null;
 };
 
-const COURT_ASPECT_RATIO = 5 / 3;
+type LiveTimelineDoc = {
+  gameId?: string;
+  liveTimeline?: LiveTimeline;
+  liveMode?: LiveGame['liveMode'];
+};
+
 const SCREEN_HORIZONTAL_PADDING = 36;
-const PLAYER_TOKEN_SIZE = 28;
-const BALL_TOKEN_SIZE = 14;
 
 function translucentColor(value: string | null | undefined, alpha: string, fallback: string) {
   const color = String(value || '').trim();
@@ -71,10 +83,21 @@ function numberText(value: unknown) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : '0';
 }
 
-function fallbackPeriodLabel(period: number) {
-  if (period <= 4) return `Q${period}`;
-  const overtimeNumber = period - 4;
-  return overtimeNumber === 1 ? 'OT' : `${overtimeNumber}OT`;
+function LiveTeamBadge({ abbr, accent, textColor = '#ffffff' }: { abbr: string; accent?: string | null; textColor?: string }) {
+  return (
+    <View style={[styles.liveTeamBadge, { borderColor: accent || '#3a3a3a' }]}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} style={[styles.liveTeamBadgeText, { color: textColor }]}>
+        {displayScheduleAbbr(abbr || 'TEAM')}
+      </Text>
+    </View>
+  );
+}
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
 }
 
 function clockText(event: LiveTimelineEvent | null) {
@@ -84,16 +107,22 @@ function clockText(event: LiveTimelineEvent | null) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function eventSide(event: LiveTimelineEvent | null, game: LiveGame | null) {
-  if (!event || !game || !event.actingTeamId) return 'LIVE';
-  if (normalizeScheduleKey(event.actingTeamId) === normalizeScheduleKey(game.homeTeamId)) return 'HOME';
-  if (normalizeScheduleKey(event.actingTeamId) === normalizeScheduleKey(game.awayTeamId)) return 'AWAY';
-  return 'LIVE';
-}
-
-function statsTextForPlayer(playerId: string | undefined, players: ReturnType<typeof livePlayerStatsAt>) {
+function statsTextForPlayer(playerId: string | undefined, players: ReturnType<typeof livePlayerStatsAt>, sport: 'nba' | 'madden' | 'mlb') {
   const player = players.find(item => item.playerId === playerId);
-  if (!player) return '0 PTS 0 REB 0 AST';
+  if (!player) {
+    if (sport === 'madden') return '0 YDS 0 TD';
+    if (sport === 'mlb') return '0 H 0 K';
+    return '0 PTS 0 REB 0 AST';
+  }
+  const line = player as any;
+  if (sport === 'madden') {
+    const yards = Number(line.passingYards || 0) + Number(line.rushingYards || 0) + Number(line.receivingYards || 0);
+    const touchdowns = Number(line.passingTouchdowns || 0) + Number(line.rushingTouchdowns || 0) + Number(line.receivingTouchdowns || 0);
+    return `${yards} YDS ${touchdowns} TD ${Number(line.sacks || 0)} SACK`;
+  }
+  if (sport === 'mlb') {
+    return `${Number(line.hits || 0)} H ${Number(line.rbi || 0)} RBI ${Number(line.strikeouts || 0)} K`;
+  }
   return `${player.points} PTS ${player.rebounds} REB ${player.assists} AST`;
 }
 
@@ -112,8 +141,12 @@ function playerForCard(player: { playerId?: string; name?: string; teamId?: stri
   };
 }
 
-function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof livePlayerStatsAt>; home: ReturnType<typeof livePlayerStatsAt> }): LiveTimelineStarterMatchup[] {
-  const positions = ['PG', 'SG', 'SF', 'PF', 'C'];
+function fallbackMatchupsFromStats({ away, home, sport }: { away: ReturnType<typeof livePlayerStatsAt>; home: ReturnType<typeof livePlayerStatsAt>; sport: 'nba' | 'madden' | 'mlb' }): LiveTimelineStarterMatchup[] {
+  const positions = sport === 'madden'
+    ? ['QB', 'HB', 'WR', 'EDGE', 'DB']
+    : sport === 'mlb'
+      ? ['SP', 'C', 'IF', 'OF', 'CL']
+      : ['PG', 'SG', 'SF', 'PF', 'C'];
   return positions.map((position, index) => ({
     position,
     awayPlayer: {
@@ -131,14 +164,14 @@ function fallbackMatchupsFromStats({ away, home }: { away: ReturnType<typeof liv
   }));
 }
 
-function safeElapsedMs(game: LiveGame | null, nowMs: number, replayStartedAtMs?: string) {
-  if (!game?.liveTimeline) return 0;
+function safeElapsedMs(game: LiveGame | null, liveTimeline: LiveTimeline | null, liveMode: LiveGame['liveMode'] | undefined, nowMs: number, replayStartedAtMs?: string) {
+  if (!liveTimeline) return 0;
   const replayStartMs = Number(replayStartedAtMs || 0);
   const startedAt = replayStartMs > 0
     ? replayStartMs
-    : Number(game.liveMode?.simulationStartedAtMs || game.simulationStartedAtMs || game.finalAtMs || 0);
+    : Number(liveMode?.simulationStartedAtMs || game?.simulationStartedAtMs || game?.finalAtMs || 0);
   const rawElapsed = startedAt > 0 ? nowMs - startedAt : 0;
-  return Math.max(0, Math.min(rawElapsed, game.liveTimeline.revealDurationMs || rawElapsed));
+  return Math.max(0, Math.min(rawElapsed, liveTimeline.revealDurationMs || rawElapsed));
 }
 
 export default function LiveModeScreen() {
@@ -147,16 +180,14 @@ export default function LiveModeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const [league, setLeague] = useState<any>(null);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
+  const [storedTimeline, setStoredTimeline] = useState<LiveTimelineDoc | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
-  const ballX = useSharedValue(0);
-  const ballY = useSharedValue(0);
   const availableCourtWidth = Math.max(120, windowWidth - SCREEN_HORIZONTAL_PADDING);
   const courtWidth = Math.min(availableCourtWidth, 420);
-  const courtHeight = Math.round(courtWidth / COURT_ASPECT_RATIO);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -193,6 +224,17 @@ export default function LiveModeScreen() {
     };
   }, [leagueId]);
 
+  useEffect(() => {
+    if (!leagueId || !gameId || !league) {
+      setStoredTimeline(null);
+      return;
+    }
+    const scheduleId = league.scheduleId || String(league.currentYear || 2025);
+    return onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'liveTimelines', gameId), snapshot => {
+      setStoredTimeline(snapshot.exists() ? snapshot.data() as LiveTimelineDoc : null);
+    }, () => setStoredTimeline(null));
+  }, [gameId, league, leagueId]);
+
   const isCupGame = competition === 'nbaCup';
   const isPlayoffGame = competition === 'playoffs';
   const playoffGames = useMemo(() => (
@@ -204,66 +246,103 @@ export default function LiveModeScreen() {
     isCupGame ? schedule?.nbaCup?.games || [] : isPlayoffGame ? playoffGames : schedule?.games || []
   ), [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
   const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
+  const sport = normalizeSport(league?.sport || game?.sport);
+  const isBasketball = sport === 'nba';
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
   const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
   const awayAbbr = displayScheduleAbbr(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
   const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
-  const liveTimeline = game?.liveTimeline || null;
-  const elapsedMs = safeElapsedMs(game, nowMs, replayStartedAtMs);
+  const liveTimeline = playableLiveTimeline({
+    scheduleTimeline: game?.liveTimeline || null,
+    storedTimeline: storedTimeline?.liveTimeline || null,
+  });
+  const hasLiveTimelineMarker = Boolean(game?.liveTimeline);
+  const waitingForStoredTimeline = hasLiveTimelineMarker && !liveTimeline;
+  const liveMode = storedTimeline?.liveMode || game?.liveMode;
+  const elapsedMs = safeElapsedMs(game, liveTimeline, liveMode, nowMs, replayStartedAtMs);
   const current = liveTimeline ? currentTimelineEvent(liveTimeline, elapsedMs) : { event: null, index: -1 as const };
   const currentEvent = current.event;
   const visibleEvents = useMemo(() => (
-    liveTimeline?.events.filter(event => event.elapsedMs <= elapsedMs).slice(-8).reverse() || []
+    liveTimeline?.events?.filter(event => event.elapsedMs <= elapsedMs).slice(-8).reverse() || []
   ), [elapsedMs, liveTimeline?.events]);
   const livePlayerStats = useMemo(() => (
     liveTimeline ? livePlayerStatsAt(liveTimeline, elapsedMs) : []
   ), [elapsedMs, liveTimeline]);
-  const displayedPeriods = liveTimeline?.periods?.length
-    ? liveTimeline.periods
-    : (game?.quarters || []).map(quarter => ({
-      period: quarter.quarter,
-      label: fallbackPeriodLabel(quarter.quarter),
-      home: quarter.home,
-      away: quarter.away,
-    }));
-  const arenaTheme = game?.liveMode?.arenaTheme || game?.arenaTheme || buildArenaTheme({
+  const displayedPeriods = scorePeriodsForSport(sport, liveTimeline?.periods?.length ? { periods: liveTimeline.periods } : game);
+  const defaultPeriodLabel = displayedPeriods[0]?.label || periodLabelForSport(sport, { period: 1 });
+  const arenaTheme = liveMode?.arenaTheme || game?.arenaTheme || buildArenaTheme({
     homeAbbr,
     currentYear: league?.currentYear,
     primaryColor: homeTeam?.primaryColor,
     secondaryColor: homeTeam?.secondaryColor,
   });
-  const homeScore = currentEvent?.homeScore ?? 0;
-  const awayScore = currentEvent?.awayScore ?? 0;
-  const competitionLabel = isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'Season';
-  const momentumText = currentEvent
-    ? currentEvent.momentum === 0
-      ? 'Even'
-      : currentEvent.momentum > 0
-        ? `${homeLabel} +${currentEvent.momentum}`
-        : `${awayLabel} +${Math.abs(currentEvent.momentum)}`
-    : 'Opening tip';
-  const resultCompetition = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const resultVisible = isLiveResultRevealed(game, nowMs);
+  const homeScore = currentEvent?.homeScore ?? (resultVisible ? Number(game?.homeScore || 0) : 0);
+  const awayScore = currentEvent?.awayScore ?? (resultVisible ? Number(game?.awayScore || 0) : 0);
+  const competitionLabel = isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'Season';
+  const resultCompetition = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const liveStatsByTeam = useMemo(() => ({
     away: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.awayTeamId || '')).slice(0, 8),
     home: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.homeTeamId || '')).slice(0, 8),
   }), [game?.awayTeamId, game?.homeTeamId, livePlayerStats]);
+  const broadcastActors = useMemo(() => buildBroadcastActorsForLineup({
+    homeTeam: {
+      teamId: game?.homeTeamId || homeTeam?.teamId || homeTeam?.id || 'home',
+      abbreviation: homeAbbr,
+      primaryColor: homeTeam?.primaryColor || arenaTheme.primary,
+      secondaryColor: homeTeam?.secondaryColor || arenaTheme.secondary,
+    },
+    awayTeam: {
+      teamId: game?.awayTeamId || awayTeam?.teamId || awayTeam?.id || 'away',
+      abbreviation: awayAbbr,
+      primaryColor: awayTeam?.primaryColor || '#5d76a9',
+      secondaryColor: awayTeam?.secondaryColor || '#ffffff',
+    },
+    homePlayers: liveStatsByTeam.home.slice(0, 5).map(player => playerForCard(player, homeTeam)),
+    awayPlayers: liveStatsByTeam.away.slice(0, 5).map(player => playerForCard(player, awayTeam)),
+  }), [
+    arenaTheme.primary,
+    arenaTheme.secondary,
+    awayAbbr,
+    awayTeam,
+    game?.awayTeamId,
+    game?.homeTeamId,
+    homeAbbr,
+    homeTeam,
+    liveStatsByTeam.away,
+    liveStatsByTeam.home,
+  ]);
+  const elapsedAfterFinalMs = currentEvent?.eventType === 'final_buzzer'
+    ? Math.max(0, elapsedMs - Number(currentEvent.elapsedMs || 0))
+    : resultVisible
+      ? Math.max(0, nowMs - Number(game?.finalAtMs || liveMode?.simulationEndsAtMs || nowMs))
+      : 0;
   const starterMatchups = useMemo(() => starterMatchupsForTimeline(liveTimeline), [liveTimeline]);
   const matchupRows = starterMatchups.length > 0
     ? starterMatchups
-    : fallbackMatchupsFromStats({ away: liveStatsByTeam.away.slice(0, 5), home: liveStatsByTeam.home.slice(0, 5) });
+    : fallbackMatchupsFromStats({ away: liveStatsByTeam.away.slice(0, 5), home: liveStatsByTeam.home.slice(0, 5), sport });
   const scoreboardBackground = translucentColor(arenaTheme.primary, '22', 'rgba(255,255,255,0.06)');
-  const courtBackground = translucentColor(arenaTheme.primary, '33', 'rgba(255,255,255,0.08)');
-  const crowdGlowBackground = translucentColor(arenaTheme.crowdGlow, '44', 'rgba(255,255,255,0.12)');
-  const courtState = useMemo(() => buildLiveCourtState({
+  const visualBoardState = useMemo(() => buildLiveVisualBoardState({
     event: currentEvent,
     homeTeamId: game?.homeTeamId || '',
     awayTeamId: game?.awayTeamId || '',
     homeAbbr,
     awayAbbr,
-  }), [awayAbbr, currentEvent, game?.awayTeamId, game?.homeTeamId, homeAbbr]);
+    homeCoachingLabel: game?.homeFirstHalfCoachingPresetName || game?.homeCoachingPresetName || 'Balanced',
+    awayCoachingLabel: game?.awayFirstHalfCoachingPresetName || game?.awayCoachingPresetName || 'Balanced',
+  }), [
+    awayAbbr,
+    currentEvent,
+    game?.awayCoachingPresetName,
+    game?.awayFirstHalfCoachingPresetName,
+    game?.awayTeamId,
+    game?.homeCoachingPresetName,
+    game?.homeFirstHalfCoachingPresetName,
+    game?.homeTeamId,
+    homeAbbr,
+  ]);
   const openPlayerCard = (player: { playerId?: string; name?: string; teamId?: string }) => {
     const sideTeam = normalizeScheduleKey(player.teamId || '') === normalizeScheduleKey(game?.awayTeamId || '') ? awayTeam : homeTeam;
     setSelectedPlayerCard({
@@ -271,20 +350,6 @@ export default function LiveModeScreen() {
       teamId: sideTeam?.id || '',
     });
   };
-
-  useEffect(() => {
-    const nextX = (courtState.ball.x / 100) * courtWidth;
-    const nextY = (courtState.ball.y / 100) * courtHeight;
-    ballX.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtWidth - BALL_TOKEN_SIZE, nextX)), { duration: 760 });
-    ballY.value = withTiming(Math.max(BALL_TOKEN_SIZE, Math.min(courtHeight - BALL_TOKEN_SIZE, nextY)), { duration: 760 });
-  }, [ballX, ballY, courtHeight, courtState.ball.x, courtState.ball.y, courtWidth]);
-
-  const ballStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: ballX.value - BALL_TOKEN_SIZE / 2 },
-      { translateY: ballY.value - BALL_TOKEN_SIZE / 2 },
-    ],
-  }));
 
   if (loading) {
     return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
@@ -307,72 +372,73 @@ export default function LiveModeScreen() {
           <Text style={styles.empty}>Live Mode is not available for this game.</Text>
         ) : (
           <>
+            {!isBasketball ? (
             <View style={[styles.scoreboard, { borderColor: arenaTheme.scoreboardTint, backgroundColor: scoreboardBackground }]}>
               <View style={styles.teamBlock}>
                 <View style={styles.logoDisc}>
-                  <SportTeamLogo sport="nba" abbr={awayAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
+                  <LiveTeamBadge abbr={awayAbbr} accent="#f1f1f1" />
                 </View>
                 <Text numberOfLines={1} style={styles.teamName}>{awayAbbr}</Text>
                 <Text style={[styles.teamScore, { color: awayScore > homeScore ? '#ffffff' : '#b8b8b8' }]}>{numberText(awayScore)}</Text>
               </View>
               <View style={styles.scoreCenter}>
                 <Text style={[styles.clock, { color: arenaTheme.text }]}>{clockText(currentEvent)}</Text>
-                <Text style={styles.period}>{currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || displayedPeriods[0]?.label || 'Q1'}</Text>
+                <Text style={styles.period}>{currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || defaultPeriodLabel}</Text>
               </View>
               <View style={styles.teamBlock}>
                 <View style={[styles.logoDisc, { borderColor: arenaTheme.secondary }]}>
-                  <SportTeamLogo sport="nba" abbr={homeAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
+                  <LiveTeamBadge abbr={homeAbbr} accent={arenaTheme.secondary} textColor={arenaTheme.text} />
                 </View>
                 <Text numberOfLines={1} style={styles.teamName}>{homeAbbr}</Text>
                 <Text style={[styles.teamScore, { color: homeScore >= awayScore ? arenaTheme.text : '#b8b8b8' }]}>{numberText(homeScore)}</Text>
               </View>
             </View>
+            ) : null}
 
-            <View style={[styles.courtWrap, { borderColor: arenaTheme.sidelineColor, backgroundColor: courtBackground, height: courtHeight + 36 }]}>
-              <View style={[styles.crowdGlow, { backgroundColor: crowdGlowBackground, width: courtWidth * 0.82, height: courtWidth * 0.82, borderRadius: courtWidth * 0.41 }]} />
-              <View style={[styles.court, { width: courtWidth, height: courtHeight, borderColor: arenaTheme.sidelineColor }]}>
-                <View style={[styles.paint, styles.leftPaint, { top: courtHeight * 0.25, width: courtWidth * 0.17, height: courtHeight * 0.5, borderColor: arenaTheme.laneColor }]} />
-                <View style={[styles.paint, styles.rightPaint, { top: courtHeight * 0.25, width: courtWidth * 0.17, height: courtHeight * 0.5, borderColor: arenaTheme.laneColor }]} />
-                <View style={[styles.centerCircle, { left: (courtWidth - courtWidth * 0.24) / 2, top: (courtHeight - courtWidth * 0.24) / 2, width: courtWidth * 0.24, height: courtWidth * 0.24, borderRadius: courtWidth * 0.12, borderColor: arenaTheme.secondary }]}>
-                  <Text style={[styles.centerText, { color: arenaTheme.text }]}>{arenaTheme.centerText}</Text>
-                </View>
-                <View style={[styles.midLine, { left: courtWidth / 2, height: courtHeight }]} />
-                {courtState.players.map(player => (
-                  <View
-                    key={player.id}
-                    style={[
-                      styles.playerToken,
-                      {
-                        left: (player.x / 100) * courtWidth - PLAYER_TOKEN_SIZE / 2,
-                        top: (player.y / 100) * courtHeight - PLAYER_TOKEN_SIZE / 2,
-                        backgroundColor: player.side === 'home' ? arenaTheme.primary : '#111111',
-                        borderColor: player.active ? '#fff' : player.side === 'home' ? arenaTheme.secondary : '#f4f4f4',
-                      },
-                      player.active && styles.activePlayerToken,
-                    ]}
-                  >
-                    <Text style={[styles.playerTokenText, { color: player.side === 'home' ? arenaTheme.text : '#ffffff' }]}>{player.label.slice(-1)}</Text>
-                  </View>
-                ))}
-                <Animated.View style={[styles.ballToken, ballStyle]} />
+            {isBasketball && !waitingForStoredTimeline ? (
+              broadcastActors.length > 0 ? (
+                <NbaBroadcastLiveMode
+                  width={courtWidth}
+                  event={currentEvent}
+                  homeTeamId={game?.homeTeamId || ''}
+                  awayTeamId={game?.awayTeamId || ''}
+                  homeAbbr={homeAbbr}
+                  awayAbbr={awayAbbr}
+                  homeScore={homeScore}
+                  awayScore={awayScore}
+                  clock={clockText(currentEvent)}
+                  period={currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || defaultPeriodLabel}
+                  theme={arenaTheme}
+                  era={league?.currentYear || league?.era}
+                  actors={broadcastActors}
+                  elapsedAfterFinalMs={elapsedAfterFinalMs}
+                />
+              ) : (
+                <NbaLiveVisualBoard
+                  width={courtWidth}
+                  state={visualBoardState}
+                  homeAbbr={homeAbbr}
+                  awayAbbr={awayAbbr}
+                  homeScore={homeScore}
+                  awayScore={awayScore}
+                  clock={clockText(currentEvent)}
+                  period={currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || defaultPeriodLabel}
+                  theme={arenaTheme}
+                  era={league?.currentYear || league?.era}
+                  isFinal={resultVisible || currentEvent?.eventType === 'final_buzzer'}
+                />
+              )
+            ) : null}
+            {isBasketball && waitingForStoredTimeline ? (
+              <View style={styles.panel}>
+                <ActivityIndicator color={arenaTheme.text} />
+                <Text style={styles.emptySmall}>Loading live replay...</Text>
               </View>
-            </View>
-
-            <View style={styles.panel}>
-              <View style={styles.panelHeader}>
-                <Text style={styles.panelTitle}>Possession</Text>
-                <Text style={[styles.panelPill, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{eventSide(currentEvent, game)}</Text>
-              </View>
-              <Text style={styles.eventText}>{displayScheduleEventText(currentEvent?.text) || 'Live timeline is loading.'}</Text>
-              <View style={styles.momentumRow}>
-                <Text style={styles.momentumLabel}>Momentum</Text>
-                <Text style={[styles.momentumValue, { color: arenaTheme.text }]}>{momentumText}</Text>
-              </View>
-            </View>
+            ) : null}
 
             {resultVisible ? (
               <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Quarter Scores</Text>
+                <Text style={styles.panelTitle}>{sport === 'mlb' ? 'Inning Scores' : 'Quarter Scores'}</Text>
                 <View style={styles.periodList}>
                   {displayedPeriods.map(period => (
                     <Text key={period.period} style={styles.periodLine}>
@@ -417,14 +483,14 @@ export default function LiveModeScreen() {
                   <View style={styles.matchupPlayer}>
                     <TouchableOpacity onPress={() => openPlayerCard(row.awayPlayer)} style={styles.playerTapArea}>
                       <Text numberOfLines={1} style={styles.matchupName}>{row.awayPlayer.name}</Text>
-                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats)}</Text>
+                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.awayPlayer.playerId, livePlayerStats, sport)}</Text>
                     </TouchableOpacity>
                   </View>
                   <Text style={[styles.matchupPosition, { color: arenaTheme.text, borderColor: arenaTheme.secondary }]}>{row.position}</Text>
                   <View style={[styles.matchupPlayer, styles.matchupPlayerRight]}>
                     <TouchableOpacity onPress={() => openPlayerCard(row.homePlayer)} style={[styles.playerTapArea, styles.playerTapAreaRight]}>
                       <Text numberOfLines={1} style={styles.matchupName}>{row.homePlayer.name}</Text>
-                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats)}</Text>
+                      <Text numberOfLines={1} style={styles.matchupStats}>{statsTextForPlayer(row.homePlayer.playerId, livePlayerStats, sport)}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -442,11 +508,12 @@ export default function LiveModeScreen() {
                           <View style={styles.statNameBlock}>
                             <Text numberOfLines={1} style={styles.statName}>{player.name}</Text>
                           </View>
-                          <Text style={[styles.statValue, { color: arenaTheme.text }]}>{player.points} PTS</Text>
-                          <Text style={styles.statValue}>{player.rebounds} REB</Text>
-                          <Text style={styles.statValue}>{player.assists} AST</Text>
-                          <Text style={styles.statValue}>{player.steals} STL</Text>
-                          <Text style={styles.statValue}>{player.blocks} BLK</Text>
+                          {statsTextForPlayer(player.playerId, livePlayerStats, sport).split(' ').reduce<string[]>((chunks, value, index, values) => {
+                            if (index % 2 === 0) chunks.push(`${value} ${values[index + 1] || ''}`.trim());
+                            return chunks;
+                          }, []).slice(0, 5).map((line, index) => (
+                            <Text key={`${player.playerId}-${line}`} style={[styles.statValue, index === 0 && { color: arenaTheme.text }]}>{line}</Text>
+                          ))}
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -474,7 +541,7 @@ export default function LiveModeScreen() {
       <PlayerCard
         player={selectedPlayerCard?.player || null}
         era={league?.era || league?.currentYear || 'current'}
-        sport="nba"
+        sport={sport}
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
         leagueDate={leagueDateFromRecord(league)}
@@ -497,7 +564,8 @@ const styles = StyleSheet.create({
   scoreboard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, padding: 14 },
   teamBlock: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
   logoDisc: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
-  logo: { width: 44, height: 44 },
+  liveTeamBadge: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#101010', paddingHorizontal: 4 },
+  liveTeamBadgeText: { fontSize: 13, fontWeight: '900', letterSpacing: 0, maxWidth: '100%' },
   teamName: { color: '#fff', fontSize: 12, fontWeight: '900', maxWidth: '100%' },
   teamScore: { fontSize: 30, fontWeight: '900', fontVariant: ['tabular-nums'] },
   scoreCenter: { width: 86, alignItems: 'center', gap: 4 },
@@ -540,6 +608,12 @@ const styles = StyleSheet.create({
   feedMeta: { color: '#777', fontSize: 10, fontWeight: '900' },
   feedText: { color: '#ddd', fontSize: 12, fontWeight: '800', marginTop: 2 },
   feedScore: { color: '#fff', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  insightRow: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
+  insightRail: { width: 4, borderRadius: 2 },
+  insightCopy: { flex: 1, minWidth: 0, gap: 2 },
+  insightMeta: { color: '#777', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  insightTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  insightText: { color: '#cfcfcf', fontSize: 12, fontWeight: '800', lineHeight: 17 },
   matchupHeader: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#1b1b1b', paddingTop: 10 },
   matchupTeamLabel: { flex: 1, minWidth: 0, color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   matchupTeamRight: { textAlign: 'right' },

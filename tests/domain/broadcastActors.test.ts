@@ -15,7 +15,7 @@ describe('broadcast actors', () => {
         bodyBuild: 'wing',
         facialHair: 'beard',
         accessories: ['arm-sleeve'],
-      },
+      } as const,
     };
 
     const celticsActor = buildBroadcastActor({

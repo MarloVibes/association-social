@@ -16,7 +16,7 @@ export type BroadcastPlayerSource = {
   jersey_number?: string | number | null;
   number?: string | number | null;
   position?: string | null;
-  visualIdentity?: Partial<BroadcastPlayerIdentity> | null;
+  visualIdentity?: (Partial<Omit<BroadcastPlayerIdentity, 'accessories'>> & { accessories?: readonly string[] }) | null;
 };
 
 export type BroadcastPlayerIdentity = {
