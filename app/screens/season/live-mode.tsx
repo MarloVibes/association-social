@@ -287,6 +287,14 @@ export default function LiveModeScreen() {
     away: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.awayTeamId || '')).slice(0, 8),
     home: livePlayerStats.filter(player => normalizeScheduleKey(player.teamId) === normalizeScheduleKey(game?.homeTeamId || '')).slice(0, 8),
   }), [game?.awayTeamId, game?.homeTeamId, livePlayerStats]);
+  const broadcastHomePlayers = useMemo(() => {
+    const livePlayers = liveStatsByTeam.home.slice(0, 5).map(player => playerForCard(player, homeTeam));
+    return livePlayers.length >= 5 ? livePlayers : (homeTeam?.players || []).slice(0, 5);
+  }, [homeTeam, liveStatsByTeam.home]);
+  const broadcastAwayPlayers = useMemo(() => {
+    const livePlayers = liveStatsByTeam.away.slice(0, 5).map(player => playerForCard(player, awayTeam));
+    return livePlayers.length >= 5 ? livePlayers : (awayTeam?.players || []).slice(0, 5);
+  }, [awayTeam, liveStatsByTeam.away]);
   const broadcastActors = useMemo(() => buildBroadcastActorsForLineup({
     homeTeam: {
       teamId: game?.homeTeamId || homeTeam?.teamId || homeTeam?.id || 'home',
@@ -300,19 +308,19 @@ export default function LiveModeScreen() {
       primaryColor: awayTeam?.primaryColor || '#5d76a9',
       secondaryColor: awayTeam?.secondaryColor || '#ffffff',
     },
-    homePlayers: liveStatsByTeam.home.slice(0, 5).map(player => playerForCard(player, homeTeam)),
-    awayPlayers: liveStatsByTeam.away.slice(0, 5).map(player => playerForCard(player, awayTeam)),
+    homePlayers: broadcastHomePlayers,
+    awayPlayers: broadcastAwayPlayers,
   }), [
     arenaTheme.primary,
     arenaTheme.secondary,
     awayAbbr,
     awayTeam,
+    broadcastAwayPlayers,
+    broadcastHomePlayers,
     game?.awayTeamId,
     game?.homeTeamId,
     homeAbbr,
     homeTeam,
-    liveStatsByTeam.away,
-    liveStatsByTeam.home,
   ]);
   const elapsedAfterFinalMs = currentEvent?.eventType === 'final_buzzer'
     ? Math.max(0, elapsedMs - Number(currentEvent.elapsedMs || 0))
