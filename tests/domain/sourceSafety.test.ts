@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -82,12 +82,34 @@ describe('source safety regressions', () => {
     expect(profile).toContain("doc(db, 'users', profileUid)");
   });
 
-  it('keeps MVP profile modules hidden from public profile navigation while paused', () => {
+  it('removes the My MVP product area from app navigation', () => {
+    const rootLayout = source('app/_layout.tsx');
+    const dashboard = source('app/(tabs)/dashboard.tsx');
     const profile = source('app/screens/profile.tsx');
+    const routes = [
+      'my-mvp',
+      'mvp-players',
+      'mvp-player-edit',
+      'mvp-player-view',
+      'mvp-proam',
+      'mvp-locker-room',
+      'mvp-stats',
+      'locker-console-chat',
+      'locker-group-chat',
+      'locker-group-create',
+      'locker-group-info',
+    ];
 
+    for (const route of routes) {
+      expect(rootLayout).not.toContain(`screens/${route}`);
+      expect(dashboard).not.toContain(route);
+      expect(profile).not.toContain(route);
+    }
+    for (const file of routes.map(route => `app/screens/${route}.tsx`)) {
+      expect(existsSync(resolve(root, file))).toBe(false);
+    }
+    expect(dashboard).not.toContain('My MVP');
     expect(profile).not.toContain('My MVP Players');
-    expect(profile).not.toContain('MVP Players');
-    expect(profile).not.toContain("pathname: '/screens/mvp-players'");
   });
 
   it('links Help / FAQ from the profile settings area', () => {
@@ -137,28 +159,9 @@ describe('source safety regressions', () => {
     expect(dashboard).toContain("f.photoUrl ? (");
   });
 
-  it('uses supported Firestore snapshot listener signatures', () => {
-    for (const path of [
-      'app/screens/locker-console-chat.tsx',
-      'app/screens/locker-group-chat.tsx',
-    ]) {
-      expect(source(path)).not.toContain(
-        "setLoading(false);\n    }, err => { if (err.code !== 'permission-denied') console.error(err); });",
-      );
-    }
-  });
-
   it('centralizes Firebase initialization in constants/firebase', () => {
     const screens = [
       'app/screens/league-rosters.tsx',
-      'app/screens/locker-console-chat.tsx',
-      'app/screens/locker-group-chat.tsx',
-      'app/screens/locker-group-create.tsx',
-      'app/screens/locker-group-info.tsx',
-      'app/screens/mvp-locker-room.tsx',
-      'app/screens/mvp-player-edit.tsx',
-      'app/screens/mvp-player-view.tsx',
-      'app/screens/mvp-players.tsx',
       'app/screens/pending-players.tsx',
       'app/screens/salary-overrides.tsx',
       'app/screens/team-roster.tsx',
@@ -193,6 +196,8 @@ describe('source safety regressions', () => {
     const hook = source('hooks/usePushNotifications.ts');
 
     expect(hook).toContain("pathname: '/screens/season/matchup'");
+    expect(hook).toContain("pathname: '/screens/season/live-mode'");
+    expect(hook).toContain("type === 'game_ready' && data.liveTimeline");
     expect(hook).toContain("pathname: '/screens/season/calendar'");
     expect(hook).toContain("pathname: '/screens/season/injuries'");
     expect(hook).toContain("pathname: '/screens/offseason'");
@@ -209,6 +214,9 @@ describe('source safety regressions', () => {
 
     expect(notifications).toContain('routeNotification');
     expect(notifications).toContain("pathname: '/screens/season/matchup'");
+    expect(notifications).toContain("pathname: '/screens/season/live-mode'");
+    expect(notifications).toContain("type === 'game_ready' && n.liveTimeline");
+    expect(notifications).toContain("if (type === 'game_ready') return 'Watch Live");
     expect(notifications).toContain("pathname: '/screens/season/calendar'");
     expect(notifications).toContain("pathname: '/screens/season/injuries'");
     expect(notifications).toContain("pathname: '/screens/offseason/live-draft'");
@@ -225,11 +233,16 @@ describe('source safety regressions', () => {
 
     expect(functionsIndex).toContain("require('firebase-functions/v2/scheduler')");
     expect(functionsIndex).toContain("case 'game_ready'");
+    expect(functionsIndex).toContain('createSimulateScheduledGameHandler({');
+    expect(functionsIndex).toContain('FieldValue,');
     expect(functionsIndex).toContain("case 'draft_started'");
     expect(functionsIndex).toContain("case 'season_awards'");
     expect(functionsIndex).toContain('exports.advanceDueOffseasons');
     expect(functionsIndex).toContain('gameId: n.gameId || n.scheduleGameId || n.matchupId ||');
     expect(functionsIndex).toContain("competition: n.competition || n.scheduleCompetition || 'regular'");
+    const matchups = source('functions/franchise/matchups.js');
+    expect(matchups).toContain('writeLiveGameReadyNotifications({');
+    expect(matchups).toContain('FieldValue,');
   });
 
   it('keeps the NBA season calendar visible inside the command center without requiring a claimed team', () => {
@@ -249,12 +262,17 @@ describe('source safety regressions', () => {
   it('puts NBA schedule setup in the league creation flow', () => {
     const createLeague = source('app/screens/create-league.tsx');
     const teamSelect = source('app/screens/team-select.tsx');
+    const leagueSettings = source('app/screens/league-settings.tsx');
 
     expect(createLeague).toContain('scheduleGamesPerTeam');
     expect(createLeague).toContain('NBA Schedule');
-    expect(createLeague).toContain("gamesPerTeam: sport === 'nba'");
+    expect(createLeague).toContain('defaultScheduleGamesPerTeam(sport)');
+    expect(createLeague).not.toContain("gamesPerTeam: sport === 'nba' ? Number(scheduleGamesPerTeam) : null");
     expect(teamSelect).toContain('scheduleCreationFailed');
     expect(teamSelect).toContain('The team was claimed, but the schedule did not lock');
+    expect(leagueSettings).toContain('scheduleOptionsForSport');
+    expect(leagueSettings).toContain("league?.sport === 'madden' ? 'NFL SCHEDULE'");
+    expect(leagueSettings).not.toContain("{league?.sport === 'nba' && (");
   });
 
   it('keeps CPU team controls server-backed for solo leagues', () => {
@@ -359,6 +377,10 @@ describe('source safety regressions', () => {
     expect(hook).toContain("pathname: '/screens/season/game-result'");
     expect(notifications).toContain("pathname: '/screens/season/game-result'");
     expect(result).toContain('Final Score');
+    expect(result).toContain('postgameStory');
+    expect(result).toContain('resultPostgameStory');
+    expect(result).toContain('Turning Point');
+    expect(result).toContain('Coaching Impact');
     expect(result).toContain('Quarter Scores');
     expect(result).toContain('Top Performers');
     expect(result).toContain('Full Box Score');
@@ -372,11 +394,11 @@ describe('source safety regressions', () => {
     const tradeChannel = source('app/screens/trade-channel.tsx');
     const league = source('app/screens/league.tsx');
 
-    for (const file of [roster, teamRoster, tradeRoom, cpuTrade, tradeChannel, league]) {
-      expect(file).toContain('compareRosterPlayersByValue');
+    for (const file of [roster, teamRoster, tradeRoom, tradeChannel, cpuTrade, league]) {
+      expect(file).toContain('compareSportRosterPlayersByValue');
     }
-    for (const file of [roster, teamRoster, tradeRoom, cpuTrade, tradeChannel]) {
-      expect(file).toContain('matchesRosterPosition');
+    for (const file of [roster, teamRoster, tradeRoom, tradeChannel, cpuTrade]) {
+      expect(file).toContain('matchesSportRosterPosition');
       expect(file).toContain('getPositionFilters');
     }
     expect(tradeRoom).toContain('theirPickerPosFilter');
@@ -429,6 +451,11 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('currentTimelineEvent');
     expect(liveMode).toContain('livePlayerStatsAt');
     expect(liveMode).toContain('Matchups');
+    expect(liveMode).toContain('Event Feed');
+    expect(liveMode).not.toContain('Command Insights');
+    expect(liveMode).not.toContain('visibleCommandInsights');
+    expect(liveMode).not.toContain('commandInsightsForTimeline');
+    expect(liveMode).not.toContain("isBasketball ? 'Possession'");
     expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
     expect(liveMode).not.toContain('matchupChip');
     expect(liveMode).toContain('See More Player Stats');
@@ -447,7 +474,12 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('/screens/season/live-mode');
     expect(result).toContain('/screens/season/live-mode');
     expect(liveMode).toContain('replayStartedAtMs');
-    expect(liveMode).toContain('safeElapsedMs(game, nowMs, replayStartedAtMs)');
+    expect(liveMode).toContain('playableLiveTimeline');
+    expect(liveMode).toContain("'liveTimelines', gameId");
+    expect(liveMode).toContain('waitingForStoredTimeline');
+    expect(liveMode).toContain('Loading live replay...');
+    expect(liveMode).toContain('liveTimeline?.events?.filter');
+    expect(liveMode).toContain('safeElapsedMs(game, liveTimeline, liveMode, nowMs, replayStartedAtMs)');
     expect(liveMode).toContain('const replayStartMs = Number(replayStartedAtMs || 0);');
     expect(liveMode.indexOf('const replayStartMs = Number(replayStartedAtMs || 0);')).toBeLessThan(
       liveMode.indexOf('const startedAt = replayStartMs > 0'),
@@ -489,9 +521,21 @@ describe('source safety regressions', () => {
 
   it('labels overtime periods on the result screen', () => {
     const result = source('app/screens/season/game-result.tsx');
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const periods = source('domain/sports/gamePeriods.ts');
 
-    expect(result).toContain('periodLabel');
-    expect(result).toContain("quarter.quarter === 5 ? 'OT'");
+    expect(result).toContain("from '@/domain/sports/gamePeriods'");
+    expect(result).toContain('scorePeriodsForSport(sport, game)');
+    expect(result).toContain('periodTableTitle(sport)');
+    expect(liveMode).toContain("from '@/domain/sports/gamePeriods'");
+    expect(liveMode).toContain('scorePeriodsForSport(sport, liveTimeline?.periods?.length');
+    expect(liveMode).toContain('periodLabelForSport(sport, { period: 1 })');
+    expect(liveMode).toContain('Event Feed');
+    expect(liveMode).not.toContain("sport === 'mlb' ? 'Current Swing' : 'Current Drive'");
+    expect(liveMode).not.toContain('fallbackPeriodLabel');
+    expect(liveMode).not.toContain("displayedPeriods[0]?.label || 'Q1'");
+    expect(periods).toContain("return value === 5 ? 'OT'");
+    expect(periods).toContain("if (sport === 'mlb') return ordinal");
   });
 
   it('exposes NBA playoffs from the command center and router', () => {
@@ -528,11 +572,10 @@ describe('source safety regressions', () => {
     expect(indexes).toContain('"collectionGroup": "trade_rooms"');
     expect(indexes).toContain('"collectionGroup": "contract_offers"');
     expect(indexes).toContain('"collectionGroup": "draft_sessions"');
-    expect(indexes).toContain('"collectionGroup": "mvp_players"');
+    expect(indexes).not.toContain('"collectionGroup": "mvp_players"');
     expect(indexes).toContain('"collectionGroup": "players"');
     expect(indexes).toContain('"collectionGroup": "leagues"');
     expect(indexes).toContain('"collectionGroup": "teams"');
-    expect(indexes).toContain('"fieldPath": "ownerUid"');
     expect(indexes).toContain('"fieldPath": "is_custom"');
     expect(indexes).toContain('"fieldPath": "created_by_league"');
     expect(indexes).toContain('"fieldPath": "sport"');
@@ -702,7 +745,13 @@ describe('source safety regressions', () => {
     const league = source('app/screens/league.tsx');
 
     expect(league).toContain("nba: 'Inside The NBA'");
+    expect(league).toContain('function sportDisplayLabel');
+    expect(league).toContain('function leagueSetupLabel');
+    expect(league).toContain('{sportDisplayLabel(league.sport)}');
+    expect(league).toContain('{leagueSetupLabel(league)}');
     expect(league).toContain('GM Controls and News');
+    expect(league).not.toContain("league.sport?.toUpperCase()");
+    expect(league).not.toContain("league.mode + ' mode'");
     expect(league).not.toContain('League News · Trade Center · Coaching · Front Office');
   });
 
@@ -955,6 +1004,7 @@ describe('source safety regressions', () => {
     const profileSetup = source('app/(tabs)/profile-setup.tsx');
     const profile = source('app/screens/profile.tsx');
     const joinLeague = source('app/screens/join-league.tsx');
+    const searchUsers = source('app/screens/search-users.tsx');
 
     for (const file of [createLeague, dashboard, profileSetup, profile]) {
       expect(file).toContain('NBA Franchise');
@@ -962,7 +1012,15 @@ describe('source safety regressions', () => {
       expect(file).toContain('MLB Franchise');
     }
     expect(joinLeague).toContain("s === 'madden' ? 'NFL'");
+    expect(joinLeague).toContain('function setupLabel');
+    expect(joinLeague).toContain('setupLabel(item)');
+    expect(joinLeague).toContain('setupLabel(selectedLeague)');
     expect(joinLeague).not.toContain("s === 'madden' ? 'MADDEN'");
+    expect(joinLeague).not.toContain("const era = ERA_LABELS[item.era] || item.era || ''");
+    expect(joinLeague).not.toContain('{ERA_LABELS[selectedLeague.era] || selectedLeague.era}</Text>');
+    expect(searchUsers).toContain('function sportLabel');
+    expect(searchUsers).toContain('sportLabel(league.sport)');
+    expect(searchUsers).not.toContain('league.sport?.toUpperCase()');
   });
 
   it('keeps signup language preference private to the account', () => {
@@ -986,16 +1044,30 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
   });
 
-  it('keeps coaching game plans to first-half and second-half preset selection', () => {
+  it('keeps coaching game plans to sport-aware preset selection', () => {
     const coaching = source('app/screens/season/coaching-presets.tsx');
 
-    expect(coaching).toContain('First Half System');
-    expect(coaching).toContain('Second Half System');
+    expect(coaching).toContain('phaseLabels[0]');
+    expect(coaching).toContain('phaseLabels[1]');
+    expect(coaching).toContain("['Early Game', 'Late Game']");
+    expect(coaching).toContain("['Opening Plan', 'Adjustment Plan']");
+    expect(coaching).toContain('matchup adjustment');
     expect(coaching).toContain('Save Game Plan');
     expect(coaching).toContain('halfCourtPreview');
+    expect(coaching).not.toContain('halftime adjustment');
     expect(coaching).not.toContain('tunerGrid');
     expect(coaching).not.toContain('updateModifier');
     expect(coaching).not.toContain('Custom Gameplan');
+  });
+
+  it('creates private matchup prep records on first save', () => {
+    const matchup = source('app/screens/season/matchup.tsx');
+
+    expect(matchup).toContain('setDoc(doc(db, \'leagues\', leagueId, \'schedules\', scheduleId, \'preparation\'');
+    expect(matchup).toContain('{ merge: true }');
+    expect(matchup).toContain('Save Preparations');
+    expect(matchup).not.toContain('Save Private Prep');
+    expect(matchup).not.toContain('await updateDoc(doc(db, \'leagues\', leagueId, \'schedules\', scheduleId, \'preparation\'');
   });
 
   it('shows conference-aware playoff picture sections', () => {
@@ -1004,6 +1076,11 @@ describe('source safety regressions', () => {
     expect(playoffs).toContain('conferencePictures');
     expect(playoffs).toContain('Eastern Conference');
     expect(playoffs).toContain('Western Conference');
+    expect(playoffs).toContain('AFC');
+    expect(playoffs).toContain('NFC');
+    expect(playoffs).toContain('American League');
+    expect(playoffs).toContain('National League');
+    expect(playoffs).toContain('sport,');
     expect(playoffs).not.toContain('<Text style={styles.pictureTitle}>Playoff Field</Text>');
   });
 
@@ -1017,6 +1094,300 @@ describe('source safety regressions', () => {
     expect(draftClass).toContain('Projected #');
     expect(draftClass).toContain('PlayerHeadshot');
     expect(draftClass).not.toContain('>R{prospect.projectedRound || prospect.draft_round ||');
+  });
+
+  it('keeps season calendar and money screens sport-aware outside NBA', () => {
+    const calendar = source('app/screens/season/calendar.tsx');
+    const finances = source('app/screens/season/finances.tsx');
+    const scouting = source('app/screens/season/scouting.tsx');
+    const standings = source('app/screens/season/standings.tsx');
+    const playoffs = source('app/screens/season/playoffs.tsx');
+    const awards = source('app/screens/season/awards.tsx');
+    const channels = source('app/screens/channels.tsx');
+
+    expect(calendar).toContain('const sport = normalizeSport(league?.sport)');
+    expect(calendar).toContain("const supportsCup = sport === 'nba'");
+    expect(calendar).toContain('sport={sport}');
+    expect(calendar).not.toContain('SportTeamLogo sport="nba"');
+    expect(finances).toContain('const sport = normalizeSport(league?.sport)');
+    expect(finances).toContain("const financeLanguage = sport === 'mlb'");
+    expect(finances).toContain("renderFinanceTile('capRoom', financeLanguage.roomLabel");
+    expect(finances).toContain("renderFinanceTile('salaryCap', financeLanguage.limitLabel");
+    expect(finances).toContain("renderFinanceTile('taxRoom', financeLanguage.thresholdLabel");
+    expect(finances).toContain('sport={sport}');
+    expect(finances).not.toContain('SportTeamLogo sport="nba"');
+    expect(scouting).toContain('const sport = normalizeSport(league?.sport)');
+    expect(scouting).toContain('sport={sport}');
+    expect(scouting).not.toContain('SportTeamLogo sport="nba"');
+    expect(standings).toContain('const sport = normalizeSport(league?.sport)');
+    expect(standings).toContain("from '@/domain/sports/playerLeaderboards'");
+    expect(standings).toContain('playerLeaderboardTabsForSport(sport)');
+    expect(standings).toContain('buildSportPlayerLeaderboard');
+    expect(standings).not.toContain("const supportsPlayerLeaders = sport === 'nba'");
+    expect(standings).toContain('sport={sport}');
+    expect(standings).not.toContain("sport={league?.sport || 'nba'}");
+    expect(standings).not.toContain('SportTeamLogo sport="nba"');
+    expect(playoffs).toContain('const sport = normalizeSport(league?.sport)');
+    expect(playoffs).toContain('sport={sport}');
+    expect(playoffs).toContain("from '@/domain/sports/playoffDisplay'");
+    expect(playoffs).toContain('playoffFormatOptionsForSport(sport)');
+    expect(playoffs).toContain('postseasonOffseasonWarning(sport)');
+    expect(playoffs).toContain('offseasonStartStageForSport(sport)');
+    expect(playoffs).not.toContain("expectedStage: 'awards_recap'");
+    expect(playoffs).not.toContain("{ value: 'play_in_16', label: 'Play-In' }");
+    expect(playoffs).not.toContain('SportTeamLogo sport="nba"');
+    expect(channels).toContain("desc: 'Schedule and game access'");
+    expect(channels).toContain("desc: 'Season standings'");
+    expect(channels).not.toContain("pathname: '/screens/season/calendar', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/standings', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/playoffs', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/finances', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/scouting', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/injuries', nbaOnly: true");
+    expect(channels).not.toContain("pathname: '/screens/season/awards', nbaOnly: true");
+    expect(awards).toContain("from '@/domain/sports/awards'");
+    expect(awards).toContain('awardCategoriesForSport(sport)');
+    expect(awards).toContain('recordsForSportAward(sport, league, category.key');
+    expect(awards).toContain("const ledgerSport = league?.sport || 'nba'");
+    expect(awards).not.toContain("recordsForSportAward('nba'");
+    expect(awards).toContain("isNba ? 'NBA Awards' : sport === 'madden' ? 'NFL Awards' : 'MLB Awards'");
+  });
+
+  it('opens shared offseason tools for MLB and NFL leagues', () => {
+    const channels = source('app/screens/channels.tsx');
+    const league = source('app/screens/league.tsx');
+    const draftClass = source('app/screens/offseason/draft-class.tsx');
+    const contractStage = source('components/offseason/ContractStageScreen.tsx');
+
+    for (const pathname of [
+      '/screens/offseason',
+      '/screens/offseason/draft-class',
+      '/screens/offseason/re-signing',
+      '/screens/offseason/free-agency',
+      '/screens/offseason/live-draft',
+    ]) {
+      expect(channels).not.toContain(`pathname: '${pathname}', nbaOnly: true`);
+    }
+    expect(league).toContain('offseasonStartStageForSport');
+    expect(league).toContain("leagueSport === 'madden' || leagueSport === 'mlb' ? 'season_end' : 'awards_recap'");
+    expect(league).not.toContain('!isNBASport || league?.offseason');
+    expect(draftClass).toContain('const sport = normalizeSport(league?.sport)');
+    expect(draftClass).toContain('sport,');
+    expect(draftClass).not.toContain("sport={league?.sport || 'nba'}");
+    expect(contractStage).toContain('const sport = normalizeSport(league?.sport)');
+    expect(contractStage).not.toContain("sport={league?.sport || 'nba'}");
+  });
+
+  it('keeps league member team labels sport-aware', () => {
+    const members = source('app/screens/league-members.tsx');
+
+    expect(members).toContain('sportIconForLeague');
+    expect(members).not.toContain('🏀 {team.name}');
+  });
+
+  it('preserves sport team conference and division metadata when teams are claimed', () => {
+    const teamSelect = source('app/screens/team-select.tsx');
+
+    expect(teamSelect).toContain('conference: t.conference');
+    expect(teamSelect).toContain('division: t.division');
+    expect(teamSelect).toContain('conference: team.conference || null');
+    expect(teamSelect).toContain('division: team.division || null');
+  });
+
+  it('keeps join league sport labels user-facing', () => {
+    const joinLeague = source('app/screens/join-league.tsx');
+
+    expect(joinLeague).toContain('function sportLabel');
+    expect(joinLeague).toContain("return 'NFL'");
+    expect(joinLeague).toContain("return 'MLB'");
+    expect(joinLeague).toContain('sportIcon(filterSport)');
+    expect(joinLeague).toContain('sportLabel(selectedLeague.sport)');
+    expect(joinLeague).not.toContain("item.sport?.toUpperCase() || 'NBA'");
+    expect(joinLeague).not.toContain("selectedLeague.sport?.toUpperCase()");
+    expect(joinLeague).not.toContain('<Text style={styles.emptyIcon}>🏀</Text>');
+  });
+
+  it('keeps NFL and MLB player cards as rich as NBA cards', () => {
+    const row = source('components/FranchisePlayerRow.tsx');
+    const card = source('components/PlayerCard.tsx');
+    const headshot = source('components/PlayerHeadshot.tsx');
+
+    expect(row).toContain('buildSportGradePreview');
+    expect(row).not.toContain("const preview = sport === 'nba' ? gradePreview(player, profile, gradeCount) : [];");
+    expect(card).toContain('buildSportPlayerIdentity');
+    expect(card).toContain('buildSportScoutingSections');
+    expect(card).toContain('sportIdentity');
+    expect(card).not.toContain("const identity = isNBAPlayer ? getVisibleIdentity(player, resolvedProfile) : null;");
+    expect(headshot).toContain('photo_url');
+    expect(card).toContain('photo_url');
+  });
+
+  it('uses sport-aware roster value and draft potential display outside NBA', () => {
+    const teamRoster = source('app/screens/team-roster.tsx');
+    const roster = source('app/screens/roster.tsx');
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+    const cpuTrade = source('app/screens/cpu-trade.tsx');
+    const liveDraft = source('app/screens/offseason/live-draft.tsx');
+
+    expect(teamRoster).toContain('compareSportRosterPlayersByValue');
+    expect(roster).toContain('compareSportRosterPlayersByValue');
+    expect(tradeChannel).toContain('compareSportRosterPlayersByValue');
+    expect(cpuTrade).toContain('FranchisePlayerRow');
+    expect(cpuTrade).toContain('compareSportRosterPlayersByValue');
+    expect(liveDraft).toContain('gradeFromNumeric');
+    expect(liveDraft).not.toContain('`POT ${item.potential}`');
+  });
+
+  it('keeps secondary roster previews and trade pickers sport-aware outside NBA', () => {
+    const league = source('app/screens/league.tsx');
+    const leagueRosters = source('app/screens/league-rosters.tsx');
+    const finances = source('app/screens/season/finances.tsx');
+    const tradeRoom = source('app/screens/trade-room.tsx');
+    const createPlayer = source('app/screens/create-player.tsx');
+
+    expect(league).toContain('compareSportRosterPlayersByValue');
+    expect(leagueRosters).toContain('compareSportRosterPlayersByValue');
+    expect(finances).toContain('compareSportRosterPlayersByValue');
+    expect(tradeRoom).toContain('compareSportRosterPlayersByValue');
+    expect(tradeRoom).toContain('matchesSportRosterPosition');
+    expect(tradeRoom).toContain('const [otherTeam, setOtherTeam]');
+    expect(tradeRoom).toContain('const hostTeam = isHost ? myTeam : otherTeam');
+    expect(tradeRoom).toContain('const guestTeam = isHost ? otherTeam : myTeam');
+    expect(tradeRoom).toContain('teamACap: teamFinanceLimit(hostTeam, leagueSport)');
+    expect(tradeRoom).toContain('teamBCap: teamFinanceLimit(guestTeam, leagueSport)');
+    expect(tradeRoom).toContain('teamABudget: teamFinanceLimit(hostTeam, leagueSport)');
+    expect(tradeRoom).toContain('teamBBudget: teamFinanceLimit(guestTeam, leagueSport)');
+    expect(tradeRoom).not.toContain('teamBCap: undefined');
+    expect(tradeRoom).not.toContain('teamBBudget: undefined');
+    expect(createPlayer).not.toContain("placeholder='Bron James Jr'");
+  });
+
+  it('keeps game notifications and reset cards sport-aware', () => {
+    const notifications = source('app/screens/notifications.tsx');
+    const channel = source('app/screens/channel.tsx');
+    const functionsIndex = source('functions/index.js');
+
+    expect(notifications).toContain('sportIconForNotification');
+    expect(notifications).toContain('notificationIcon(n.type, n.sport || n.leagueSport)');
+    expect(notifications).not.toContain("if (['matchup_request', 'matchup_accepted', 'game_ready', 'game_simulated', 'game_final', 'score_reported'].includes(type)) return '🏀';");
+    expect(channel).toContain('sportIconForChannel');
+    expect(channel).toContain('{sportIconForChannel(resolvedSport)} VS');
+    expect(channel).not.toContain('🏀 VS');
+    expect(functionsIndex).toContain('sportIconForNotification');
+    expect(functionsIndex).toContain('titleFor(n.type, n.sport || n.leagueSport)');
+    expect(functionsIndex).not.toContain("case 'matchup_request': return '🏀 Matchup Request';");
+  });
+
+  it('opens sport-aware coaching presets for MLB and NFL leagues', () => {
+    const channels = source('app/screens/channels.tsx');
+    const coachingScreen = source('app/screens/season/coaching-presets.tsx');
+    const matchup = source('app/screens/season/matchup.tsx');
+    const sportPresets = source('domain/sports/coachingPresets.ts');
+
+    expect(channels).not.toContain("pathname: '/screens/season/coaching-presets', nbaOnly: true");
+    expect(coachingScreen).toContain("import { defaultPresetsForSport");
+    expect(coachingScreen).toContain('const sport = normalizeSport(leagueSport)');
+    expect(coachingScreen).toContain('defaultPresetsForSport(sport)');
+    expect(coachingScreen).not.toContain('Coaching presets are only available for NBA leagues.');
+    expect(matchup).toContain("from '@/domain/sports/coachingPresets'");
+    expect(matchup).toContain('matchup adjustment');
+    expect(matchup).not.toContain('halftime adjustment');
+    expect(matchup).not.toContain('const NFL_GAME_PRESETS');
+    expect(matchup).not.toContain('const MLB_GAME_PRESETS');
+    expect(sportPresets).toContain('export const NFL_GAME_PRESETS');
+    expect(sportPresets).toContain('export const MLB_GAME_PRESETS');
+    expect(sportPresets).toContain('export function defaultPresetsForSport');
+  });
+
+  it('normalizes NFL CPU trade pools before loading rosters', () => {
+    const cpuTrade = source('app/screens/cpu-trade.tsx');
+    const matchups = source('functions/franchise/matchups.js');
+    const salaryOverrides = source('app/screens/salary-overrides.tsx');
+    const teamRoster = source('app/screens/team-roster.tsx');
+
+    expect(cpuTrade).toContain('const sport = normalizeSport(league?.sport)');
+    expect(cpuTrade).toContain("const loadedSport = normalizeSport(ld.sport)");
+    expect(cpuTrade).toContain("const poolKey = loadedSport !== 'nba' ? loadedSport : eraKey");
+    expect(cpuTrade).not.toContain("const sport = league?.sport || 'nba'");
+    expect(cpuTrade).not.toContain("(ld.sport && ld.sport !== 'nba') ? ld.sport : eraKey");
+    expect(matchups).toContain("const sport = normalizeSport(league.sport || 'nba')");
+    expect(matchups).toContain("const poolKey = sport !== 'nba' ? sport : String(league.era || 'current')");
+    expect(matchups).not.toContain("const sport = String(league.sport || 'nba')");
+    expect(salaryOverrides).toContain("const sport = normalizeSport(ld.sport)");
+    expect(salaryOverrides).toContain("const poolKey = sport !== 'nba' ? sport : era");
+    expect(salaryOverrides).not.toContain("(ld.sport && ld.sport !== 'nba') ? ld.sport : era");
+    expect(teamRoster).toContain('function normalizeSport');
+    expect(teamRoster).toContain('loadedSport = normalizeSport(d.sport)');
+    expect(teamRoster).toContain("const loadedPoolSport = normalizeSport(ld2.sport)");
+    expect(teamRoster).toContain("const poolKey = loadedPoolSport !== 'nba' ? loadedPoolSport : eraKey");
+    expect(teamRoster).not.toContain("(ld2.sport && ld2.sport !== 'nba') ? ld2.sport : eraKey");
+  });
+
+  it('does not show raw schedule ids in scouting opponent labels', () => {
+    const scouting = source('app/screens/season/scouting.tsx');
+
+    expect(scouting).toContain('displayScheduleAbbr(item.opponentTeamId)');
+    expect(scouting).not.toContain('vs {item.opponentTeamId}');
+    expect(scouting).not.toContain('abbr={item.opponentTeamId}');
+  });
+
+  it('keeps live mode logos scoped to the visual board header', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const board = source('components/season/NbaLiveVisualBoard.tsx');
+
+    expect(liveMode).not.toContain("import SportTeamLogo");
+    expect(liveMode).toContain('LiveTeamBadge');
+    expect(board).toContain("import SportTeamLogo");
+    expect(board).toContain('<SportTeamLogo');
+  });
+
+  it('renders NBA Live Mode through the authentic visual board component', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const board = source('components/season/NbaLiveVisualBoard.tsx');
+
+    expect(liveMode).toContain('NbaLiveVisualBoard');
+    expect(liveMode).toContain('isFinal={resultVisible || currentEvent?.eventType ===');
+    expect(board).toContain('react-native-svg');
+    expect(board).toContain('buildBasketballMotionFrame');
+    expect(board).toContain('motionFrame');
+    expect(board).toContain('isFinal');
+    expect(board).toContain('if (isFinal) return');
+    expect(board).toContain('scorePop');
+    expect(board).toContain('+2');
+    expect(board).toContain('+3');
+    expect(board).not.toContain('pathStart');
+    expect(board).not.toContain('state.ball.x + 31');
+    expect(board).not.toContain('KNICKS');
+    expect(board).not.toContain('GRIZZLIES');
+    expect(board).not.toContain('Visual play event');
+    expect(board).not.toContain('Coaching identity');
+    expect(board).not.toContain('Counter style');
+    expect(board).not.toContain('coachRow');
+  });
+
+  it('does not show raw schedule ids in launch summary rows', () => {
+    const awards = source('app/screens/season/awards.tsx');
+    const offseason = source('app/screens/offseason/index.tsx');
+    const expansion = source('app/screens/offseason/expansion.tsx');
+
+    expect(awards).toContain('displayScheduleAbbr(grant.teamId)');
+    expect(awards).not.toContain('{grant.teamId}: {grant.totalPoints}');
+    expect(offseason).toContain('displayScheduleTeamLabel(pick.name || pick.abbreviation, pick.teamId, league?.sport)');
+    expect(offseason).not.toContain('{pick.name || pick.abbreviation || pick.teamId}');
+    expect(expansion).toContain('displayScheduleAbbr(teamId)');
+    expect(expansion).toContain('displayScheduleAbbr(pick.sourceTeamId)');
+    expect(expansion).not.toContain('{teamId}</Text>');
+    expect(expansion).not.toContain('from {pick.sourceTeamId}');
+  });
+
+  it('renders NBA broadcast live mode with crowd, jumbotron, and player actors', () => {
+    const sourceText = source('components/season/NbaBroadcastLiveMode.tsx');
+
+    expect(sourceText).toContain('Jumbotron');
+    expect(sourceText).toContain('crowd');
+    expect(sourceText).toContain('BroadcastActor');
+    expect(sourceText).toContain('postgameStage');
+    expect(sourceText).toContain('Locker');
   });
 
   it('centers compact award marks in the trophy case', () => {
