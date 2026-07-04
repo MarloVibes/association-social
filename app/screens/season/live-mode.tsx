@@ -403,7 +403,7 @@ export default function LiveModeScreen() {
             </View>
             ) : null}
 
-            {isBasketball && !waitingForStoredTimeline ? (
+            {isBasketball ? (
               broadcastActors.length > 0 ? (
                 <NbaBroadcastLiveMode
                   width={courtWidth}
@@ -440,7 +440,7 @@ export default function LiveModeScreen() {
             {isBasketball && waitingForStoredTimeline ? (
               <View style={styles.panel}>
                 <ActivityIndicator color={arenaTheme.text} />
-                <Text style={styles.emptySmall}>Loading live replay...</Text>
+                <Text style={styles.emptySmall}>Loading detailed replay events...</Text>
               </View>
             ) : null}
 

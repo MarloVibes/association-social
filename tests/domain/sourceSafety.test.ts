@@ -477,7 +477,7 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('playableLiveTimeline');
     expect(liveMode).toContain("'liveTimelines', gameId");
     expect(liveMode).toContain('waitingForStoredTimeline');
-    expect(liveMode).toContain('Loading live replay...');
+    expect(liveMode).toContain('Loading detailed replay events...');
     expect(liveMode).toContain('liveTimeline?.events?.filter');
     expect(liveMode).toContain('safeElapsedMs(game, liveTimeline, liveMode, nowMs, replayStartedAtMs)');
     expect(liveMode).toContain('const replayStartMs = Number(replayStartedAtMs || 0);');
@@ -1397,6 +1397,17 @@ describe('source safety regressions', () => {
     expect(liveMode).toContain('buildBroadcastActorsForLineup');
     expect(liveMode).toContain('NbaLiveVisualBoard');
     expect(liveMode).toContain('elapsedAfterFinalMs');
+  });
+
+  it('does not hide NBA broadcast mode behind the stored timeline loading gate', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const broadcastIndex = liveMode.indexOf('<NbaBroadcastLiveMode');
+    const loadingIndex = liveMode.indexOf('Loading detailed replay events...');
+
+    expect(broadcastIndex).toBeGreaterThan(-1);
+    expect(loadingIndex).toBeGreaterThan(-1);
+    expect(broadcastIndex).toBeLessThan(loadingIndex);
+    expect(liveMode).not.toContain('isBasketball && !waitingForStoredTimeline ? (');
   });
 
   it('centers compact award marks in the trophy case', () => {

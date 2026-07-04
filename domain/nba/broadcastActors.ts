@@ -52,6 +52,7 @@ const DEFAULT_PRIMARY = '#1f2937';
 const DEFAULT_SECONDARY = '#f8fafc';
 const SKIN_TONES: BroadcastPlayerIdentity['skinTone'][] = ['light', 'medium', 'dark', 'deep'];
 const HAIR_STYLES: BroadcastPlayerIdentity['hairStyle'][] = ['short', 'short-fade', 'braids', 'headband', 'bald'];
+const DEFAULT_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
 
 function stableHash(value: string) {
   let hash = 0;
@@ -146,7 +147,23 @@ export function buildBroadcastActorsForLineup({
   homePlayers: BroadcastPlayerSource[];
   awayPlayers: BroadcastPlayerSource[];
 }): BroadcastActor[] {
-  const home = homePlayers.slice(0, 5).map((player, slot) => buildBroadcastActor({ player, team: homeTeam, side: 'home', slot }));
-  const away = awayPlayers.slice(0, 5).map((player, slot) => buildBroadcastActor({ player, team: awayTeam, side: 'away', slot }));
+  const normalizedHomePlayers = DEFAULT_POSITIONS.map((position, slot) => (
+    homePlayers[slot] || {
+      playerId: `${homeTeam.teamId || homeTeam.abbreviation || 'home'}-broadcast-${position}`,
+      name: 'Home Player',
+      jerseyNumber: slot + 1,
+      position,
+    }
+  ));
+  const normalizedAwayPlayers = DEFAULT_POSITIONS.map((position, slot) => (
+    awayPlayers[slot] || {
+      playerId: `${awayTeam.teamId || awayTeam.abbreviation || 'away'}-broadcast-${position}`,
+      name: 'Away Player',
+      jerseyNumber: slot + 1,
+      position,
+    }
+  ));
+  const home = normalizedHomePlayers.map((player, slot) => buildBroadcastActor({ player, team: homeTeam, side: 'home', slot }));
+  const away = normalizedAwayPlayers.map((player, slot) => buildBroadcastActor({ player, team: awayTeam, side: 'away', slot }));
   return [...away, ...home];
 }

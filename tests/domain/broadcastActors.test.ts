@@ -62,4 +62,17 @@ describe('broadcast actors', () => {
     expect(actors.filter(actor => actor.side === 'home')).toHaveLength(5);
     expect(actors.filter(actor => actor.side === 'away')).toHaveLength(5);
   });
+
+  it('pads missing roster slots so broadcast mode can render while replay data loads', () => {
+    const actors = buildBroadcastActorsForLineup({
+      homeTeam: { teamId: 'NYK', abbreviation: 'NYK', primaryColor: '#006BB6', secondaryColor: '#F58426' },
+      awayTeam: { teamId: 'MIN', abbreviation: 'MIN', primaryColor: '#0C2340', secondaryColor: '#78BE20' },
+      homePlayers: [],
+      awayPlayers: [],
+    });
+
+    expect(actors).toHaveLength(10);
+    expect(actors.filter(actor => actor.side === 'home').map(actor => actor.uniform.abbr)).toEqual(['NYK', 'NYK', 'NYK', 'NYK', 'NYK']);
+    expect(actors.filter(actor => actor.side === 'away').map(actor => actor.uniform.abbr)).toEqual(['MIN', 'MIN', 'MIN', 'MIN', 'MIN']);
+  });
 });
