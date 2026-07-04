@@ -1387,8 +1387,23 @@ describe('source safety regressions', () => {
     expect(sourceText).toContain('crowd');
     expect(sourceText).toContain('BroadcastActor');
     expect(sourceText).toContain('buildBroadcastMotionFrame');
+    expect(sourceText).toContain('seatRows');
+    expect(sourceText).toContain('backboard');
+    expect(sourceText).toContain('spotlight');
+    expect(sourceText).toContain('broadcastFloor');
     expect(sourceText).toContain('postgameStage');
     expect(sourceText).toContain('Locker');
+  });
+
+  it('keeps game details below the broadcast arena instead of above the visual', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const broadcastIndex = liveMode.indexOf('<NbaBroadcastLiveMode');
+    const eventFeedIndex = liveMode.indexOf('<Text style={styles.panelTitle}>Event Feed</Text>');
+    const matchupIndex = liveMode.indexOf('<Text style={styles.panelTitle}>Matchups</Text>');
+
+    expect(broadcastIndex).toBeGreaterThan(-1);
+    expect(eventFeedIndex).toBeGreaterThan(broadcastIndex);
+    expect(matchupIndex).toBeGreaterThan(eventFeedIndex);
   });
 
   it('uses NBA broadcast live mode while preserving the visual board fallback', () => {

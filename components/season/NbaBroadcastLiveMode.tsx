@@ -25,20 +25,16 @@ export type NbaBroadcastLiveModeProps = {
   elapsedAfterFinalMs?: number;
 };
 
-const COURT_W = 60;
-const COURT_H = 96;
 const WOOD_STRIPS = Array.from({ length: 14 }, (_, index) => index);
+const seatRows = Array.from({ length: 4 }, (_, row) => row);
+const seatColumns = Array.from({ length: 14 }, (_, column) => column);
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+function stageX(value: number) {
+  return (value / 100) * 100;
 }
 
-function x(value: number) {
-  return (value / 100) * COURT_W;
-}
-
-function y(value: number) {
-  return (value / 100) * COURT_H;
+function stageY(value: number) {
+  return (value / 100) * 68;
 }
 
 function translucentColor(value: string | null | undefined, alpha: string, fallback: string) {
@@ -75,7 +71,7 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
   } = props;
   const [tick, setTick] = useState(0);
   const boardWidth = Math.max(300, Math.min(width, 430));
-  const boardHeight = Math.round(boardWidth * 1.56);
+  const boardHeight = Math.round(boardWidth * 0.68);
   const scene = useMemo(() => buildBroadcastScene({ event, homeTeamId, awayTeamId, elapsedAfterFinalMs }), [awayTeamId, elapsedAfterFinalMs, event, homeTeamId]);
   const motionFrame = useMemo(() => buildBroadcastMotionFrame({ actors, scene, tick }), [actors, scene, tick]);
   const homeAccent = theme.primary || '#006bb6';
@@ -114,39 +110,83 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
             <View key={index} style={[styles.crowdDot, { backgroundColor: index % 4 === 0 ? homeAccent : index % 4 === 1 ? awayAccent : '#f8fafc' }]} />
           ))}
         </View>
-        <Svg width={boardWidth} height={boardHeight} viewBox={`0 0 ${COURT_W} ${COURT_H}`}>
-          <Rect x="0" y="0" width={COURT_W} height={COURT_H} rx="2" fill="#b8753b" />
-          {WOOD_STRIPS.map(index => (
-            <Rect key={index} x={index * (COURT_W / WOOD_STRIPS.length)} y="0" width={COURT_W / WOOD_STRIPS.length} height={COURT_H} fill={index % 3 === 0 ? '#d59755' : index % 3 === 1 ? '#c37b3f' : '#e1a766'} opacity={0.96} />
-          ))}
-          <Rect x="1" y="1" width={COURT_W - 2} height={COURT_H - 2} rx="1.4" fill="none" stroke="#fff7eb" strokeWidth="0.8" />
-          <Line x1="1" y1="48" x2="59" y2="48" stroke="#fff7eb" strokeWidth="0.65" />
-          <Circle cx="30" cy="48" r="7" fill={translucentColor(homeAccent, 'aa', 'rgba(0,107,182,0.66)')} stroke="#fff7eb" strokeWidth="0.55" />
-          <SvgText x="30" y="49.4" fill="#ffffff" fontSize="4" fontWeight="900" textAnchor="middle">{homeAbbr.slice(0, 3)}</SvgText>
-          <Rect x="17" y="1" width="26" height="18" fill={translucentColor(awayAccent, '66', 'rgba(93,118,169,0.4)')} stroke="#fff7eb" strokeWidth="0.55" />
-          <Rect x="17" y="77" width="26" height="18" fill={translucentColor(homeAccent, '66', 'rgba(0,107,182,0.4)')} stroke="#fff7eb" strokeWidth="0.55" />
-          <Path d="M14 1A23 23 0 0 0 46 1" fill="none" stroke="#fff7eb" strokeWidth="0.65" />
-          <Path d="M14 95A23 23 0 0 1 46 95" fill="none" stroke="#fff7eb" strokeWidth="0.65" />
-          <Circle cx="30" cy="15" r="5.2" fill="none" stroke="#fff7eb" strokeWidth="0.45" />
-          <Circle cx="30" cy="81" r="5.2" fill="none" stroke="#fff7eb" strokeWidth="0.45" />
-          <Rect x="24" y="5.5" width="12" height="1.2" rx="0.4" fill="#2f2f2f" />
-          <Rect x="24" y="89.3" width="12" height="1.2" rx="0.4" fill="#2f2f2f" />
-          <Circle cx="30" cy="8" r="1.5" fill="none" stroke="#f97316" strokeWidth="1" />
-          <Circle cx="30" cy="88" r="1.5" fill="none" stroke="#f97316" strokeWidth="1" />
+        <Svg width={boardWidth} height={boardHeight} viewBox="0 0 100 68">
+          <Rect x="0" y="0" width="100" height="68" rx="2" fill="#071229" />
+          <Rect x="0" y="0" width="100" height="31" fill="#10234f" />
+          {seatRows.map(row => seatColumns.map(column => (
+            <Rect
+              key={`seat-${row}-${column}`}
+              x={3 + column * 6.9}
+              y={7 + row * 5.1}
+              width="4.7"
+              height="4.2"
+              rx="1.4"
+              fill={column % 3 === 0 ? '#00b7a8' : column % 3 === 1 ? '#18c7b9' : '#55d5ca'}
+              opacity={0.55 + row * 0.08}
+            />
+          )))}
+          <Path d="M8 6h10l-5 18H3z" fill="rgba(255,255,255,0.16)" />
+          <Path d="M82 6h10l5 18H87z" fill="rgba(255,255,255,0.16)" />
+          <Path d="M39 2h22l-3 19H42z" fill="rgba(255,255,255,0.18)" />
+          <Rect x="40" y="5" width="20" height="13" rx="1.2" fill="#151b37" stroke={theme.secondary || '#ff3366'} strokeWidth="1" />
+          <SvgText x="46.4" y="13" fill="#f8fafc" fontSize="5" fontWeight="900" textAnchor="middle">{awayScore}</SvgText>
+          <SvgText x="50" y="13" fill="#f8fafc" fontSize="4.3" fontWeight="900" textAnchor="middle">:</SvgText>
+          <SvgText x="53.6" y="13" fill="#f8fafc" fontSize="5" fontWeight="900" textAnchor="middle">{homeScore}</SvgText>
+          <Rect x="45" y="19.2" width="10" height="2.5" rx="0.8" fill={theme.secondary || '#f97316'} />
+          <Path d="M18 3h20l-3 45H12z" fill="rgba(255,255,255,0.12)" />
+          <Path d="M62 3h20l6 45H65z" fill="rgba(255,255,255,0.12)" />
+          <G id="broadcastFloor">
+            <Path d="M0 34h100v34H0z" fill="#d9873d" />
+            {WOOD_STRIPS.map(index => (
+              <Rect key={index} x={index * (100 / WOOD_STRIPS.length)} y="34" width={100 / WOOD_STRIPS.length} height="34" fill={index % 3 === 0 ? '#f0ad5f' : index % 3 === 1 ? '#d8873e' : '#eaa459'} opacity={0.9} />
+            ))}
+          </G>
+          <Path d="M7 59h86L84 39H16z" fill={translucentColor(homeAccent, '24', 'rgba(255,255,255,0.1)')} stroke="#fff7eb" strokeWidth="1" />
+          <Line x1="50" y1="40" x2="50" y2="59" stroke="#fff7eb" strokeWidth="0.8" />
+          <Circle cx="50" cy="49" r="5.4" fill={translucentColor(homeAccent, '99', 'rgba(0,107,182,0.58)')} stroke="#fff7eb" strokeWidth="0.8" />
+          <Path d="M7 59a25 21 0 0 1 25-20" fill="none" stroke="#fff7eb" strokeWidth="0.8" />
+          <Path d="M93 59a25 21 0 0 0-25-20" fill="none" stroke="#fff7eb" strokeWidth="0.8" />
+          <Rect x="13" y="43" width="13" height="10" fill={translucentColor(awayAccent, '5f', 'rgba(93,118,169,0.38)')} stroke="#fff7eb" strokeWidth="0.65" />
+          <Rect x="74" y="43" width="13" height="10" fill={translucentColor(homeAccent, '5f', 'rgba(0,107,182,0.38)')} stroke="#fff7eb" strokeWidth="0.65" />
+          <G id="left-backboard">
+            <Rect x="8" y="28" width="1.2" height="26" rx="0.4" fill="#d7e5ff" />
+            <Rect x="8.5" y="27" width="9" height="6" fill="rgba(220,237,255,0.7)" stroke="#d7e5ff" strokeWidth="0.7" />
+            <Rect x="11.2" y="28.5" width="4" height="3" fill="none" stroke="#ffffff" strokeWidth="0.5" />
+            <Circle cx="17.2" cy="35" r="1.7" fill="none" stroke="#f97316" strokeWidth="0.9" />
+            <Path d="M16 36.4q1.2 2.4 2.4 0" fill="none" stroke="#ffffff" strokeWidth="0.45" />
+          </G>
+          <G id="right-backboard">
+            <Rect x="90.8" y="28" width="1.2" height="26" rx="0.4" fill="#d7e5ff" />
+            <Rect x="82.5" y="27" width="9" height="6" fill="rgba(220,237,255,0.7)" stroke="#d7e5ff" strokeWidth="0.7" />
+            <Rect x="84.8" y="28.5" width="4" height="3" fill="none" stroke="#ffffff" strokeWidth="0.5" />
+            <Circle cx="82.8" cy="35" r="1.7" fill="none" stroke="#f97316" strokeWidth="0.9" />
+            <Path d="M81.6 36.4q1.2 2.4 2.4 0" fill="none" stroke="#ffffff" strokeWidth="0.45" />
+          </G>
+          <Circle cx="12" cy="4" r="3.4" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="50" cy="3" r="3.4" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="88" cy="4" r="3.4" fill="rgba(255,255,255,0.9)" />
+          <G id="spotlight">
+            <Path d="M12 7l-7 31h18z" fill="rgba(255,255,255,0.13)" />
+            <Path d="M50 6l-12 43h24z" fill="rgba(255,255,255,0.11)" />
+            <Path d="M88 7l-18 31h25z" fill="rgba(255,255,255,0.13)" />
+          </G>
+          <SvgText x="50" y="50.8" fill="#ffffff" fontSize="4" fontWeight="900" textAnchor="middle">{homeAbbr.slice(0, 3)}</SvgText>
           {motionFrame.players.map(player => {
             const actor = player.actor;
             const isBig = actor.identity.bodyBuild === 'big';
             const skin = actor.identity.skinTone === 'deep' ? '#5b321d' : actor.identity.skinTone === 'dark' ? '#7b4a2a' : actor.identity.skinTone === 'medium' ? '#b8754b' : '#d7a376';
             const actionLift = player.action === 'shoot' || player.action === 'block' ? -1.8 : player.action === 'celebrate' ? Math.sin(tick / 3 + actor.slot) * 1.8 : 0;
+            const sx = stageX(player.x);
+            const sy = stageY(34 + player.y * 0.34);
             return (
               <G key={actor.id}>
-                <Circle cx={x(clamp(player.x, 8, 92))} cy={y(clamp(player.y, 6, 94)) - (isBig ? 2.8 : 2.4) + actionLift} r={isBig ? 2.1 : 1.8} fill={skin} stroke="#111111" strokeWidth="0.25" />
-                <Rect x={x(player.x) - (isBig ? 2.4 : 2)} y={y(player.y) - 1.3 + actionLift} width={isBig ? 4.8 : 4} height={isBig ? 5.5 : 4.8} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.45" />
-                <SvgText x={x(player.x)} y={y(player.y) + 2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.4" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
+                <Circle cx={sx} cy={sy - (isBig ? 3.1 : 2.7) + actionLift} r={isBig ? 2.2 : 1.9} fill={skin} stroke="#111111" strokeWidth="0.25" />
+                <Rect x={sx - (isBig ? 2.6 : 2.2)} y={sy - 1.4 + actionLift} width={isBig ? 5.2 : 4.4} height={isBig ? 5.8 : 5.1} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.5" />
+                <SvgText x={sx} y={sy + 2.2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.5" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
               </G>
             );
           })}
-          <Circle cx={x(motionFrame.ball.x)} cy={y(motionFrame.ball.y)} r="1.35" fill="#f97316" stroke="#fff1d6" strokeWidth="0.5" />
+          <Circle cx={stageX(motionFrame.ball.x)} cy={stageY(34 + motionFrame.ball.y * 0.34)} r="1.35" fill="#f97316" stroke="#fff1d6" strokeWidth="0.5" />
         </Svg>
       </View>
 
