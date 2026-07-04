@@ -1444,6 +1444,19 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain("name: home[index]?.name || 'Home Player'");
   });
 
+  it('shows final state in broadcast mode when a result exists without replay events', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
+
+    expect(liveMode).toContain('broadcastEvent');
+    expect(liveMode).toContain("eventType: 'final_buzzer'");
+    expect(liveMode).toContain('Detailed replay unavailable.');
+    expect(liveMode).toContain('event={broadcastEvent}');
+    expect(liveMode).toContain("period={broadcastEvent?.eventType === 'final_buzzer' ? 'Final'");
+    expect(broadcast).not.toContain('{awayScore}</SvgText>');
+    expect(broadcast).not.toContain('{homeScore}</SvgText>');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

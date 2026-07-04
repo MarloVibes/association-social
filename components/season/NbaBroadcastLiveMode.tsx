@@ -129,9 +129,8 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
           <Path d="M82 6h10l5 18H87z" fill="rgba(255,255,255,0.16)" />
           <Path d="M39 2h22l-3 19H42z" fill="rgba(255,255,255,0.18)" />
           <Rect x="40" y="5" width="20" height="13" rx="1.2" fill="#151b37" stroke={theme.secondary || '#ff3366'} strokeWidth="1" />
-          <SvgText x="46.4" y="13" fill="#f8fafc" fontSize="5" fontWeight="900" textAnchor="middle">{awayScore}</SvgText>
-          <SvgText x="50" y="13" fill="#f8fafc" fontSize="4.3" fontWeight="900" textAnchor="middle">:</SvgText>
-          <SvgText x="53.6" y="13" fill="#f8fafc" fontSize="5" fontWeight="900" textAnchor="middle">{homeScore}</SvgText>
+          <SvgText x="50" y="10.8" fill="#f8fafc" fontSize="3.7" fontWeight="900" textAnchor="middle">{scene.jumbotronCue}</SvgText>
+          <SvgText x="50" y="15" fill="#cbd5e1" fontSize="2.4" fontWeight="900" textAnchor="middle">{awayAbbr} at {homeAbbr}</SvgText>
           <Rect x="45" y="19.2" width="10" height="2.5" rx="0.8" fill={theme.secondary || '#f97316'} />
           <Path d="M18 3h20l-3 45H12z" fill="rgba(255,255,255,0.12)" />
           <Path d="M62 3h20l6 45H65z" fill="rgba(255,255,255,0.12)" />

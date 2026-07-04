@@ -319,6 +319,22 @@ export default function LiveModeScreen() {
   const resultVisible = isLiveResultRevealed(game, nowMs);
   const homeScore = currentEvent?.homeScore ?? (resultVisible ? Number(game?.homeScore || 0) : 0);
   const awayScore = currentEvent?.awayScore ?? (resultVisible ? Number(game?.awayScore || 0) : 0);
+  const broadcastEvent: LiveTimelineEvent | null = currentEvent || (resultVisible ? {
+    id: `${game?.id || 'game'}-final-fallback`,
+    period: displayedPeriods.length || 4,
+    periodLabel: 'Final',
+    clockSeconds: 0,
+    elapsedMs: liveTimeline?.revealDurationMs || 0,
+    homeScore,
+    awayScore,
+    eventType: 'final_buzzer',
+    actingTeamId: game?.homeTeamId || '',
+    text: 'Detailed replay unavailable.',
+    x: 50,
+    y: 50,
+    momentum: 0,
+    tags: ['final'],
+  } : null);
   const competitionLabel = isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'Season';
   const resultCompetition = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const liveStatsByTeam = useMemo(() => ({
@@ -471,15 +487,15 @@ export default function LiveModeScreen() {
               broadcastActors.length > 0 ? (
                 <NbaBroadcastLiveMode
                   width={courtWidth}
-                  event={currentEvent}
+                  event={broadcastEvent}
                   homeTeamId={game?.homeTeamId || ''}
                   awayTeamId={game?.awayTeamId || ''}
                   homeAbbr={homeAbbr}
                   awayAbbr={awayAbbr}
                   homeScore={homeScore}
                   awayScore={awayScore}
-                  clock={clockText(currentEvent)}
-                  period={currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || defaultPeriodLabel}
+                  clock={clockText(broadcastEvent)}
+                  period={broadcastEvent?.eventType === 'final_buzzer' ? 'Final' : broadcastEvent?.periodLabel || defaultPeriodLabel}
                   theme={arenaTheme}
                   era={league?.currentYear || league?.era}
                   actors={broadcastActors}
@@ -493,8 +509,8 @@ export default function LiveModeScreen() {
                   awayAbbr={awayAbbr}
                   homeScore={homeScore}
                   awayScore={awayScore}
-                  clock={clockText(currentEvent)}
-                  period={currentEvent?.eventType === 'final_buzzer' ? 'Final' : currentEvent?.periodLabel || defaultPeriodLabel}
+                  clock={clockText(broadcastEvent)}
+                  period={broadcastEvent?.eventType === 'final_buzzer' ? 'Final' : broadcastEvent?.periodLabel || defaultPeriodLabel}
                   theme={arenaTheme}
                   era={league?.currentYear || league?.era}
                   isFinal={resultVisible || currentEvent?.eventType === 'final_buzzer'}
