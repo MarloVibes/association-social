@@ -11,7 +11,15 @@ class PlayerUpgradeError extends Error {
 
 const GRADE_LADDER = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
 const LIMITED_LABELS = new Set(['STAR', 'SUPERSTAR', 'LEGEND']);
-const S_ELIGIBLE_LABELS = new Set(['SUPERSTAR', 'LEGEND']);
+const DEFENSE_CREDIT_ABILITIES = new Set([
+  'perimeterDefense',
+  'postDefense',
+  'blocking',
+  'steals',
+  'defenseIq',
+  'helpDefense',
+  'rebounding',
+]);
 const GRADE_NUMERIC_FLOOR = {
   F: 0,
   'D-': 50,
@@ -266,7 +274,6 @@ function nextGrade(current, label) {
   const index = GRADE_LADDER.indexOf(current);
   if (index < 0) return current;
   const candidate = GRADE_LADDER[Math.min(index + 1, GRADE_LADDER.length - 1)];
-  if (candidate === 'S' && !S_ELIGIBLE_LABELS.has(normalizedLabel(label))) return current;
   return candidate;
 }
 
@@ -469,16 +476,33 @@ function canUpgradePlayerThisSeason({ label, upgradesUsedThisSeason }) {
   return Number(upgradesUsedThisSeason || 0) < 1;
 }
 
+function upgradeCost(target) {
+  if (target === 'S') return { teamPoints: 4, starTrainingTokens: 1 };
+  if (target === 'A+') return { teamPoints: 3, starTrainingTokens: 0 };
+  if (target === 'A' || target === 'A-') return { teamPoints: 2, starTrainingTokens: 0 };
+  return { teamPoints: 1, starTrainingTokens: 0 };
+}
+
+function creditAppliesToAbility(credit, ability) {
+  if (Number(credit && credit.remaining || 0) <= 0) return false;
+  const allowed = Array.isArray(credit.allowedAbilities) ? credit.allowedAbilities : [];
+  if (allowed.length === 0) return true;
+  return allowed.includes(ability);
+}
+
 function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
   if (!team) throw new PlayerUpgradeError('not-found', 'Team not found.');
   if (!player) throw new PlayerUpgradeError('not-found', 'Player not found.');
   const points = Number(team.upgradePoints || 0);
-  if (points < 1) throw new PlayerUpgradeError('failed-precondition', 'This team does not have upgrade points.');
+  const starTrainingTokens = Number(team.starTrainingTokens || 0);
   const grades = upgradeGradesForPlayer(player);
   const current = grades[ability];
   if (!current) throw new PlayerUpgradeError('invalid-argument', 'Choose a valid ability to upgrade.');
   const usageKey = String(seasonYear || 'current');
   const upgradeUsage = { ...(player.upgradeUsage || {}) };
+  const playerCredits = Array.isArray(player.playerUpgradeCredits && player.playerUpgradeCredits[usageKey])
+    ? player.playerUpgradeCredits[usageKey].map(credit => ({ ...credit, remaining: Math.max(0, Number(credit.remaining || 0)) }))
+    : [];
   const used = Number(upgradeUsage[usageKey] || 0);
   const playerLabel = derivePlayerLabel(player);
   if (!canUpgradePlayerThisSeason({ label: playerLabel, upgradesUsedThisSeason: used })) {
@@ -488,6 +512,11 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
   if (upgraded === current) {
     throw new PlayerUpgradeError('failed-precondition', 'This grade cannot be upgraded further.');
   }
+  const cost = upgradeCost(upgraded);
+  const creditIndex = playerCredits.findIndex(credit => creditAppliesToAbility(credit, ability));
+  const teamPointCost = Math.max(0, cost.teamPoints - (creditIndex >= 0 ? 1 : 0));
+  if (points < teamPointCost) throw new PlayerUpgradeError('failed-precondition', 'This team does not have enough development points.');
+  if (starTrainingTokens < cost.starTrainingTokens) throw new PlayerUpgradeError('failed-precondition', 'This upgrade requires a Star Training Token.');
   const upgradedFloor = hiddenFloorForGrade(upgraded);
   const nextHidden = player.hidden && typeof player.hidden === 'object'
     ? {
@@ -508,7 +537,11 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
     }
     : player.visible;
   return {
-    team: { ...team, upgradePoints: points - 1 },
+    team: {
+      ...team,
+      upgradePoints: points - teamPointCost,
+      starTrainingTokens: starTrainingTokens - cost.starTrainingTokens,
+    },
     player: {
       ...player,
       grades: { ...grades, [ability]: upgraded },
@@ -521,9 +554,45 @@ function spendTeamUpgradePoint({ team, player, ability, seasonYear }) {
       era_adjusted_profiles: syncedRatingSource(player.era_adjusted_profiles, ability, upgraded, upgradedFloor),
       hidden: nextHidden,
       visible: nextVisible,
+      playerUpgradeCredits: {
+        ...(player.playerUpgradeCredits || {}),
+        [usageKey]: playerCredits.map((credit, index) => (
+          index === creditIndex ? { ...credit, remaining: Math.max(0, Number(credit.remaining || 0) - 1) } : credit
+        )),
+      },
       upgradeUsage: { ...upgradeUsage, [usageKey]: used + 1 },
     },
   };
+}
+
+function creditMatchesPlayer(credit, player) {
+  const creditPlayerId = String(credit && (credit.playerId || credit.player_id || '')).trim();
+  const creditPlayerName = String(credit && credit.playerName || '').trim().toLowerCase();
+  if (creditPlayerId && playerId(player) === creditPlayerId) return true;
+  if (creditPlayerName && String(player && (player.full_name || player.name) || '').trim().toLowerCase() === creditPlayerName) return true;
+  return !creditPlayerId && !creditPlayerName;
+}
+
+function applyPlayerCreditsToRoster(players, credits, seasonKey) {
+  const remainingCredits = [...(credits || [])];
+  return (players || []).map((player) => {
+    const matched = remainingCredits.filter(credit => creditMatchesPlayer(credit, player));
+    matched.forEach(credit => {
+      const index = remainingCredits.indexOf(credit);
+      if (index >= 0) remainingCredits.splice(index, 1);
+    });
+    if (matched.length === 0) return player;
+    return {
+      ...player,
+      playerUpgradeCredits: {
+        ...(player.playerUpgradeCredits || {}),
+        [seasonKey]: [
+          ...((player.playerUpgradeCredits && player.playerUpgradeCredits[seasonKey]) || []),
+          ...matched,
+        ],
+      },
+    };
+  });
 }
 
 function applySeasonUpgradeGrants({ teams, grants, seasonYear }) {
@@ -534,15 +603,21 @@ function applySeasonUpgradeGrants({ teams, grants, seasonYear }) {
     if (!grant || Number(grant.totalPoints || 0) <= 0) return team;
     const existingGrants = team.upgradePointGrants || {};
     if (existingGrants[seasonKey]) return team;
+    const playerCredits = Array.isArray(grant.playerCredits) ? grant.playerCredits : [];
     return {
       ...team,
       upgradePoints: Number(team.upgradePoints || 0) + Number(grant.totalPoints || 0),
+      starTrainingTokens: Number(team.starTrainingTokens || 0) + Number(grant.starTrainingTokens || 0),
+      players: applyPlayerCreditsToRoster(team.players || [], playerCredits, seasonKey),
       upgradePointGrants: {
         ...existingGrants,
         [seasonKey]: {
           awardPoints: Number(grant.awardPoints || 0),
           lotteryBoostPoints: Number(grant.lotteryBoostPoints || 0),
+          rebuildPoints: Number(grant.rebuildPoints || 0),
           totalPoints: Number(grant.totalPoints || 0),
+          starTrainingTokens: Number(grant.starTrainingTokens || 0),
+          playerCredits,
         },
       },
     };
@@ -556,6 +631,8 @@ function prepareSeasonGrantUpdates({ teams, grants, seasonYear }) {
       const original = (teams || [])[index] || {};
       if (
         Number(team.upgradePoints || 0) === Number(original.upgradePoints || 0)
+        && Number(team.starTrainingTokens || 0) === Number(original.starTrainingTokens || 0)
+        && JSON.stringify(team.players || []) === JSON.stringify(original.players || [])
         && JSON.stringify(team.upgradePointGrants || {}) === JSON.stringify(original.upgradePointGrants || {})
       ) {
         return null;
@@ -564,6 +641,8 @@ function prepareSeasonGrantUpdates({ teams, grants, seasonYear }) {
         ref: original.ref,
         teamId: team.id || team.teamId || team.abbreviation,
         upgradePoints: team.upgradePoints,
+        starTrainingTokens: Number(team.starTrainingTokens || 0),
+        players: team.players || [],
         upgradePointGrants: team.upgradePointGrants || {},
       };
     })
@@ -676,10 +755,12 @@ function createSpendPlayerUpgradeHandler({ getFirestore, HttpsError }) {
       tx.update(teamRef, {
         players: nextPlayers,
         upgradePoints: next.team.upgradePoints,
+        starTrainingTokens: next.team.starTrainingTokens,
       });
       return {
         player: next.player,
         upgradePoints: next.team.upgradePoints,
+        starTrainingTokens: next.team.starTrainingTokens,
       };
     });
   };
@@ -782,7 +863,10 @@ function normalizeGrant(raw) {
     teamId: String(raw && raw.teamId || '').trim(),
     awardPoints: Number(raw && raw.awardPoints || 0),
     lotteryBoostPoints: Number(raw && raw.lotteryBoostPoints || 0),
+    rebuildPoints: Number(raw && raw.rebuildPoints || 0),
     totalPoints: Number(raw && raw.totalPoints || 0),
+    starTrainingTokens: Number(raw && raw.starTrainingTokens || 0),
+    playerCredits: Array.isArray(raw && raw.playerCredits) ? raw.playerCredits : [],
   };
 }
 
@@ -793,7 +877,16 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
     const data = request.data || {};
     const leagueId = typeof data.leagueId === 'string' ? data.leagueId.trim() : '';
     const seasonYear = Number.isInteger(data.seasonYear) ? data.seasonYear : null;
-    const grants = Array.isArray(data.grants) ? data.grants.map(normalizeGrant).filter(grant => grant.teamId && grant.totalPoints > 0) : [];
+    const grants = Array.isArray(data.grants)
+      ? data.grants.map(normalizeGrant).filter(grant => (
+        grant.teamId
+        && (
+          grant.totalPoints > 0
+          || grant.starTrainingTokens > 0
+          || grant.playerCredits.length > 0
+        )
+      ))
+      : [];
     if (!leagueId || !seasonYear || grants.length === 0) {
       throw new HttpsError('invalid-argument', 'Provide leagueId, seasonYear, and grants.');
     }
@@ -814,6 +907,8 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
       const updates = prepareSeasonGrantUpdates({ teams, grants, seasonYear });
       updates.forEach(update => tx.update(update.ref, {
         upgradePoints: update.upgradePoints,
+        starTrainingTokens: update.starTrainingTokens,
+        players: update.players,
         upgradePointGrants: update.upgradePointGrants,
       }));
       if (FieldValue) {

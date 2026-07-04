@@ -4,12 +4,13 @@ import {
   abilityGradesFromStats,
   canUpgradePlayerThisSeason,
   detailedUpgradeGradesFromScoutingGrades,
+  spendUpgradePoint,
   upgradeGradesFromScoutingGrades,
   UPGRADE_GRADE_OPTIONS,
   seasonUpgradeGrants,
   nextGrade,
-  spendUpgradePoint,
   teamLotteryBoostPoints,
+  upgradeCost,
 } from '@/domain/nba/upgradePoints';
 
 describe('NBA upgrade points', () => {
@@ -18,7 +19,7 @@ describe('NBA upgrade points', () => {
       championships: 1,
       finalsRunnerUp: 1,
       awards: { mvp: 1, dpoy: 1, all_star: 2 },
-    })).toBe(12);
+    })).toBe(8);
   });
 
   it('gives bottom five teams from each conference lottery boost points', () => {
@@ -26,16 +27,16 @@ describe('NBA upgrade points', () => {
     const west = Array.from({ length: 15 }, (_, index) => ({ teamId: `W${index}`, conference: 'West', wins: 15 - index }));
     const boosts = teamLotteryBoostPoints([...east, ...west]);
 
-    expect(boosts.get('E14')).toBe(3);
-    expect(boosts.get('E10')).toBe(3);
+    expect(boosts.get('E14')).toBe(2);
+    expect(boosts.get('E10')).toBe(2);
     expect(boosts.get('E9')).toBeUndefined();
-    expect(boosts.get('W14')).toBe(3);
+    expect(boosts.get('W14')).toBe(2);
   });
 
   it('moves exactly one grade per point and reserves S for superstar labels', () => {
     expect(nextGrade('B')).toBe('B+');
-    expect(nextGrade('A+', 'STAR')).toBe('A+');
-    expect(nextGrade('A+', 'SUPERSTAR')).toBe('S');
+    expect(nextGrade('A+', 'ROLE PLAYER')).toBe('S');
+    expect(nextGrade('A+', 'STAR')).toBe('S');
     expect(nextGrade('S', 'LEGEND')).toBe('S');
   });
 
@@ -48,6 +49,8 @@ describe('NBA upgrade points', () => {
   it('spends one team point on one eligible grade step', () => {
     const result = spendUpgradePoint({
       teamPoints: 2,
+      starTrainingTokens: 0,
+      playerCredits: [],
       playerLabel: 'ROLE PLAYER',
       upgradesUsedThisSeason: 0,
       ability: 'shooting',
@@ -58,9 +61,67 @@ describe('NBA upgrade points', () => {
       valid: true,
       errors: [],
       teamPoints: 1,
+      starTrainingTokens: 0,
+      playerCredits: [],
       upgradesUsedThisSeason: 1,
       grades: { shooting: 'B-' },
     });
+  });
+
+  it('scales upgrade cost by target grade and requires star tokens for S', () => {
+    expect(upgradeCost('B')).toEqual({ teamPoints: 1, starTrainingTokens: 0 });
+    expect(upgradeCost('A-')).toEqual({ teamPoints: 2, starTrainingTokens: 0 });
+    expect(upgradeCost('A+')).toEqual({ teamPoints: 3, starTrainingTokens: 0 });
+    expect(upgradeCost('S')).toEqual({ teamPoints: 4, starTrainingTokens: 1 });
+
+    const blocked = spendUpgradePoint({
+      teamPoints: 10,
+      starTrainingTokens: 0,
+      playerCredits: [],
+      playerLabel: 'SUPERSTAR',
+      upgradesUsedThisSeason: 0,
+      ability: 'clutch',
+      grades: { clutch: 'A+' },
+    });
+
+    expect(blocked.valid).toBe(false);
+    expect(blocked.errors).toContain('insufficient_star_tokens');
+
+    const upgraded = spendUpgradePoint({
+      teamPoints: 10,
+      starTrainingTokens: 1,
+      playerCredits: [],
+      playerLabel: 'ROLE PLAYER',
+      upgradesUsedThisSeason: 0,
+      ability: 'clutch',
+      grades: { clutch: 'A+' },
+    });
+
+    expect(upgraded.valid).toBe(true);
+    expect(upgraded.teamPoints).toBe(6);
+    expect(upgraded.starTrainingTokens).toBe(0);
+    expect(upgraded.grades.clutch).toBe('S');
+  });
+
+  it('spends matching player-bound credits before team points', () => {
+    const result = spendUpgradePoint({
+      teamPoints: 1,
+      starTrainingTokens: 0,
+      playerCredits: [
+        { id: 'mip-credit', label: 'Most Improved Credit', remaining: 1 },
+      ],
+      playerLabel: 'ROLE PLAYER',
+      upgradesUsedThisSeason: 0,
+      ability: 'threePoint',
+      grades: { threePoint: 'A-' },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.teamPoints).toBe(0);
+    expect(result.playerCredits).toEqual([
+      { id: 'mip-credit', label: 'Most Improved Credit', remaining: 0 },
+    ]);
+    expect(result.grades.threePoint).toBe('A');
   });
 
   it('derives ability grades from existing player stats when no grade sheet exists yet', () => {
@@ -175,14 +236,20 @@ describe('NBA upgrade points', () => {
     });
 
     expect(grants.find(grant => grant.teamId === 'E5')).toMatchObject({
-      awardPoints: 6,
-      lotteryBoostPoints: 3,
-      totalPoints: 9,
+      awardPoints: 5,
+      lotteryBoostPoints: 2,
+      rebuildPoints: 1,
+      totalPoints: 8,
+      starTrainingTokens: 1,
+      playerCredits: expect.arrayContaining([
+        expect.objectContaining({ award: 'mvp', remaining: 1 }),
+      ]),
     });
     expect(grants.find(grant => grant.teamId === 'W5')).toMatchObject({
-      awardPoints: 3,
-      lotteryBoostPoints: 3,
-      totalPoints: 6,
+      awardPoints: 2,
+      lotteryBoostPoints: 2,
+      rebuildPoints: 1,
+      totalPoints: 5,
     });
     expect(grants.find(grant => grant.teamId === 'E0')).toBeUndefined();
   });

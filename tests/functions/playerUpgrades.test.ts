@@ -93,8 +93,44 @@ describe('player upgrade callable helpers', () => {
     });
 
     expect(result.team.upgradePoints).toBe(2);
+    expect(result.team.starTrainingTokens).toBe(0);
     expect(result.player.grades.shooting).toBe('B+');
     expect(result.player.upgradeUsage['2026']).toBe(2);
+  });
+
+  it('spends player-bound credits and star tokens for expensive upgrades', () => {
+    const credited = spendTeamUpgradePoint({
+      team: { upgradePoints: 1, starTrainingTokens: 0 },
+      player: {
+        id: 'p1',
+        playerLabel: 'ROLE PLAYER',
+        grades: { threePoint: 'A-' },
+        playerUpgradeCredits: {
+          '2026': [{ id: 'mip-credit', label: 'Most Improved Credit', remaining: 1 }],
+        },
+      },
+      ability: 'threePoint',
+      seasonYear: 2026,
+    });
+
+    expect(credited.team.upgradePoints).toBe(0);
+    expect(credited.player.playerUpgradeCredits['2026'][0].remaining).toBe(0);
+    expect(credited.player.grades.threePoint).toBe('A');
+
+    const elite = spendTeamUpgradePoint({
+      team: { upgradePoints: 5, starTrainingTokens: 1 },
+      player: {
+        id: 'p2',
+        playerLabel: 'SUPERSTAR',
+        grades: { clutch: 'A+' },
+      },
+      ability: 'clutch',
+      seasonYear: 2026,
+    });
+
+    expect(elite.team.upgradePoints).toBe(1);
+    expect(elite.team.starTrainingTokens).toBe(0);
+    expect(elite.player.grades.clutch).toBe('S');
   });
 
   it('updates hidden simulation values and visible grades when spending a point', () => {
@@ -147,17 +183,10 @@ describe('player upgrade callable helpers', () => {
     })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
   });
 
-  it('allows only superstar and legend labels to reach S', () => {
-    expect(() => spendTeamUpgradePoint({
-      team: { upgradePoints: 1 },
-      player: { id: 'star', playerLabel: 'STAR', grades: { shooting: 'A+' } },
-      ability: 'shooting',
-      seasonYear: 2026,
-    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
-
+  it('allows any player label to reach S when the team pays the elite cost', () => {
     expect(spendTeamUpgradePoint({
-      team: { upgradePoints: 1 },
-      player: { id: 'superstar', playerLabel: 'SUPERSTAR', grades: { shooting: 'A+' } },
+      team: { upgradePoints: 4, starTrainingTokens: 1 },
+      player: { id: 'role', playerLabel: 'ROLE PLAYER', grades: { shooting: 'A+' } },
       ability: 'shooting',
       seasonYear: 2026,
     }).player.grades.shooting).toBe('S');
@@ -165,7 +194,7 @@ describe('player upgrade callable helpers', () => {
 
   it('derives superstar eligibility from production when no label is saved', () => {
     expect(spendTeamUpgradePoint({
-      team: { upgradePoints: 1 },
+      team: { upgradePoints: 4, starTrainingTokens: 1 },
       player: { id: 'scorer', ppg: 28, grades: { shooting: 'A+' } },
       ability: 'shooting',
       seasonYear: 2026,
@@ -174,7 +203,7 @@ describe('player upgrade callable helpers', () => {
 
   it('uses canonical skill grades before stale saved upgrade grades', () => {
     const result = spendTeamUpgradePoint({
-      team: { upgradePoints: 1 },
+      team: { upgradePoints: 4, starTrainingTokens: 1 },
       player: {
         id: 'gobert',
         full_name: 'Rudy Gobert',
@@ -246,42 +275,54 @@ describe('player upgrade callable helpers', () => {
 
   it('applies season grants once per team and season', () => {
     const teams = [
-      { id: 'E5', upgradePoints: 1, upgradePointGrants: {} },
+      { id: 'E5', upgradePoints: 1, upgradePointGrants: {}, players: [{ id: 'p1', full_name: 'Award Winner' }] },
       { id: 'W5', upgradePoints: 2, upgradePointGrants: { '2026': { totalPoints: 4 } } },
     ];
     const result = applySeasonUpgradeGrants({
       teams,
       seasonYear: 2026,
       grants: [
-        { teamId: 'E5', awardPoints: 6, lotteryBoostPoints: 3, totalPoints: 9 },
-        { teamId: 'W5', awardPoints: 3, lotteryBoostPoints: 3, totalPoints: 6 },
+        {
+          teamId: 'E5',
+          awardPoints: 5,
+          lotteryBoostPoints: 2,
+          rebuildPoints: 1,
+          totalPoints: 8,
+          starTrainingTokens: 1,
+          playerCredits: [{ id: 'E5:mvp:p1', playerId: 'p1', label: 'MVP Credit', remaining: 1 }],
+        },
+        { teamId: 'W5', awardPoints: 2, lotteryBoostPoints: 2, rebuildPoints: 1, totalPoints: 5, starTrainingTokens: 0, playerCredits: [] },
       ],
     });
 
-    expect(result.find((team: any) => team.id === 'E5').upgradePoints).toBe(10);
-    expect(result.find((team: any) => team.id === 'E5').upgradePointGrants['2026'].totalPoints).toBe(9);
+    expect(result.find((team: any) => team.id === 'E5').upgradePoints).toBe(9);
+    expect(result.find((team: any) => team.id === 'E5').starTrainingTokens).toBe(1);
+    expect(result.find((team: any) => team.id === 'E5').players[0].playerUpgradeCredits['2026'][0].label).toBe('MVP Credit');
+    expect(result.find((team: any) => team.id === 'E5').upgradePointGrants['2026'].totalPoints).toBe(8);
     expect(result.find((team: any) => team.id === 'W5').upgradePoints).toBe(2);
   });
 
   it('prepares only changed team updates for season grant writes', () => {
     const teams = [
-      { id: 'E5', ref: 'ref-e5', upgradePoints: 1, upgradePointGrants: {} },
+      { id: 'E5', ref: 'ref-e5', upgradePoints: 1, upgradePointGrants: {}, players: [] },
       { id: 'W5', ref: 'ref-w5', upgradePoints: 2, upgradePointGrants: { '2026': { totalPoints: 4 } } },
     ];
     const updates = prepareSeasonGrantUpdates({
       teams,
       seasonYear: 2026,
       grants: [
-        { teamId: 'E5', awardPoints: 6, lotteryBoostPoints: 3, totalPoints: 9 },
-        { teamId: 'W5', awardPoints: 3, lotteryBoostPoints: 3, totalPoints: 6 },
+        { teamId: 'E5', awardPoints: 5, lotteryBoostPoints: 2, rebuildPoints: 1, totalPoints: 8, starTrainingTokens: 1, playerCredits: [] },
+        { teamId: 'W5', awardPoints: 2, lotteryBoostPoints: 2, rebuildPoints: 1, totalPoints: 5, starTrainingTokens: 0, playerCredits: [] },
       ],
     });
 
     expect(updates).toEqual([{
       ref: 'ref-e5',
       teamId: 'E5',
-      upgradePoints: 10,
-      upgradePointGrants: { '2026': { awardPoints: 6, lotteryBoostPoints: 3, totalPoints: 9 } },
+      upgradePoints: 9,
+      starTrainingTokens: 1,
+      players: [],
+      upgradePointGrants: { '2026': { awardPoints: 5, lotteryBoostPoints: 2, rebuildPoints: 1, totalPoints: 8, starTrainingTokens: 1, playerCredits: [] } },
     }]);
   });
 

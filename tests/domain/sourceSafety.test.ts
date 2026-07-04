@@ -154,9 +154,11 @@ describe('source safety regressions', () => {
     expect(sharedRow).toContain('rowIdentity?.tier');
     expect(sharedRow).toContain('rowIdentity?.archetypes');
     const roster = source('app/screens/roster.tsx');
-    expect(roster).toContain('tierFilter');
-    expect(roster).toContain('archetypeFilter');
-    expect(roster).toContain('matchesNbaClassificationFilter');
+    expect(roster).toContain('positionFilters.map');
+    expect(roster).not.toContain('ALL TIERS');
+    expect(roster).not.toContain('ALL ARCHETYPES');
+    expect(roster).not.toContain('First Name');
+    expect(roster).not.toContain('Last Name');
     expect(playerCard).toContain('compareMode');
     expect(playerCard).toContain("same_tier");
     expect(playerCard).toContain("same_archetype");
@@ -698,12 +700,13 @@ describe('source safety regressions', () => {
     expect(settings).toContain('financeMode: sportRules.financeMode');
   });
 
-  it('lets commissioners apply award and lottery upgrade points from the trophy case', () => {
+  it('lets commissioners apply award, lottery, and player-bound upgrade currency from the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
     const functionsIndex = source('functions/index.js');
 
     expect(awards).toContain("httpsCallable(functions, 'applyUpgradeGrants')");
     expect(awards).toContain('seasonUpgradeGrants');
+    expect(awards).toContain('awardWinners');
     expect(awards).toContain('Apply Upgrade Points');
     expect(awards).toContain('grantsAlreadyApplied');
     expect(awards).toContain('(result.data as any)?.updatedTeams');
@@ -735,7 +738,7 @@ describe('source safety regressions', () => {
     expect(upgrades).toContain('canUpgradePlayerThisSeason');
     expect(upgrades).toContain('upgradesUsedThisSeason: used');
     expect(upgrades).toContain('selectedTeamId');
-    expect(upgrades).toContain('One point raises one grade');
+    expect(upgrades).toContain('Higher grades cost more');
     expect(upgrades).toContain('getUpgradeStatus');
     expect(upgrades).toContain('arrow-up-circle');
     expect(upgrades).toContain('arrow-forward');
@@ -959,7 +962,11 @@ describe('source safety regressions', () => {
 
     const upgrades = source('app/screens/season/player-upgrades.tsx');
     expect(upgrades).toContain('Upgrade Points');
-    expect(upgrades).toContain('One point raises one grade');
+    expect(upgrades).toContain('Team Development Points');
+    expect(upgrades).toContain('Star Training Tokens');
+    expect(upgrades).toContain('player-bound credit');
+    expect(upgrades).toContain('S-grade upgrades are rare');
+    expect(upgrades).not.toContain('One point raises one grade');
     expect(upgrades).not.toContain('rating');
   });
 
@@ -1579,6 +1586,14 @@ describe('source safety regressions', () => {
     expect(awards).toContain('awardMarkIconWrap');
     expect(awards).toContain('numberOfLines={2}');
     expect(awards).toContain('textAlign:');
+  });
+
+  it('keeps player-bound upgrade credits with manually dropped free agents', () => {
+    const roster = source('app/screens/roster.tsx');
+
+    expect(roster).toContain("setDoc(doc(db, 'leagues', leagueId, 'free_agents'");
+    expect(roster).toContain('arrayUnion({ ...player, team:');
+    expect(roster).toContain('playerUpgradeCredits');
   });
 
   it('keeps prohibited commercial-game branding out of app source and docs', () => {

@@ -79,7 +79,7 @@ function teamKeys(team: Team) {
     .filter(Boolean);
 }
 
-function addAward(ledger: Record<string, AwardUpgradeInput>, teamId: string, awardKey: string, count = 1) {
+function addAward(ledger: Record<string, AwardUpgradeInput>, teamId: string, awardKey: string, record?: SportAwardRecord, count = 1) {
   if (!teamId) return;
   const current = ledger[teamId] || { awards: {} };
   ledger[teamId] = {
@@ -88,6 +88,14 @@ function addAward(ledger: Record<string, AwardUpgradeInput>, teamId: string, awa
       ...(current.awards || {}),
       [awardKey]: Number(current.awards?.[awardKey as keyof NonNullable<AwardUpgradeInput['awards']>] || 0) + count,
     },
+    awardWinners: [
+      ...(current.awardWinners || []),
+      {
+        award: awardKey,
+        playerName: record?.winnerName || undefined,
+        count,
+      },
+    ],
   };
 }
 
@@ -128,7 +136,7 @@ function awardLedgerFor(
   };
   Object.entries(awardMap).forEach(([sourceKey, awardKey]) => {
     recordsForSportAward(ledgerSport, league, sourceKey, { currentYear: league?.currentYear, schedule, teams, standings, includeProjected: false }).forEach(record => (
-      addAward(ledger, teamRecordKey(record), awardKey)
+      addAward(ledger, teamRecordKey(record), awardKey, record)
     ));
   });
   return ledger;
@@ -227,6 +235,8 @@ export default function AwardsScreen() {
     awardLedger: awardLedgerFor(league, schedule, teams, standings),
   }), [league, schedule, standings, teams]);
   const grantPoints = upgradeGrants.reduce((total, grant) => total + grant.totalPoints, 0);
+  const grantTokens = upgradeGrants.reduce((total, grant) => total + grant.starTrainingTokens, 0);
+  const grantCredits = upgradeGrants.reduce((total, grant) => total + grant.playerCredits.length, 0);
   const seasonKey = String(league?.currentYear || new Date().getFullYear());
   const grantsAlreadyApplied = upgradeGrants.length > 0 && upgradeGrants.every((grant) => {
     const grantTeamKey = normalizeTeamKey(grant.teamId);
@@ -304,7 +314,7 @@ export default function AwardsScreen() {
               <View style={styles.grantsPanel}>
                 <View style={styles.grantsCopy}>
                   <Text style={styles.grantsTitle}>Upgrade Point Grants</Text>
-                  <Text style={styles.grantsMeta}>{grantPoints} points ready from awards and lottery boosts</Text>
+                  <Text style={styles.grantsMeta}>{grantPoints} points, {grantTokens} star tokens, {grantCredits} player credits ready</Text>
                 </View>
                 <TouchableOpacity
                   disabled={finalizingAwards || teams.length === 0}

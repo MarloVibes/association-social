@@ -39,10 +39,28 @@ export type UpgradeAwards = Partial<Record<
   number
 >>;
 
+export type PlayerUpgradeCredit = {
+  id: string;
+  label: string;
+  remaining: number;
+  award?: keyof UpgradeAwards | string;
+  playerId?: string;
+  playerName?: string;
+  allowedAbilities?: string[];
+};
+
+export type AwardWinnerCreditInput = {
+  award: keyof UpgradeAwards | string;
+  playerId?: string;
+  playerName?: string;
+  count?: number;
+};
+
 export type AwardUpgradeInput = {
   championships?: number;
   finalsRunnerUp?: number;
   awards?: UpgradeAwards;
+  awardWinners?: AwardWinnerCreditInput[];
 };
 
 export type StandingLike = {
@@ -56,7 +74,10 @@ export type SeasonUpgradeGrant = {
   teamId: string;
   awardPoints: number;
   lotteryBoostPoints: number;
+  rebuildPoints: number;
   totalPoints: number;
+  starTrainingTokens: number;
+  playerCredits: PlayerUpgradeCredit[];
 };
 
 export type SeasonUpgradeGrantInput = {
@@ -66,6 +87,8 @@ export type SeasonUpgradeGrantInput = {
 
 export type SpendUpgradeInput = {
   teamPoints: number;
+  starTrainingTokens?: number;
+  playerCredits?: PlayerUpgradeCredit[];
   playerLabel: UpgradePlayerLabel;
   upgradesUsedThisSeason: number;
   ability: string;
@@ -76,30 +99,56 @@ export type SpendUpgradeResult = {
   valid: boolean;
   errors: string[];
   teamPoints: number;
+  starTrainingTokens: number;
+  playerCredits: PlayerUpgradeCredit[];
   upgradesUsedThisSeason: number;
   grades: Record<string, NbaGrade>;
 };
 
 const GRADE_LADDER: NbaGrade[] = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S'];
 const LIMITED_LABELS = new Set(['STAR', 'SUPERSTAR', 'LEGEND']);
-const S_ELIGIBLE_LABELS = new Set(['SUPERSTAR', 'LEGEND']);
 
 const AWARD_POINTS: Required<UpgradeAwards> = {
-  championship: 5,
-  finals_runner_up: 3,
+  championship: 4,
+  finals_runner_up: 2,
   mvp: 1,
   finals_mvp: 1,
   dpoy: 1,
   roy: 1,
   sixth_man: 1,
   mip: 1,
-  all_nba_1st: 1,
-  all_nba_2nd: 1,
-  all_nba_3rd: 1,
-  all_defense: 1,
-  all_star: 1,
+  all_nba_1st: 0,
+  all_nba_2nd: 0,
+  all_nba_3rd: 0,
+  all_defense: 0,
+  all_star: 0,
   nba_cup: 1,
 };
+
+const STAR_TOKEN_AWARDS = new Set<keyof UpgradeAwards>(['mvp', 'finals_mvp']);
+const PLAYER_CREDIT_AWARDS = new Set<string>([
+  'mvp',
+  'finals_mvp',
+  'dpoy',
+  'roy',
+  'sixth_man',
+  'mip',
+  'all_nba_1st',
+  'all_nba_2nd',
+  'all_nba_3rd',
+  'all_defense',
+]);
+
+const DEFENSE_CREDIT_AWARDS = new Set<string>(['dpoy', 'all_defense']);
+const DEFENSE_CREDIT_ABILITIES = [
+  'perimeterDefense',
+  'postDefense',
+  'blocking',
+  'steals',
+  'defenseIq',
+  'helpDefense',
+  'rebounding',
+];
 
 export type UpgradeGradeOption = {
   key: string;
@@ -276,6 +325,61 @@ export function awardUpgradePoints(input: AwardUpgradeInput): number {
   return total;
 }
 
+function awardLabel(award: string) {
+  const labels: Record<string, string> = {
+    mvp: 'MVP Credit',
+    finals_mvp: 'Finals MVP Credit',
+    dpoy: 'Defensive Player Credit',
+    roy: 'Rookie of the Year Credit',
+    sixth_man: 'Sixth Man Credit',
+    mip: 'Most Improved Credit',
+    all_nba_1st: 'All-NBA Credit',
+    all_nba_2nd: 'All-NBA Credit',
+    all_nba_3rd: 'All-NBA Credit',
+    all_defense: 'All-Defense Credit',
+  };
+  return labels[award] || 'Player Award Credit';
+}
+
+export function playerCreditsFromAwards(input: AwardUpgradeInput, teamId: string): PlayerUpgradeCredit[] {
+  const credits: PlayerUpgradeCredit[] = [];
+  const winners = input.awardWinners || [];
+  winners.forEach((winner, index) => {
+    const award = String(winner.award || '');
+    if (!PLAYER_CREDIT_AWARDS.has(award)) return;
+    const count = Math.max(1, Number(winner.count || 1));
+    credits.push({
+      id: `${teamId}:${award}:${winner.playerId || winner.playerName || index}`,
+      label: awardLabel(award),
+      award,
+      playerId: winner.playerId,
+      playerName: winner.playerName,
+      remaining: count,
+      allowedAbilities: DEFENSE_CREDIT_AWARDS.has(award) ? DEFENSE_CREDIT_ABILITIES : undefined,
+    });
+  });
+  Object.entries(input.awards || {}).forEach(([award, rawCount]) => {
+    if (!PLAYER_CREDIT_AWARDS.has(award)) return;
+    const count = Math.max(0, Number(rawCount || 0));
+    for (let index = 0; index < count; index += 1) {
+      credits.push({
+        id: `${teamId}:${award}:unbound:${index}`,
+        label: awardLabel(award),
+        award,
+        remaining: 1,
+        allowedAbilities: DEFENSE_CREDIT_AWARDS.has(award) ? DEFENSE_CREDIT_ABILITIES : undefined,
+      });
+    }
+  });
+  return credits;
+}
+
+export function starTokensFromAwards(input: AwardUpgradeInput): number {
+  return Object.entries(input.awards || {}).reduce((total, [award, rawCount]) => (
+    total + (STAR_TOKEN_AWARDS.has(award as keyof UpgradeAwards) ? Math.max(0, Number(rawCount || 0)) : 0)
+  ), 0);
+}
+
 export function teamLotteryBoostPoints(standings: StandingLike[]): Map<string, number> {
   const byConference = new Map<string, StandingLike[]>();
   standings.forEach((row) => {
@@ -292,13 +396,27 @@ export function teamLotteryBoostPoints(standings: StandingLike[]): Map<string, n
         || a.teamId.localeCompare(b.teamId)
       ))
       .slice(0, 5)
-      .forEach(row => boosts.set(row.teamId, 3));
+      .forEach(row => boosts.set(row.teamId, 2));
   });
+  return boosts;
+}
+
+export function teamRebuildPoints(standings: StandingLike[]): Map<string, number> {
+  const boosts = new Map<string, number>();
+  [...standings]
+    .sort((a, b) => (
+      a.wins - b.wins
+      || (b.losses || 0) - (a.losses || 0)
+      || a.teamId.localeCompare(b.teamId)
+    ))
+    .slice(0, 3)
+    .forEach(row => boosts.set(row.teamId, 1));
   return boosts;
 }
 
 export function seasonUpgradeGrants(input: SeasonUpgradeGrantInput): SeasonUpgradeGrant[] {
   const lotteryBoosts = teamLotteryBoostPoints(input.standings);
+  const rebuildBoosts = teamRebuildPoints(input.standings);
   const teamIds = new Set<string>([
     ...input.standings.map(row => row.teamId),
     ...Object.keys(input.awardLedger || {}),
@@ -308,14 +426,19 @@ export function seasonUpgradeGrants(input: SeasonUpgradeGrantInput): SeasonUpgra
     .map((teamId) => {
       const awardPoints = awardUpgradePoints(input.awardLedger?.[teamId] || {});
       const lotteryBoostPoints = lotteryBoosts.get(teamId) || 0;
+      const rebuildPoints = rebuildBoosts.get(teamId) || 0;
+      const awardInput = input.awardLedger?.[teamId] || {};
       return {
         teamId,
         awardPoints,
         lotteryBoostPoints,
-        totalPoints: awardPoints + lotteryBoostPoints,
+        rebuildPoints,
+        totalPoints: awardPoints + lotteryBoostPoints + rebuildPoints,
+        starTrainingTokens: starTokensFromAwards(awardInput),
+        playerCredits: playerCreditsFromAwards(awardInput, teamId),
       };
     })
-    .filter(grant => grant.totalPoints > 0)
+    .filter(grant => grant.totalPoints > 0 || grant.starTrainingTokens > 0 || grant.playerCredits.length > 0)
     .sort((a, b) => b.totalPoints - a.totalPoints || a.teamId.localeCompare(b.teamId));
 }
 
@@ -323,9 +446,6 @@ export function nextGrade(current: NbaGrade, playerLabel: UpgradePlayerLabel = '
   const currentIndex = GRADE_LADDER.indexOf(current);
   if (currentIndex < 0) return current;
   const candidate = GRADE_LADDER[Math.min(currentIndex + 1, GRADE_LADDER.length - 1)];
-  if (candidate === 'S' && !S_ELIGIBLE_LABELS.has(normalizedLabel(playerLabel))) {
-    return current;
-  }
   return candidate;
 }
 
@@ -340,9 +460,23 @@ export function canUpgradePlayerThisSeason({
   return Number(upgradesUsedThisSeason || 0) < 1;
 }
 
+export function upgradeCost(target: NbaGrade): { teamPoints: number; starTrainingTokens: number } {
+  if (target === 'S') return { teamPoints: 4, starTrainingTokens: 1 };
+  if (target === 'A+') return { teamPoints: 3, starTrainingTokens: 0 };
+  if (target === 'A' || target === 'A-') return { teamPoints: 2, starTrainingTokens: 0 };
+  return { teamPoints: 1, starTrainingTokens: 0 };
+}
+
+export function creditAppliesToAbility(credit: PlayerUpgradeCredit, ability: string): boolean {
+  if (Number(credit.remaining || 0) <= 0) return false;
+  if (!credit.allowedAbilities || credit.allowedAbilities.length === 0) return true;
+  return credit.allowedAbilities.includes(ability);
+}
+
 export function spendUpgradePoint(input: SpendUpgradeInput): SpendUpgradeResult {
   const errors: string[] = [];
-  if (input.teamPoints < 1) errors.push('insufficient_points');
+  const starTrainingTokens = Math.max(0, Number(input.starTrainingTokens || 0));
+  const playerCredits = (input.playerCredits || []).map(credit => ({ ...credit, remaining: Math.max(0, Number(credit.remaining || 0)) }));
   if (!canUpgradePlayerThisSeason({
     label: input.playerLabel,
     upgradesUsedThisSeason: input.upgradesUsedThisSeason,
@@ -353,12 +487,20 @@ export function spendUpgradePoint(input: SpendUpgradeInput): SpendUpgradeResult 
   if (!current) errors.push('ability_missing');
   const upgraded = current ? nextGrade(current, input.playerLabel) : current;
   if (current && upgraded === current) errors.push('grade_maxed');
+  const cost = upgraded ? upgradeCost(upgraded) : { teamPoints: 1, starTrainingTokens: 0 };
+  const creditIndex = playerCredits.findIndex(credit => creditAppliesToAbility(credit, input.ability));
+  const creditDiscount = creditIndex >= 0 ? 1 : 0;
+  const teamPointCost = Math.max(0, cost.teamPoints - creditDiscount);
+  if (input.teamPoints < teamPointCost) errors.push('insufficient_points');
+  if (starTrainingTokens < cost.starTrainingTokens) errors.push('insufficient_star_tokens');
 
   if (errors.length > 0) {
     return {
       valid: false,
       errors,
       teamPoints: input.teamPoints,
+      starTrainingTokens,
+      playerCredits,
       upgradesUsedThisSeason: input.upgradesUsedThisSeason,
       grades: { ...input.grades },
     };
@@ -367,7 +509,11 @@ export function spendUpgradePoint(input: SpendUpgradeInput): SpendUpgradeResult 
   return {
     valid: true,
     errors,
-    teamPoints: input.teamPoints - 1,
+    teamPoints: input.teamPoints - teamPointCost,
+    starTrainingTokens: starTrainingTokens - cost.starTrainingTokens,
+    playerCredits: playerCredits.map((credit, index) => (
+      index === creditIndex ? { ...credit, remaining: Math.max(0, Number(credit.remaining || 0) - 1) } : credit
+    )),
     upgradesUsedThisSeason: input.upgradesUsedThisSeason + 1,
     grades: {
       ...input.grades,

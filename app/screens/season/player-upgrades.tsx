@@ -12,8 +12,11 @@ import {
   UPGRADE_GRADE_OPTIONS,
   abilityGradesFromStats,
   canUpgradePlayerThisSeason,
+  creditAppliesToAbility,
   detailedUpgradeGradesFromScoutingGrades,
   nextGrade,
+  upgradeCost,
+  type PlayerUpgradeCredit,
   type UpgradePlayerLabel,
 } from '@/domain/nba/upgradePoints';
 import type { NbaGrade } from '@/domain/nba/identity';
@@ -24,6 +27,7 @@ type Team = {
   abbreviation?: string;
   gmId?: string;
   upgradePoints?: number;
+  starTrainingTokens?: number;
   players?: Player[];
 };
 
@@ -41,6 +45,7 @@ type Player = {
   era_adjusted_profiles?: Record<string, unknown>;
   hidden?: Record<string, unknown>;
   upgradeUsage?: Record<string, number>;
+  playerUpgradeCredits?: Record<string, PlayerUpgradeCredit[]>;
   playerLabel?: string;
   tierLabel?: string;
   reputation?: string;
@@ -100,26 +105,40 @@ function getUpgradeStatus({
   grade,
   target,
   teamPoints,
+  starTrainingTokens,
+  playerCredits,
+  ability,
   label,
   used,
 }: {
   grade: NbaGrade;
   target: NbaGrade;
   teamPoints: number;
+  starTrainingTokens: number;
+  playerCredits: PlayerUpgradeCredit[];
+  ability: string;
   label: UpgradePlayerLabel;
   used: number;
 }) {
   if (target === grade) {
     return {
       canImprove: false,
-      text: grade === 'A+' ? 'Needs Superstar or Legend for S' : 'Maxed',
+      text: 'Maxed',
     };
   }
-  if (teamPoints < 1) return { canImprove: false, text: 'No team points' };
   if (!canUpgradePlayerThisSeason({ label, upgradesUsedThisSeason: used })) {
     return { canImprove: false, text: 'Season limit reached' };
   }
-  return { canImprove: true, text: 'Spend 1 point' };
+  const cost = upgradeCost(target);
+  const creditDiscount = playerCredits.some(credit => creditAppliesToAbility(credit, ability)) ? 1 : 0;
+  const teamPointCost = Math.max(0, cost.teamPoints - creditDiscount);
+  if (teamPoints < teamPointCost) return { canImprove: false, text: `Needs ${teamPointCost} team points` };
+  if (starTrainingTokens < cost.starTrainingTokens) return { canImprove: false, text: 'Needs Star Training Token' };
+  const parts = [
+    teamPointCost > 0 ? `${teamPointCost} team point${teamPointCost === 1 ? '' : 's'}` : 'player credit',
+    cost.starTrainingTokens > 0 ? `${cost.starTrainingTokens} star token` : null,
+  ].filter(Boolean);
+  return { canImprove: true, text: `Spend ${parts.join(' + ')}` };
 }
 
 export default function PlayerUpgradesScreen() {
@@ -207,11 +226,12 @@ export default function PlayerUpgradesScreen() {
             </View>
             <View style={styles.summary}>
               <Text style={styles.summaryValue}>{team?.upgradePoints || 0}</Text>
-              <Text style={styles.summaryLabel}>{teamName(team)} points available</Text>
+              <Text style={styles.summaryLabel}>{teamName(team)} Team Development Points</Text>
+              <Text style={styles.tokenLine}>{team?.starTrainingTokens || 0} Star Training Tokens</Text>
             </View>
             <View style={styles.rulePanel}>
-              <Text style={styles.ruleText}>One point raises one grade. Star, Superstar, and Legend players get one upgrade per season.</Text>
-              <Text style={styles.ruleText}>Only Superstar and Legend players can reach S.</Text>
+              <Text style={styles.ruleText}>Higher grades cost more. Player-bound credits reduce the cost for the award winner.</Text>
+              <Text style={styles.ruleText}>S-grade upgrades are rare and require a Star Training Token.</Text>
             </View>
             {isLeagueAdmin && selectableTeams.length > 1 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamChips}>
@@ -237,6 +257,7 @@ export default function PlayerUpgradesScreen() {
           const style = getSportArchetypeForYear(item, null, league?.currentYear, 'nba');
           const label = (item.playerLabel || item.tierLabel || item.reputation || style.label) as UpgradePlayerLabel;
           const used = Number(item.upgradeUsage?.[seasonKey] || 0);
+          const playerCredits = (item.playerUpgradeCredits?.[seasonKey] || []).filter(credit => Number(credit.remaining || 0) > 0);
           const grades = gradesFor(item, league);
           const sections = upgradeSections(grades);
           return (
@@ -245,6 +266,9 @@ export default function PlayerUpgradesScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.playerName}>{playerName(item)}</Text>
                   <Text style={styles.playerMeta}>{[item.position, style.label, used ? `${used} used` : null].filter(Boolean).join(' · ')}</Text>
+                  {playerCredits.length > 0 ? (
+                    <Text style={styles.creditMeta}>{playerCredits.reduce((total, credit) => total + Number(credit.remaining || 0), 0)} player-bound credit{playerCredits.length === 1 ? '' : 's'} available</Text>
+                  ) : null}
                 </View>
                 <View style={[styles.labelBadge, { borderColor: style.color + '88' }]}>
                   <Text style={[styles.labelText, { color: style.color }]}>{style.label}</Text>
@@ -262,6 +286,9 @@ export default function PlayerUpgradesScreen() {
                         grade,
                         target,
                         teamPoints: team?.upgradePoints || 0,
+                        starTrainingTokens: team?.starTrainingTokens || 0,
+                        playerCredits,
+                        ability,
                         label,
                         used,
                       });
@@ -287,7 +314,7 @@ export default function PlayerUpgradesScreen() {
                             ) : null}
                           </View>
                           <Text style={[styles.abilityStatus, status.canImprove && styles.abilityStatusReady]}>
-                            {status.canImprove ? `1 point upgrades ${grade} to ${target}` : status.text}
+                            {status.canImprove ? `${status.text} to upgrade ${grade} to ${target}` : status.text}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -314,6 +341,7 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: '#101410', borderWidth: 1, borderColor: '#1f3328', borderRadius: 8, padding: 14, marginBottom: 14 },
   summaryValue: { color: '#00e58b', fontSize: 30, fontWeight: '900' },
   summaryLabel: { color: '#999', fontSize: 13, fontWeight: '800', marginTop: 2 },
+  tokenLine: { color: '#d7b56d', fontSize: 12, fontWeight: '900', marginTop: 6 },
   rulePanel: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#252525', padding: 12, marginBottom: 12, gap: 4 },
   ruleText: { color: '#9a9a9a', fontSize: 12, lineHeight: 17, fontWeight: '700' },
   teamChips: { gap: 8, paddingBottom: 12 },
@@ -326,6 +354,7 @@ const styles = StyleSheet.create({
   playerHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   playerName: { color: '#fff', fontSize: 16, fontWeight: '900' },
   playerMeta: { color: '#777', fontSize: 11, fontWeight: '800', marginTop: 3, textTransform: 'uppercase' },
+  creditMeta: { color: '#d7b56d', fontSize: 11, fontWeight: '900', marginTop: 5 },
   labelBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   labelText: { fontSize: 9, fontWeight: '900' },
   abilitySection: { marginTop: 8 },
