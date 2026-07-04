@@ -107,7 +107,12 @@ describe('broadcast motion', () => {
     const fallenDefender = frame.players.find(player => player.side === 'away' && player.action === 'fall');
 
     expect(ballHandler?.action).toBe('run');
+    expect(ballHandler?.riveState).toBe('dribble_attack');
+    expect(ballHandler?.moment).toBe('ankle_breaker');
     expect(fallenDefender?.slot).toBe(0);
+    expect(fallenDefender?.riveState).toBe('stumble_fall');
+    expect(fallenDefender?.moment).toBe('ankle_breaker');
+    expect(fallenDefender?.intensity).toBe('highlight');
     expect(Math.abs((fallenDefender?.x || 0) - (ballHandler?.x || 0))).toBeLessThan(16);
   });
 
@@ -127,6 +132,8 @@ describe('broadcast motion', () => {
     const thief = frame.players.find(player => player.side === 'home' && player.action === 'run');
 
     expect(thief?.slot).toBe(0);
+    expect(thief?.riveState).toBe('runout_dribble');
+    expect(thief?.moment).toBe('steal');
     expect(frame.ball.detached).toBe(false);
     expect(Math.abs(frame.ball.x - (thief?.x || 0))).toBeLessThan(6);
     expect(thief?.x).toBeGreaterThan(45);
@@ -148,7 +155,22 @@ describe('broadcast motion', () => {
     const handler = frame.players.find(player => player.side === 'home' && player.slot === 0);
 
     expect(frame.ball.detached).toBe(true);
+    expect(handler?.riveState).toBe('turnover_react');
+    expect(handler?.moment).toBe('turnover');
     expect(Math.abs(frame.ball.x - (handler?.x || 0))).toBeGreaterThan(7);
+  });
+
+  it('exposes a stable Rive-ready animation contract for every player', () => {
+    const frame = buildBroadcastMotionFrame({ actors, scene: { ...flowScene, type: 'dunk', side: 'home', jumbotronCue: 'POSTER', crowdEnergy: 'eruption' }, tick: 52 });
+
+    expect(frame.players).toHaveLength(10);
+    frame.players.forEach(player => {
+      expect(player.riveState).toMatch(/^[a-z0-9_]+$/);
+      expect(player.moment).toMatch(/^[a-z0-9_]+$/);
+      expect(['ambient', 'normal', 'highlight']).toContain(player.intensity);
+    });
+    expect(frame.players.some(player => player.riveState === 'poster_fall')).toBe(true);
+    expect(frame.players.some(player => player.riveState === 'dunk_finish')).toBe(true);
   });
 
   it('moves players through postgame celebration, sportsmanship, and locker exit beats', () => {

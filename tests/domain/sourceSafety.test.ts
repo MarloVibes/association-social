@@ -1457,6 +1457,20 @@ describe('source safety regressions', () => {
     expect(broadcast).not.toContain('{homeScore}</SvgText>');
   });
 
+  it('keeps broadcast motion Rive-ready with stable animation states', () => {
+    const motion = source('domain/nba/broadcastMotion.ts');
+    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
+
+    expect(motion).toContain('BroadcastRiveState');
+    expect(motion).toContain('BroadcastAnimationMoment');
+    expect(motion).toContain('riveStateFor');
+    expect(motion).toContain("'poster_fall'");
+    expect(motion).toContain("'stumble_fall'");
+    expect(motion).toContain("'runout_dribble'");
+    expect(motion).toContain("'deep_three_release'");
+    expect(broadcast).toContain('player.riveState');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

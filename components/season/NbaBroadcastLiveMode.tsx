@@ -180,7 +180,7 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
             const fallRotate = player.action === 'fall' ? (actor.side === 'home' ? -74 : 74) : 0;
             const fallY = player.action === 'fall' ? 3.2 : 0;
             return (
-              <G key={actor.id} transform={`rotate(${fallRotate} ${sx} ${sy}) translate(0 ${fallY})`}>
+              <G key={actor.id} data-rive-state={player.riveState} transform={`rotate(${fallRotate} ${sx} ${sy}) translate(0 ${fallY})`}>
                 <Circle cx={sx} cy={sy - (isBig ? 3.1 : 2.7) + actionLift} r={isBig ? 2.2 : 1.9} fill={skin} stroke="#111111" strokeWidth="0.25" />
                 <Rect x={sx - (isBig ? 2.6 : 2.2)} y={sy - 1.4 + actionLift} width={isBig ? 5.2 : 4.4} height={isBig ? 5.8 : 5.1} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.5" />
                 <SvgText x={sx} y={sy + 2.2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.5" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>

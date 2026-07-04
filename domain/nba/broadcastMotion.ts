@@ -10,7 +10,32 @@ export type BroadcastMotionPlayer = {
   y: number;
   role: 'handler' | 'wing' | 'corner' | 'big' | 'defender';
   action: 'run' | 'space' | 'defend' | 'shoot' | 'finish' | 'rebound' | 'block' | 'fall' | 'celebrate' | 'sportsmanship' | 'exit';
+  riveState: BroadcastRiveState;
+  moment: BroadcastAnimationMoment;
+  intensity: BroadcastAnimationIntensity;
 };
+
+export type BroadcastAnimationIntensity = 'ambient' | 'normal' | 'highlight';
+export type BroadcastAnimationMoment = 'flow' | 'shot' | 'deep_three' | 'rim_finish' | 'poster' | 'ankle_breaker' | 'block' | 'rebound' | 'steal' | 'turnover' | 'postgame';
+export type BroadcastRiveState =
+  | 'idle'
+  | 'run'
+  | 'space'
+  | 'defend'
+  | 'dribble_attack'
+  | 'runout_dribble'
+  | 'jump_shot'
+  | 'deep_three_release'
+  | 'rim_finish'
+  | 'dunk_finish'
+  | 'poster_fall'
+  | 'stumble_fall'
+  | 'rebound_gather'
+  | 'block_jump'
+  | 'turnover_react'
+  | 'celebrate'
+  | 'sportsmanship'
+  | 'locker_exit';
 
 export type BroadcastMotionFrame = {
   players: BroadcastMotionPlayer[];
@@ -24,6 +49,48 @@ export type BroadcastMotionFrame = {
 const SLOT_X = [50, 24, 76, 36, 64];
 const SLOT_LANE_Y = [50, 42, 58, 35, 65];
 const ROLE_BY_SLOT: BroadcastMotionPlayer['role'][] = ['handler', 'wing', 'corner', 'wing', 'big'];
+
+function animationMomentForScene(scene: BroadcastScene): BroadcastAnimationMoment {
+  if (scene.type === 'deep_three') return 'deep_three';
+  if (scene.type === 'three' || scene.type === 'free_throw' || scene.type === 'miss') return 'shot';
+  if (scene.type === 'dunk') return 'poster';
+  if (scene.type === 'rim_finish') return 'rim_finish';
+  if (scene.type === 'ankle_breaker') return 'ankle_breaker';
+  if (scene.type === 'block') return 'block';
+  if (scene.type === 'rebound') return 'rebound';
+  if (scene.type === 'steal') return 'steal';
+  if (scene.type === 'turnover') return 'turnover';
+  if (scene.type === 'postgame') return 'postgame';
+  return 'flow';
+}
+
+function intensityFor({ scene, action }: { scene: BroadcastScene; action: BroadcastMotionPlayer['action'] }): BroadcastAnimationIntensity {
+  if (scene.type === 'dunk' || scene.type === 'ankle_breaker' || scene.type === 'deep_three') return 'highlight';
+  if (action === 'shoot' || action === 'finish' || action === 'block' || action === 'rebound' || action === 'fall' || action === 'celebrate') return 'highlight';
+  if (scene.type === 'flow') return 'ambient';
+  return 'normal';
+}
+
+function riveStateFor({ scene, action, actor, offense }: { scene: BroadcastScene; action: BroadcastMotionPlayer['action']; actor: BroadcastActor; offense: boolean }): BroadcastRiveState {
+  if (action === 'celebrate') return 'celebrate';
+  if (action === 'sportsmanship') return 'sportsmanship';
+  if (action === 'exit') return 'locker_exit';
+  if (action === 'block') return 'block_jump';
+  if (action === 'rebound') return 'rebound_gather';
+  if (scene.type === 'turnover' && offense && actor.slot === 0) return 'turnover_react';
+  if (scene.type === 'steal' && offense && actor.slot === 0) return 'runout_dribble';
+  if (scene.type === 'ankle_breaker' && action === 'fall') return 'stumble_fall';
+  if (scene.type === 'ankle_breaker' && offense && actor.slot === 0) return 'dribble_attack';
+  if (scene.type === 'dunk' && action === 'fall') return 'poster_fall';
+  if (scene.type === 'dunk' && action === 'finish') return 'dunk_finish';
+  if (scene.type === 'rim_finish' && action === 'finish') return 'rim_finish';
+  if (scene.type === 'deep_three' && action === 'shoot') return 'deep_three_release';
+  if ((scene.type === 'three' || scene.type === 'free_throw' || scene.type === 'miss') && action === 'shoot') return 'jump_shot';
+  if (action === 'run') return 'run';
+  if (action === 'space') return 'space';
+  if (action === 'defend') return 'defend';
+  return 'idle';
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
@@ -92,6 +159,7 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
     const wave = Math.sin((tick + actor.slot * 7) / 7);
     if (scene.postgameStage === 'celebration') {
       const celebrating = actor.side === winner;
+      const action: BroadcastMotionPlayer['action'] = celebrating ? 'celebrate' : 'defend';
       return {
         actor,
         id: actor.id,
@@ -100,10 +168,14 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
         x: celebrating ? 42 + actor.slot * 4.2 : SLOT_X[actor.slot],
         y: celebrating ? 45 + wave * 3 : actor.side === 'home' ? 72 - actor.slot * 2 : 24 + actor.slot * 2,
         role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
-        action: celebrating ? 'celebrate' : 'defend',
+        action,
+        riveState: riveStateFor({ scene, action, actor, offense: false }),
+        moment: 'postgame',
+        intensity: intensityFor({ scene, action }),
       };
     }
     if (scene.postgameStage === 'sportsmanship') {
+      const action: BroadcastMotionPlayer['action'] = 'sportsmanship';
       return {
         actor,
         id: actor.id,
@@ -112,9 +184,13 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
         x: 20 + actor.slot * 10,
         y: actor.side === 'home' ? 53 : 45,
         role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
-        action: 'sportsmanship',
+        action,
+        riveState: riveStateFor({ scene, action, actor, offense: false }),
+        moment: 'postgame',
+        intensity: intensityFor({ scene, action }),
       };
     }
+    const action: BroadcastMotionPlayer['action'] = 'exit';
     return {
       actor,
       id: actor.id,
@@ -123,7 +199,10 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
       x: SLOT_X[actor.slot],
       y: actor.side === 'home' ? 92 - actor.slot * 2 : 8 + actor.slot * 2,
       role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
-      action: 'exit',
+      action,
+      riveState: riveStateFor({ scene, action, actor, offense: false }),
+      moment: 'postgame',
+      intensity: intensityFor({ scene, action }),
     };
   });
 }
@@ -174,6 +253,7 @@ export function buildBroadcastMotionFrame({ actors, scene, tick }: { actors: Bro
       : scene.type === 'dunk' || scene.type === 'rim_finish'
         ? (slot === 0 ? 0 : slot % 2 === 0 ? 3 : -3)
         : 0;
+    const action = actionForScene(scene, actor, offense);
     return {
       actor,
       id: actor.id,
@@ -182,7 +262,10 @@ export function buildBroadcastMotionFrame({ actors, scene, tick }: { actors: Bro
       x: clamp(x + sceneXShift + cut, 8, 92),
       y: clamp(y, 6, 94),
       role: offense ? (slot === 0 ? 'handler' : ROLE_BY_SLOT[slot] || 'wing') : 'defender',
-      action: actionForScene(scene, actor, offense),
+      action,
+      riveState: riveStateFor({ scene, action, actor, offense }),
+      moment: animationMomentForScene(scene),
+      intensity: intensityFor({ scene, action }),
     };
   });
 
