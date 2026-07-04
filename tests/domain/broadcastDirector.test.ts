@@ -39,6 +39,11 @@ describe('broadcast director', () => {
       type: 'block',
       jumbotronCue: 'BLOCK',
     });
+    expect(buildBroadcastScene({ event: event({ points: 2, text: 'Ja Morant crosses up the defender and shakes him to the floor' }), homeTeamId: 'NYK', awayTeamId: 'BOS' })).toMatchObject({
+      type: 'ankle_breaker',
+      jumbotronCue: 'ANKLE BREAKER',
+      crowdEnergy: 'eruption',
+    });
   });
 
   it('uses coaching style to change spacing hints without creating mid-game controls', () => {

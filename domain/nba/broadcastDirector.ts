@@ -1,7 +1,7 @@
 import type { LiveTimelineEvent } from './liveTimeline';
 import { normalizeScheduleKey } from './scheduleView';
 
-export type BroadcastSceneType = 'flow' | 'three' | 'deep_three' | 'dunk' | 'rim_finish' | 'miss' | 'rebound' | 'block' | 'steal' | 'turnover' | 'free_throw' | 'postgame';
+export type BroadcastSceneType = 'flow' | 'three' | 'deep_three' | 'dunk' | 'rim_finish' | 'miss' | 'rebound' | 'block' | 'steal' | 'turnover' | 'ankle_breaker' | 'free_throw' | 'postgame';
 export type CrowdEnergy = 'idle' | 'swell' | 'eruption' | 'dip' | 'quiet';
 export type PostgameStage = 'none' | 'buzzer' | 'celebration' | 'sportsmanship' | 'locker_exit' | 'settled';
 
@@ -64,6 +64,7 @@ function sceneTypeFor(event: LiveTimelineEvent | null | undefined): Pick<Broadca
   if (event.eventType === 'final_buzzer') return { type: 'postgame', jumbotronCue: 'FINAL', crowdEnergy: 'swell' };
   const text = String(event.text || '').toLowerCase();
   const points = Number(event.points || event.statDelta?.points || 0);
+  if (/\b(ankle|crossover|crossed|stumble|shakes|snatches)\b/.test(text)) return { type: 'ankle_breaker', jumbotronCue: 'ANKLE BREAKER', crowdEnergy: 'eruption' };
   if (event.eventType === 'block' || text.includes('block')) return { type: 'block', jumbotronCue: 'BLOCK', crowdEnergy: 'swell' };
   if (text.includes('steal')) return { type: 'steal', jumbotronCue: 'STEAL', crowdEnergy: 'swell' };
   if (event.eventType === 'turnover' || text.includes('turnover')) return { type: 'turnover', jumbotronCue: 'TURNOVER', crowdEnergy: 'dip' };

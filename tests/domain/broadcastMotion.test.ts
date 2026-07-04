@@ -23,7 +23,7 @@ const flowScene: BroadcastScene = {
 };
 
 describe('broadcast motion', () => {
-  it('uses full-court possession travel instead of left-right head bobbing', () => {
+  it('uses side-view possession travel toward a basket instead of vertical board travel', () => {
     const early = buildBroadcastMotionFrame({ actors, scene: flowScene, tick: 8 });
     const late = buildBroadcastMotionFrame({ actors, scene: flowScene, tick: 52 });
     const earlyHandler = early.players.find(player => player.role === 'handler');
@@ -32,9 +32,9 @@ describe('broadcast motion', () => {
     expect(early.players).toHaveLength(10);
     expect(earlyHandler?.side).toBe('home');
     expect(lateHandler?.side).toBe('home');
-    expect(Math.abs((lateHandler?.y || 0) - (earlyHandler?.y || 0))).toBeGreaterThan(18);
-    expect(Math.abs((lateHandler?.x || 0) - (earlyHandler?.x || 0))).toBeLessThan(12);
-    expect(late.ball.y).toBeLessThan(early.ball.y);
+    expect(Math.abs((lateHandler?.x || 0) - (earlyHandler?.x || 0))).toBeGreaterThan(24);
+    expect(Math.abs((lateHandler?.y || 0) - (earlyHandler?.y || 0))).toBeLessThan(14);
+    expect(late.ball.x).toBeGreaterThan(early.ball.x);
   });
 
   it('detaches the ball on shot scenes instead of pinning it to the player hip', () => {
@@ -55,6 +55,60 @@ describe('broadcast motion', () => {
     expect(frame.ball.detached).toBe(true);
     expect(Math.abs(frame.ball.x - (shooter?.x || 0))).toBeGreaterThan(5);
     expect(frame.ball.y).toBeLessThan(shooter?.y || 100);
+  });
+
+  it('puts blocks and rebounds near the active rim for broadcast-readable moments', () => {
+    const blockScene: BroadcastScene = {
+      ...flowScene,
+      id: 'block',
+      type: 'block',
+      side: 'away',
+      jumbotronCue: 'BLOCK',
+      crowdEnergy: 'swell',
+      x: 73,
+      y: 47,
+    };
+    const reboundScene: BroadcastScene = {
+      ...flowScene,
+      id: 'rebound',
+      type: 'rebound',
+      side: 'away',
+      jumbotronCue: 'REBOUND',
+      crowdEnergy: 'swell',
+      x: 73,
+      y: 47,
+    };
+
+    const blockFrame = buildBroadcastMotionFrame({ actors, scene: blockScene, tick: 48 });
+    const reboundFrame = buildBroadcastMotionFrame({ actors, scene: reboundScene, tick: 48 });
+    const shotBlocker = blockFrame.players.find(player => player.action === 'block');
+    const rebounder = reboundFrame.players.find(player => player.action === 'rebound');
+
+    expect(shotBlocker?.side).toBe('home');
+    expect(shotBlocker?.x).toBeLessThan(32);
+    expect(rebounder?.x).toBeLessThan(32);
+    expect(Math.abs((shotBlocker?.y || 0) - (rebounder?.y || 0))).toBeLessThan(16);
+  });
+
+  it('turns ankle-breaker events into a defender fall animation state', () => {
+    const ankleBreakerScene: BroadcastScene = {
+      ...flowScene,
+      id: 'ankle-breaker',
+      type: 'ankle_breaker',
+      side: 'home',
+      jumbotronCue: 'ANKLE BREAKER',
+      crowdEnergy: 'eruption',
+      x: 62,
+      y: 48,
+    };
+
+    const frame = buildBroadcastMotionFrame({ actors, scene: ankleBreakerScene, tick: 44 });
+    const ballHandler = frame.players.find(player => player.side === 'home' && player.slot === 0);
+    const fallenDefender = frame.players.find(player => player.side === 'away' && player.action === 'fall');
+
+    expect(ballHandler?.action).toBe('run');
+    expect(fallenDefender?.slot).toBe(0);
+    expect(Math.abs((fallenDefender?.x || 0) - (ballHandler?.x || 0))).toBeLessThan(16);
   });
 
   it('moves players through postgame celebration, sportsmanship, and locker exit beats', () => {
