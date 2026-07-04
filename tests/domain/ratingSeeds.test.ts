@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { buildBaselineRatingProfiles } from '../../domain/nba/ratingSeeds';
 import { gradeRank } from '../../domain/nba/gradeScale';
@@ -6,6 +8,20 @@ import { buildScoutingGrades } from '../../domain/nba/scoutingGrades';
 
 describe('rating seed baselines', () => {
   const profiles = () => buildBaselineRatingProfiles();
+  const currentPool = () => JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/current-player-pool.json'), 'utf8'));
+  const historicalPools = () => [
+    { era: 'magic_bird', season: 1984, data: JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/magic_bird-player-pool.json'), 'utf8')) },
+    { era: 'jordan', season: 1992, data: JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/jordan-player-pool.json'), 'utf8')) },
+    { era: 'kobe', season: 2003, data: JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/kobe-player-pool.json'), 'utf8')) },
+    { era: 'lebron', season: 2011, data: JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/lebron-player-pool.json'), 'utf8')) },
+    { era: 'steph', season: 2017, data: JSON.parse(readFileSync(resolve(__dirname, '../../data/nba/steph-player-pool.json'), 'utf8')) },
+  ];
+  const normalizeCoverageKey = (value: unknown) => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
   const findProfile = (name: string, team: string, season: number) => {
     const profile = profiles().find(candidate => (
       candidate.full_name === name
@@ -22,6 +38,8 @@ describe('rating seed baselines', () => {
     const lebron2011 = profiles.find(profile => profile.player_id === 'lebron-james-2011');
     const rose2011 = profiles.find(profile => profile.player_id === 'derrick-rose-2011');
 
+    expect(lebron2011?.visibleIdentity?.reputation).toMatch(/Legend|Superstar|Star/);
+    expect(rose2011?.visibleIdentity?.reputation).toMatch(/Superstar|Star/);
     expect(lebron2011?.development_curve.potential_grade).toBe('A+');
     expect(rose2011?.development_curve.potential_grade).toBe('A+');
     expect(lebron2011?.age).toBe(26);
@@ -30,6 +48,159 @@ describe('rating seed baselines', () => {
     expect(lebron2011?.category_skill_grades.playmaking.grade).toMatch(/^A/);
     expect(rose2011?.category_skill_grades.playmaking.grade).toMatch(/^A|S/);
     expect(gradeRank(lebron2011?.skill_grades.passing || 'F')).toBeGreaterThanOrEqual(gradeRank('A-'));
+  });
+
+  it('gives every generated baseline profile a visible card identity', () => {
+    for (const profile of buildBaselineRatingProfiles()) {
+      expect(profile.visibleIdentity?.grades, `${profile.full_name} ${profile.season} needs visible identity grades`).toBeTruthy();
+      expect(profile.visibleIdentity?.primaryRole, `${profile.full_name} ${profile.season} needs a card role`).toBeTruthy();
+      expect(profile.visibleIdentity?.reputation, `${profile.full_name} ${profile.season} needs card reputation`).toBeTruthy();
+      expect(profile.visibleIdentity?.tier, `${profile.full_name} ${profile.season} needs a primary tier`).toBeTruthy();
+      expect(profile.visibleIdentity?.archetypes?.length, `${profile.full_name} ${profile.season} needs archetype tags`).toBeGreaterThan(0);
+      expect(profile.visibleIdentity?.developmentOutlook, `${profile.full_name} ${profile.season} needs a development outlook`).toBeTruthy();
+      expect(profile.visibleIdentity?.potentialLabel, `${profile.full_name} ${profile.season} needs a potential label`).toBeTruthy();
+    }
+  });
+
+  it('separates baseline player tiers from archetypes for recognizable player types', () => {
+    const rose2011 = findProfile('Derrick Rose', 'CHI', 2011);
+    const korver2017 = findProfile('Kyle Korver', 'CLE', 2017);
+    const gobert2017 = findProfile('Rudy Gobert', 'UTA', 2017);
+    const jaylenBrown2017 = findProfile('Jaylen Brown', 'BOS', 2017);
+
+    expect(rose2011.visibleIdentity.tier).toBe('Superstar');
+    expect(rose2011.visibleIdentity.archetypes).toContain('Primary Creator');
+    expect(rose2011.visibleIdentity.archetypes).toContain('Athletic Finisher');
+
+    expect(korver2017.visibleIdentity.tier).toMatch(/Valuable Rotation Player|Specialist \/ Depth Piece/);
+    expect(korver2017.visibleIdentity.archetypes).toContain('Catch-and-Shoot Specialist');
+    expect(korver2017.visibleIdentity.archetypes).not.toContain('Primary Creator');
+
+    expect(gobert2017.visibleIdentity.tier).toMatch(/Star|High-Impact Contributor/);
+    expect(gobert2017.visibleIdentity.archetypes).toContain('Rim Protector');
+    expect(gobert2017.visibleIdentity.archetypes).toContain('Defensive Anchor');
+
+    expect(jaylenBrown2017.visibleIdentity.tier).toBe('Valuable Rotation Player');
+    expect(jaylenBrown2017.visibleIdentity.developmentTag).toBe('Prospect');
+    expect(jaylenBrown2017.visibleIdentity.potentialLabel).toMatch(/Star Upside|High-Impact Upside/);
+  });
+
+  it('includes current-pool NBA stars in generated 2026 baselines', () => {
+    const tatum2026 = findProfile('Jayson Tatum', 'BOS', 2026);
+
+    expect(tatum2026.visibleIdentity.reputation).toMatch(/Star|Superstar/);
+    expect(tatum2026.visibleIdentity.primaryRole).toMatch(/Scoring Wing|Two-Way Wing|Shot Creator/);
+  });
+
+  it('has a generated 2026 baseline for every current-pool NBA player', () => {
+    const currentProfiles = profiles().filter(profile => profile.season === 2026);
+    const covered = new Set(currentProfiles.map(profile => (
+      `${normalizeCoverageKey(profile.full_name)}|${String(profile.team || '').toUpperCase()}`
+    )));
+    const missing = currentPool().players
+      .filter((player: any) => !covered.has(`${normalizeCoverageKey(player.full_name)}|${String(player.team || '').toUpperCase()}`))
+      .map((player: any) => `${player.full_name} ${player.team}`);
+
+    expect(missing).toEqual([]);
+  });
+
+  it('has a generated baseline identity for every historical era-pool NBA player', () => {
+    const allProfiles = profiles();
+    const missing = historicalPools().flatMap(({ era, season, data }) => {
+      const covered = new Set(
+        allProfiles
+          .filter(profile => profile.season === season)
+          .map(profile => normalizeCoverageKey(profile.full_name)),
+      );
+      return data.players
+        .filter((player: any) => !covered.has(normalizeCoverageKey(player.full_name)))
+        .map((player: any) => `${era} ${player.full_name}`);
+    });
+
+    expect(missing).toEqual([]);
+  });
+
+  it('does not label core-production baseline players as role players', () => {
+    for (const profile of buildBaselineRatingProfiles()) {
+      const source = profile.source_stat_line;
+      const production = Number(source.pointsPerGame || 0) + Number(source.reboundsPerGame || 0) + Number(source.assistsPerGame || 0);
+      const minutes = Number(source.minutesPerGame || 0);
+      const winShares = Number(source.winShares || 0);
+      const games = Number(source.games || 0);
+      const coreProduction = (games >= 50 && minutes >= 28 && production >= 18) || winShares >= 5;
+
+      if (!coreProduction) continue;
+
+      expect(
+        profile.visibleIdentity.reputation,
+        `${profile.full_name} ${profile.season} has core production and should not show as a role player`,
+      ).not.toBe('Role Player');
+    }
+  });
+
+  it('uses basketball-specific card roles instead of defaulting wings to shot creator', () => {
+    const korver2017 = findProfile('Kyle Korver', 'CLE', 2017);
+    const klay2017 = findProfile('Klay Thompson', 'GSW', 2017);
+    const kiddGilchrist2017 = findProfile('Michael Kidd-Gilchrist', 'CHA', 2017);
+    const jeramiGrant2017 = findProfile('Jerami Grant', 'OKC', 2017);
+    const gobert2017 = findProfile('Rudy Gobert', 'UTA', 2017);
+    const edwards2026 = findProfile('Anthony Edwards', 'MIN', 2026);
+    const darwinCook1984 = findProfile('Darwin Cook', 'NJN', 1984);
+    const magic1984 = findProfile('Magic Johnson', 'LAL', 1984);
+    const stockton1992 = findProfile('John Stockton', 'UTA', 1992);
+    const paul2011 = findProfile('Chris Paul', 'NOH', 2011);
+
+    expect(korver2017.visibleIdentity.primaryRole).toBe('Movement Shooter');
+    expect(klay2017.visibleIdentity.primaryRole).toBe('Two-Way Wing');
+    expect(klay2017.visibleIdentity.secondaryRole).toBe('Movement Shooter');
+    expect(kiddGilchrist2017.visibleIdentity.primaryRole).toBe('Defensive Wing');
+    expect(jeramiGrant2017.visibleIdentity.primaryRole).toBe('Switch Forward');
+    expect(gobert2017.visibleIdentity.primaryRole).toBe('Rim Protector');
+    expect(edwards2026.visibleIdentity.primaryRole).toBe('Scoring Wing');
+    expect(darwinCook1984.visibleIdentity.primaryRole).not.toBe('Defensive Wing');
+    expect(magic1984.visibleIdentity.primaryRole).toBe('Floor General');
+    expect(stockton1992.visibleIdentity.primaryRole).toBe('Floor General');
+    expect(paul2011.visibleIdentity.primaryRole).toBe('Floor General');
+  });
+
+  it('leads scoring big player cards with offensive identity before rebounding', () => {
+    const dirk2011 = findProfile('Dirk Nowitzki', 'DAL', 2011);
+    const bosh2011 = findProfile('Chris Bosh', 'MIA', 2011);
+    const aldridge2011 = findProfile('LaMarcus Aldridge', 'POR', 2011);
+    const rodman1992 = findProfile('Dennis Rodman', 'DET', 1992);
+
+    expect(dirk2011.visibleIdentity.primaryRole).toBe('Stretch Big');
+    expect(bosh2011.visibleIdentity.primaryRole).toBe('Midrange Big');
+    expect(aldridge2011.visibleIdentity.primaryRole).toBe('Post Scorer');
+    expect(rodman1992.visibleIdentity.primaryRole).toBe('Glass Cleaner');
+  });
+
+  it('does not create MVP or superstar labels from generated career math alone', () => {
+    const reggie1992 = findProfile('Reggie Miller', 'IND', 1992);
+    const pau2011 = findProfile('Pau Gasol', 'LAL', 2011);
+    const ray2011 = findProfile('Ray Allen', 'BOS', 2011);
+    const marion2011 = findProfile('Shawn Marion', 'DAL', 2011);
+    const rose2011 = findProfile('Derrick Rose', 'CHI', 2011);
+    const rose2017 = findProfile('Derrick Rose', 'NYK', 2017);
+
+    for (const profile of [reggie1992, pau2011, ray2011, marion2011]) {
+      expect(profile.source_stat_line.scoutingTags).not.toContain('mvp');
+      expect(profile.visibleIdentity.reputation).not.toBe('Legend');
+      expect(profile.visibleIdentity.reputation).not.toBe('Superstar');
+    }
+
+    expect(rose2011.visibleIdentity.reputation).toBe('Superstar');
+    expect(rose2017.visibleIdentity.reputation).not.toBe('Superstar');
+  });
+
+  it('caps non-legacy late-career reputation below star tier', () => {
+    const hayes1984 = findProfile('Elvin Hayes', 'HOU', 1984);
+    const malone2003 = findProfile('Karl Malone', 'LAL', 2003);
+    const lebron2026 = findProfile('LeBron James', 'LAL', 2026);
+
+    expect(hayes1984.visibleIdentity.reputation).toBe('Starter');
+    expect(malone2003.visibleIdentity.reputation).toBe('Starter');
+    expect(lebron2026.visibleIdentity.reputation).toBe('Superstar');
   });
 
   it('does not inflate 2011 Derrick Rose into an elite three point shooter', () => {
@@ -142,6 +313,20 @@ describe('rating seed baselines', () => {
     }
   });
 
+  it('does not give rookie-era players their future-prime production', () => {
+    const paulGeorge2011 = findProfile('Paul George', 'IND', 2011);
+    const jaylenBrown2017 = findProfile('Jaylen Brown', 'BOS', 2017);
+
+    expect(paulGeorge2011.source_stat_line.pointsPerGame).toBeLessThanOrEqual(12);
+    expect(paulGeorge2011.source_stat_line.minutesPerGame).toBeLessThanOrEqual(26);
+    expect(paulGeorge2011.visibleIdentity.reputation).toBe('Role Player');
+    expect(paulGeorge2011.source_stat_line.scoutingTags).not.toContain('high_usage_creator');
+
+    expect(jaylenBrown2017.source_stat_line.pointsPerGame).toBeLessThanOrEqual(9);
+    expect(jaylenBrown2017.source_stat_line.minutesPerGame).toBeLessThanOrEqual(24);
+    expect(jaylenBrown2017.visibleIdentity.reputation).toBe('Prospect');
+  });
+
   it('does not trust impossible generated three point samples as elite shooting proof', () => {
     const truckRobinson1984 = findProfile('Truck Robinson', 'NYK', 1984);
     const eddyCurry2003 = findProfile('Eddy Curry', 'CHI', 2003);
@@ -201,6 +386,7 @@ describe('rating seed baselines', () => {
     expect(simmons2017.source_stat_line.minutesPerGame).toBeLessThan(18);
     expect(simmons2017.source_stat_line.assistsPerGame).toBeLessThan(4);
     expect(gradeRank(simmons2017.category_skill_grades.playmaking.grade)).toBeLessThan(gradeRank('A-'));
+    expect(simmons2017.visibleIdentity.reputation).toBe('Prospect');
     expect(gradeRank(simmons2017.development_curve.potential_grade)).toBeGreaterThanOrEqual(gradeRank('A-'));
   });
 

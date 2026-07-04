@@ -7,7 +7,7 @@ import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
-import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue } from '@/domain/sports/rosterValue';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 type Player = {
@@ -41,9 +41,9 @@ type Team = {
 
 const FINANCE_DEFINITIONS = {
   payroll: 'Total salary currently committed to players on this roster.',
-  capRoom: 'How much room this team has below the salary cap. Red means the team is already over the cap.',
+  capRoom: 'How much room this team has below its main spending line. Red means the team is already over that limit.',
   salaryCap: 'The league spending line for the current era season.',
-  taxRoom: 'How much room remains before this team crosses the luxury tax line.',
+  taxRoom: 'How much room remains before this team reaches its secondary spending threshold.',
 } as const;
 
 type FinanceDefinitionKey = keyof typeof FINANCE_DEFINITIONS;
@@ -65,6 +65,13 @@ function playerYears(player: Player) {
 
 function playerName(player: Player) {
   return player.full_name || player.name || 'Unknown Player';
+}
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
 }
 
 export default function FinancesScreen() {
@@ -97,13 +104,59 @@ export default function FinancesScreen() {
     };
   }, [leagueId]);
 
+  const sport = normalizeSport(league?.sport);
+  const financeLanguage = sport === 'mlb'
+    ? {
+      roomLabel: 'Budget Room',
+      limitLabel: 'Team Budget',
+      thresholdLabel: 'Reserve Room',
+      availableHint: 'Available',
+      overLimitHint: 'Over budget',
+      beforeThresholdHint: 'Before reserve',
+      overThresholdHint: 'Over reserve',
+      roomDefinition: 'How much room this team has below its team budget. Red means the payroll is already above budget.',
+      limitDefinition: 'The team spending budget for this league season.',
+      thresholdDefinition: 'Extra cushion above budget before the roster becomes financially tight.',
+    }
+    : sport === 'madden'
+      ? {
+        roomLabel: 'Cap Room',
+        limitLabel: 'Salary Cap',
+        thresholdLabel: 'Roster Buffer',
+        availableHint: 'Available',
+        overLimitHint: 'Over cap',
+        beforeThresholdHint: 'Before buffer',
+        overThresholdHint: 'Over buffer',
+        roomDefinition: 'How much room this team has below the salary cap. Red means the team is already over the cap.',
+        limitDefinition: 'The football salary cap for the current season.',
+        thresholdDefinition: 'Extra roster-building cushion above the listed cap line for this simplified franchise model.',
+      }
+      : {
+        roomLabel: 'Cap Room',
+        limitLabel: 'Salary Cap',
+        thresholdLabel: 'Tax Room',
+        availableHint: 'Available',
+        overLimitHint: 'Over cap',
+        beforeThresholdHint: 'Before tax',
+        overThresholdHint: 'Over tax',
+        roomDefinition: 'How much room this team has below the salary cap. Red means the team is already over the cap.',
+        limitDefinition: 'The league spending line for the current era season.',
+        thresholdDefinition: 'How much room remains before this team crosses the luxury tax line.',
+      };
+  const financeDefinitions = {
+    ...FINANCE_DEFINITIONS,
+    capRoom: financeLanguage.roomDefinition,
+    salaryCap: financeLanguage.limitDefinition,
+    taxRoom: financeLanguage.thresholdDefinition,
+  };
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const cap = Number(selectedTeam?.salaryCap || selectedTeam?.budget || league?.salaryCap || league?.teamBudget || getEraCap(league?.era));
+  const rosterComparator = compareSportRosterPlayersByValue(sport);
   const players = useMemo(() => [...(selectedTeam?.players || [])].sort((a, b) => {
     const salaryDiff = playerSalary(b) - playerSalary(a);
     if (salaryDiff !== 0) return salaryDiff;
-    return compareRosterPlayersByValue(a, b);
-  }), [selectedTeam?.players]);
+    return rosterComparator(a, b);
+  }), [rosterComparator, selectedTeam?.players]);
   const payroll = players.reduce((sum, player) => sum + playerSalary(player), 0);
   const capRoom = cap - payroll;
   const taxLine = Math.round(cap * 1.22);
@@ -132,7 +185,7 @@ export default function FinancesScreen() {
       {hint ? <Text style={styles.tileHint}>{hint}</Text> : null}
       {activeFinanceHelp === key ? (
         <View style={styles.definitionBubble}>
-          <Text style={styles.definitionText}>{FINANCE_DEFINITIONS[key]}</Text>
+          <Text style={styles.definitionText}>{financeDefinitions[key]}</Text>
         </View>
       ) : null}
     </View>
@@ -172,7 +225,7 @@ export default function FinancesScreen() {
                     setSelectedPlayer(null);
                   }}
                 >
-                  <SportTeamLogo sport="nba" abbr={team.abbreviation || team.id} era={league?.currentYear} style={styles.chipLogo} fontSize={8} />
+                  <SportTeamLogo sport={sport} abbr={team.abbreviation || team.id} era={league?.currentYear} style={styles.chipLogo} fontSize={8} />
                   <Text style={[styles.teamChipText, selectedTeam.id === team.id && styles.teamChipTextActive]} numberOfLines={1}>{displayScheduleTeamLabel(team.abbreviation || team.name, team.teamId || team.id || 'TEAM')}</Text>
                 </TouchableOpacity>
               ))}
@@ -180,19 +233,19 @@ export default function FinancesScreen() {
 
             <View style={styles.teamHeader}>
               <View style={styles.teamLogoDisc}>
-                <SportTeamLogo sport="nba" abbr={selectedTeam.abbreviation || selectedTeam.id} era={league?.currentYear} style={styles.teamLogo} fontSize={12} />
+                <SportTeamLogo sport={sport} abbr={selectedTeam.abbreviation || selectedTeam.id} era={league?.currentYear} style={styles.teamLogo} fontSize={12} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.teamName}>{displayScheduleTeamLabel(selectedTeam.name || selectedTeam.abbreviation, selectedTeam.teamId || selectedTeam.id || 'Team')}</Text>
+                <Text style={styles.teamName}>{displayScheduleTeamLabel(selectedTeam.name || selectedTeam.abbreviation, selectedTeam.teamId || selectedTeam.id || 'Team', sport)}</Text>
                 <Text style={styles.teamMeta}>{players.length} contracts</Text>
               </View>
             </View>
 
             <View style={styles.financeGrid}>
               {renderFinanceTile('payroll', 'Payroll', money(payroll))}
-              {renderFinanceTile('capRoom', 'Cap Room', money(Math.abs(capRoom)), capRoom >= 0 ? 'Available' : 'Over cap', capRoom < 0)}
-              {renderFinanceTile('salaryCap', 'Salary Cap', money(cap))}
-              {renderFinanceTile('taxRoom', 'Tax Room', money(Math.abs(taxRoom)), taxRoom >= 0 ? 'Before tax' : 'Over tax', taxRoom < 0)}
+              {renderFinanceTile('capRoom', financeLanguage.roomLabel, money(Math.abs(capRoom)), capRoom >= 0 ? financeLanguage.availableHint : financeLanguage.overLimitHint, capRoom < 0)}
+              {renderFinanceTile('salaryCap', financeLanguage.limitLabel, money(cap))}
+              {renderFinanceTile('taxRoom', financeLanguage.thresholdLabel, money(Math.abs(taxRoom)), taxRoom >= 0 ? financeLanguage.beforeThresholdHint : financeLanguage.overThresholdHint, taxRoom < 0)}
             </View>
 
             <View style={styles.capBar}>
@@ -207,7 +260,7 @@ export default function FinancesScreen() {
                 <TouchableOpacity
                   key={player.player_id || player.id || playerName(player)}
                   style={styles.contractRowCompact}
-                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id) })}
+                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id, sport) })}
                 >
                   <Text style={styles.contractName} numberOfLines={1}>{playerName(player)}</Text>
                   <Text style={styles.contractAmount}>{money(playerSalary(player))}</Text>
@@ -226,7 +279,7 @@ export default function FinancesScreen() {
                 <TouchableOpacity
                   key={player.player_id || player.id || playerName(player)}
                   style={styles.contractRow}
-                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id) })}
+                  onPress={() => setSelectedPlayer({ ...player, team: displayScheduleTeamLabel(selectedTeam.abbreviation || selectedTeam.name, selectedTeam.teamId || selectedTeam.id, sport) })}
                 >
                   <Text style={[styles.contractName, styles.nameCol]} numberOfLines={1}>{playerName(player)}</Text>
                   <Text style={[styles.contractMeta, styles.posCol]}>{player.position || '-'}</Text>
@@ -241,7 +294,7 @@ export default function FinancesScreen() {
       <PlayerCard
         player={selectedPlayer}
         era={league?.era || 'current'}
-        sport="nba"
+        sport={sport}
         leagueId={leagueId}
         teamId={selectedTeam?.id || ''}
         leagueDate={leagueDateFromRecord(league)}

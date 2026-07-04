@@ -1,3 +1,5 @@
+import { buildVisibleIdentity, type VisibleNbaIdentity } from './identity';
+
 export type DraftVaultPick = {
   pick: number;
   round: number;
@@ -53,6 +55,11 @@ export type DraftVaultDoc = {
   projectedRound: number;
   source: string;
   sourceUpdatedAt?: string;
+  identity: VisibleNbaIdentity;
+  visibleIdentity: VisibleNbaIdentity;
+  grades: VisibleNbaIdentity['grades'];
+  playerLabel: string;
+  developmentTrait: VisibleNbaIdentity['developmentTrait'];
 };
 
 function slugName(name: string) {
@@ -67,18 +74,54 @@ function splitName(name: string) {
   };
 }
 
+const PROSPECT_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
+
+function inferredPosition(pick: DraftVaultPick) {
+  if (pick.position) return pick.position;
+  const index = Math.max(0, Number(pick.pick || 1) - 1);
+  return PROSPECT_POSITIONS[index % PROSPECT_POSITIONS.length];
+}
+
+function pickTierValue(pick: number, round: number) {
+  const slot = Math.max(1, Number(pick || 60));
+  const roundPenalty = Math.max(0, Number(round || 1) - 1) * 9;
+  return Math.max(54, Math.min(88, 88 - Math.floor((slot - 1) / 4) * 2 - roundPenalty));
+}
+
+export function buildDraftProspectIdentity(pick: DraftVaultPick): VisibleNbaIdentity {
+  const position = inferredPosition(pick);
+  const base = pickTierValue(pick.pick, pick.round);
+  const guard = position === 'PG' || position === 'SG';
+  const wing = position === 'SF';
+  const big = position === 'PF' || position === 'C';
+  return buildVisibleIdentity({
+    shooting: base + (guard || wing ? 2 : -3),
+    playmaking: base + (position === 'PG' ? 4 : guard ? 1 : -4),
+    defense: base + (wing || big ? 2 : -1),
+    rebounding: base + (big ? 4 : wing ? 1 : -5),
+    athleticism: base + 1,
+    basketballIq: base,
+    consistency: Math.max(50, base - 7),
+    chemistry: Math.max(54, base - 4),
+    potential: Math.min(99, base + 8),
+    age: 19,
+    seasonsPlayed: 0,
+  });
+}
+
 export function buildDraftPlayerId(name: string, pick: number, year: number) {
   return `draft_${year}_${pick}_${slugName(name)}`;
 }
 
 export function buildDraftVaultDoc(input: DraftVaultInput): DraftVaultDoc {
   const names = splitName(input.pick.name);
+  const visibleIdentity = buildDraftProspectIdentity(input.pick);
   return {
     bref_id: buildDraftPlayerId(input.pick.name, input.pick.pick, input.year),
     full_name: input.pick.name,
     first_name: names.firstName,
     last_name: names.lastName,
-    position: input.pick.position || '',
+    position: inferredPosition(input.pick),
     height: input.pick.height || '',
     weight: input.pick.weight || '',
     birth_date: input.pick.birthDate || '',
@@ -104,5 +147,10 @@ export function buildDraftVaultDoc(input: DraftVaultInput): DraftVaultDoc {
     projectedRound: input.pick.round,
     source: input.source,
     sourceUpdatedAt: input.sourceUpdatedAt,
+    identity: visibleIdentity,
+    visibleIdentity,
+    grades: visibleIdentity.grades,
+    playerLabel: visibleIdentity.reputation.toUpperCase(),
+    developmentTrait: visibleIdentity.developmentTrait,
   };
 }

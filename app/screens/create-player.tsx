@@ -45,6 +45,12 @@ const sanitizeEditableRatings = (ratings: Record<string, any>, sport?: string | 
   );
 };
 
+function playerNamePlaceholder(sport?: string | null) {
+  if (sport === 'madden') return 'Franchise QB';
+  if (sport === 'mlb') return 'Top Prospect';
+  return 'Custom Player';
+}
+
 
 // Auto-format height on blur. User types digits, gets feet'inches".
 // Examples: "7" -> 7'0", "66" -> 6'6", "611" -> 6'11", "6-11" -> 6'11"
@@ -122,6 +128,7 @@ export default function CreatePlayerScreen() {
 
   const leagueId = params.leagueId;
   const editorSchema = getPlayerEditorSchema(leagueSport);
+  const namePlaceholder = playerNamePlaceholder(leagueSport);
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
@@ -370,7 +377,7 @@ export default function CreatePlayerScreen() {
         <Text style={styles.sectionLabel}>IDENTITY</Text>
         <View style={styles.card}>
           <Text style={styles.fieldLabel}>Full Name *</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder='Bron James Jr' placeholderTextColor='#555' />
+          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder={namePlaceholder} placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Position *</Text>
           <View style={styles.posRow}>
             {editorSchema.positions.map(p => (
@@ -404,8 +411,8 @@ export default function CreatePlayerScreen() {
           <Text style={styles.helper}>{"Enter the player's annual cap hit. Used for trade balance math."}</Text>
           <Text style={styles.fieldLabel}>Contract Years</Text>
           <TextInput style={styles.input} value={contractYears} onChangeText={setContractYears} keyboardType='number-pad' placeholder='1' placeholderTextColor='#555' />
-          <Text style={styles.fieldLabel}>Role</Text>
-          <TextInput style={styles.input} value={role} onChangeText={setRole} placeholder='Starter, rotation, prospect...' placeholderTextColor='#555' />
+          <Text style={styles.fieldLabel}>Archetype Notes</Text>
+          <TextInput style={styles.input} value={role} onChangeText={setRole} placeholder='3-and-D wing, rim protector, microwave scorer...' placeholderTextColor='#555' />
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput style={[styles.input, styles.textArea]} value={bio} onChangeText={setBio} multiline placeholder='Optional backstory...' placeholderTextColor='#555' />
         </View>

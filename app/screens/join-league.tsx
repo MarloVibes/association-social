@@ -17,6 +17,31 @@ const ERA_LABELS: Record<string, string> = {
   current: '📅 Current Rosters (25-26)',
 };
 
+function sportLabel(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return 'NFL';
+  if (sport === 'mlb') return 'MLB';
+  return 'NBA';
+}
+
+function sportIcon(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return '🏈';
+  if (sport === 'mlb') return '⚾';
+  if (sport === 'nba') return '🏀';
+  return '🎮';
+}
+
+function modeLabel(mode?: string | null) {
+  if (mode === 'draft') return 'Fantasy Draft';
+  if (mode === 'current') return 'Current Rosters';
+  if (mode === 'random') return 'Random Teams';
+  return mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : 'Current Rosters';
+}
+
+function setupLabel(league: any) {
+  if (league?.sport === 'nba') return ERA_LABELS[league?.era] || league?.era || modeLabel(league?.mode);
+  return modeLabel(league?.mode);
+}
+
 export default function JoinLeagueScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId?: string; leagueName?: string }>();
   const [leagues, setLeagues] = useState<any[]>([]);
@@ -212,8 +237,10 @@ export default function JoinLeagueScreen() {
     const isMember = alreadyMember.has(item.id);
     const requested = alreadyRequested.has(item.id);
     const members = item.members?.length || 1;
-    const sport = item.sport?.toUpperCase() || 'NBA';
-    const era = ERA_LABELS[item.era] || item.era || '';
+    const sport = sportLabel(item.sport);
+    const setup = setupLabel(item);
+    const mode = modeLabel(item.mode);
+    const isNba = item.sport === 'nba';
     return (
       <TouchableOpacity
         style={styles.leagueCard}
@@ -229,9 +256,13 @@ export default function JoinLeagueScreen() {
         <View style={styles.leagueMeta}>
           <Text style={styles.leagueMetaText}>{sport}</Text>
           <Text style={styles.leagueMetaDot}>·</Text>
-          <Text style={styles.leagueMetaText}>{era}</Text>
-          <Text style={styles.leagueMetaDot}>·</Text>
-          <Text style={styles.leagueMetaText}>{item.mode === 'draft' ? 'Draft' : item.mode === 'current' ? 'Current Rosters' : item.mode + ' mode'}</Text>
+          <Text style={styles.leagueMetaText}>{setup}</Text>
+          {isNba ? (
+            <>
+              <Text style={styles.leagueMetaDot}>·</Text>
+              <Text style={styles.leagueMetaText}>{mode}</Text>
+            </>
+          ) : null}
         </View>
         <View style={styles.commRow}>
           <Text style={styles.commLabel}>Commissioner: </Text>
@@ -300,7 +331,7 @@ export default function JoinLeagueScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>🏀</Text>
+              <Text style={styles.emptyIcon}>{sportIcon(filterSport)}</Text>
               <Text style={styles.emptyText}>No leagues found</Text>
             </View>
           }
@@ -323,16 +354,18 @@ export default function JoinLeagueScreen() {
               <View style={styles.modalInfoCard}>
                 <View style={styles.modalInfoRow}>
                   <Text style={styles.modalInfoLabel}>Sport</Text>
-                  <Text style={styles.modalInfoValue}>{selectedLeague.sport?.toUpperCase()}</Text>
+                  <Text style={styles.modalInfoValue}>{sportLabel(selectedLeague.sport)}</Text>
                 </View>
                 <View style={styles.modalInfoRow}>
-                  <Text style={styles.modalInfoLabel}>Era</Text>
-                  <Text style={styles.modalInfoValue}>{ERA_LABELS[selectedLeague.era] || selectedLeague.era}</Text>
+                  <Text style={styles.modalInfoLabel}>{selectedLeague.sport === 'nba' ? 'Era' : 'Setup'}</Text>
+                  <Text style={styles.modalInfoValue}>{setupLabel(selectedLeague)}</Text>
                 </View>
-                <View style={styles.modalInfoRow}>
-                  <Text style={styles.modalInfoLabel}>Mode</Text>
-                  <Text style={styles.modalInfoValue}>{selectedLeague.mode === 'draft' ? 'Draft' : selectedLeague.mode === 'current' ? 'Current Rosters' : selectedLeague.mode}</Text>
-                </View>
+                {selectedLeague.sport === 'nba' ? (
+                  <View style={styles.modalInfoRow}>
+                    <Text style={styles.modalInfoLabel}>Mode</Text>
+                    <Text style={styles.modalInfoValue}>{modeLabel(selectedLeague.mode)}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.modalInfoRow}>
                   <Text style={styles.modalInfoLabel}>Commissioner</Text>
                   <Text style={styles.modalInfoValue}>{selectedLeague.commDisplayName || 'Unknown'}{selectedLeague.commUsername ? ' (@' + selectedLeague.commUsername + ')' : ''}</Text>

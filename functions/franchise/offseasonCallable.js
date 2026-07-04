@@ -91,6 +91,50 @@ function usesNbaOffseasonSequence(sport) {
   return sport !== 'mlb' && sport !== 'madden' && sport !== 'nfl';
 }
 
+function normalizeSport(sport) {
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function sportFreeAgentPoolId(sport) {
+  const normalized = normalizeSport(sport);
+  if (normalized === 'madden') return 'madden_fa';
+  if (normalized === 'mlb') return 'mlb_fa';
+  return '';
+}
+
+function playerKey(player) {
+  return String(player && (player.player_id || player.id || player.bref_id || player.full_name || player.name) || '');
+}
+
+function seededSportFreeAgent(player, sport, seasonYear) {
+  const id = playerKey(player);
+  return {
+    ...player,
+    id: player && player.id || id,
+    player_id: player && player.player_id || id,
+    full_name: player && (player.full_name || player.name) || 'Free Agent',
+    sport: normalizeSport(sport),
+    team: '',
+    freeAgent: true,
+    freeAgentSource: 'seeded_sport_pool',
+    freeAgencySeason: seasonYear,
+  };
+}
+
+function mergeFreeAgents(existing, seeded) {
+  const seen = new Set();
+  const merged = [];
+  for (const player of [...(existing || []), ...(seeded || [])]) {
+    const key = playerKey(player);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    merged.push(player);
+  }
+  return merged;
+}
+
 function hasLotteryComplete(offseason) {
   return Boolean(
     offseason
@@ -309,6 +353,7 @@ function transitionForCallable(input) {
 }
 
 async function writeFreeAgencyPoolIfNeeded({
+  db,
   tx,
   leagueRef,
   teamsQuery,
@@ -316,16 +361,26 @@ async function writeFreeAgencyPoolIfNeeded({
   teamDocs,
   previousStage,
   offseason,
+  sport,
 }) {
   if (!offseason || offseason.stage !== 'free_agency' || previousStage === 'free_agency') return;
-  const pending = materializeFreeAgencyPool(teams, offseason.seasonYear, []);
-  if (pending.freeAgents.length === 0) return;
+  const sportPoolId = sportFreeAgentPoolId(sport);
+  const pendingExpired = materializeFreeAgencyPool(teams, offseason.seasonYear, []);
+  if (pendingExpired.freeAgents.length === 0 && !sportPoolId) return;
   const poolRef = leagueRef.collection('free_agents').doc(`contracts_${offseason.seasonYear}`);
-  const poolSnap = await tx.get(poolRef);
+  const [poolSnap, seededPoolSnap] = await Promise.all([
+    tx.get(poolRef),
+    sportPoolId && db ? tx.get(db.collection('era_player_pools').doc(sportPoolId)) : Promise.resolve(null),
+  ]);
   const existingFreeAgents = poolSnap.exists && Array.isArray((poolSnap.data() || {}).players)
     ? (poolSnap.data() || {}).players
     : [];
-  const materialized = materializeFreeAgencyPool(teams, offseason.seasonYear, existingFreeAgents);
+  const seededFreeAgents = seededPoolSnap && seededPoolSnap.exists && Array.isArray((seededPoolSnap.data() || {}).players)
+    ? (seededPoolSnap.data() || {}).players.map(player => seededSportFreeAgent(player, sport, offseason.seasonYear))
+    : [];
+  const startingFreeAgents = mergeFreeAgents(existingFreeAgents, seededFreeAgents);
+  const materialized = materializeFreeAgencyPool(teams, offseason.seasonYear, startingFreeAgents);
+  if (materialized.freeAgents.length === existingFreeAgents.length) return;
   const byId = new Map(materialized.teams.map(team => [String(team.id), team]));
   (teamDocs || []).forEach((doc) => {
     const original = teams.find(team => String(team.id) === String(doc.id));
@@ -338,7 +393,7 @@ async function writeFreeAgencyPoolIfNeeded({
   if (materialized.freeAgents.length > existingFreeAgents.length) {
     tx.set(poolRef, {
       seasonYear: offseason.seasonYear,
-      source: 'contract_expiration',
+      source: seededFreeAgents.length > 0 ? 'contract_expiration_and_seeded_sport_pool' : 'contract_expiration',
       players: materialized.freeAgents,
     }, { merge: true });
   }
@@ -466,6 +521,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
             : null,
         });
         await writeFreeAgencyPoolIfNeeded({
+          db,
           tx,
           leagueRef,
           teamsQuery,
@@ -473,6 +529,7 @@ function createAdvanceOffseasonHandler({ getFirestore, serverTimestamp, HttpsErr
           teamDocs: teamsSnap.docs,
           previousStage: input.expectedStage,
           offseason,
+          sport: league.sport,
         });
         expansionTeamDocs.forEach(team => tx.set(teamsQuery.doc(team.id), team.data));
         tx.update(leagueRef, { offseason });
@@ -611,6 +668,7 @@ function createAdvanceDueOffseasonsHandler({
               : null,
           });
           await writeFreeAgencyPoolIfNeeded({
+            db,
             tx,
             leagueRef,
             teamsQuery: leagueRef.collection('teams'),
@@ -618,6 +676,7 @@ function createAdvanceDueOffseasonsHandler({
             teamDocs: teamsSnap.docs,
             previousStage: expectedStage,
             offseason,
+            sport: league.sport,
           });
           tx.update(leagueRef, { offseason });
           return { advanced: true, leagueId: leagueDoc.id, league, offseason };

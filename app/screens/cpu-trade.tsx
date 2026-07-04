@@ -1,14 +1,22 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
+import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/FranchisePlayerRow';
 import { getPositionFilters } from '@/domain/sports/playerFields';
-import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/domain/sports/rosterValue';
 
 const keyOf = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').trim().toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
 
 export default function CpuTradeScreen() {
   const { leagueId, cpuTeamId, cpuAbbr, cpuName, prefillGet } = useLocalSearchParams<{ leagueId: string; cpuTeamId: string; cpuAbbr: string; cpuName?: string; prefillGet?: string }>();
@@ -24,8 +32,9 @@ export default function CpuTradeScreen() {
   const [getPosFilter, setGetPosFilter] = useState('ALL');
   const user = auth.currentUser;
   const userId = user?.uid;
-  const sport = league?.sport || 'nba';
+  const sport = normalizeSport(league?.sport);
   const positionFilters = getPositionFilters(sport);
+  const rosterComparator = useMemo(() => compareSportRosterPlayersByValue(sport), [sport]);
 
   useEffect(() => {
     if (!leagueId || !userId) return;
@@ -35,23 +44,25 @@ export default function CpuTradeScreen() {
         const ld = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
         setLeague({ id: leagueId, ...ld });
         const eraKey = ld.era || 'current';
-        const poolKey = (ld.sport && ld.sport !== 'nba') ? ld.sport : eraKey;
+        const loadedSport = normalizeSport(ld.sport);
+        const loadedComparator = compareSportRosterPlayersByValue(loadedSport);
+        const poolKey = loadedSport !== 'nba' ? loadedSport : eraKey;
 
         const mySnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', leagueId + '_' + userId));
         if (mySnap.exists()) {
           const md = mySnap.data() as any;
           setMyTeam({ id: mySnap.id, ...md });
-          setMyRoster([...(md.players || [])].sort(compareRosterPlayersByValue));
+          setMyRoster([...(md.players || [])].sort(loadedComparator));
         }
 
         // CPU roster: live doc if already materialized, else the era pool
         const cpuSnap = await getDoc(doc(db, 'leagues', leagueId, 'teams', 'cpu_' + cpuTeamId));
         if (cpuSnap.exists()) {
-          setCpuRoster([...((cpuSnap.data() as any).players || [])].sort(compareRosterPlayersByValue));
+          setCpuRoster([...((cpuSnap.data() as any).players || [])].sort(loadedComparator));
         } else {
           const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
           const pool = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
-          setCpuRoster(pool.filter((p: any) => p.team === cpuAbbr).sort(compareRosterPlayersByValue));
+          setCpuRoster(pool.filter((p: any) => p.team === cpuAbbr).sort(loadedComparator));
         }
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -95,12 +106,17 @@ export default function CpuTradeScreen() {
   };
 
   const Row = ({ p, selected, onPress }: { p: any; selected: boolean; onPress: () => void }) => (
-    <TouchableOpacity style={[styles.row, selected && styles.rowSel]} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.pos}>{p.position || '?'}</Text>
-      <Text style={styles.pname}>{p.full_name}</Text>
-      {p.salary ? <Text style={styles.psal}>{p.salary <= 1272870 ? '$Min' : '$' + (p.salary / 1000000).toFixed(1) + 'M'}</Text> : null}
-      <Text style={[styles.check, selected && styles.checkOn]}>{selected ? '✓' : '+'}</Text>
-    </TouchableOpacity>
+    <FranchisePlayerRow
+      player={p}
+      sport={sport}
+      salary={p.salary || p.contract?.salary || p.currentSalary}
+      salaryLabel={`${formatFranchisePlayerMoney(p.salary || p.contract?.salary || p.currentSalary)} salary`}
+      selected={selected}
+      gradeCount={3}
+      showRank={false}
+      onPress={onPress}
+      action={{ label: selected ? '✓' : '+', variant: selected ? 'neutral' : 'primary', onPress }}
+    />
   );
 
   return (
@@ -119,16 +135,16 @@ export default function CpuTradeScreen() {
           <PositionFilterRow filters={positionFilters} selected={givePosFilter} onChange={setGivePosFilter} />
           {myRoster.length === 0 ? <Text style={styles.empty}>No players on your roster.</Text> :
             myRoster
-              .filter(p => matchesRosterPosition(p, givePosFilter))
-              .sort(compareRosterPlayersByValue)
+              .filter(p => matchesSportRosterPosition(p, givePosFilter, sport))
+              .sort(rosterComparator)
               .map((p, i) => <Row key={keyOf(p) + i} p={p} selected={give.has(keyOf(p))} onPress={() => toggle(give, setGive, keyOf(p))} />)}
 
           <Text style={[styles.section, { marginTop: 18 }]}>📥 You get ({get.size}) — from {cpuName || cpuAbbr}</Text>
           <PositionFilterRow filters={positionFilters} selected={getPosFilter} onChange={setGetPosFilter} />
           {cpuRoster.length === 0 ? <Text style={styles.empty}>No players found for this team.</Text> :
             cpuRoster
-              .filter(p => matchesRosterPosition(p, getPosFilter))
-              .sort(compareRosterPlayersByValue)
+              .filter(p => matchesSportRosterPosition(p, getPosFilter, sport))
+              .sort(rosterComparator)
               .map((p, i) => <Row key={keyOf(p) + i} p={p} selected={get.has(keyOf(p))} onPress={() => toggle(get, setGet, keyOf(p))} />)}
 
           <TouchableOpacity style={[styles.submit, (sending || (give.size === 0 && get.size === 0)) && { opacity: 0.5 }]} onPress={submit} disabled={sending || (give.size === 0 && get.size === 0)}>

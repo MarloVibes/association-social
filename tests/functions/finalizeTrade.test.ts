@@ -252,14 +252,16 @@ describe('finalizeTrade domain', () => {
   });
 
   it('derives Madden and MLB CPU identities from trusted pool abbreviations', () => {
-    const players = [{ team: 'KC' }, { team: 'kc' }, { team: 'LAD' }, { team: '' }];
+    const players = [{ team: 'KC' }, { team: 'kc' }, { team: 'LAD' }, { team: 'ATH' }, { team: '' }];
     expect(canonicalCpuTeams('madden', players, [])).toEqual([
-      { id: 'KC', abbreviation: 'KC' },
-      { id: 'LAD', abbreviation: 'LAD' },
+      { id: 'ATH', abbreviation: 'ATH', name: 'ATH' },
+      { id: 'KC', abbreviation: 'KC', name: 'Kansas City Chiefs' },
+      { id: 'LAD', abbreviation: 'LAD', name: 'LAD' },
     ]);
     expect(canonicalCpuTeams('mlb', players, [])).toEqual([
-      { id: 'KC', abbreviation: 'KC' },
-      { id: 'LAD', abbreviation: 'LAD' },
+      { id: 'ATH', abbreviation: 'ATH', name: 'Athletics' },
+      { id: 'KC', abbreviation: 'KC', name: 'Kansas City Royals' },
+      { id: 'LAD', abbreviation: 'LAD', name: 'Los Angeles Dodgers' },
     ]);
   });
 
@@ -331,6 +333,140 @@ describe('finalizeTrade domain', () => {
       source: {
         give: [{ player_id: 'bench', full_name: 'Bench Guard', position: 'PG', overall: 70, age: 28 }],
         get: [{ player_id: 'star', full_name: 'CPU Star', position: 'SF', overall: 94, age: 27 }],
+        givePicks: [],
+        getPicks: [],
+      },
+    });
+
+    expect(decision.decision).toBe('decline');
+    expect(decision.reasons.join(' ')).toContain('star');
+  });
+
+  it('protects stat-rich Madden CPU stars without raw overall ratings', () => {
+    const cpuQuarterback = {
+      player_id: 'qb-star',
+      sport: 'madden',
+      full_name: 'CPU Franchise QB',
+      position: 'QB',
+      passing_yards: 4520,
+      passing_tds: 36,
+      rushing_yards: 380,
+      ratings: { awareness: 91, technique: 88, speed: 82 },
+      age: 27,
+    };
+    const decision = evaluateCpuTrade({
+      league: { sport: 'madden' },
+      proposerTeam: {
+        players: [
+          {
+            player_id: 'depth-wr',
+            sport: 'madden',
+            full_name: 'Depth Receiver',
+            position: 'WR',
+            receiving_yards: 180,
+            ratings: { awareness: 60, speed: 70 },
+            age: 29,
+          },
+        ],
+      },
+      cpuTeam: {
+        wins: 11,
+        losses: 5,
+        players: [
+          cpuQuarterback,
+          {
+            player_id: 'wr-two',
+            sport: 'madden',
+            full_name: 'CPU WR2',
+            position: 'WR',
+            receiving_yards: 850,
+            ratings: { awareness: 75, speed: 83 },
+            age: 25,
+          },
+        ],
+      },
+      source: {
+        give: [
+          {
+            player_id: 'depth-wr',
+            sport: 'madden',
+            full_name: 'Depth Receiver',
+            position: 'WR',
+            receiving_yards: 180,
+            ratings: { awareness: 60, speed: 70 },
+            age: 29,
+          },
+        ],
+        get: [cpuQuarterback],
+        givePicks: [],
+        getPicks: [],
+      },
+    });
+
+    expect(decision.decision).toBe('decline');
+    expect(decision.reasons.join(' ')).toContain('star');
+  });
+
+  it('protects stat-rich MLB CPU stars without raw overall ratings', () => {
+    const cpuAce = {
+      player_id: 'ace',
+      sport: 'mlb',
+      full_name: 'CPU Ace',
+      position: 'SP',
+      era: 2.61,
+      whip: 1.02,
+      so: 215,
+      ratings: { command: 90, stamina: 84, velocity: 88 },
+      age: 28,
+    };
+    const decision = evaluateCpuTrade({
+      league: { sport: 'mlb' },
+      proposerTeam: {
+        players: [
+          {
+            player_id: 'bench-bat',
+            sport: 'mlb',
+            full_name: 'Bench Bat',
+            position: 'LF',
+            avg: 0.218,
+            hr: 4,
+            ratings: { contact: 58, power: 61 },
+            age: 30,
+          },
+        ],
+      },
+      cpuTeam: {
+        wins: 88,
+        losses: 74,
+        players: [
+          cpuAce,
+          {
+            player_id: 'slugger',
+            sport: 'mlb',
+            full_name: 'CPU Slugger',
+            position: '1B',
+            avg: 0.276,
+            hr: 31,
+            rbi: 96,
+            ratings: { contact: 79, power: 87 },
+            age: 27,
+          },
+        ],
+      },
+      source: {
+        give: [
+          {
+            player_id: 'bench-bat',
+            sport: 'mlb',
+            full_name: 'Bench Bat',
+            position: 'LF',
+            avg: 0.218,
+            hr: 4,
+            ratings: { contact: 58, power: 61 },
+            age: 30,
+          },
+        ],
+        get: [cpuAce],
         givePicks: [],
         getPicks: [],
       },

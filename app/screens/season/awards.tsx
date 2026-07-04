@@ -5,13 +5,13 @@ import { httpsCallable } from 'firebase/functions';
 import { type ComponentProps, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
-import { NBA_AWARD_CATEGORIES, recordsForAward, type NbaAwardCategory, type NbaAwardRecord } from '@/domain/nba/awards';
-import { displayScheduleEventText } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, displayScheduleEventText } from '@/domain/nba/scheduleView';
 import { buildNbaStandings } from '@/domain/nba/standings';
 import { seasonUpgradeGrants, type AwardUpgradeInput } from '@/domain/nba/upgradePoints';
+import { awardCategoriesForSport, recordsForSportAward, type SportAwardCategory, type SportAwardRecord } from '@/domain/sports/awards';
 
-type TrophyCaseItem = NbaAwardCategory & {
-  records: NbaAwardRecord[];
+type TrophyCaseItem = SportAwardCategory & {
+  records: SportAwardRecord[];
 };
 
 type AwardsScheduleDoc = {
@@ -46,7 +46,7 @@ type Team = {
 const EAST_TEAMS = new Set(['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DET', 'IND', 'MIA', 'MIL', 'NJN', 'NYK', 'ORL', 'PHI', 'TOR', 'WAS']);
 const WEST_TEAMS = new Set(['DAL', 'DEN', 'GSW', 'HOU', 'LAC', 'LAL', 'MEM', 'MIN', 'NOH', 'NOK', 'NOP', 'OKC', 'PHX', 'POR', 'SAC', 'SAS', 'SEA', 'UTA']);
 
-function recordLabel(record: NbaAwardRecord) {
+function recordLabel(record: SportAwardRecord) {
   const winner = record.winnerName || record.teamName || 'Winner';
   const team = record.teamAbbr || record.teamName;
   const season = record.season ? String(record.season) : '';
@@ -54,12 +54,12 @@ function recordLabel(record: NbaAwardRecord) {
   return displayScheduleEventText(parts.join(' · '));
 }
 
-function awardIconName(item: NbaAwardCategory): ComponentProps<typeof Ionicons>['name'] {
+function awardIconName(item: SportAwardCategory): ComponentProps<typeof Ionicons>['name'] {
   if (item.key === 'championship_rings') return 'diamond';
   if (item.kind === 'championship') return 'trophy';
-  if (item.key === 'defensive_player' || item.key === 'all_defense') return 'shield-checkmark';
+  if (item.key === 'defensive_player' || item.key === 'all_defense' || item.key === 'dpoy' || item.key === 'gold_glove') return 'shield-checkmark';
   if (item.key === 'most_improved') return 'trending-up';
-  if (item.key === 'all_nba') return 'people';
+  if (item.key === 'all_nba' || item.key === 'all_pro') return 'people';
   if (item.key === 'all_star') return 'star';
   if (item.key === 'coach') return 'clipboard';
   return 'ribbon';
@@ -69,7 +69,7 @@ function normalizeTeamKey(value?: string | null) {
   return String(value || '').trim().toUpperCase();
 }
 
-function teamRecordKey(record: NbaAwardRecord) {
+function teamRecordKey(record: SportAwardRecord) {
   return normalizeTeamKey(record.teamAbbr || record.teamName || record.winnerName);
 }
 
@@ -107,10 +107,11 @@ function awardLedgerFor(
   standings: { teamId: string; abbreviation: string; wins: number; losses: number }[],
 ): Record<string, AwardUpgradeInput> {
   const ledger: Record<string, AwardUpgradeInput> = {};
-  recordsForAward(league, 'championship_rings', { currentYear: league?.currentYear, schedule }).forEach(record => (
+  const ledgerSport = league?.sport || 'nba';
+  recordsForSportAward(ledgerSport, league, 'championship_rings', { currentYear: league?.currentYear, schedule }).forEach(record => (
     addFinalResult(ledger, teamRecordKey(record), 'championships')
   ));
-  recordsForAward(league, 'finals_runner_up', { currentYear: league?.currentYear, schedule }).forEach(record => (
+  recordsForSportAward(ledgerSport, league, 'finals_runner_up', { currentYear: league?.currentYear, schedule }).forEach(record => (
     addFinalResult(ledger, teamRecordKey(record), 'finalsRunnerUp')
   ));
   const awardMap: Record<string, string> = {
@@ -126,7 +127,7 @@ function awardLedgerFor(
     all_star: 'all_star',
   };
   Object.entries(awardMap).forEach(([sourceKey, awardKey]) => {
-    recordsForAward(league, sourceKey, { currentYear: league?.currentYear, schedule, teams, standings, includeProjected: false }).forEach(record => (
+    recordsForSportAward(ledgerSport, league, sourceKey, { currentYear: league?.currentYear, schedule, teams, standings, includeProjected: false }).forEach(record => (
       addAward(ledger, teamRecordKey(record), awardKey)
     ));
   });
@@ -194,22 +195,28 @@ export default function AwardsScreen() {
     };
   }, [leagueId]);
 
-  const standings = useMemo(() => buildNbaStandings({
-    games: schedule?.games || [],
-    participants: schedule?.participants || [],
-    teams,
-  }), [schedule?.games, schedule?.participants, teams]);
+  const sport = league?.sport || 'nba';
+  const isNba = sport === 'nba';
+  const standings = useMemo(() => (
+    isNba
+      ? buildNbaStandings({
+        games: schedule?.games || [],
+        participants: schedule?.participants || [],
+        teams,
+      })
+      : []
+  ), [isNba, schedule?.games, schedule?.participants, teams]);
   const trophyCase = useMemo<TrophyCaseItem[]>(() => (
-    NBA_AWARD_CATEGORIES.map(category => ({
+    awardCategoriesForSport(sport).map(category => ({
       ...category,
-      records: recordsForAward(league, category.key, {
+      records: recordsForSportAward(sport, league, category.key, {
         currentYear: league?.currentYear,
         schedule,
         teams,
         standings,
       }),
     }))
-  ), [league, schedule, standings, teams]);
+  ), [league, schedule, sport, standings, teams]);
   const upgradeGrants = useMemo(() => seasonUpgradeGrants({
     standings: standings.map(row => ({
       teamId: row.teamId,
@@ -228,6 +235,7 @@ export default function AwardsScreen() {
   });
   const uid = auth.currentUser?.uid;
   const isLeagueAdmin = Boolean(uid && league && (league.commissionerId === uid || (league.coCommissioners || []).includes(uid)));
+  const awardSectionTitle = isNba ? 'NBA Awards' : sport === 'madden' ? 'NFL Awards' : 'MLB Awards';
 
   const finalizeAwards = async () => {
     if (!leagueId) return;
@@ -292,7 +300,7 @@ export default function AwardsScreen() {
               <Text style={styles.heroTitle}>Awards and Rings</Text>
               <Text style={styles.heroMeta}>Championship hardware, player awards, and league honors live here.</Text>
             </View>
-            {isLeagueAdmin ? (
+            {isLeagueAdmin && isNba ? (
               <View style={styles.grantsPanel}>
                 <View style={styles.grantsCopy}>
                   <Text style={styles.grantsTitle}>Upgrade Point Grants</Text>
@@ -321,11 +329,11 @@ export default function AwardsScreen() {
                   )}
                 </TouchableOpacity>
                 {upgradeGrants.slice(0, 3).map(grant => (
-                  <Text key={grant.teamId} style={styles.grantLine}>{grant.teamId}: {grant.totalPoints} pts</Text>
+                  <Text key={grant.teamId} style={styles.grantLine}>{displayScheduleAbbr(grant.teamId)}: {grant.totalPoints} pts</Text>
                 ))}
               </View>
             ) : null}
-            <Text style={styles.sectionTitle}>NBA Awards</Text>
+            <Text style={styles.sectionTitle}>{awardSectionTitle}</Text>
           </>
         )}
         renderItem={({ item }) => (

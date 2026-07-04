@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildLiveTimeline,
+  commandInsightsForTimeline,
   currentTimelineEvent,
   livePlayerStatsAt,
+  playableLiveTimeline,
   periodLabel,
   starterMatchupsForTimeline,
   type LiveTimelineEvent,
@@ -19,6 +21,8 @@ const supportedEventTypes: LiveTimelineEvent['eventType'][] = [
   'timeout',
   'run',
   'momentum',
+  'drive',
+  'inning',
   'period_end',
   'final_buzzer',
 ];
@@ -96,6 +100,48 @@ describe('Live Mode timeline', () => {
     expect(scoreEvent).not.toHaveProperty('teamId');
     expect(scoreEvent?.tags).toContain('score');
     expect(timeline.events.every(event => supportedEventTypes.includes(event.eventType))).toBe(true);
+  });
+
+  it('accepts sport-specific live event types used by NFL and MLB timelines', () => {
+    const eventTypes: LiveTimelineEvent['eventType'][] = ['drive', 'inning'];
+
+    expect(eventTypes.every(type => supportedEventTypes.includes(type))).toBe(true);
+  });
+
+  it('prefers the separately stored replay timeline over the compact schedule marker', () => {
+    const scheduleTimeline = {
+      version: 2,
+      gameId: 'game-live-1',
+      homeTeamId: 'LAL',
+      awayTeamId: 'BOS',
+      homeScore: 104,
+      awayScore: 101,
+      revealDurationMs: 900_000,
+      periods: [{ period: 1, label: 'Q1', home: 25, away: 23 }],
+    } as any;
+    const storedTimeline = buildLiveTimeline(baseInput);
+
+    expect(playableLiveTimeline({ scheduleTimeline, storedTimeline })).toBe(storedTimeline);
+    expect(playableLiveTimeline({ scheduleTimeline, storedTimeline: null })).toBeNull();
+  });
+
+  it('treats compact timeline markers without events as not yet playable', () => {
+    const compactTimeline = {
+      version: 2,
+      gameId: 'game-live-compact',
+      homeTeamId: 'LAL',
+      awayTeamId: 'BOS',
+      homeScore: 104,
+      awayScore: 101,
+      revealDurationMs: 900_000,
+      periods: [{ period: 1, label: 'Q1', home: 25, away: 23 }],
+      storage: 'liveTimelines',
+    } as any;
+
+    expect(playableLiveTimeline({ scheduleTimeline: compactTimeline, storedTimeline: null })).toBeNull();
+    expect(currentTimelineEvent(compactTimeline, 1_000)).toEqual({ event: null, index: -1 });
+    expect(livePlayerStatsAt(compactTimeline, 1_000)).toEqual([]);
+    expect(commandInsightsForTimeline(compactTimeline, 1_000)).toEqual([]);
   });
 
   it('adds non-scoring play actions and live player stat deltas', () => {
@@ -254,5 +300,68 @@ describe('Live Mode timeline', () => {
 
     expect(starterMatchupsForTimeline(timeline)).toHaveLength(5);
     expect(starterMatchupsForTimeline(null)).toEqual([]);
+  });
+
+  it('surfaces command insights only from revealed enriched events', () => {
+    const timeline = {
+      version: 2,
+      gameId: 'command-game',
+      homeTeamId: 'LAL',
+      awayTeamId: 'BOS',
+      homeScore: 100,
+      awayScore: 96,
+      revealDurationMs: 90_000,
+      periods: [],
+      events: [
+        {
+          id: 'opening-score',
+          period: 1,
+          periodLabel: 'Q1',
+          clockSeconds: 690,
+          elapsedMs: 10_000,
+          homeScore: 2,
+          awayScore: 0,
+          eventType: 'score',
+          actingTeamId: 'LAL',
+          text: 'Home Star made a layup.',
+          x: 58,
+          y: 42,
+          momentum: 1,
+          tags: ['score'],
+          importance: 2,
+          spotlight: 'score',
+          why: 'The early post touch punished a smaller defender.',
+        },
+        {
+          id: 'future-final',
+          period: 4,
+          periodLabel: 'Q4',
+          clockSeconds: 0,
+          elapsedMs: 90_000,
+          homeScore: 100,
+          awayScore: 96,
+          eventType: 'final_buzzer',
+          actingTeamId: 'LAL',
+          text: 'Final: BOS 96 - LAL 100',
+          x: 50,
+          y: 50,
+          momentum: 4,
+          tags: ['final'],
+          importance: 3,
+          spotlight: 'clutch',
+          why: 'LAL closed the game at the line.',
+        },
+      ],
+    } as any;
+
+    expect(commandInsightsForTimeline(timeline, 20_000)).toEqual([
+      expect.objectContaining({
+        id: 'opening-score',
+        title: 'Score',
+        text: 'The early post touch punished a smaller defender.',
+      }),
+    ]);
+    expect(commandInsightsForTimeline(timeline, 20_000).map(item => item.id)).not.toContain('future-final');
+    expect(commandInsightsForTimeline(timeline, 90_000).map(item => item.id)).toContain('future-final');
   });
 });

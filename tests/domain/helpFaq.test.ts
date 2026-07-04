@@ -11,6 +11,10 @@ describe('help faq content', () => {
     expect(allText).toContain('marlollc@icloud.com');
     expect(allText).toContain('franchisemobile');
     expect(allText).toContain('letter grades');
+    expect(allText).toContain('league hub');
+    expect(allText).toContain('sport context');
+    expect(allText).not.toContain('inside the nba');
+    expect(allText).not.toContain('basketball context');
     expect(allText).not.toContain('numeric ratings');
   });
 });

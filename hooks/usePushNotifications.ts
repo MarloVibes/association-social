@@ -38,7 +38,11 @@ function routeFromData(data: any) {
       }
     } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
       if (gameId) {
-        router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
+        if (type === 'game_ready' && data.liveTimeline) {
+          router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition } });
+        } else {
+          router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
+        }
       } else if (leagueId) {
         router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
       }

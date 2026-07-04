@@ -17,6 +17,24 @@ export type NbaScoutingPerformer = {
   points?: number;
   rebounds?: number;
   assists?: number;
+  passingYards?: number;
+  passingTouchdowns?: number;
+  interceptions?: number;
+  rushingYards?: number;
+  rushingTouchdowns?: number;
+  receivingYards?: number;
+  receivingTouchdowns?: number;
+  sacks?: number;
+  tackles?: number;
+  atBats?: number;
+  hits?: number;
+  runs?: number;
+  rbi?: number;
+  homeRuns?: number;
+  stolenBases?: number;
+  inningsPitched?: number;
+  strikeouts?: number;
+  earnedRuns?: number;
 };
 
 type ScoutingBoxPlayer = {
@@ -29,6 +47,24 @@ type ScoutingBoxPlayer = {
   points?: number | null;
   rebounds?: number | null;
   assists?: number | null;
+  passingYards?: number | null;
+  passingTouchdowns?: number | null;
+  interceptions?: number | null;
+  rushingYards?: number | null;
+  rushingTouchdowns?: number | null;
+  receivingYards?: number | null;
+  receivingTouchdowns?: number | null;
+  sacks?: number | null;
+  tackles?: number | null;
+  atBats?: number | null;
+  hits?: number | null;
+  runs?: number | null;
+  rbi?: number | null;
+  homeRuns?: number | null;
+  stolenBases?: number | null;
+  inningsPitched?: number | null;
+  strikeouts?: number | null;
+  earnedRuns?: number | null;
 };
 
 export type NbaScoutingGame = {
@@ -68,18 +104,75 @@ function playerName(player: ScoutingBoxPlayer) {
 }
 
 function playerLines(players: ScoutingBoxPlayer[] | undefined, teamSide: 'team' | 'opponent'): NbaScoutingPerformer[] {
-  return (players || []).map(player => ({
-    playerId: playerId(player),
-    name: playerName(player),
-    teamSide,
-    minutes: numberFrom(player.minutes),
-    points: numberFrom(player.points),
-    rebounds: numberFrom(player.rebounds),
-    assists: numberFrom(player.assists),
-  })).filter(player => player.playerId);
+  return (players || []).map((player) => {
+    const line: NbaScoutingPerformer = {
+      playerId: playerId(player),
+      name: playerName(player),
+      teamSide,
+      minutes: numberFrom(player.minutes),
+      points: numberFrom(player.points),
+      rebounds: numberFrom(player.rebounds),
+      assists: numberFrom(player.assists),
+    };
+    ([
+      'passingYards',
+      'passingTouchdowns',
+      'interceptions',
+      'rushingYards',
+      'rushingTouchdowns',
+      'receivingYards',
+      'receivingTouchdowns',
+      'sacks',
+      'tackles',
+      'atBats',
+      'hits',
+      'runs',
+      'rbi',
+      'homeRuns',
+      'stolenBases',
+      'inningsPitched',
+      'strikeouts',
+      'earnedRuns',
+    ] as const).forEach((key) => {
+      if (player[key] != null) line[key] = numberFrom(player[key]);
+    });
+    return line;
+  }).filter(player => player.playerId);
 }
 
-function scoutingBoxDetails(game: ScoutingGame, isHome: boolean) {
+function performerScore(player: NbaScoutingPerformer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    return numberFrom(player.passingYards)
+      + numberFrom(player.rushingYards) * 1.15
+      + numberFrom(player.receivingYards) * 1.15
+      + numberFrom(player.passingTouchdowns) * 45
+      + numberFrom(player.rushingTouchdowns) * 45
+      + numberFrom(player.receivingTouchdowns) * 45
+      + numberFrom(player.sacks) * 35
+      + numberFrom(player.interceptions) * 35
+      + numberFrom(player.tackles) * 3;
+  }
+  if (sport === 'mlb') {
+    return numberFrom(player.hits) * 12
+      + numberFrom(player.rbi) * 10
+      + numberFrom(player.homeRuns) * 25
+      + numberFrom(player.stolenBases) * 8
+      + numberFrom(player.inningsPitched) * 8
+      + numberFrom(player.strikeouts) * 5
+      - numberFrom(player.earnedRuns) * 5;
+  }
+  return numberFrom(player.points) * 2
+    + numberFrom(player.rebounds) * 1.15
+    + numberFrom(player.assists) * 1.35;
+}
+
+function normalizeSport(sport?: string | null): 'nba' | 'madden' | 'mlb' {
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function scoutingBoxDetails(game: ScoutingGame, isHome: boolean, sport: 'nba' | 'madden' | 'mlb') {
   const teamPlayers = isHome ? game.boxScore?.home?.players : game.boxScore?.away?.players;
   const opponentPlayers = isHome ? game.boxScore?.away?.players : game.boxScore?.home?.players;
   const lines = [
@@ -89,7 +182,8 @@ function scoutingBoxDetails(game: ScoutingGame, isHome: boolean) {
   return {
     topPerformers: [...lines]
       .sort((left, right) => (
-        numberFrom(right.points) - numberFrom(left.points)
+        performerScore(right, sport) - performerScore(left, sport)
+        || numberFrom(right.points) - numberFrom(left.points)
         || numberFrom(right.rebounds) - numberFrom(left.rebounds)
         || numberFrom(right.assists) - numberFrom(left.assists)
         || right.minutes - left.minutes
@@ -104,12 +198,15 @@ function scoutingBoxDetails(game: ScoutingGame, isHome: boolean) {
 }
 
 export function buildNbaScoutingReport({
+  sport: sportInput = 'nba',
   teamId,
   games,
 }: {
+  sport?: string | null;
   teamId: string;
   games: ScoutingGame[];
 }): NbaScoutingReport {
+  const sport = normalizeSport(sportInput);
   const reportGames = games
     .filter(game => isFinalWithScore(game) && (game.homeTeamId === teamId || game.awayTeamId === teamId))
     .sort((a, b) => b.sequence - a.sequence)
@@ -117,7 +214,7 @@ export function buildNbaScoutingReport({
       const isHome = game.homeTeamId === teamId;
       const teamScore = isHome ? game.homeScore as number : game.awayScore as number;
       const opponentScore = isHome ? game.awayScore as number : game.homeScore as number;
-      const boxDetails = scoutingBoxDetails(game, isHome);
+      const boxDetails = scoutingBoxDetails(game, isHome, sport);
       return {
         gameId: game.id,
         opponentTeamId: isHome ? game.awayTeamId : game.homeTeamId,

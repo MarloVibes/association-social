@@ -82,6 +82,48 @@ describe('NBA schedule generation', () => {
     expect(jordanPayload.nbaCup).toBeNull();
   });
 
+  it('creates default NFL and MLB schedules without NBA Cup events', () => {
+    const nflTeams = Array.from({ length: 32 }, (_, index) => ({
+      id: `nfl-${index}`,
+      teamId: `N${index}`,
+      abbreviation: `N${index}`,
+      gmId: index === 0 ? 'gm-nfl' : null,
+    }));
+    const mlbTeams = Array.from({ length: 30 }, (_, index) => ({
+      id: `mlb-${index}`,
+      teamId: `M${index}`,
+      abbreviation: `M${index}`,
+      gmId: index === 0 ? 'gm-mlb' : null,
+    }));
+
+    const nflPayload = buildNbaSchedulePayload({
+      leagueId: 'league-nfl',
+      sport: 'madden',
+      currentYear: 2026,
+      gamesPerTeam: 17,
+      teams: nflTeams,
+      scheduleTeamIds: nflTeams.map(team => team.teamId),
+    });
+    const mlbPayload = buildNbaSchedulePayload({
+      leagueId: 'league-mlb',
+      sport: 'mlb',
+      currentYear: 2026,
+      gamesPerTeam: 162,
+      teams: mlbTeams,
+      scheduleTeamIds: mlbTeams.map(team => team.teamId),
+    });
+
+    expect(nflPayload.games).toHaveLength((32 * 17) / 2);
+    expect(mlbPayload.games).toHaveLength((30 * 162) / 2);
+    expect(nflPayload.nbaCup).toBeNull();
+    expect(mlbPayload.nbaCup).toBeNull();
+    expect(nflPayload.games.find(game => game.homeTeamId === 'N0' || game.awayTeamId === 'N0')).toEqual(expect.objectContaining({
+      status: 'scheduled',
+    }));
+    expect(nflPayload.games.some(game => game.homeGmId === 'gm-nfl' || game.awayGmId === 'gm-nfl')).toBe(true);
+    expect(mlbPayload.games.some(game => game.homeGmId === 'gm-mlb' || game.awayGmId === 'gm-mlb')).toBe(true);
+  });
+
   it('advances NBA Cup from groups through the final champion', () => {
     const payload = buildNbaSchedulePayload({
       leagueId: 'league-cup-advance',

@@ -675,6 +675,110 @@ describe('offseason callable helpers', () => {
     });
   });
 
+  it('includes seeded sport free agents when MLB advances into free agency', async () => {
+    const teamsCollection = {
+      kind: 'teams-query',
+      doc: (id: string) => ({ kind: 'team-doc', id }),
+    };
+    const freeAgentsCollection = {
+      doc: (id: string) => ({ kind: 'free-agents-doc', id }),
+    };
+    const contractOffersCollection = { kind: 'contract-offers-query' };
+    const leagueRef = {
+      collection: (name: string) => {
+        if (name === 'teams') return teamsCollection;
+        if (name === 'free_agents') return freeAgentsCollection;
+        if (name === 'contract_offers') return contractOffersCollection;
+        return { kind: name };
+      },
+    };
+    const faPoolRef = { kind: 'era-player-pool', id: 'mlb_fa' };
+    const leagueSnap = {
+      exists: true,
+      data: () => ({
+        sport: 'mlb',
+        commissionerId: 'comm',
+        offseason: {
+          stage: 're_signing',
+          seasonYear: 2028,
+          completedTeamIds: Array.from({ length: 30 }, (_, index) => `T${index}`),
+          draftStatus: 'none',
+          contractRoundsComplete: true,
+          version: 2,
+        },
+      }),
+    };
+    const teamsSnap = {
+      docs: Array.from({ length: 30 }, (_, index) => ({
+        id: `T${index}`,
+        data: () => ({
+          abbreviation: `T${index}`,
+          gmId: `gm-${index}`,
+          players: index === 0
+            ? [
+              { player_id: 'expired-sp', full_name: 'Expired Starter', position: 'SP', contractYears: 0, contractExpired: true },
+              { player_id: 'kept-ss', full_name: 'Kept Shortstop', position: 'SS', contractYears: 2 },
+            ]
+            : [],
+        }),
+      })),
+    };
+    const writes: any[] = [];
+    const tx = {
+      get: vi.fn(async (ref) => {
+        if (ref === leagueRef) return leagueSnap;
+        if (ref.kind === 'teams-query') return teamsSnap;
+        if (ref.kind === 'contract-offers-query') return { docs: [] };
+        if (ref.kind === 'free-agents-doc') return { exists: false, data: () => ({}) };
+        if (ref.kind === 'era-player-pool') {
+          return {
+            exists: true,
+            data: () => ({
+              players: [
+                { player_id: 'seeded-mlb-fa', full_name: 'Seeded MLB Free Agent', position: 'CF', team: 'FA' },
+              ],
+            }),
+          };
+        }
+        return { exists: false, data: () => ({}) };
+      }),
+      set: vi.fn((ref, data) => writes.push({ ref, data })),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: (name: string) => {
+        if (name === 'era_player_pools') return { doc: () => faPoolRef };
+        return { doc: () => leagueRef };
+      },
+      runTransaction: vi.fn(async (callback) => callback(tx)),
+    };
+    const handler = createAdvanceOffseasonHandler({
+      getFirestore: () => db,
+      serverTimestamp: () => 'server-time',
+      HttpsError: FakeHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'comm' },
+      data: { leagueId: 'league-1', expectedStage: 're_signing', expectedVersion: 2 },
+    });
+
+    expect(writes).toContainEqual({
+      ref: { kind: 'free-agents-doc', id: 'contracts_2028' },
+      data: expect.objectContaining({
+        players: expect.arrayContaining([
+          expect.objectContaining({ player_id: 'expired-sp', previousTeamId: 'T0' }),
+          expect.objectContaining({
+            player_id: 'seeded-mlb-fa',
+            freeAgent: true,
+            freeAgentSource: 'seeded_sport_pool',
+            freeAgencySeason: 2028,
+          }),
+        ]),
+      }),
+    });
+  });
+
   it('requires authentication and maps transition errors to HttpsError', async () => {
     const handler = createAdvanceOffseasonHandler({
       getFirestore: () => ({}),

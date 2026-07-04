@@ -356,6 +356,7 @@ export function advanceNbaCupStage({
 
 export function buildNbaSchedulePayload({
   leagueId,
+  sport = 'nba',
   currentYear,
   era,
   gamesPerTeam,
@@ -363,9 +364,10 @@ export function buildNbaSchedulePayload({
   scheduleTeamIds,
 }: {
   leagueId: string;
+  sport?: string | null;
   currentYear: number;
   era?: string | null;
-  gamesPerTeam: 14 | 29 | 58 | 82;
+  gamesPerTeam: number;
   teams: ClaimedTeam[];
   scheduleTeamIds?: readonly string[];
 }) {
@@ -376,7 +378,7 @@ export function buildNbaSchedulePayload({
     generateSchedule({ teams: scheduleTeams, gamesPerTeam, seed }),
     participants,
   );
-  const rawNbaCup = supportsNbaCupSchedule({ era, currentYear })
+  const rawNbaCup = sport === 'nba' && supportsNbaCupSchedule({ era, currentYear })
     ? buildNbaCupSchedule({ scheduleTeamIds: scheduleTeams, currentYear, seed })
     : null;
   const nbaCup = rawNbaCup

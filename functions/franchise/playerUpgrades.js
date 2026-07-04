@@ -44,6 +44,8 @@ const GRADE_VALUE = {
   'A+': 95,
   S: 99,
 };
+const DEVELOPMENT_ASSIGNMENT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const NBA_MINIMUM_CONTRACT_CUTOFF = 1_300_000;
 const UPGRADE_BUCKETS = {
   shooting: [
     ['threePoint', 0.36],
@@ -272,6 +274,12 @@ function hiddenFloorForGrade(grade) {
   return GRADE_NUMERIC_FLOOR[grade] || 0;
 }
 
+function advanceDevelopmentGrade(grade, levels = 2) {
+  const index = GRADE_LADDER.indexOf(grade);
+  if (index < 0) return grade;
+  return GRADE_LADDER[Math.min(index + levels, GRADE_LADDER.length - 1)];
+}
+
 function syncedRatingSource(source, ability, grade, rating) {
   if (!source || typeof source !== 'object') return source;
   const current = source[ability];
@@ -283,6 +291,138 @@ function syncedRatingSource(source, ability, grade, rating) {
   return {
     ...source,
     [ability]: nextValue,
+  };
+}
+
+function developmentPlayerId(player) {
+  return String(player && (player.id || player.player_id || player.playerId || player.full_name || player.name) || '');
+}
+
+function developmentPlayerName(player) {
+  return player && (player.full_name || player.name) || 'Player';
+}
+
+function isDevelopmentEligiblePlayer(player) {
+  const labels = [
+    player && player.contractType,
+    player && player.contract_type,
+    player && player.rosterSlot,
+    player && player.roster_slot,
+    player && player.status,
+  ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+  if (labels.some(label => label.includes('two') && label.includes('way'))) return true;
+  if (labels.some(label => label.includes('minimum') || label === 'min')) return true;
+  const salary = numberFrom(player && player.salary);
+  return salary > 0 && salary <= NBA_MINIMUM_CONTRACT_CUTOFF;
+}
+
+function isAssignmentActive(assignment, nowMs) {
+  return Boolean(assignment && assignment.status === 'active' && numberFrom(assignment.completesAtMs) > nowMs);
+}
+
+function gradeFromEntry(entry) {
+  if (typeof entry === 'string' && GRADE_LADDER.includes(entry)) return entry;
+  if (!entry || typeof entry !== 'object') return null;
+  const grade = entry.grade || entry.value;
+  return typeof grade === 'string' && GRADE_LADDER.includes(grade) ? grade : null;
+}
+
+function developmentPlayerGrade(player, gradeKey) {
+  const sources = [
+    player && player.skill_grades,
+    player && player.category_skill_grades,
+    player && player.grades,
+    player && player.abilityGrades,
+    player && player.visible && player.visible.grades,
+  ].filter(Boolean);
+  for (const source of sources) {
+    const grade = gradeFromEntry(source[gradeKey]);
+    if (grade) return grade;
+  }
+  return null;
+}
+
+function applyDevelopmentGradeToPlayer(player, gradeKey, grade) {
+  const rating = hiddenFloorForGrade(grade);
+  const nextHidden = player.hidden && typeof player.hidden === 'object'
+    ? {
+      ...player.hidden,
+      [gradeKey]: Math.max(numberFrom(player.hidden[gradeKey]), rating),
+    }
+    : player.hidden;
+  const nextVisible = player.visible && typeof player.visible === 'object'
+    ? {
+      ...player.visible,
+      grades: {
+        ...(player.visible.grades || {}),
+        [gradeKey]: grade,
+      },
+    }
+    : player.visible;
+  return {
+    ...player,
+    grades: player.grades ? { ...player.grades, [gradeKey]: grade } : player.grades,
+    abilityGrades: player.abilityGrades ? { ...player.abilityGrades, [gradeKey]: grade } : player.abilityGrades,
+    skill_grades: syncedRatingSource(player.skill_grades, gradeKey, grade, rating),
+    category_skill_grades: syncedRatingSource(player.category_skill_grades, gradeKey, grade, rating),
+    attribute_model: syncedRatingSource(player.attribute_model, gradeKey, grade, rating),
+    era_adjusted_profiles: syncedRatingSource(player.era_adjusted_profiles, gradeKey, grade, rating),
+    hidden: nextHidden,
+    visible: nextVisible,
+  };
+}
+
+function startDevelopmentAssignment({ team, playerId: targetPlayerId, gradeKey, gradeLabel, nowMs }) {
+  const errors = [];
+  if (isAssignmentActive(team && team.developmentAssignment, nowMs)) errors.push('assignment_active');
+  const player = ((team && team.players) || []).find(item => developmentPlayerId(item) === targetPlayerId);
+  if (!player) errors.push('player_missing');
+  if (player && !isDevelopmentEligiblePlayer(player)) errors.push('player_not_eligible');
+  const currentGrade = player ? developmentPlayerGrade(player, gradeKey) : null;
+  if (!gradeKey || !currentGrade) errors.push('grade_missing');
+  if (errors.length > 0) return { valid: false, errors };
+  const toGrade = advanceDevelopmentGrade(currentGrade, 2);
+  if (toGrade === currentGrade) return { valid: false, errors: ['grade_maxed'] };
+  return {
+    valid: true,
+    errors: [],
+    assignment: {
+      playerId: targetPlayerId,
+      playerName: developmentPlayerName(player),
+      gradeKey,
+      gradeLabel,
+      fromGrade: currentGrade,
+      toGrade,
+      status: 'active',
+      startedAtMs: nowMs,
+      completesAtMs: nowMs + DEVELOPMENT_ASSIGNMENT_DURATION_MS,
+    },
+  };
+}
+
+function completeDevelopmentAssignment({ team, nowMs }) {
+  const assignment = team && team.developmentAssignment;
+  const players = (team && Array.isArray(team.players)) ? team.players : [];
+  if (!assignment || assignment.status !== 'active') return { valid: false, errors: ['assignment_missing'], players };
+  if (numberFrom(assignment.completesAtMs) > nowMs) return { valid: false, errors: ['assignment_not_ready'], players, assignment };
+  const index = players.findIndex(item => developmentPlayerId(item) === assignment.playerId);
+  if (index < 0) return { valid: false, errors: ['player_missing'], players, assignment };
+  const currentGrade = developmentPlayerGrade(players[index], assignment.gradeKey) || assignment.fromGrade;
+  if (!currentGrade) return { valid: false, errors: ['grade_missing'], players, assignment };
+  const toGrade = assignment.toGrade || advanceDevelopmentGrade(currentGrade, 2);
+  const nextPlayers = [...players];
+  nextPlayers[index] = applyDevelopmentGradeToPlayer(nextPlayers[index], assignment.gradeKey, toGrade);
+  return {
+    valid: true,
+    errors: [],
+    players: nextPlayers,
+    assignment: {
+      ...assignment,
+      fromGrade: assignment.fromGrade || currentGrade,
+      toGrade,
+      status: 'completed',
+      completedAtMs: nowMs,
+    },
   };
 }
 
@@ -545,6 +685,98 @@ function createSpendPlayerUpgradeHandler({ getFirestore, HttpsError }) {
   };
 }
 
+function mapDevelopmentError(HttpsError, code) {
+  const messages = {
+    assignment_active: 'Only one player can be in the Development League at a time.',
+    player_missing: 'Player not found.',
+    player_not_eligible: 'Only minimum-contract and two-way players can be sent to the Development League.',
+    grade_missing: 'Choose a valid grade to train.',
+    grade_maxed: 'That grade cannot improve further.',
+    assignment_missing: 'No active Development League assignment found.',
+    assignment_not_ready: 'This Development League assignment is not ready yet.',
+  };
+  const status = code === 'player_missing' || code === 'assignment_missing'
+    ? 'not-found'
+    : code === 'assignment_active' || code === 'assignment_not_ready' || code === 'grade_maxed'
+      ? 'failed-precondition'
+      : 'invalid-argument';
+  return new HttpsError(status, messages[code] || 'Development League action failed.', { code });
+}
+
+function createStartDevelopmentAssignmentHandler({ getFirestore, HttpsError, now = () => Date.now() }) {
+  return async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+    const data = request.data || {};
+    const leagueId = typeof data.leagueId === 'string' ? data.leagueId.trim() : '';
+    const teamId = typeof data.teamId === 'string' ? data.teamId.trim() : '';
+    const targetPlayerId = typeof data.playerId === 'string' ? data.playerId.trim() : '';
+    const gradeKey = typeof data.gradeKey === 'string' ? data.gradeKey.trim() : '';
+    const gradeLabel = typeof data.gradeLabel === 'string' ? data.gradeLabel.trim() : '';
+    if (!leagueId || !teamId || !targetPlayerId || !gradeKey) {
+      throw new HttpsError('invalid-argument', 'Provide leagueId, teamId, playerId, and gradeKey.');
+    }
+
+    const db = getFirestore();
+    const leagueRef = db.collection('leagues').doc(leagueId);
+    const teamRef = leagueRef.collection('teams').doc(teamId);
+    return db.runTransaction(async (tx) => {
+      const [leagueSnap, teamSnap] = await Promise.all([tx.get(leagueRef), tx.get(teamRef)]);
+      if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+      if (!teamSnap.exists) throw new HttpsError('not-found', 'Team not found.');
+      const league = leagueSnap.data() || {};
+      const team = { id: teamSnap.id, ...teamSnap.data() };
+      if (team.gmId !== uid && !isCommissioner(uid, league)) {
+        throw new HttpsError('permission-denied', 'Only the team GM or commissioner can use the Development League.');
+      }
+      const result = startDevelopmentAssignment({
+        team,
+        playerId: targetPlayerId,
+        gradeKey,
+        gradeLabel,
+        nowMs: now(),
+      });
+      if (!result.valid) throw mapDevelopmentError(HttpsError, result.errors[0]);
+      tx.update(teamRef, { developmentAssignment: result.assignment });
+      return { assignment: result.assignment };
+    });
+  };
+}
+
+function createCompleteDevelopmentAssignmentHandler({ getFirestore, HttpsError, now = () => Date.now() }) {
+  return async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+    const data = request.data || {};
+    const leagueId = typeof data.leagueId === 'string' ? data.leagueId.trim() : '';
+    const teamId = typeof data.teamId === 'string' ? data.teamId.trim() : '';
+    if (!leagueId || !teamId) {
+      throw new HttpsError('invalid-argument', 'Provide leagueId and teamId.');
+    }
+
+    const db = getFirestore();
+    const leagueRef = db.collection('leagues').doc(leagueId);
+    const teamRef = leagueRef.collection('teams').doc(teamId);
+    return db.runTransaction(async (tx) => {
+      const [leagueSnap, teamSnap] = await Promise.all([tx.get(leagueRef), tx.get(teamRef)]);
+      if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+      if (!teamSnap.exists) throw new HttpsError('not-found', 'Team not found.');
+      const league = leagueSnap.data() || {};
+      const team = { id: teamSnap.id, ...teamSnap.data() };
+      if (team.gmId !== uid && !isCommissioner(uid, league)) {
+        throw new HttpsError('permission-denied', 'Only the team GM or commissioner can use the Development League.');
+      }
+      const result = completeDevelopmentAssignment({ team, nowMs: now() });
+      if (!result.valid) throw mapDevelopmentError(HttpsError, result.errors[0]);
+      tx.update(teamRef, {
+        players: result.players,
+        developmentAssignment: result.assignment,
+      });
+      return { assignment: result.assignment };
+    });
+  };
+}
+
 function normalizeGrant(raw) {
   return {
     teamId: String(raw && raw.teamId || '').trim(),
@@ -608,14 +840,20 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
 
 module.exports = {
   PlayerUpgradeError,
+  DEVELOPMENT_ASSIGNMENT_DURATION_MS,
   applySeasonUpgradeGrants,
   canUpgradePlayerThisSeason,
   createApplyUpgradeGrantsHandler,
+  createCompleteDevelopmentAssignmentHandler,
+  createStartDevelopmentAssignmentHandler,
   createSpendPlayerUpgradeHandler,
   createUpgradePointNotifications,
+  completeDevelopmentAssignment,
   derivePlayerLabel,
+  isDevelopmentEligiblePlayer,
   nextGrade,
   prepareSeasonGrantUpdates,
+  startDevelopmentAssignment,
   spendTeamUpgradePoint,
   abilityGradesFromStats,
 };

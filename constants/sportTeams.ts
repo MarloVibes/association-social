@@ -35,7 +35,7 @@ export function getSportTeamTheme(sport: string, abbr: string) {
 
 export function getSportTeamName(sport: string, abbr: string): string {
   const team = getSportTeam(sport, abbr);
-  return team ? `${team.city} ${team.name}` : abbr;
+  return team ? [team.city, team.name].filter((part, index, parts) => part && parts.indexOf(part) === index).join(' ') : abbr;
 }
 
 // Real team logos via ESPN's public CDN. Our abbreviations mostly match ESPN's

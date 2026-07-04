@@ -179,6 +179,8 @@ export default function TeamSelectScreen() {
           abbreviation: t.abbr,
           full_name: `${t.city} ${t.name}`,
           name: t.name,
+          conference: t.conference,
+          division: t.division,
           players: [],
         })).sort((a, b) => a.full_name.localeCompare(b.full_name));
       }
@@ -318,8 +320,7 @@ export default function TeamSelectScreen() {
         const maxMembers = typeof currentLeague.maxMembers === 'number'
           ? currentLeague.maxMembers
           : getSportRules(currentLeague.sport).teamCount;
-        shouldGenerateSchedule = currentLeague.sport === 'nba'
-          && currentLeague.scheduleLocked !== true
+        shouldGenerateSchedule = currentLeague.scheduleLocked !== true
           && currentLeague.mode !== 'draft';
         selectedGamesPerTeam = Number(currentLeague.gamesPerTeam || 29);
 
@@ -338,6 +339,8 @@ export default function TeamSelectScreen() {
           teamId: team.id,
           name: team.full_name,
           abbreviation: team.abbreviation,
+          conference: team.conference || null,
+          division: team.division || null,
           era: poolKey,
           players,
           picks,
@@ -374,17 +377,17 @@ export default function TeamSelectScreen() {
               });
             } catch (fallbackError) {
               scheduleCreationFailed = true;
-              console.warn('Failed to create NBA schedule locally after team claim', fallbackError);
+              console.warn('Failed to create schedule locally after team claim', fallbackError);
             }
           } else {
             scheduleCreationFailed = true;
-            console.warn('Failed to create NBA schedule after team claim', e);
+            console.warn('Failed to create schedule after team claim', e);
           }
         }
         if (scheduleCreationFailed) {
           Alert.alert(
             'Team claimed',
-            'The team was claimed, but the schedule did not lock. Open League Settings > NBA Schedule to create and lock it.'
+            'The team was claimed, but the schedule did not lock. Open League Settings to create and lock it.'
           );
         }
       }

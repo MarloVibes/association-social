@@ -6,6 +6,13 @@ import { auth, db } from '@/constants/firebase';
 
 const MIN_SALARY = 500000; // Override floor (below NBA min to allow buyouts / partial salaries)
 
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').trim().toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
 function formatSalary(n: number): string {
   if (!n) return '$Min';
   if (n < 1000000) return '$' + Math.round(n / 1000) + 'K';
@@ -44,7 +51,8 @@ export default function SalaryOverridesScreen() {
 
       // Load era player pool for search
       const era = ld.era || 'current';
-      const poolKey = (ld.sport && ld.sport !== 'nba') ? ld.sport : era;
+      const sport = normalizeSport(ld.sport);
+      const poolKey = sport !== 'nba' ? sport : era;
       const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
       if (poolSnap.exists()) {
         setAllPlayers((poolSnap.data() as any).players || []);

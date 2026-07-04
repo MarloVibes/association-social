@@ -5,7 +5,8 @@ import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
-import { COACHING_PRESETS, coachingPresetInfoText, validateCoachingPreset, type CoachingPreset } from '@/domain/nba/coaching';
+import { coachingPresetInfoText, validateCoachingPreset, type CoachingPreset } from '@/domain/nba/coaching';
+import { defaultPresetsForSport, normalizeSport, type FranchiseSport } from '@/domain/sports/coachingPresets';
 
 type Team = {
   id: string;
@@ -15,7 +16,27 @@ type Team = {
   defaultSecondHalfCoachingPresetId?: string;
 };
 
-function tendencyRows(preset: CoachingPreset) {
+function tendencyRows(preset: CoachingPreset, sport: FranchiseSport) {
+  if (sport === 'madden') {
+    return [
+      { label: 'Tempo', value: preset.modifiers.pace },
+      { label: 'Pass', value: preset.modifiers.threePointRate },
+      { label: 'Run', value: preset.modifiers.rimPressure },
+      { label: 'Control', value: preset.modifiers.midrangeRate },
+      { label: 'Pressure', value: preset.modifiers.turnovers },
+      { label: 'Physical', value: preset.modifiers.rebounding },
+    ];
+  }
+  if (sport === 'mlb') {
+    return [
+      { label: 'Pace', value: preset.modifiers.pace },
+      { label: 'Power', value: preset.modifiers.rimPressure },
+      { label: 'Contact', value: preset.modifiers.midrangeRate },
+      { label: 'Pressure', value: preset.modifiers.turnovers },
+      { label: 'Control', value: preset.modifiers.fouls },
+      { label: 'Defense', value: preset.modifiers.rebounding },
+    ];
+  }
   return [
     { label: 'Tempo', value: preset.modifiers.pace },
     { label: 'Spacing', value: preset.modifiers.threePointRate },
@@ -40,6 +61,8 @@ export default function CoachingPresetsScreen() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
   const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
+  const sport = normalizeSport(leagueSport);
+  const phaseLabels = sport === 'mlb' ? ['Early Game', 'Late Game'] : ['Opening Plan', 'Adjustment Plan'];
 
   useEffect(() => {
     if (!leagueId) return;
@@ -59,9 +82,9 @@ export default function CoachingPresetsScreen() {
 
   const presets = useMemo(() => {
     const byId = new Map<string, CoachingPreset>();
-    [...COACHING_PRESETS, ...(team?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
+    [...defaultPresetsForSport(sport), ...(team?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
     return [...byId.values()];
-  }, [team?.coachingPresets]);
+  }, [sport, team?.coachingPresets]);
   const selectedPreset = useMemo(() => (
     presets.find(preset => preset.id === firstHalfPresetId) || presets.find(preset => preset.id === team?.defaultCoachingPresetId) || presets[0]
   ), [firstHalfPresetId, presets, team?.defaultCoachingPresetId]);
@@ -89,7 +112,7 @@ export default function CoachingPresetsScreen() {
     setSavingId(preset.id);
     try {
       await httpsCallable(functions, 'saveTeamCoachingPreset')({ leagueId, preset, secondHalfPresetId });
-      Alert.alert('Saved', `${preset.name} will open games. ${secondHalfPreset?.name || preset.name} is saved as the halftime adjustment.`);
+      Alert.alert('Saved', `${preset.name} will open games. ${secondHalfPreset?.name || preset.name} is saved as the matchup adjustment.`);
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -120,9 +143,7 @@ export default function CoachingPresetsScreen() {
                 <Text style={styles.title}>Coaching</Text>
               </View>
             </View>
-            {leagueSport !== 'nba' ? (
-              <Text style={styles.empty}>Coaching presets are only available for NBA leagues.</Text>
-            ) : !team ? (
+            {!team ? (
               <Text style={styles.empty}>Claim a team before saving coaching presets.</Text>
             ) : (
               <>
@@ -137,21 +158,23 @@ export default function CoachingPresetsScreen() {
                       <Ionicons color="#00e58b" name="information-circle-outline" size={22} />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.courtPanel}>
-                    <View style={styles.halfCourtPreview}>
-                      <View style={styles.courtThreeArc} />
-                      <View style={styles.courtPaint} />
-                      <View style={styles.courtFreeThrowCircle} />
-                      <View style={styles.courtRim} />
-                      <View style={[styles.courtNode, styles.courtNodeOne]} />
-                      <View style={[styles.courtNode, styles.courtNodeTwo]} />
-                      <View style={[styles.courtNode, styles.courtNodeThree]} />
-                      <View style={[styles.courtNode, styles.courtNodeFour]} />
-                      <View style={[styles.courtNode, styles.courtNodeFive]} />
+                  {sport === 'nba' ? (
+                    <View style={styles.courtPanel}>
+                      <View style={styles.halfCourtPreview}>
+                        <View style={styles.courtThreeArc} />
+                        <View style={styles.courtPaint} />
+                        <View style={styles.courtFreeThrowCircle} />
+                        <View style={styles.courtRim} />
+                        <View style={[styles.courtNode, styles.courtNodeOne]} />
+                        <View style={[styles.courtNode, styles.courtNodeTwo]} />
+                        <View style={[styles.courtNode, styles.courtNodeThree]} />
+                        <View style={[styles.courtNode, styles.courtNodeFour]} />
+                        <View style={[styles.courtNode, styles.courtNodeFive]} />
+                      </View>
                     </View>
-                  </View>
+                  ) : null}
                   <View style={styles.tendencyList}>
-                    {tendencyRows(selectedPreset).map(row => (
+                    {tendencyRows(selectedPreset, sport).map(row => (
                       <View key={row.label} style={styles.tendencyRow}>
                         <Text style={styles.tendencyLabel}>{row.label}</Text>
                         <View style={styles.tendencyTrack}>
@@ -171,14 +194,14 @@ export default function CoachingPresetsScreen() {
                   <View style={styles.gamePlanHeader}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.gamePlanTitle}>Game Plan</Text>
-                      <Text style={styles.gamePlanMeta}>Pick a starting identity and a halftime adjustment.</Text>
+                      <Text style={styles.gamePlanMeta}>Pick a starting identity and a matchup adjustment.</Text>
                     </View>
                     <TouchableOpacity disabled={savingId === firstHalfPresetId || !selectedPreset} onPress={() => selectedPreset && savePreset(selectedPreset)} style={styles.customSave}>
                       <Ionicons color="#06130c" name="save-outline" size={15} />
                       <Text style={styles.customSaveText}>Save Game Plan</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.halfLabel}>First Half System</Text>
+                  <Text style={styles.halfLabel}>{phaseLabels[0]}</Text>
                   <View style={styles.optionStrip}>
                     {presets.map(preset => (
                       <TouchableOpacity
@@ -190,7 +213,7 @@ export default function CoachingPresetsScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <Text style={styles.halfLabel}>Second Half System</Text>
+                  <Text style={styles.halfLabel}>{phaseLabels[1]}</Text>
                   <View style={styles.optionStrip}>
                     {presets.map(preset => (
                       <TouchableOpacity

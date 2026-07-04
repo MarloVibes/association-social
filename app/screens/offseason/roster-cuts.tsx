@@ -189,7 +189,7 @@ export default function RosterCutsScreen() {
               <>
                 <View style={styles.summary}>
                   <View>
-                    <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Your Team')}</Text>
+                    <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Your Team', league?.sport)}</Text>
                     <Text style={styles.summaryMeta}>
                       {isNba
                         ? `${standardPlayers.length}/${compliance.rosterLimit} standard · ${twoWayPlayers.length}/${compliance.twoWayLimit} Two-way`

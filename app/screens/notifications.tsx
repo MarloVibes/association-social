@@ -51,7 +51,8 @@ function routeNotification(n: any) {
     if (n.deadlineKind === 'trade') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
     else router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
   } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
-    if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
+    if (gameId && type === 'game_ready' && n.liveTimeline) router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition } });
+    else if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
     else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
   } else if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) {
     router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
@@ -72,14 +73,21 @@ function routeNotification(n: any) {
   }
 }
 
-function notificationIcon(type: string) {
+function sportIconForNotification(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return '🏈';
+  if (sport === 'mlb') return '⚾';
+  if (sport === 'nba') return '🏀';
+  return '🎮';
+}
+
+function notificationIcon(type: string, sport?: string | null) {
   if (type === 'join_accepted' || type === 'trade_executed' || type === 'trade_override_approved' || type === 'custom_player_approved') return '✅';
   if (type === 'join_denied' || type === 'trade_declined' || type === 'trade_cancelled' || type === 'trade_override_denied' || type === 'custom_player_denied') return '❌';
   if (type === 'trade_offer' || type === 'trade_room_opened') return '🤝';
   if (type === 'trade_override_review') return '🔓';
   if (type === 'custom_player_submitted') return '📝';
   if (type === 'mention') return '📣';
-  if (['matchup_request', 'matchup_accepted', 'game_ready', 'game_simulated', 'game_final', 'score_reported'].includes(type)) return '🏀';
+  if (['matchup_request', 'matchup_accepted', 'game_ready', 'game_simulated', 'game_final', 'score_reported'].includes(type)) return sportIconForNotification(sport);
   if (['schedule_created', 'schedule_updated', 'game_reset'].includes(type)) return '📅';
   if (['nba_cup', 'nba_cup_advanced', 'season_awards', 'awards_finalized'].includes(type)) return '🏆';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn', 'draft_class_ready'].includes(type)) return '🎙️';
@@ -109,6 +117,7 @@ function notificationActionLabel(type: string) {
   if (type === 'injury_update') return 'View Injuries →';
   if (type === 'extension_interest' || type === 'extension_offer_submitted') return 'View Contract →';
   if (type === 'contract_deadline') return 'Review Deadline →';
+  if (type === 'game_ready') return 'Watch Live →';
   if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) return 'View Matchup →';
   if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) return 'View Calendar →';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) return 'View Draft →';
@@ -407,7 +416,7 @@ export default function NotificationsScreen() {
                 >
                 <View style={styles.notifCard}>
                   <Text style={styles.notifIcon}>
-                    {notificationIcon(n.type)}
+                    {notificationIcon(n.type, n.sport || n.leagueSport)}
                   </Text>
                   <View style={styles.notifInfo}>
                     {n.type === 'join_accepted' && <Text style={styles.notifText}>Your request to join <Text style={styles.notifBold}>{n.leagueName}</Text> was accepted!</Text>}

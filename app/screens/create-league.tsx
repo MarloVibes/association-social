@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, Touc
 import { auth, db } from '@/constants/firebase';
 import { goToTeamSelect } from '@/utils/teamSelectNav';
 import { getEraCap } from '@/constants/eraCaps';
-import { buildLeagueDefaults, seasonLabel } from '@/domain/sports/rules';
+import { buildLeagueDefaults, defaultScheduleGamesPerTeam, seasonLabel } from '@/domain/sports/rules';
 import { getCreateLeagueIntro, shouldShowSportPicker } from '@/domain/createLeague/flow';
 import GlobalNav from '@/components/GlobalNav';
 
@@ -150,7 +150,7 @@ export default function CreateLeagueScreen() {
         era: finalEra,
         draftPickMode,
         stepienRule: sport === 'nba' ? stepienRule : false,
-        gamesPerTeam: sport === 'nba' ? Number(scheduleGamesPerTeam) : null,
+        gamesPerTeam: sport === 'nba' ? Number(scheduleGamesPerTeam) : defaultScheduleGamesPerTeam(sport),
         scheduleLocked: false,
         draftBaseYear: draftBaseYearFor(leagueSeasonYear),
         rosterLimit: defaults.rosterLimit,

@@ -66,13 +66,19 @@ export type LiveTimelineEvent = {
   elapsedMs: number;
   homeScore: number;
   awayScore: number;
-  eventType: 'score' | 'miss' | 'block' | 'turnover' | 'foul' | 'free_throw_trip' | 'timeout' | 'run' | 'momentum' | 'period_end' | 'final_buzzer';
+  eventType: 'score' | 'miss' | 'block' | 'turnover' | 'foul' | 'free_throw_trip' | 'timeout' | 'run' | 'momentum' | 'drive' | 'inning' | 'period_end' | 'final_buzzer';
   actingTeamId: string | null;
   text: string;
   x: number;
   y: number;
   momentum: number;
   tags: string[];
+  importance?: 0 | 1 | 2 | 3;
+  spotlight?: 'score' | 'stop' | 'turnover' | 'injury' | 'clutch' | 'run' | 'substitution' | 'manager';
+  why?: string;
+  pressure?: 'low' | 'medium' | 'high' | 'clutch';
+  coachContext?: string;
+  matchupContext?: string;
   playerId?: string;
   playerName?: string;
   points?: number;
@@ -82,6 +88,14 @@ export type LiveTimelineEvent = {
     home?: string[];
     away?: string[];
   };
+};
+
+export type LiveCommandInsight = {
+  id: string;
+  title: string;
+  text: string;
+  meta: string;
+  importance: 0 | 1 | 2 | 3;
 };
 
 export type LiveTimelineInput = {
@@ -296,7 +310,9 @@ export function livePlayerStatsAt(timeline: LiveTimeline, elapsedMs: number) {
     defensiveRebounds: number;
   }>();
 
-  timeline.events
+  const events = Array.isArray(timeline?.events) ? timeline.events : [];
+
+  events
     .filter(event => event.elapsedMs <= elapsedMs)
     .forEach((event) => {
       const deltas = event.statDeltas || (event.playerId && event.playerName && event.statDelta
@@ -343,13 +359,89 @@ export function starterMatchupsForTimeline(timeline: LiveTimeline | null | undef
   return Array.isArray(timeline?.starterMatchups) ? timeline.starterMatchups : [];
 }
 
+export function liveTimelineHasEvents(timeline: Pick<LiveTimeline, 'events'> | null | undefined): boolean {
+  return Array.isArray(timeline?.events) && timeline.events.length > 0;
+}
+
+export function playableLiveTimeline({
+  scheduleTimeline,
+  storedTimeline,
+}: {
+  scheduleTimeline?: LiveTimeline | null;
+  storedTimeline?: LiveTimeline | null;
+}): LiveTimeline | null {
+  if (liveTimelineHasEvents(storedTimeline)) return storedTimeline || null;
+  if (liveTimelineHasEvents(scheduleTimeline)) return scheduleTimeline || null;
+  return null;
+}
+
+export function commandInsightsForTimeline(
+  timeline: LiveTimeline | null | undefined,
+  elapsedMs: number,
+  limit = 3,
+): LiveCommandInsight[] {
+  const events = Array.isArray(timeline?.events) ? timeline.events : [];
+  if (!events.length || limit <= 0) return [];
+  return events
+    .filter(event => event.elapsedMs <= elapsedMs)
+    .map(commandInsightFromEvent)
+    .filter((insight): insight is LiveCommandInsight => !!insight)
+    .sort((left, right) => (
+      right.importance - left.importance
+      || (events.find(event => event.id === right.id)?.elapsedMs || 0) - (events.find(event => event.id === left.id)?.elapsedMs || 0)
+    ))
+    .slice(0, limit);
+}
+
 export function currentTimelineEvent(
   timeline: LiveTimeline,
   elapsedMs: number,
 ): { event: LiveTimelineEvent; index: number } | { event: null; index: -1 } {
-  if (timeline.events.length === 0) return { event: null, index: -1 };
-  const index = Math.max(0, timeline.events.findLastIndex(event => event.elapsedMs <= elapsedMs));
-  return { event: timeline.events[index], index };
+  const events = Array.isArray(timeline?.events) ? timeline.events : [];
+  if (events.length === 0) return { event: null, index: -1 };
+  const index = Math.max(0, events.findLastIndex(event => event.elapsedMs <= elapsedMs));
+  return { event: events[index], index };
+}
+
+function commandInsightFromEvent(event: LiveTimelineEvent): LiveCommandInsight | null {
+  const text = [event.why, event.coachContext, event.matchupContext].find(value => String(value || '').trim());
+  const importance = event.importance ?? (event.eventType === 'run' || event.eventType === 'momentum' || event.eventType === 'final_buzzer' ? 2 : 0);
+  if (!text || importance <= 0) return null;
+  return {
+    id: event.id,
+    title: titleForSpotlight(event.spotlight || event.eventType),
+    text: String(text).trim(),
+    meta: `${event.periodLabel} · ${clockForInsight(event)}`,
+    importance,
+  };
+}
+
+function titleForSpotlight(value: string): string {
+  const labels: Record<string, string> = {
+    block: 'Stop',
+    clutch: 'Clutch',
+    final_buzzer: 'Final',
+    foul: 'Foul Pressure',
+    free_throw_trip: 'Free Throws',
+    injury: 'Injury',
+    manager: 'Coach Window',
+    miss: 'Stop',
+    momentum: 'Momentum',
+    period_end: 'Period',
+    run: 'Run',
+    score: 'Score',
+    stop: 'Stop',
+    substitution: 'Substitution',
+    timeout: 'Timeout',
+    turnover: 'Turnover',
+  };
+  return labels[value] || 'Insight';
+}
+
+function clockForInsight(event: LiveTimelineEvent): string {
+  const minutes = Math.floor(Math.max(0, event.clockSeconds) / 60);
+  const seconds = Math.max(0, event.clockSeconds) % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function validateFinalScore(input: LiveTimelineInput, periods: LiveTimelinePeriod[]): void {

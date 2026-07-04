@@ -166,6 +166,12 @@ function offerStrengthLabel(score: number): string {
   return 'Weak';
 }
 
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  if (value === 'nfl' || value === 'madden') return 'madden';
+  if (value === 'mlb') return 'mlb';
+  return 'nba';
+}
+
 export default function ContractStageScreen({ stage }: Props) {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -185,6 +191,7 @@ export default function ContractStageScreen({ stage }: Props) {
   const [years, setYears] = useState('1');
   const [role, setRole] = useState<ContractRole>('starter');
   const [working, setWorking] = useState(false);
+  const sport = normalizeSport(league?.sport);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -241,7 +248,7 @@ export default function ContractStageScreen({ stage }: Props) {
   }, [leagueId, router, stage]);
 
   useEffect(() => {
-    if (stage !== 'free_agency' || league?.sport !== 'nba') {
+    if (stage !== 'free_agency' || sport !== 'nba') {
       setVaultFreeAgents([]);
       return;
     }
@@ -264,7 +271,7 @@ export default function ContractStageScreen({ stage }: Props) {
         setVaultFreeAgents([]);
       },
     );
-  }, [league?.era, league?.sport, stage]);
+  }, [league?.era, sport, stage]);
 
   const freeAgents = useMemo(() => {
     const seen = new Set<string>();
@@ -699,7 +706,7 @@ export default function ContractStageScreen({ stage }: Props) {
       <PlayerCard
         player={selectedPlayerCard?.player || null}
         era={league?.era || 'current'}
-        sport={league?.sport || 'nba'}
+        sport={sport}
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
         leagueDate={leagueDateFromRecord(league)}

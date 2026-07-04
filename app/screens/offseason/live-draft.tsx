@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
+import { gradeFromNumeric } from '@/domain/nba/gradeScale';
 import { displayScheduleAbbr, displayScheduleName } from '@/domain/nba/scheduleView';
 
 type League = {
@@ -403,7 +404,7 @@ export default function LiveDraftScreen() {
             <View style={styles.prospectCopy}>
               <Text style={styles.prospectName}>{prospectName(item)}</Text>
               <Text style={styles.prospectMeta}>
-                {[item.position, item.archetype, item.potential ? `POT ${item.potential}` : null]
+                {[item.position, item.archetype, item.potential ? `POT ${gradeFromNumeric(item.potential)}` : null]
                   .filter(Boolean).join(' · ')}
               </Text>
             </View>

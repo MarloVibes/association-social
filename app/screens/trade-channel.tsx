@@ -4,15 +4,26 @@ import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/Fra
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, arrayUnion } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import { getPositionFilters } from '@/domain/sports/playerFields';
-import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/domain/sports/rosterValue';
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { isTradeRoomExpired } from '@/domain/tradeRoomExpiry';
+import { matchesNbaClassificationFilter, type NbaArchetype, type NbaPlayerTier, type VisibleNbaIdentity } from '@/domain/nba/identity';
+
+const NBA_TRADE_TIER_FILTERS: Array<NbaPlayerTier | 'ALL'> = ['ALL', 'Legend', 'Superstar', 'Star', 'High-Impact Contributor', 'Valuable Rotation Player', 'Specialist / Depth Piece', 'Prospect'];
+const NBA_TRADE_ARCHETYPE_FILTERS: Array<NbaArchetype | 'ALL'> = ['ALL', '3-and-D Wing', 'Perimeter Defender', 'Stretch Big', 'Rim Protector', 'Defensive Anchor', 'Primary Creator', 'Floor General', 'Spot-Up Shooter', 'Catch-and-Shoot Specialist', 'Versatile Connector', 'Athletic Finisher', 'Roll Big', 'Microwave Scorer'];
+
+function tradeVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | null {
+  const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
+  if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
+  if (!identity.tier || !Array.isArray(identity.archetypes)) return null;
+  return identity as VisibleNbaIdentity;
+}
 
 
 function PlaystyleBadge({
@@ -86,15 +97,27 @@ export default function TradeChannelScreen() {
   const [rosterModal, setRosterModal] = useState<'block' | 'untouchable' | 'target' | null>(null);
   const [selectedAvailPlayer, setSelectedAvailPlayer] = useState<{ player: any; uid: string; teamId: string; teamName: string } | null>(null);
   const [blockSort, setBlockSort] = useState<string>('team');
+  const [tradeTierFilter, setTradeTierFilter] = useState<NbaPlayerTier | 'ALL'>('ALL');
+  const [tradeArchetypeFilter, setTradeArchetypeFilter] = useState<NbaArchetype | 'ALL'>('ALL');
   const [targetSearch, setTargetSearch] = useState('');
   const [targetPosFilter, setTargetPosFilter] = useState('ALL');
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const user = auth.currentUser;
   const positionFilters = getPositionFilters(sport);
   const tradePositionFilters = positionFilters.filter(position => position !== 'ALL');
+  const rosterComparator = useMemo(() => compareSportRosterPlayersByValue(sport), [sport]);
   const leagueEra = league?.era || 'current';
   const leagueYear = league?.currentYear || league?.seasonYear || null;
   const leagueDate = leagueDateFromRecord(league);
+  const matchesTradeClassification = useCallback((player: any) => {
+    if (sport !== 'nba') return true;
+    if (tradeTierFilter === 'ALL' && tradeArchetypeFilter === 'ALL') return true;
+    const profile = selectRosterRatingProfile(player, {}, { era: leagueEra, currentYear: leagueYear, leagueDate });
+    return matchesNbaClassificationFilter(tradeVisibleIdentity(player, profile), {
+      tier: tradeTierFilter,
+      archetype: tradeArchetypeFilter,
+    });
+  }, [sport, tradeTierFilter, tradeArchetypeFilter, leagueEra, leagueYear, leagueDate]);
 
   useEffect(() => {
     const q = query(
@@ -158,11 +181,6 @@ export default function TradeChannelScreen() {
     try {
       const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
       const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const teamsByRosterValue = teams.map((team: any) => ({
-        ...team,
-        players: [...(team.players || [])].sort(compareRosterPlayersByValue),
-      }));
-      setAllTeams(teamsByRosterValue);
       // League sport drives archetype labels (NBA playstyle vs MLB/NFL archetypes).
       let leagueSport = 'nba';
       try {
@@ -173,6 +191,12 @@ export default function TradeChannelScreen() {
           leagueSport = leagueData.sport || 'nba';
         }
       } catch {}
+      const teamComparator = compareSportRosterPlayersByValue(leagueSport);
+      const teamsByRosterValue = teams.map((team: any) => ({
+        ...team,
+        players: [...(team.players || [])].sort(teamComparator),
+      }));
+      setAllTeams(teamsByRosterValue);
       setSport(leagueSport);
       const isNBA = leagueSport === 'nba';
       // Note: allTeams are used for tradeBlock display - they get enriched inline
@@ -199,7 +223,7 @@ export default function TradeChannelScreen() {
           ...p,
           ...(statsMap[p.full_name] || {}),
         }));
-        setMyRoster(enrichedRoster.sort(compareRosterPlayersByValue));
+        setMyRoster(enrichedRoster.sort(teamComparator));
       }
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -210,17 +234,17 @@ export default function TradeChannelScreen() {
   const getPlayerById = (pid: string) => myRoster.find((p: any) => (p.player_id || p.full_name) === pid);
   const playerSalary = (player: any) => player?.salary ?? player?.contract?.salary ?? player?.currentSalary ?? 0;
 
-  const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
-  const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(compareRosterPlayersByValue);
+  const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean).sort(rosterComparator);
+  const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(rosterComparator);
   const allTradeBlockAcrossLeague = allTeams.flatMap((t: any) => {
     const tb = t.tradeBlock || [];
     return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({
       ...p,
-      teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || ''),
+      teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || '', sport),
       teamId: t.id,
       gmId: t.gmId,
     }));
-  }).sort((a: any, b: any) => (a.teamName || '').localeCompare(b.teamName || '') || compareRosterPlayersByValue(a, b));
+  }).sort((a: any, b: any) => (a.teamName || '').localeCompare(b.teamName || '') || rosterComparator(a, b));
   const claimedTradeTeams = allTeams
     .filter((t: any) => t.gmId && t.gmId !== user?.uid)
     .sort((a: any, b: any) => (a.name || a.abbreviation || '').localeCompare(b.name || b.abbreviation || ''));
@@ -358,6 +382,24 @@ export default function TradeChannelScreen() {
                   <Text style={[styles.sortBtnText, blockSort === pos && styles.sortBtnTextActive]}>{pos}</Text>
                 </TouchableOpacity>
               ))}
+              {sport === 'nba' ? (
+                <>
+                  <View style={{ width: 1, backgroundColor: '#333', marginHorizontal: 4 }} />
+                  <Text style={styles.sortLabel}>Tier:</Text>
+                  {NBA_TRADE_TIER_FILTERS.map(tier => (
+                    <TouchableOpacity key={tier} style={[styles.sortBtn, tradeTierFilter === tier && styles.sortBtnActive]} onPress={() => setTradeTierFilter(tier)}>
+                      <Text style={[styles.sortBtnText, tradeTierFilter === tier && styles.sortBtnTextActive]}>{tier === 'ALL' ? 'All' : tier}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <View style={{ width: 1, backgroundColor: '#333', marginHorizontal: 4 }} />
+                  <Text style={styles.sortLabel}>Type:</Text>
+                  {NBA_TRADE_ARCHETYPE_FILTERS.map(archetype => (
+                    <TouchableOpacity key={archetype} style={[styles.sortBtn, tradeArchetypeFilter === archetype && styles.sortBtnActive]} onPress={() => setTradeArchetypeFilter(archetype)}>
+                      <Text style={[styles.sortBtnText, tradeArchetypeFilter === archetype && styles.sortBtnTextActive]}>{archetype === 'ALL' ? 'All' : archetype}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : null}
             </View>
           </ScrollView>
         </View>
@@ -379,7 +421,8 @@ export default function TradeChannelScreen() {
             const isPositionFilter = tradePositionFilters.includes(blockSort);
             const isTeamFilter = !isPositionFilter && blockSort !== 'team';
             const filtered = allAvail.filter(item => {
-              if (isPositionFilter) return matchesRosterPosition(item.player || {}, blockSort);
+              if (!matchesTradeClassification(item.player || {})) return false;
+              if (isPositionFilter) return matchesSportRosterPosition(item.player || {}, blockSort, sport);
               if (isTeamFilter) {
                 const abbr = item.teamName?.slice(0,3).toUpperCase();
                 const fullMatch = item.teamName?.toUpperCase().includes(blockSort.toUpperCase());
@@ -388,7 +431,7 @@ export default function TradeChannelScreen() {
               return true;
             });
             const sorted = [...filtered].sort((a, b) => (
-              compareRosterPlayersByValue(a.player || {}, b.player || {})
+              rosterComparator(a.player || {}, b.player || {})
               || (a.teamName || '').localeCompare(b.teamName || '')
             ));
             return sorted.map(item => (
@@ -450,7 +493,7 @@ export default function TradeChannelScreen() {
                     leagueId,
                     otherUid: team.gmId,
                     otherTeamId: team.id,
-                    otherTeamName: displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || ''),
+                    otherTeamName: displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || '', sport),
                   },
                 })}
               >
@@ -458,7 +501,7 @@ export default function TradeChannelScreen() {
                   <Text style={styles.proposeTeamAvatarText}>{displayScheduleTeamLabel(team.abbreviation || team.name || '?', team.teamId || team.id || '?').slice(0, 3).toUpperCase()}</Text>
                 </View>
                 <View style={styles.proposeTeamInfo}>
-                  <Text style={styles.proposeTeamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Team')}</Text>
+                  <Text style={styles.proposeTeamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || 'Team', sport)}</Text>
                   <Text style={styles.proposeTeamMeta}>{(team.players || []).length} players · Start trade room</Text>
                 </View>
                 <Text style={styles.proposeTeamChevron}>›</Text>
@@ -503,14 +546,14 @@ export default function TradeChannelScreen() {
             {(() => {
               const otherTeams = allTeams.filter((t: any) => t.gmId !== user?.uid && t.id !== myTeamId);
               const allLeaguePlayers = rosterModal === 'target'
-                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Unknown') })))
+                ? otherTeams.flatMap((t: any) => (t.players || []).map((p: any) => ({ ...p, teamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Unknown', sport) })))
                     .filter((p: any) => {
                       const matchSearch = !targetSearch || (p.full_name || '').toLowerCase().includes(targetSearch.toLowerCase());
-                      const matchPos = matchesRosterPosition(p, targetPosFilter);
+                      const matchPos = matchesSportRosterPosition(p, targetPosFilter, sport);
                       return matchSearch && matchPos;
                     })
-                    .sort((a: any, b: any) => compareRosterPlayersByValue(a, b) || (a.teamName || '').localeCompare(b.teamName || ''))
-                : [...myRoster].sort(compareRosterPlayersByValue);
+                    .sort((a: any, b: any) => rosterComparator(a, b) || (a.teamName || '').localeCompare(b.teamName || ''))
+                : [...myRoster].sort(rosterComparator);
               return allLeaguePlayers.map((p: any, i: number) => {
               const pid = p.player_id || p.full_name;
               const isSelected = rosterModal === 'block' ? tradeBlock.includes(pid) : rosterModal === 'target' ? (myTeam?.targetList || []).includes(pid) : untouchables.includes(pid);

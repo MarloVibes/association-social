@@ -14,6 +14,7 @@ describe('buildLeagueDefaults', () => {
       draftTimerSeconds: 80,
       financeMode: 'hard_cap',
       defaultFinanceLimit: 279_200_000,
+      gamesPerTeam: 17,
     });
   });
 
@@ -28,6 +29,7 @@ describe('buildLeagueDefaults', () => {
       draftTimerSeconds: 80,
       financeMode: 'team_budget',
       defaultFinanceLimit: 244_000_000,
+      gamesPerTeam: 162,
     });
   });
 
@@ -42,6 +44,7 @@ describe('buildLeagueDefaults', () => {
       draftTimerSeconds: 80,
       financeMode: 'nba_cap',
       defaultFinanceLimit: 154_647_000,
+      gamesPerTeam: 29,
     });
   });
 

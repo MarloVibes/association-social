@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
 import type { VisibleNbaIdentity } from '@/domain/nba/identity';
+import { matchesNbaClassificationFilter } from '@/domain/nba/identity';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { playerProfileWithLeagueDateAge } from '@/domain/nba/ratingProfile';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
@@ -16,6 +17,7 @@ import {
   gradeColors,
 } from '@/domain/nba/scoutingGrades';
 import { basketballSeasonAverageItems } from '@/domain/nba/seasonStats';
+import { buildSportPlayerIdentity, buildSportScoutingSections } from '@/domain/sports/playerIdentity';
 
 type Props = {
   player: any;
@@ -268,6 +270,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
   const [activeStatsTab, setActiveStatsTab] = useState<'compare' | 'original'>('compare');
   const [compareCandidates, setCompareCandidates] = useState<any[]>([]);
   const [compareQuery, setCompareQuery] = useState('');
+  const [compareMode, setCompareMode] = useState<'all' | 'same_tier' | 'same_archetype'>('all');
   const [selectedComparePlayer, setSelectedComparePlayer] = useState<any>(null);
   const [selectedCompareProfile, setSelectedCompareProfile] = useState<any>(null);
 
@@ -304,6 +307,7 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
     setPhotoFailed(false);
     setActiveStatsTab('compare');
     setCompareQuery('');
+    setCompareMode('all');
     setCompareCandidates([]);
     setSelectedComparePlayer(null);
     setSelectedCompareProfile(null);
@@ -421,9 +425,17 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
     : (player.passing_yards != null || player.rushing_yards != null || player.receiving_yards != null || player.sacks != null) ? 'madden'
     : (sport || 'nba');
   const isNBAPlayer = effectiveSport === 'nba';
-  const identity = isNBAPlayer ? getVisibleIdentity(player, resolvedProfile) : null;
+  const sportIdentity = !isNBAPlayer ? buildSportPlayerIdentity(player, effectiveSport) : null;
+  const identity = isNBAPlayer ? getVisibleIdentity(player, resolvedProfile) : sportIdentity;
   const evaluationLayers = isNBAPlayer ? buildEvaluationLayers(player, resolvedProfile) : null;
-  const scoutingSections = isNBAPlayer ? getScoutingGradeSections(player, resolvedProfile) : [];
+  const scoutingSections = (isNBAPlayer ? getScoutingGradeSections(player, resolvedProfile) : buildSportScoutingSections(player, effectiveSport))
+    .map(section => ({
+      ...section,
+      items: section.items.map((item: any) => ({
+        ...item,
+        colors: item.colors || gradeColors(item.grade),
+      })),
+    }));
   const potentialSummary = isNBAPlayer ? getPotentialScoutingSummary(player, resolvedProfile) : null;
   const playerGrades = isNBAPlayer ? buildScoutingGrades(player, resolvedProfile) : null;
   const selectedSavedCompareProfile = playerProfileWithLeagueDateAge(selectedCompareProfile, leagueDate);
@@ -431,17 +443,27 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
   const resolvedCompareProfile = selectedBaselineCompareProfile || selectedSavedCompareProfile;
   const compareGrades = selectedComparePlayer ? buildScoutingGrades(selectedComparePlayer, resolvedCompareProfile) : null;
   const compareRows = playerGrades && compareGrades ? compareScoutingGrades(playerGrades, compareGrades) : [];
-  const filteredCompareCandidates = compareQuery.trim()
-    ? compareCandidates.filter(candidate => searchMatches(candidate, compareQuery)).slice(0, 10)
-    : compareCandidates.slice(0, 10);
+  const currentCompareIdentity = isNBAPlayer ? getVisibleIdentity(player, resolvedProfile) : null;
+  const filteredCompareCandidates = compareCandidates
+    .filter(candidate => !compareQuery.trim() || searchMatches(candidate, compareQuery))
+    .filter(candidate => {
+      if (!currentCompareIdentity || compareMode === 'all') return true;
+      const candidateProfile = resolveBaselineRatingProfile(candidate, { era, leagueDate });
+      const candidateIdentity = getVisibleIdentity(candidate, candidateProfile);
+      if (compareMode === 'same_tier') {
+        return matchesNbaClassificationFilter(candidateIdentity, { tier: currentCompareIdentity.tier });
+      }
+      const archetype = currentCompareIdentity.archetypes?.[0];
+      return archetype ? matchesNbaClassificationFilter(candidateIdentity, { archetype }) : true;
+    })
+    .slice(0, 10);
   const franchiseSeasons = buildFranchiseSeasons(player, effectiveSport);
 
   // Headshot source per sport. MLB derives from the MLB person id; NFL uses a
   // stored photo url (from the roster seed); NBA uses basketball-reference.
-  let headshotUri = '';
-  if (isNBAPlayer) headshotUri = brefId ? 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' : '';
-  else if (effectiveSport === 'mlb') headshotUri = player.player_id ? `https://midfield.mlbstatic.com/v1/people/${player.player_id}/spots/120` : '';
-  else headshotUri = player.photo || player.headshot_url || '';
+  let headshotUri = player.photo_url || player.photoUrl || player.photo || player.headshot_url || '';
+  if (!headshotUri && isNBAPlayer) headshotUri = brefId ? 'https://www.basketball-reference.com/req/202106291/images/headshots/' + brefId + '.jpg' : '';
+  else if (!headshotUri && effectiveSport === 'mlb') headshotUri = player.player_id ? `https://midfield.mlbstatic.com/v1/people/${player.player_id}/spots/120` : '';
 
   // Season stat line for MLB/NFL (the pool carries one season of stats).
   const sportStats: { label: string; value: any }[] = [];
@@ -514,17 +536,35 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                 </View>
               </View>
 
-              {isNBAPlayer && (
+              {(isNBAPlayer || sportIdentity) && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Scouting Grades</Text>
                   {identity && (
                     <View style={styles.identityHeader}>
                       <View style={styles.identityRoleBlock}>
-                        <Text style={styles.identityRole}>{identity.primaryRole}</Text>
-                        <Text style={styles.identitySubRole}>{identity.secondaryRole}</Text>
+                        {isNBAPlayer ? (() => {
+                          const nbaIdentity = identity as VisibleNbaIdentity;
+                          return (
+                            <>
+                              <Text style={styles.identityRole}>{nbaIdentity.tier}</Text>
+                              <View style={styles.archetypeRow}>
+                                {(nbaIdentity.archetypes?.length ? nbaIdentity.archetypes : [nbaIdentity.primaryRole, nbaIdentity.secondaryRole]).slice(0, 2).map(tag => (
+                                  <View key={tag} style={styles.archetypePill}>
+                                    <Text style={styles.archetypeText}>{tag}</Text>
+                                  </View>
+                                ))}
+                              </View>
+                            </>
+                          );
+                        })() : (
+                          <>
+                            <Text style={styles.identityRole}>{identity.primaryRole}</Text>
+                            <Text style={styles.identitySubRole}>{identity.secondaryRole}</Text>
+                          </>
+                        )}
                       </View>
                       <View style={styles.reputationPill}>
-                        <Text style={styles.reputationText}>{identity.reputation}</Text>
+                        <Text style={styles.reputationText}>{isNBAPlayer ? ((identity as VisibleNbaIdentity).developmentTag || 'Current') : identity.reputation}</Text>
                       </View>
                     </View>
                   )}
@@ -570,20 +610,26 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                       </View>
                     </View>
                   ))}
-                  {identity && (
+                  {isNBAPlayer && identity && (() => {
+                    const nbaIdentity = identity as VisibleNbaIdentity;
+                    return (
                     <>
                       <View style={styles.traitRow}>
                         <View style={styles.traitBlock}>
                           <Text style={styles.traitLabel}>Consistency</Text>
-                          <Text style={styles.traitValue}>{identity.consistency}</Text>
+                          <Text style={styles.traitValue}>{nbaIdentity.consistency}</Text>
                         </View>
                         <View style={styles.traitBlock}>
                           <Text style={styles.traitLabel}>Chemistry</Text>
-                          <Text style={styles.traitValue}>{identity.chemistry}</Text>
+                          <Text style={styles.traitValue}>{nbaIdentity.chemistry}</Text>
                         </View>
                         <View style={styles.traitBlock}>
-                          <Text style={styles.traitLabel}>Development</Text>
-                          <Text style={styles.traitValue}>{identity.developmentTrait}</Text>
+                          <Text style={styles.traitLabel}>Potential Ceiling</Text>
+                          <Text style={styles.traitValue}>{nbaIdentity.potentialLabel}</Text>
+                        </View>
+                        <View style={styles.traitBlock}>
+                          <Text style={styles.traitLabel}>Development Outlook</Text>
+                          <Text style={styles.traitValue}>{nbaIdentity.developmentOutlook}</Text>
                         </View>
                       </View>
                       {(identity.strengths.length > 0 || identity.weaknesses.length > 0) && (
@@ -603,32 +649,35 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
                         </View>
                       )}
                     </>
+                    );
+                  })()}
+                  {isNBAPlayer && (
+                    <View style={styles.franchiseStatsBlock}>
+                      <Text style={styles.franchiseStatsTitle}>Franchise Mobile Stats</Text>
+                      {franchiseSeasons.length > 0 ? (
+                        franchiseSeasons.map(season => (
+                          <View key={season.year} style={styles.franchiseSeasonRow}>
+                            <View style={styles.franchiseSeasonHeader}>
+                              <Text style={styles.franchiseSeasonYear}>{season.year}</Text>
+                              {season.awards.length > 0 ? (
+                                <Text style={styles.franchiseSeasonAwards} numberOfLines={1}>{season.awards.join(' / ')}</Text>
+                              ) : null}
+                            </View>
+                            <View style={styles.franchiseSeasonGrid}>
+                              {season.statItems.slice(0, 8).map(stat => (
+                                <View key={`${season.year}-${stat.label}`} style={styles.franchiseSeasonStat}>
+                                  <Text style={styles.franchiseSeasonValue}>{formatStatValue(stat.value)}</Text>
+                                  <Text style={styles.franchiseSeasonLabel}>{stat.label}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.noDataText}>No Franchise Mobile season stats yet.</Text>
+                      )}
+                    </View>
                   )}
-                  <View style={styles.franchiseStatsBlock}>
-                    <Text style={styles.franchiseStatsTitle}>Franchise Mobile Stats</Text>
-                    {franchiseSeasons.length > 0 ? (
-                      franchiseSeasons.map(season => (
-                        <View key={season.year} style={styles.franchiseSeasonRow}>
-                          <View style={styles.franchiseSeasonHeader}>
-                            <Text style={styles.franchiseSeasonYear}>{season.year}</Text>
-                            {season.awards.length > 0 ? (
-                              <Text style={styles.franchiseSeasonAwards} numberOfLines={1}>{season.awards.join(' / ')}</Text>
-                            ) : null}
-                          </View>
-                          <View style={styles.franchiseSeasonGrid}>
-                            {season.statItems.slice(0, 8).map(stat => (
-                              <View key={`${season.year}-${stat.label}`} style={styles.franchiseSeasonStat}>
-                                <Text style={styles.franchiseSeasonValue}>{formatStatValue(stat.value)}</Text>
-                                <Text style={styles.franchiseSeasonLabel}>{stat.label}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.noDataText}>No Franchise Mobile season stats yet.</Text>
-                    )}
-                  </View>
                 </View>
               )}
 
@@ -711,6 +760,21 @@ export default function PlayerCard({ player, era, sport, leagueId, teamId, leagu
 
                   {activeStatsTab === 'compare' && (
                     <View>
+                      <View style={styles.compareModeRow}>
+                        {[
+                          { key: 'all', label: 'All' },
+                          { key: 'same_tier', label: 'Same Tier' },
+                          { key: 'same_archetype', label: 'Same Type' },
+                        ].map(mode => (
+                          <TouchableOpacity
+                            key={mode.key}
+                            style={[styles.compareModeBtn, compareMode === mode.key && styles.compareModeBtnActive]}
+                            onPress={() => setCompareMode(mode.key as typeof compareMode)}
+                          >
+                            <Text style={[styles.compareModeText, compareMode === mode.key && styles.compareModeTextActive]}>{mode.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                       <TextInput
                         value={compareQuery}
                         onChangeText={setCompareQuery}
@@ -946,6 +1010,9 @@ const styles = StyleSheet.create({
   identityRoleBlock: { flex: 1 },
   identityRole: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
   identitySubRole: { color: '#777', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  archetypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  archetypePill: { borderRadius: 999, borderWidth: 1, borderColor: '#2d7051', backgroundColor: '#06160f', paddingHorizontal: 8, paddingVertical: 4 },
+  archetypeText: { color: '#9cf5c3', fontSize: 10, fontWeight: '900' },
   reputationPill: { borderRadius: 999, borderWidth: 1, borderColor: '#00ff8755', backgroundColor: '#0a2a1a', paddingHorizontal: 10, paddingVertical: 5 },
   reputationText: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
   evaluationSummary: { gap: 8, marginBottom: 14 },
@@ -979,6 +1046,11 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87' },
   tabBtnText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center' },
   tabBtnTextActive: { color: '#00ff87' },
+  compareModeRow: { flexDirection: 'row', gap: 7, marginBottom: 10 },
+  compareModeBtn: { flex: 1, minHeight: 34, borderRadius: 8, borderWidth: 1, borderColor: '#252525', backgroundColor: '#101010', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  compareModeBtnActive: { borderColor: '#00ff87', backgroundColor: '#071f14' },
+  compareModeText: { color: '#777', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  compareModeTextActive: { color: '#00ff87' },
   compareSearch: { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: '#252525', backgroundColor: '#0a0a0a', color: '#ffffff', paddingHorizontal: 12, fontSize: 13, fontWeight: '700', marginBottom: 10 },
   compareScroller: { marginBottom: 12 },
   compareChip: { width: 120, minHeight: 54, borderRadius: 8, borderWidth: 1, borderColor: '#252525', backgroundColor: '#151515', padding: 9, marginRight: 8, justifyContent: 'center' },

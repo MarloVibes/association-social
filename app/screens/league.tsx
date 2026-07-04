@@ -13,7 +13,7 @@ import LeagueAvatar from '@/components/LeagueAvatar';
 import { setLastLeagueId } from '@/utils/lastLeague';
 import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
 import { playerJerseyDisplay } from '@/domain/sports/playerDisplay';
-import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue } from '@/domain/sports/rosterValue';
 import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 
@@ -41,6 +41,31 @@ const CHANNEL_ICON: Record<string, string> = {
   mlb: '⚾',
 };
 
+function sportDisplayLabel(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return 'NFL';
+  if (sport === 'mlb') return 'MLB';
+  if (sport === 'nba') return 'NBA';
+  return 'Franchise';
+}
+
+function modeDisplayLabel(mode?: string | null) {
+  if (mode === 'draft') return 'Fantasy Draft';
+  if (mode === 'current') return 'Current Rosters';
+  if (mode === 'random') return 'Random Teams';
+  return mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : 'Current Rosters';
+}
+
+function leagueSetupLabel(league: any) {
+  if (league?.sport === 'nba' && league?.era) {
+    return `${NBA_ERA_LABELS[league.era] || league.era} Era · ${modeDisplayLabel(league.mode)}`;
+  }
+  return modeDisplayLabel(league?.mode);
+}
+
+function offseasonStartStageForSport(leagueSport: string) {
+  return leagueSport === 'madden' || leagueSport === 'mlb' ? 'season_end' : 'awards_recap';
+}
+
 export default function LeagueScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [league, setLeague] = useState<any>(null);
@@ -51,11 +76,11 @@ export default function LeagueScreen() {
   const user = auth.currentUser;
   const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
   const currentYear = league?.currentYear || 2024;
+  const leagueSport = league?.sport || 'nba';
   const rawTeamAbbr = myTeam?.abbreviation || myTeam?.teamId || '';
   const myTeamAbbr = displayScheduleAbbr(rawTeamAbbr);
-  const myTeamName = displayScheduleTeamLabel(myTeam?.name || myTeamAbbr, rawTeamAbbr || myTeam?.id);
+  const myTeamName = displayScheduleTeamLabel(myTeam?.name || myTeamAbbr, rawTeamAbbr || myTeam?.id, leagueSport);
   const teamAbbr = myTeamAbbr;
-  const leagueSport = league?.sport || 'nba';
   const isNBASport = leagueSport === 'nba';
   const teamColors = isNBASport
     ? getTeamColors(teamAbbr || 'ATL', currentYear)
@@ -82,7 +107,7 @@ export default function LeagueScreen() {
   const titleColor = teamTheme.titleColor;
   const tintColor = teamTheme.tintColor;
   const teamText = hexToLum(teamPrimary) < 0.35 ? '#ffffff' : teamPrimary;
-  const myTeamPlayersByValue = [...(myTeam?.players || [])].sort(compareRosterPlayersByValue);
+  const myTeamPlayersByValue = [...(myTeam?.players || [])].sort(compareSportRosterPlayersByValue(leagueSport));
 
   useEffect(() => {
     if (!leagueId) return;
@@ -190,13 +215,16 @@ export default function LeagueScreen() {
   };
 
   const openOffseasonManagement = () => {
-    if (!isCommissioner || !isNBASport || league?.offseason) {
+    if (!isCommissioner || league?.offseason) {
       router.push({ pathname: '/screens/offseason', params: { leagueId } });
       return;
     }
+    const startStage = offseasonStartStageForSport(leagueSport);
     Alert.alert(
       'Start offseason?',
-      'Once offseason starts, each stage lasts 10 minutes, league pages move forward, and there is no going back.',
+      isNBASport
+        ? 'Once offseason starts, each stage lasts 10 minutes, league pages move forward, and there is no going back.'
+        : 'This will open the offseason flow for re-signing, free agency, draft review, draft room, and roster cuts.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -207,7 +235,7 @@ export default function LeagueScreen() {
               const advance = httpsCallable(functions, 'advanceOffseasonStage');
               await advance({
                 leagueId,
-                expectedStage: 'awards_recap',
+                expectedStage: startStage,
                 expectedVersion: 0,
               });
               router.push({ pathname: '/screens/offseason', params: { leagueId } });
@@ -294,11 +322,9 @@ export default function LeagueScreen() {
         </View>
         <View style={styles.leagueMeta}>
           <View style={styles.sportChip}>
-            <Text style={styles.sportChipText}>{league.sport?.toUpperCase()}</Text>
+            <Text style={styles.sportChipText}>{sportDisplayLabel(league.sport)}</Text>
           </View>
-          <Text style={styles.metaText}>{league.sport === 'nba' && league.era
-            ? (NBA_ERA_LABELS[league.era] || league.era) + ' Era · ' + (league.mode === 'draft' ? 'Draft' : 'Current Rosters')
-            : league.mode + ' mode'}</Text>
+          <Text style={styles.metaText}>{leagueSetupLabel(league)}</Text>
           <View style={styles.metaBtns}>
             <TouchableOpacity
               style={[styles.membersTabBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
@@ -427,9 +453,11 @@ export default function LeagueScreen() {
             >
               <Text style={[styles.advanceSeasonBtnText, { color: '#ffaa00' }]}>Offseason Management</Text>
             </TouchableOpacity>
-            {isNBASport && !league?.offseason ? (
+            {!league?.offseason ? (
               <Text style={styles.offseasonWarning}>
-                Warning: starting offseason opens timed 10-minute stages and cannot be rolled back.
+                {isNBASport
+                  ? 'Warning: starting offseason opens timed 10-minute stages and cannot be rolled back.'
+                  : 'Starting offseason opens sport-specific roster, contract, draft, and cut stages.'}
               </Text>
             ) : null}
           </View>

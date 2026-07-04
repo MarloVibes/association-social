@@ -34,8 +34,8 @@ function playerName(player: Player) {
   return String(player.full_name || player.name || playerId(player) || 'Player');
 }
 
-function teamLabel(team?: Team | null) {
-  return displayScheduleTeamLabel(team?.abbreviation || team?.name, team?.teamId || team?.id || 'Team');
+function teamLabel(team?: Team | null, sport?: string | null) {
+  return displayScheduleTeamLabel(team?.abbreviation || team?.name, team?.teamId || team?.id || 'Team', sport);
 }
 
 export default function InjuriesScreen() {
@@ -162,7 +162,7 @@ export default function InjuriesScreen() {
                     setSelectedTeamId(team.id);
                     setSelectedPlayerId('');
                   }}>
-                    <Text style={[styles.chipText, selectedTeam?.id === team.id && styles.chipTextActive]}>{teamLabel(team)}</Text>
+                    <Text style={[styles.chipText, selectedTeam?.id === team.id && styles.chipTextActive]}>{teamLabel(team, league?.sport)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -198,7 +198,7 @@ export default function InjuriesScreen() {
                 </TouchableOpacity>
               </View>
             ) : null}
-            <Text style={styles.sectionTitle}>{teamLabel(selectedTeam)} Active Injuries</Text>
+            <Text style={styles.sectionTitle}>{teamLabel(selectedTeam, league?.sport)} Active Injuries</Text>
           </>
         )}
         ListEmptyComponent={<Text style={styles.empty}>No active injuries for this team.</Text>}

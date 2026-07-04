@@ -22,11 +22,11 @@ export type NbaScheduleGame = {
 
 export type GenerateScheduleInput = {
   teams: string[];
-  gamesPerTeam: 14 | 29 | 58 | 82;
+  gamesPerTeam: number;
   seed: string;
 };
 
-const APPROVED_LENGTHS = new Set([14, 29, 58, 82]);
+const APPROVED_LENGTHS = new Set([14, 17, 29, 58, 82, 162]);
 
 function hash(value: string): number {
   let h = 2166136261;
@@ -38,15 +38,15 @@ function hash(value: string): number {
 }
 
 function gameId(seed: string, sequence: number, awayTeamId: string, homeTeamId: string): string {
-  return `nba_${hash(`${seed}:${sequence}:${awayTeamId}:${homeTeamId}`).toString(36)}`;
+  return `game_${hash(`${seed}:${sequence}:${awayTeamId}:${homeTeamId}`).toString(36)}`;
 }
 
 function assertValidInput(input: GenerateScheduleInput) {
   if (input.teams.length < 30 || input.teams.length > 36) {
-    throw new Error('NBA schedules require 30 to 36 teams.');
+    throw new Error('Schedules require 30 to 36 teams.');
   }
   if (!APPROVED_LENGTHS.has(input.gamesPerTeam)) {
-    throw new Error('Unsupported NBA schedule length.');
+    throw new Error('Unsupported schedule length.');
   }
   if (new Set(input.teams).size !== input.teams.length) {
     throw new Error('Team IDs must be unique.');
@@ -102,13 +102,13 @@ function regularPairings(teams: string[], degree: number, seed: string): [string
       ))
       .slice(0, needed);
     if (opponents.length !== needed) {
-      throw new Error('Unable to build a balanced NBA schedule for this team count and length.');
+      throw new Error('Unable to build a balanced schedule for this team count and length.');
     }
     remaining.set(team, 0);
     opponents.forEach((opponent) => {
       const opponentRemaining = remaining.get(opponent) || 0;
       if (opponentRemaining <= 0) {
-        throw new Error('Unable to build a balanced NBA schedule for this team count and length.');
+        throw new Error('Unable to build a balanced schedule for this team count and length.');
       }
       remaining.set(opponent, opponentRemaining - 1);
       pairings.push([team, opponent]);
@@ -199,7 +199,7 @@ function assignHomeTeams(pairings: [string, string][], teams: string[], seed: st
   });
 
   if (maxFlow(graph, source, sink) !== pairings.length) {
-    throw new Error('Unable to balance NBA home and away games.');
+    throw new Error('Unable to balance home and away games.');
   }
 
   return pairings.map(([left, right], index) => {
@@ -239,7 +239,7 @@ export function generateSchedule(input: GenerateScheduleInput): NbaScheduleGame[
   for (const team of teams) {
     const appearances = games.filter(game => game.homeTeamId === team || game.awayTeamId === team).length;
     if (appearances !== target) {
-      throw new Error('Unable to build a balanced NBA schedule for this team count and length.');
+      throw new Error('Unable to build a balanced schedule for this team count and length.');
     }
   }
 

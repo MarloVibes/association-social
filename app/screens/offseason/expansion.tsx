@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import GlobalNav from '@/components/GlobalNav';
 import { auth, db, functions } from '@/constants/firebase';
 import { validateExpansionProposal } from '@/domain/nba/expansion';
+import { displayScheduleAbbr } from '@/domain/nba/scheduleView';
 
 type ExpansionTeam = {
   city?: string;
@@ -236,9 +237,9 @@ export default function ExpansionScreen() {
                 <Text style={styles.sectionTitle}>Expansion Draft Results</Text>
                 {Object.entries(league.expansionDraft?.selections || {}).map(([teamId, picks]) => (
                   <View key={teamId} style={styles.resultGroup}>
-                    <Text style={styles.resultTitle}>{teamId}</Text>
+                    <Text style={styles.resultTitle}>{displayScheduleAbbr(teamId)}</Text>
                     {picks.slice(0, 8).map(pick => (
-                      <Text key={pick.playerId} style={styles.resultText}>{pick.name} from {pick.sourceTeamId}</Text>
+                      <Text key={pick.playerId} style={styles.resultText}>{pick.name} from {displayScheduleAbbr(pick.sourceTeamId)}</Text>
                     ))}
                   </View>
                 ))}

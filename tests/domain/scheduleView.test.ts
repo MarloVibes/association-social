@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { MLB_TEAMS } from '@/constants/mlbTeams';
+import { NFL_TEAMS } from '@/constants/nflTeams';
+import { getSportTeamName } from '@/constants/sportTeams';
+import { TEAM_COLORS } from '@/constants/teamColors';
+import { NBA_TEAM_IDS } from '@/domain/nba/scheduleSetup';
 import {
   displayScheduleAbbr,
   displayScheduleEventText,
@@ -14,6 +19,8 @@ import {
 } from '@/domain/nba/scheduleView';
 
 describe('NBA schedule view helpers', () => {
+  const NBA_ERA_SUFFIXES = ['CURRENT', '1984', '1992', '2003', '2011', '2017'];
+
   it('normalizes team keys so lowercase era ids match schedule abbreviations', () => {
     expect(normalizeScheduleKey(' bos ')).toBe('BOS');
     expect([...teamScheduleKeys({ id: 'league_user', teamId: 'bos', abbreviation: 'BOS' })]).toEqual([
@@ -33,10 +40,14 @@ describe('NBA schedule view helpers', () => {
 
   it('normalizes era schedule ids for display and matching', () => {
     expect(scheduleKeyAliases('SAS_2011')).toContain('SAS');
+    expect(scheduleKeyAliases('MIL_CURRENT')).toContain('MIL');
     expect(displayScheduleAbbr('SAS_2011')).toBe('SAS');
+    expect(displayScheduleAbbr('MIL_CURRENT')).toBe('MIL');
     expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011' })).toBe('SAS');
+    expect(displayScheduleName({ scheduleTeamId: 'MIL_CURRENT', abbreviation: 'MIL_CURRENT' })).toBe('MIL');
     expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', abbreviation: 'SAS_2011', name: 'San Antonio Spurs' })).toBe('San Antonio Spurs');
     expect(displayScheduleName({ scheduleTeamId: 'SAS_2011', name: 'SAS_2011' })).toBe('SAS');
+    expect(displayScheduleName({ scheduleTeamId: 'MIL_CURRENT', name: 'MIL_CURRENT' })).toBe('MIL');
   });
 
   it('matches my games by normalized team id or stored GM id', () => {
@@ -124,12 +135,82 @@ describe('NBA schedule view helpers', () => {
     expect(displayScheduleEventText('Final: MIN_2003 90 - LAL 101')).toBe('Final: MIN 90 - LAL 101');
     expect(displayScheduleEventText('End of Q1: SAS_2011 33 - BOS_1986 31')).toBe('End of Q1: SAS 33 - BOS 31');
     expect(displayScheduleEventText('Final: nola_2003 90 - lal_2003 101')).toBe('Final: NOLA 90 - LAL 101');
+    expect(displayScheduleEventText('Final: MIL_CURRENT 90 - LAL_CURRENT 101')).toBe('Final: MIL 90 - LAL 101');
   });
 
   it('prefers real team names but replaces raw era ids in team labels', () => {
     expect(displayScheduleTeamLabel('Los Angeles Lakers', 'LAL_2003')).toBe('Los Angeles Lakers');
     expect(displayScheduleTeamLabel('MIN_2003', 'MIN_2003')).toBe('MIN');
+    expect(displayScheduleTeamLabel('MIL_CURRENT', 'MIL_CURRENT')).toBe('MIL');
     expect(displayScheduleTeamLabel('', 'SAS_2011')).toBe('SAS');
+    expect(displayScheduleTeamLabel('', 'CHA_CURRENT')).toBe('CHA');
     expect(displayScheduleTeamLabel('Final: MIN_2003 90 - LAL 101')).toBe('Final: MIN 90 - LAL 101');
+  });
+
+  it('strips current-era schedule suffixes for every NBA schedule team', () => {
+    expect(NBA_TEAM_IDS).toHaveLength(30);
+    NBA_TEAM_IDS.forEach(abbr => {
+      const currentId = `${abbr}_CURRENT`;
+      expect(scheduleKeyAliases(currentId)).toContain(abbr);
+      expect(displayScheduleAbbr(currentId)).toBe(abbr);
+      expect(displayScheduleName({ scheduleTeamId: currentId, abbreviation: currentId })).toBe(abbr);
+      expect(displayScheduleName({ scheduleTeamId: currentId, name: currentId })).toBe(abbr);
+      expect(displayScheduleTeamLabel(currentId, currentId)).toBe(abbr);
+      expect(displayScheduleTeamLabel('', currentId)).toBe(abbr);
+      expect(displayScheduleEventText(`Final: ${currentId} 90 - LAL_CURRENT 101`)).toBe(`Final: ${abbr} 90 - LAL 101`);
+    });
+  });
+
+  it('strips every supported NBA era suffix for every NBA team code', () => {
+    const nbaCodes = [...new Set([...NBA_TEAM_IDS, ...Object.keys(TEAM_COLORS).map(code => code.toUpperCase())])];
+    expect(nbaCodes).toContain('SEA');
+    expect(nbaCodes).toContain('NJN');
+    expect(nbaCodes).toContain('CHA_OLD');
+    NBA_ERA_SUFFIXES.forEach(suffix => {
+      nbaCodes.forEach(abbr => {
+        const scheduleId = `${abbr}_${suffix}`;
+        expect(scheduleKeyAliases(scheduleId)).toContain(abbr);
+        expect(displayScheduleAbbr(scheduleId)).toBe(abbr);
+        expect(displayScheduleName({ scheduleTeamId: scheduleId, abbreviation: scheduleId })).toBe(abbr);
+        expect(displayScheduleName({ scheduleTeamId: scheduleId, name: scheduleId })).toBe(abbr);
+        expect(displayScheduleTeamLabel(scheduleId, scheduleId)).toBe(abbr);
+        expect(displayScheduleTeamLabel('', scheduleId)).toBe(abbr);
+        expect(displayScheduleEventText(`Final: ${scheduleId} 90 - LAL_${suffix} 101`)).toBe(`Final: ${abbr} 90 - LAL 101`);
+      });
+    });
+  });
+
+  it('uses real NFL and MLB names for vacant CPU team fallbacks', () => {
+    expect(displayScheduleTeamLabel('', 'cpu_KC', 'madden')).toBe('Kansas City Chiefs');
+    expect(displayScheduleTeamLabel('KC', 'KC', 'madden')).toBe('Kansas City Chiefs');
+    expect(displayScheduleTeamLabel('cpu_LAD', 'cpu_LAD', 'mlb')).toBe('Los Angeles Dodgers');
+    expect(displayScheduleTeamLabel('ATH', 'cpu_ATH', 'mlb')).toBe('Athletics');
+  });
+
+  it('renders every NFL and MLB static team without internal CPU labels', () => {
+    const rows = [
+      ...Object.keys(NFL_TEAMS).map(abbr => ({ sport: 'madden', abbr })),
+      ...Object.keys(MLB_TEAMS).map(abbr => ({ sport: 'mlb', abbr })),
+    ];
+
+    expect(Object.keys(NFL_TEAMS)).toHaveLength(32);
+    expect(Object.keys(MLB_TEAMS)).toHaveLength(30);
+    rows.forEach(({ sport, abbr }) => {
+      const expectedName = getSportTeamName(sport, abbr);
+      const fromCpuId = displayScheduleTeamLabel('', `cpu_${abbr}`, sport);
+      const fromAbbr = displayScheduleTeamLabel(abbr, abbr, sport);
+      const words = expectedName.toLowerCase().split(/\s+/);
+      expect(expectedName).toBeTruthy();
+      expect(fromCpuId).toBe(expectedName);
+      expect(fromAbbr).toBe(expectedName);
+      expect(fromCpuId).not.toMatch(/^cpu_/i);
+      expect(words.some((word, index) => index > 0 && word === words[index - 1])).toBe(false);
+    });
+  });
+
+  it('strips CPU prefixes for every NBA team color code fallback', () => {
+    Object.keys(TEAM_COLORS).forEach(abbr => {
+      expect(displayScheduleTeamLabel('', `cpu_${abbr}`, 'nba')).toBe(displayScheduleAbbr(abbr));
+    });
   });
 });

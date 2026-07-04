@@ -7,6 +7,13 @@ import LeagueAvatar from '@/components/LeagueAvatar';
 import { blockAndReport } from '@/constants/moderation';
 import GlobalNav from '@/components/GlobalNav';
 
+function sportLabel(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return 'NFL';
+  if (sport === 'mlb') return 'MLB';
+  if (sport === 'nba') return 'NBA';
+  return 'Franchise';
+}
+
 export default function SearchUsersScreen() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -159,7 +166,7 @@ export default function SearchUsersScreen() {
                   <LeagueAvatar photoUrl={league.photoUrl} leagueName={league.name} size={36} />
                   <View style={styles.leagueRowInfo}>
                     <Text style={styles.leagueRowName}>{league.name}</Text>
-                    <Text style={styles.leagueRowMeta}>{league.sport?.toUpperCase()} · {league.members?.length || 1} members</Text>
+                    <Text style={styles.leagueRowMeta}>{sportLabel(league.sport)} · {league.members?.length || 1} members</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.joinLeagueBtn}

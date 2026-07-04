@@ -5,6 +5,12 @@ import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableO
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 
+function sportIconForLeague(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return '🏈';
+  if (sport === 'mlb') return '⚾';
+  return '🏀';
+}
+
 export default function LeagueMembersScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [members, setMembers] = useState<any[]>([]);
@@ -175,7 +181,7 @@ export default function LeagueMembersScreen() {
                       {!isComm && coComms.includes(item.uid) && <View style={styles.coCommBadge}><Text style={styles.coCommBadgeText}>Co-Commissioner</Text></View>}
                     </View>
                     <Text style={styles.memberUsername}>@{item.username}</Text>
-                    {team && <Text style={styles.memberTeam}>🏀 {team.name}</Text>}
+                    {team && <Text style={styles.memberTeam}>{sportIconForLeague(league?.sport)} {team.name}</Text>}
                   </View>
                   <View style={styles.memberActions}>
                     <TouchableOpacity

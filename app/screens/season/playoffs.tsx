@@ -11,6 +11,7 @@ import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { advancePlayoffSeries, buildPlayoffBracket, syncPlayoffSeriesFromGames, type PlayoffBracket, type PlayoffFormat, type PlayoffSeries } from '@/domain/nba/playoffs';
 import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { buildNbaStandings } from '@/domain/nba/standings';
+import { offseasonStartStageForSport, playoffFormatOptionsForSport, postseasonOffseasonWarning } from '@/domain/sports/playoffDisplay';
 
 type Team = {
   id: string;
@@ -39,6 +40,12 @@ function formatSeries(series: PlayoffSeries) {
 
 function teamLabel(teamId: string, teamName?: string | null) {
   return displayScheduleTeamLabel(teamName, teamId);
+}
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  if (value === 'nfl' || value === 'madden') return 'madden';
+  if (value === 'mlb') return 'mlb';
+  return 'nba';
 }
 
 export default function PlayoffsScreen() {
@@ -95,6 +102,7 @@ export default function PlayoffsScreen() {
       || (league.coCommissioners || []).includes(uid)
     ),
   );
+  const sport = normalizeSport(league?.sport);
   const standings = useMemo(() => buildNbaStandings({
     games: schedule?.games || [],
     participants: schedule?.participants || [],
@@ -109,13 +117,14 @@ export default function PlayoffsScreen() {
     bracketExists: Boolean(bracket),
   }), [standings, format, completion, bracket]);
   const conferencePictures = useMemo(() => buildConferencePlayoffPicture({
+    sport,
     standings,
     teams,
     format,
     completion,
     bracketExists: Boolean(bracket),
-  }), [standings, teams, format, completion, bracket]);
-  const conferenceLabels = ['Eastern Conference', 'Western Conference'];
+  }), [sport, standings, teams, format, completion, bracket]);
+  const conferenceLabels = ['Eastern Conference', 'Western Conference', 'AFC', 'NFC', 'American League', 'National League'];
   const series = useMemo(() => (
     bracket?.rounds.flatMap(round => round.series.map(item => ({ ...item, roundLabel: round.label }))) || []
   ), [bracket?.rounds]);
@@ -126,6 +135,9 @@ export default function PlayoffsScreen() {
   ), [bracket?.rounds]);
   const championTeamId = finalSeries?.winnerTeamId || null;
   const offseasonStarted = Boolean(league?.offseason && league.offseason.stage !== 'regular_season');
+  const formatOptions = playoffFormatOptionsForSport(sport);
+  const offseasonWarning = postseasonOffseasonWarning(sport);
+  const offseasonStartStage = offseasonStartStageForSport(sport);
 
   const startPlayoffs = async () => {
     if (!leagueId || !league || !schedule) return;
@@ -238,7 +250,7 @@ export default function PlayoffsScreen() {
     if (!leagueId || !championTeamId || offseasonStarted || startingOffseason) return;
     Alert.alert(
       'Advance to offseason?',
-      'Once offseason starts, each stage lasts 10 minutes, league pages move forward, and there is no going back.',
+      offseasonWarning,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -250,7 +262,7 @@ export default function PlayoffsScreen() {
               const advance = httpsCallable(functions, 'advanceOffseasonStage');
               await advance({
                 leagueId,
-                expectedStage: 'awards_recap',
+                expectedStage: offseasonStartStage,
                 expectedVersion: 0,
               });
               router.push({ pathname: '/screens/offseason', params: { leagueId } });
@@ -336,11 +348,7 @@ export default function PlayoffsScreen() {
             {!bracket && isLeagueAdmin ? (
               <View style={styles.startCard}>
                 <View style={styles.segment}>
-                  {[
-                    { value: 'short_8', label: '8 Teams' },
-                    { value: 'traditional_16', label: '16 Teams' },
-                    { value: 'play_in_16', label: 'Play-In' },
-                  ].map(option => (
+                  {formatOptions.map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[styles.segmentButton, format === option.value && styles.segmentButtonActive]}
@@ -394,7 +402,7 @@ export default function PlayoffsScreen() {
                   Champion: {teamLabel(championTeamId, finalSeries?.homeTeamId === championTeamId ? finalSeries?.homeTeamName : finalSeries?.awayTeamName)}
                 </Text>
                 <Text style={styles.offseasonWarning}>
-                  Starting offseason opens 10-minute stages for awards, lottery, progression, contracts, draft, free agency, and ready period. There is no going back.
+                  {offseasonWarning}
                 </Text>
                 <TouchableOpacity
                   disabled={startingOffseason || offseasonStarted}
@@ -419,7 +427,7 @@ export default function PlayoffsScreen() {
             <View style={styles.matchupRow}>
               <View style={styles.teamSide}>
                 <View style={styles.logoDisc}>
-                  <SportTeamLogo sport="nba" abbr={item.homeTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
+                  <SportTeamLogo sport={sport} abbr={item.homeTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
                 </View>
                 <Text style={styles.seed}>{item.homeSeed}</Text>
                 <Text style={styles.teamName} numberOfLines={1}>{teamLabel(item.homeTeamId, item.homeTeamName)}</Text>
@@ -427,7 +435,7 @@ export default function PlayoffsScreen() {
               <Text style={styles.vs}>VS</Text>
               <View style={styles.teamSide}>
                 <View style={styles.logoDisc}>
-                  <SportTeamLogo sport="nba" abbr={item.awayTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
+                  <SportTeamLogo sport={sport} abbr={item.awayTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
                 </View>
                 <Text style={styles.seed}>{item.awaySeed}</Text>
                 <Text style={styles.teamName} numberOfLines={1}>{teamLabel(item.awayTeamId, item.awayTeamName)}</Text>

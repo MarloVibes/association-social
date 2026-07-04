@@ -73,6 +73,24 @@ describe('possession timeline engine', () => {
     expect(timeline.homeScore).not.toBe(timeline.awayScore);
   });
 
+  it('adds command-center explanations to important possession events', () => {
+    const timeline = buildPossessionTimeline({
+      gameId: 'game-command-insights',
+      seed: 'seed-command-insights',
+      homeTeamId: 'CHI',
+      awayTeamId: 'PHI',
+      homeTeam: team('CHI', 84),
+      awayTeam: team('PHI', 79),
+      nowMs: 10_000,
+    });
+    const insights = timeline.events.filter((event: any) => event.importance > 0 && event.why);
+
+    expect(insights.length).toBeGreaterThan(8);
+    expect(insights.some((event: any) => event.spotlight === 'score')).toBe(true);
+    expect(insights.some((event: any) => event.spotlight === 'stop' || event.spotlight === 'turnover')).toBe(true);
+    expect(insights.every((event: any) => typeof event.why === 'string' && event.why.length > 12)).toBe(true);
+  });
+
   it('uses clean team abbreviations in final and period text for era-suffixed teams', () => {
     const timeline = buildPossessionTimeline({
       gameId: 'game-era-labels',

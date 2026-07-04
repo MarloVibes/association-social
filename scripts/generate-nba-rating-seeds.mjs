@@ -12,6 +12,26 @@ const ERA_CONFIG = {
   kobe: { seasonStart: 2002, season: 2003, era: '2000s', pace: 91, leaguePace: 91, leagueThreePointPct: 0.35, leagueFreeThrowPct: 0.75, positionMinutesBaseline: 35 },
   lebron: { seasonStart: 2010, season: 2011, era: '2010s', pace: 92, leaguePace: 92, leagueThreePointPct: 0.358, leagueFreeThrowPct: 0.763, positionMinutesBaseline: 34 },
   steph: { seasonStart: 2016, season: 2017, era: '2010s', pace: 97, leaguePace: 97, leagueThreePointPct: 0.358, leagueFreeThrowPct: 0.772, positionMinutesBaseline: 33 },
+  current: { seasonStart: 2025, season: 2026, era: 'modern', pace: 99, leaguePace: 99, leagueThreePointPct: 0.36, leagueFreeThrowPct: 0.78, positionMinutesBaseline: 31 },
+};
+
+const FULL_POOL_SOURCES = {
+  magic_bird: 'data/nba/magic_bird-player-pool.json',
+  jordan: 'data/nba/jordan-player-pool.json',
+  kobe: 'data/nba/kobe-player-pool.json',
+  lebron: 'data/nba/lebron-player-pool.json',
+  steph: 'data/nba/steph-player-pool.json',
+  current: 'data/nba/current-player-pool.json',
+};
+
+const STAT_SOURCES = {
+  1984: 'data/nba/season-stats-1984.json',
+  1992: 'data/nba/season-stats-1992.json',
+  2003: 'data/nba/season-stats-2003.json',
+  2011: 'data/nba/season-stats-2011.json',
+  2017: 'data/nba/season-stats-2017.json',
+  2025: 'data/nba/current-season-stats-2025.json',
+  2026: 'data/nba/current-season-stats-2026.json',
 };
 
 const NAME_ALIASES = {
@@ -267,6 +287,27 @@ function buildSalaryIndex(salariesCsv, idToName) {
   return byNameYear;
 }
 
+function readJson(relativePath, fallback) {
+  try {
+    return JSON.parse(readFileSync(resolve(ROOT, relativePath), 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function statIndex(data) {
+  const players = Array.isArray(data?.players) ? data.players : [];
+  return new Map(players.filter(player => player.bref_id).map(player => [player.bref_id, player]));
+}
+
+function seasonStatIndexes() {
+  const indexes = {};
+  for (const [season, path] of Object.entries(STAT_SOURCES)) {
+    indexes[season] = statIndex(readJson(path, { players: [] }));
+  }
+  return indexes;
+}
+
 function estimateMinutes(profile, salary) {
   const impact = profile.ppg + profile.rpg * 0.65 + profile.apg * 0.9 + profile.per * 0.55 + Math.min(10, profile.ws / 12);
   const salarySignal = salary >= 12_000_000 ? 5 : salary >= 8_000_000 ? 3 : salary >= 4_000_000 ? 1.5 : 0;
@@ -286,8 +327,21 @@ function tagsFor(name, profile, salary) {
   if (profile.apg >= 8.5) tags.add('elite_passer');
   if (profile.rpg >= 9) tags.add('elite_rebounder');
   if (profile.fg3 >= 0.385 && profile.ppg >= 8) tags.add('elite_shooter');
-  if (profile.per >= 22 || profile.ws >= 120) tags.add('mvp');
   return [...tags];
+}
+
+function normalizePosition(primary, fallback = '') {
+  for (const value of [primary, fallback]) {
+    const text = String(value || '').toUpperCase();
+    if (/POINT GUARD|\bPG\b/.test(text)) return 'PG';
+    if (/SHOOTING GUARD|\bSG\b/.test(text)) return 'SG';
+    if (/SMALL FORWARD|\bSF\b/.test(text)) return 'SF';
+    if (/POWER FORWARD|\bPF\b/.test(text)) return 'PF';
+    if (/CENTER|\bC\b/.test(text)) return 'C';
+    if (/GUARD|\bG\b/.test(text)) return 'G';
+    if (/FORWARD|\bF\b/.test(text)) return 'F';
+  }
+  return '';
 }
 
 function hasShootingSample(profile) {
@@ -296,18 +350,30 @@ function hasShootingSample(profile) {
 
 function sourceForPlayer(player, profile, salary, config) {
   let tags = tagsFor(player.full_name, profile, salary);
-  const isGuard = /PG|SG|G/i.test(player.position || profile.position);
-  const isBig = /PF|C/i.test(player.position || profile.position);
-  const age = ageFromBirthDate(profile.birthDate, config.seasonStart);
+  const position = normalizePosition(player.position, profile.position) || player.position || profile.position;
+  const isGuard = /PG|SG|G/i.test(position);
+  const isBig = /PF|C/i.test(position);
+  const age = ageFromBirthDate(profile.birthDate, config.seasonStart) ?? numberFrom(profile.age, numberFrom(player.age, undefined));
   const lateCareer = Number(age) >= 37;
   const draftYear = Number(profile.draftYear);
+  const yearsFromDraft = Number.isFinite(draftYear) ? config.seasonStart - draftYear : null;
   const preRookie = Number.isFinite(draftYear) && draftYear > config.seasonStart;
+  const rookieSeason = yearsFromDraft === 0;
+  const secondYear = yearsFromDraft === 1;
+  const thirdYear = yearsFromDraft === 2;
   if (lateCareer) {
     tags = tags.filter(tag => !['elite_burst', 'elite_rim_pressure', 'mvp', 'all_star', 'high_usage_creator'].includes(tag));
   }
   if (preRookie) {
     tags = tags.filter(tag => !['mvp', 'all_star', 'high_usage_creator', 'floor_general', 'elite_passer'].includes(tag));
     tags = [...new Set([...tags, 'pre_rookie_projection'])];
+  }
+  if (rookieSeason) {
+    tags = tags.filter(tag => !['mvp', 'all_star', 'high_usage_creator', 'floor_general', 'elite_passer'].includes(tag));
+    tags = [...new Set([...tags, 'rookie_projection'])];
+  } else if (secondYear || thirdYear) {
+    tags = tags.filter(tag => tag !== 'mvp' && !(roleSignal(profile, salary) < 57 && ['all_star', 'high_usage_creator'].includes(tag)));
+    tags = [...new Set([...tags, 'early_career_projection'])];
   }
   const override = SEASON_SOURCE_OVERRIDES[`${profileExactKey(player.full_name)}|${config.seasonStart}`] || {};
   if (override.tagsToRemove) {
@@ -317,13 +383,16 @@ function sourceForPlayer(player, profile, salary, config) {
     tags = [...new Set([...tags, ...override.tagsToAdd])];
   }
   const shootingSample = hasShootingSample(profile);
-  const productionScale = preRookie ? 0.55 : lateCareer ? 0.66 : 1;
-  const reboundScale = preRookie ? 0.58 : lateCareer ? 0.82 : 1;
-  const assistScale = preRookie ? 0.58 : lateCareer ? 0.88 : 1;
+  const earlyProductionScale = rookieSeason ? 0.58 : secondYear ? 0.72 : thirdYear ? 0.85 : 1;
+  const earlyReboundScale = rookieSeason ? 0.64 : secondYear ? 0.78 : thirdYear ? 0.9 : 1;
+  const earlyAssistScale = rookieSeason ? 0.62 : secondYear ? 0.78 : thirdYear ? 0.9 : 1;
+  const productionScale = preRookie ? 0.55 : lateCareer ? 0.66 : earlyProductionScale;
+  const reboundScale = preRookie ? 0.58 : lateCareer ? 0.82 : earlyReboundScale;
+  const assistScale = preRookie ? 0.58 : lateCareer ? 0.88 : earlyAssistScale;
   const ppg = numberFrom(override.pointsPerGame, profile.ppg * productionScale);
   const rpg = numberFrom(override.reboundsPerGame, profile.rpg * reboundScale);
   const apg = numberFrom(override.assistsPerGame, profile.apg * assistScale);
-  const minutesCap = preRookie ? 28 : lateCareer ? 31 : 39;
+  const minutesCap = preRookie ? 28 : rookieSeason ? 24 : secondYear ? 30 : thirdYear ? 33 : lateCareer ? 31 : 39;
   const minutes = numberFrom(override.minutesPerGame, Math.min(minutesCap, estimateMinutes(profile, salary)));
   const star = roleSignal(profile, salary);
   const uncappedThreeAttempts = !shootingSample && isBig
@@ -336,14 +405,14 @@ function sourceForPlayer(player, profile, salary, config) {
   const threeAttempts = numberFrom(override.threePointAttemptsPerGame, uncappedThreeAttempts);
   const freeThrowAttempts = numberFrom(override.freeThrowAttemptsPerGame, Math.max(1.2, Math.min(9.5, ppg * 0.24 + (tags.includes('elite_rim_pressure') ? 2.2 : 0) + (isBig ? 0.5 : 0))));
   const usage = numberFrom(override.usagePct, Math.max(12, Math.min(34, 13 + ppg * 0.65 + apg * 0.45 + (tags.includes('high_usage_creator') ? 4 : 0))));
-  const defensiveWinShares = Math.max(0.4, Math.min(preRookie ? 2.2 : lateCareer ? 3.4 : 5.8, profile.ws / 24 + (tags.includes('defensive_anchor') ? 1.6 : 0) + (tags.includes('defensive_wing_assignment') ? 1.1 : 0)));
-  const winShares = Math.max(0.5, Math.min(preRookie ? 5.5 : lateCareer ? 8 : 16, profile.ws / 11 + (salary >= 8_000_000 ? 1.2 : 0)));
+  const defensiveWinShares = Math.max(0.4, Math.min(preRookie ? 2.2 : rookieSeason ? 2.2 : secondYear ? 3.2 : thirdYear ? 4.2 : lateCareer ? 3.4 : 5.8, profile.ws / 24 + (tags.includes('defensive_anchor') ? 1.6 : 0) + (tags.includes('defensive_wing_assignment') ? 1.1 : 0)));
+  const winShares = Math.max(0.5, Math.min(preRookie ? 5.5 : rookieSeason ? 3.2 : secondYear ? 5.5 : thirdYear ? 7.5 : lateCareer ? 8 : 16, profile.ws / 11 + (salary >= 8_000_000 ? 1.2 : 0)));
 
   return {
     player_id: playerSlug(player.full_name, config.season),
     full_name: player.full_name,
     team: player.team,
-    position: player.position || profile.position,
+    position,
     age,
     birthDate: isoBirthDate(profile.birthDate),
     games: Math.max(50, Math.min(82, Math.round(68 + Math.min(12, profile.games / 120)))),
@@ -377,13 +446,123 @@ function sourceForPlayer(player, profile, salary, config) {
     driveRate: numberFrom(override.driveRate, tags.includes('elite_rim_pressure') ? 0.4 : isGuard ? 0.28 : 0.16),
     transitionRate: numberFrom(override.transitionRate, tags.includes('elite_burst') ? 0.24 : isGuard ? 0.16 : 0.1),
     postTouchRate: numberFrom(override.postTouchRate, tags.includes('post_scorer') ? 0.32 : isBig ? 0.18 : 0.05),
-    awardWeight: numberFrom(override.awardWeight, preRookie ? 2 : lateCareer ? Math.min(2, star >= 42 ? 2 : 0) : tags.includes('generational') ? 10 : tags.includes('mvp') ? 7 : tags.includes('all_star') ? 4 : star >= 42 ? 2 : 0),
+    awardWeight: numberFrom(override.awardWeight, preRookie ? 2 : rookieSeason ? 1 : secondYear ? Math.min(2, star >= 42 ? 2 : 0) : thirdYear ? Math.min(3, star >= 42 ? 2 : 0) : lateCareer ? Math.min(2, star >= 42 ? 2 : 0) : tags.includes('generational') ? 10 : tags.includes('mvp') ? 7 : tags.includes('all_star') ? 4 : star >= 42 ? 2 : 0),
     scoutingTags: tags,
   };
 }
 
+function brefIdForPlayer(player) {
+  if (player.bref_id) return String(player.bref_id);
+  const match = String(player.player_id || '').match(/^(?:current|pool_\d+)_([a-z0-9]+)$/i);
+  return match?.[1] || '';
+}
+
+function profileFromSeasonStats(player, stat, csvProfile) {
+  const position = normalizePosition(csvProfile?.position, stat.position || player.position) || normalizePosition(player.position);
+  return {
+    id: brefIdForPlayer(player) || csvProfile?.id || player.player_id,
+    full_name: player.full_name || stat.name || csvProfile?.full_name,
+    birthDate: csvProfile?.birthDate || (player.birth_year ? `January 1, ${player.birth_year}` : ''),
+    age: numberFrom(stat.age, numberFrom(player.age, undefined)),
+    position,
+    ppg: numberFrom(stat.pointsPerGame, csvProfile?.ppg ?? 3),
+    rpg: numberFrom(stat.reboundsPerGame, csvProfile?.rpg ?? 1.5),
+    apg: numberFrom(stat.assistsPerGame, csvProfile?.apg ?? 1),
+    fg: numberFrom(stat.fieldGoalPct, csvProfile?.fg ?? 0.43),
+    fg3: numberFrom(stat.threePointPct, csvProfile?.fg3 ?? 0.3),
+    ft: numberFrom(stat.freeThrowPct, csvProfile?.ft ?? 0.72),
+    games: numberFrom(stat.games, csvProfile?.games ?? 1),
+    per: numberFrom(stat.playerEfficiencyRating, csvProfile?.per ?? 10),
+    ws: numberFrom(stat.winShares, csvProfile?.ws ?? 0.2),
+    efg: numberFrom(stat.effectiveFieldGoalPct, csvProfile?.efg ?? stat.fieldGoalPct ?? 0.48),
+    draftPick: csvProfile?.draftPick,
+    draftYear: undefined,
+    sourceStats: stat,
+  };
+}
+
+function fallbackPoolProfile(player, csvProfile) {
+  if (csvProfile) {
+    return {
+      ...csvProfile,
+      position: normalizePosition(csvProfile.position, player.position) || csvProfile.position,
+      age: numberFrom(player.age, undefined),
+      draftYear: undefined,
+    };
+  }
+  return {
+    id: brefIdForPlayer(player) || player.player_id,
+    full_name: player.full_name,
+    birthDate: player.birth_year ? `January 1, ${player.birth_year}` : '',
+    age: numberFrom(player.age, undefined),
+    position: normalizePosition(player.position) || 'G',
+    ppg: 3,
+    rpg: 1.5,
+    apg: 1,
+    fg: 0.43,
+    fg3: 0.3,
+    ft: 0.72,
+    games: 1,
+    per: 10,
+    ws: 0.2,
+    efg: 0.48,
+    draftPick: undefined,
+    draftYear: undefined,
+  };
+}
+
+function sourceForPoolPlayer(player, profile, config) {
+  const source = sourceForPlayer({ ...player, position: profile.position || player.position }, profile, 0, config);
+  const stats = profile.sourceStats || {};
+  return {
+    ...source,
+    games: numberFrom(stats.games, source.games),
+    minutesPerGame: numberFrom(stats.minutesPerGame, source.minutesPerGame),
+    pointsPerGame: numberFrom(stats.pointsPerGame, source.pointsPerGame),
+    reboundsPerGame: numberFrom(stats.reboundsPerGame, source.reboundsPerGame),
+    assistsPerGame: numberFrom(stats.assistsPerGame, source.assistsPerGame),
+    stealsPerGame: numberFrom(stats.stealsPerGame, source.stealsPerGame),
+    blocksPerGame: numberFrom(stats.blocksPerGame, source.blocksPerGame),
+    fieldGoalPct: numberFrom(stats.fieldGoalPct, source.fieldGoalPct),
+    trueShootingPct: numberFrom(stats.trueShootingPct, source.trueShootingPct),
+    effectiveFieldGoalPct: numberFrom(stats.effectiveFieldGoalPct, source.effectiveFieldGoalPct),
+    threePointPct: numberFrom(stats.threePointPct, source.threePointPct),
+    threePointAttemptsPerGame: numberFrom(stats.threePointAttemptsPerGame, source.threePointAttemptsPerGame),
+    freeThrowPct: numberFrom(stats.freeThrowPct, source.freeThrowPct),
+    freeThrowAttemptsPerGame: numberFrom(stats.freeThrowAttemptsPerGame, source.freeThrowAttemptsPerGame),
+    usagePct: numberFrom(stats.usagePct, source.usagePct),
+    assistPct: numberFrom(stats.assistPct, source.assistPct),
+    turnoverPct: numberFrom(stats.turnoverPct, source.turnoverPct),
+    defensiveWinShares: numberFrom(stats.defensiveWinShares, source.defensiveWinShares),
+    winShares: numberFrom(stats.winShares, source.winShares),
+  };
+}
+
+function teamForPoolPlayer(player, stat, era) {
+  if (era === 'current') return String(player.team || stat?.team || '').toUpperCase().trim();
+  const statTeam = String(stat?.team || '').toUpperCase().trim();
+  if (statTeam && statTeam !== 'TOT') return statTeam;
+  return String(player.team || '').toUpperCase().trim();
+}
+
+function seasonNameKey(season, name) {
+  return `${season}|${normalizeName(name)}`;
+}
+
 function compact(value) {
   return JSON.stringify(value, null, 2).replace(/"([^"]+)":/g, '$1:');
+}
+
+function generatedSeedKey(seed) {
+  return [
+    seed.leagueContext.season,
+    normalizeName(seed.source.full_name),
+    String(seed.source.team || '').toUpperCase().trim(),
+  ].join('|');
+}
+
+function dedupeSeeds(seeds) {
+  return [...seeds.reduce((acc, seed) => acc.set(generatedSeedKey(seed), seed), new Map()).values()];
 }
 
 function main() {
@@ -393,6 +572,7 @@ function main() {
   const salariesCsv = readFileSync(resolve(ROOT, 'salaries_1985to2018.csv'), 'utf8');
   const { byName, byExactName, byId, idToName } = buildProfileIndex(playersCsv);
   const salaries = buildSalaryIndex(salariesCsv, idToName);
+  const statsBySeason = seasonStatIndexes();
 
   const seeds = [];
   for (const [era, teams] of Object.entries(rosters)) {
@@ -427,16 +607,63 @@ function main() {
     }
   }
 
+  const coveredSeasonNames = new Set(seeds.map(seed => seasonNameKey(seed.leagueContext.season, seed.source.full_name)));
+  for (const [era, sourcePath] of Object.entries(FULL_POOL_SOURCES)) {
+    const config = ERA_CONFIG[era];
+    if (!config) continue;
+    const pool = readJson(sourcePath, { players: [] });
+    for (const player of pool.players || []) {
+      if (!player.full_name) continue;
+      if (era !== 'current' && coveredSeasonNames.has(seasonNameKey(config.season, player.full_name))) continue;
+      const brefId = brefIdForPlayer(player);
+    const key = NAME_ALIASES[normalizeName(player.full_name)] || normalizeName(player.full_name);
+    const csvProfile = (brefId ? byId[brefId] : undefined)
+      || byExactName[profileExactKey(player.full_name)]
+      || byName[key];
+      const stat = (brefId ? statsBySeason[String(config.season)]?.get(brefId) : undefined)
+        || (era === 'current' && brefId ? statsBySeason['2025']?.get(brefId) : undefined);
+      const playerForSeed = {
+        ...player,
+        team: teamForPoolPlayer(player, stat, era),
+        position: stat?.position || player.position,
+      };
+    const profile = stat
+        ? profileFromSeasonStats(playerForSeed, stat, csvProfile)
+        : fallbackPoolProfile(playerForSeed, csvProfile);
+
+    seeds.push({
+        snapshotId: `generated-${config.season}`,
+      leagueContext: {
+          season: config.season,
+          pace: config.pace,
+          leagueThreePointPct: config.leagueThreePointPct,
+          leagueFreeThrowPct: config.leagueFreeThrowPct,
+      },
+      eraContext: {
+          season: config.season,
+          era: config.era,
+          pace: config.pace,
+          leaguePace: config.leaguePace,
+          leagueThreePointPct: config.leagueThreePointPct,
+          positionMinutesBaseline: config.positionMinutesBaseline,
+      },
+        source: sourceForPoolPlayer(playerForSeed, profile, config),
+    });
+      coveredSeasonNames.add(seasonNameKey(config.season, player.full_name));
+    }
+  }
+
+  const uniqueSeeds = dedupeSeeds(seeds);
   const output = [
     "import type { BaselineSeed } from './ratingSeeds';",
     '',
     '// Generated from local public basketball stat and era roster sources.',
     '// Run scripts/generate-nba-rating-seeds.mjs after source data changes.',
-    `export const generatedRatingSeeds: BaselineSeed[] = ${compact(seeds)};`,
+    `export const generatedRatingSeeds: BaselineSeed[] = ${compact(uniqueSeeds)};`,
     '',
   ].join('\n');
   writeFileSync(resolve(ROOT, 'domain/nba/generatedRatingSeeds.ts'), output);
-  console.log(`Wrote ${seeds.length} generated NBA rating seeds.`);
+  console.log(`Wrote ${uniqueSeeds.length} generated NBA rating seeds.`);
 }
 
 main();

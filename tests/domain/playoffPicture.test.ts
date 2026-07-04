@@ -119,4 +119,52 @@ describe('NBA playoff picture', () => {
     expect(picture.conferences[0].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['MIA', 'BOS']);
     expect(picture.conferences[1].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['LAL', 'DEN']);
   });
+
+  it('splits NFL playoff picture into AFC and NFC groups', () => {
+    const picture = buildConferencePlayoffPicture({
+      sport: 'madden',
+      standings: [
+        conferenceRow(1, 'KC', 'Kansas City Chiefs'),
+        conferenceRow(2, 'BUF', 'Buffalo Bills'),
+        conferenceRow(3, 'DAL', 'Dallas Cowboys'),
+        conferenceRow(4, 'SF', 'San Francisco 49ers'),
+      ],
+      teams: [
+        { id: 'KC', abbreviation: 'KC', conference: 'AFC' },
+        { id: 'BUF', abbreviation: 'BUF', conference: 'AFC' },
+        { id: 'DAL', abbreviation: 'DAL', conference: 'NFC' },
+        { id: 'SF', abbreviation: 'SF', conference: 'NFC' },
+      ],
+      format: 'short_8',
+      completion: { totalGames: 272, finalGames: 200, remainingGames: 72, complete: false },
+    });
+
+    expect(picture.conferences.map(group => group.label)).toEqual(['AFC', 'NFC']);
+    expect(picture.conferences[0].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['KC', 'BUF']);
+    expect(picture.conferences[1].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['DAL', 'SF']);
+  });
+
+  it('splits MLB playoff picture into American and National League groups', () => {
+    const picture = buildConferencePlayoffPicture({
+      sport: 'mlb',
+      standings: [
+        conferenceRow(1, 'NYY', 'New York Yankees'),
+        conferenceRow(2, 'SEA', 'Seattle Mariners'),
+        conferenceRow(3, 'LAD', 'Los Angeles Dodgers'),
+        conferenceRow(4, 'ATL', 'Atlanta Braves'),
+      ],
+      teams: [
+        { id: 'NYY', abbreviation: 'NYY', conference: 'AL' },
+        { id: 'SEA', abbreviation: 'SEA', conference: 'AL' },
+        { id: 'LAD', abbreviation: 'LAD', conference: 'NL' },
+        { id: 'ATL', abbreviation: 'ATL', conference: 'NL' },
+      ],
+      format: 'short_8',
+      completion: { totalGames: 2430, finalGames: 1200, remainingGames: 1230, complete: false },
+    });
+
+    expect(picture.conferences.map(group => group.label)).toEqual(['American League', 'National League']);
+    expect(picture.conferences[0].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['NYY', 'SEA']);
+    expect(picture.conferences[1].picture.playoffSeeds.map(seed => seed.abbreviation)).toEqual(['LAD', 'ATL']);
+  });
 });

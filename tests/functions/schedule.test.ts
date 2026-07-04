@@ -60,6 +60,22 @@ describe('schedule callable helpers', () => {
     }
   });
 
+  it('supports NFL and MLB season lengths for shared franchise calendars', () => {
+    const nflTeams = Array.from({ length: 32 }, (_, index) => `NFL${index}`);
+    const mlbTeams = Array.from({ length: 30 }, (_, index) => `MLB${index}`);
+    const nflGames = generateServerSchedule({ teams: nflTeams, gamesPerTeam: 17, seed: 'nfl-season' });
+    const mlbGames = generateServerSchedule({ teams: mlbTeams, gamesPerTeam: 162, seed: 'mlb-season' });
+
+    expect(nflGames).toHaveLength((32 * 17) / 2);
+    expect(mlbGames).toHaveLength((30 * 162) / 2);
+    for (const team of nflTeams) {
+      expect(nflGames.filter((game: any) => game.homeTeamId === team || game.awayTeamId === team)).toHaveLength(17);
+    }
+    for (const team of mlbTeams) {
+      expect(mlbGames.filter((game: any) => game.homeTeamId === team || game.awayTeamId === team)).toHaveLength(162);
+    }
+  });
+
   it('rejects impossible odd-team odd-length schedules clearly', () => {
     const teams = Array.from({ length: 31 }, (_, index) => `IMP${index}`);
 

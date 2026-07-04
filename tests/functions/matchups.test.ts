@@ -7,15 +7,20 @@ const {
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
   canonicalizeTeamForSimulation,
+  cleanFirestoreData,
   coachingGradeAdjustmentsForPlayer,
   createResetScheduledGameHandler,
   canUserSimulateVsCpu,
+  createSimulateScheduledGameHandler,
   expireMatchupRequest,
   finalScoreGame,
   finalScoreGameResult,
   gameStoryFromResult,
   gameWithCoachingSnapshots,
   gamesForCompetition,
+  postgameStoryFromResult,
+  liveGameReadyNotifications,
+  writeLiveGameReadyNotifications,
   requestMatchup,
   resetScheduledGame,
   scheduleAliases,
@@ -29,6 +34,7 @@ const {
   teamStateUpdatePayload,
   updatePayloadForCompetition,
 } = require('../../functions/franchise/matchups.js');
+const { simulateSportGame } = require('../../functions/franchise/sportSimulation.js');
 
 function seedAvailableGame(overrides: Record<string, unknown> = {}) {
   return {
@@ -71,6 +77,67 @@ function seedRoster(prefix: string, skill = 78) {
   };
 }
 
+function seedNflRoster(prefix: string, skill = 78) {
+  const players = [
+    { position: 'QB', passing_yards: 4200, passing_tds: 31 },
+    { position: 'HB', rushing_yards: 1120, receiving_yards: 280 },
+    { position: 'WR', receiving_yards: 1320 },
+    { position: 'WR', receiving_yards: 870 },
+    { position: 'TE', receiving_yards: 640 },
+    { position: 'LT' },
+    { position: 'LG' },
+    { position: 'C' },
+    { position: 'RG' },
+    { position: 'RT' },
+    { position: 'EDGE', sacks: 13 },
+    { position: 'DT', sacks: 5 },
+    { position: 'LB', sacks: 4 },
+    { position: 'CB' },
+    { position: 'S' },
+  ];
+  return {
+    players: players.map((player, index) => ({
+      player_id: `${prefix}-nfl-${index}`,
+      full_name: `${prefix} NFL ${index + 1}`,
+      hidden: { footballIq: skill, defense: skill - 2, speed: skill - 4 },
+      ...player,
+    })),
+  };
+}
+
+function seedMlbRoster(prefix: string, skill = 78) {
+  const players = [
+    { position: 'SP', era: '3.12', so: 189 },
+    { position: 'RP', era: '3.46', so: 64 },
+    { position: 'CP', era: '2.31', saves: 34, so: 78 },
+    { position: 'C', hr: 18, avg: '.251' },
+    { position: '1B', hr: 32, avg: '.274' },
+    { position: '2B', hr: 13, avg: '.268', sb: 18 },
+    { position: '3B', hr: 25, avg: '.263' },
+    { position: 'SS', hr: 21, avg: '.279', sb: 24 },
+    { position: 'LF', hr: 20, avg: '.260' },
+    { position: 'CF', hr: 16, avg: '.271', sb: 31 },
+    { position: 'RF', hr: 27, avg: '.266' },
+  ];
+  return {
+    players: players.map((player, index) => ({
+      player_id: `${prefix}-mlb-${index}`,
+      full_name: `${prefix} MLB ${index + 1}`,
+      hidden: { baseballIq: skill, power: skill - 1, contact: skill - 3, fielding: skill - 4 },
+      ...player,
+    })),
+  };
+}
+
+function undefinedPaths(value: unknown, path = 'value'): string[] {
+  if (value === undefined) return [path];
+  if (!value || typeof value !== 'object') return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => undefinedPaths(item, `${path}[${index}]`));
+  }
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => undefinedPaths(item, `${path}.${key}`));
+}
+
 describe('matchup request state helpers', () => {
   it('selects the next cancellable regular-season sim batch', () => {
     const batch = selectSimBatch({
@@ -105,6 +172,7 @@ describe('matchup request state helpers', () => {
   it('aliases era-suffixed schedule ids back to their team abbreviation', () => {
     expect(scheduleAliases('SAS_2011')).toEqual(['SAS_2011', 'SAS']);
     expect(scheduleAliases('NOH_2011')).toEqual(['NOH_2011', 'NOH', 'NOK', 'NOP']);
+    expect(scheduleAliases('MEM_CURRENT')).toEqual(['MEM_CURRENT', 'MEM', 'VAN']);
   });
 
   it('expires an unaccepted request after one hour', () => {
@@ -147,6 +215,204 @@ describe('matchup request state helpers', () => {
     });
     expect(result.homeScore).not.toBe(result.awayScore);
     expect([game.homeTeamId, game.awayTeamId]).toContain(result.winnerTeamId);
+  });
+
+  it('simulates NFL franchise games with football scoring and football box scores', () => {
+    const game = seedAvailableGame({
+      sport: 'madden',
+      homeTeamId: 'KC',
+      awayTeamId: 'LV',
+    });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 12_000,
+      homeTeam: seedNflRoster('Home', 86),
+      awayTeam: seedNflRoster('Away', 74),
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.sport).toBe('madden');
+    expect(result.homeScore).toBeGreaterThanOrEqual(6);
+    expect(result.homeScore).toBeLessThanOrEqual(49);
+    expect(result.awayScore).toBeGreaterThanOrEqual(6);
+    expect(result.awayScore).toBeLessThanOrEqual(49);
+    expect(result.quarters).toHaveLength(4);
+    expect(result.liveTimeline).toMatchObject({ sport: 'madden', version: 3 });
+    expect(result.liveTimeline.periods.map((period: { label: string }) => period.label)).toEqual(['Q1', 'Q2', 'Q3', 'Q4']);
+    expect(result.liveMode).toMatchObject({
+      status: 'ready',
+      simulationStartedAtMs: 12_000,
+      simulationEndsAtMs: 12_000 + result.liveTimeline.revealDurationMs,
+    });
+    expect(result.boxScore.home.players.some((player: any) => player.passingYards > 0 || player.rushingYards > 0 || player.receivingYards > 0)).toBe(true);
+    expect(result.boxScore.home.players.some((player: any) => player.points || player.rebounds || player.assists)).toBe(false);
+    expect(result.story).toMatch(/KC|LV/);
+    expect(result.postgameStory).toMatchObject({
+      headline: expect.stringContaining(result.winnerTeamId),
+      summary: expect.stringContaining('beat'),
+      turningPoint: expect.any(String),
+      topPerformers: expect.any(Array),
+    });
+  });
+
+  it('uses sport ratings as simulation inputs for NFL and MLB prospects', () => {
+    const footballGame = seedAvailableGame({ sport: 'madden', homeTeamId: 'KC', awayTeamId: 'LV' });
+    const footballHigh = {
+      players: ['QB', 'HB', 'WR', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'EDGE', 'DT', 'LB', 'CB', 'S'].map((position, index) => ({
+        player_id: `high-football-${index}`,
+        full_name: `High Football ${index}`,
+        position,
+        ratings: { awareness: 94, speed: 92, strength: 90, technique: 91 },
+      })),
+    };
+    const footballLow = {
+      players: ['QB', 'HB', 'WR', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'EDGE', 'DT', 'LB', 'CB', 'S'].map((position, index) => ({
+        player_id: `low-football-${index}`,
+        full_name: `Low Football ${index}`,
+        position,
+        ratings: { awareness: 48, speed: 47, strength: 49, technique: 46 },
+      })),
+    };
+    const football = simulateSportGame({
+      sport: 'madden',
+      game: footballGame,
+      homeTeam: footballHigh,
+      awayTeam: footballLow,
+      seed: 'ratings-football',
+    });
+    const footballLowHome = simulateSportGame({
+      sport: 'madden',
+      game: footballGame,
+      homeTeam: footballLow,
+      awayTeam: footballHigh,
+      seed: 'ratings-football',
+    });
+
+    const baseballGame = seedAvailableGame({ sport: 'mlb', homeTeamId: 'LAD', awayTeamId: 'SF' });
+    const baseballHigh = {
+      players: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((position, index) => ({
+        player_id: `high-baseball-${index}`,
+        full_name: `High Baseball ${index}`,
+        position,
+        ratings: { contact: 92, power: 91, command: 90 },
+      })),
+    };
+    const baseballLow = {
+      players: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((position, index) => ({
+        player_id: `low-baseball-${index}`,
+        full_name: `Low Baseball ${index}`,
+        position,
+        ratings: { contact: 45, power: 44, command: 46 },
+      })),
+    };
+    const baseball = simulateSportGame({
+      sport: 'mlb',
+      game: baseballGame,
+      homeTeam: baseballHigh,
+      awayTeam: baseballLow,
+      seed: 'ratings-baseball',
+    });
+    const baseballLowHome = simulateSportGame({
+      sport: 'mlb',
+      game: baseballGame,
+      homeTeam: baseballLow,
+      awayTeam: baseballHigh,
+      seed: 'ratings-baseball',
+    });
+
+    expect(football.homeScore).toBeGreaterThan(footballLowHome.homeScore);
+    expect(baseball.homeScore).toBeGreaterThanOrEqual(baseballLowHome.homeScore);
+  });
+
+  it('lets NFL and MLB game prep influence sport simulations', () => {
+    const nflGame = seedAvailableGame({
+      sport: 'madden',
+      homeTeamId: 'KC',
+      awayTeamId: 'LV',
+      homeFirstHalfCoachingPresetId: 'air_raid',
+      homeSecondHalfCoachingPresetId: 'air_raid',
+      awayFirstHalfCoachingPresetId: 'balanced',
+      awaySecondHalfCoachingPresetId: 'balanced',
+    });
+    const neutralNflGame = {
+      ...nflGame,
+      homeFirstHalfCoachingPresetId: 'balanced',
+      homeSecondHalfCoachingPresetId: 'balanced',
+    };
+    const nflArgs = {
+      uid: nflGame.homeGmId,
+      nowMs: 12_100,
+      homeTeam: seedNflRoster('Home', 80),
+      awayTeam: seedNflRoster('Away', 80),
+    };
+
+    expect(simulateScheduledGame({ game: nflGame, ...nflArgs }).homeScore)
+      .toBeGreaterThan(simulateScheduledGame({ game: neutralNflGame, ...nflArgs }).homeScore);
+
+    const mlbGame = seedAvailableGame({
+      sport: 'mlb',
+      homeTeamId: 'LAD',
+      awayTeamId: 'SF',
+      homeFirstHalfCoachingPresetId: 'power_lineup',
+      homeSecondHalfCoachingPresetId: 'bullpen_aggressive',
+      awayFirstHalfCoachingPresetId: 'balanced',
+      awaySecondHalfCoachingPresetId: 'balanced',
+    });
+    const neutralMlbGame = {
+      ...mlbGame,
+      homeFirstHalfCoachingPresetId: 'balanced',
+      homeSecondHalfCoachingPresetId: 'balanced',
+    };
+    const mlbArgs = {
+      uid: mlbGame.homeGmId,
+      nowMs: 12_200,
+      homeTeam: seedMlbRoster('Home', 78),
+      awayTeam: seedMlbRoster('Away', 78),
+    };
+
+    expect(simulateScheduledGame({ game: mlbGame, ...mlbArgs }).homeScore)
+      .toBeGreaterThan(simulateScheduledGame({ game: neutralMlbGame, ...mlbArgs }).homeScore);
+  });
+
+  it('simulates MLB franchise games with inning scoring and baseball box scores', () => {
+    const game = seedAvailableGame({
+      sport: 'mlb',
+      homeTeamId: 'LAD',
+      awayTeamId: 'SF',
+    });
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 13_000,
+      homeTeam: seedMlbRoster('Home', 84),
+      awayTeam: seedMlbRoster('Away', 76),
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.sport).toBe('mlb');
+    expect(result.homeScore).toBeGreaterThanOrEqual(0);
+    expect(result.homeScore).toBeLessThanOrEqual(14);
+    expect(result.awayScore).toBeGreaterThanOrEqual(0);
+    expect(result.awayScore).toBeLessThanOrEqual(14);
+    expect(result.innings).toHaveLength(9);
+    expect(result.liveTimeline).toMatchObject({ sport: 'mlb', version: 3 });
+    expect(result.liveTimeline.periods.map((period: { label: string }) => period.label)).toEqual(['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']);
+    expect(result.liveMode).toMatchObject({
+      status: 'ready',
+      simulationStartedAtMs: 13_000,
+      simulationEndsAtMs: 13_000 + result.liveTimeline.revealDurationMs,
+    });
+    expect(result.boxScore.home.players.some((player: any) => player.hits > 0 || player.homeRuns > 0 || player.rbi > 0)).toBe(true);
+    expect(result.boxScore.home.players.some((player: any) => player.inningsPitched > 0 || player.strikeouts > 0)).toBe(true);
+    expect(result.boxScore.home.players.some((player: any) => player.points || player.rebounds || player.assists)).toBe(false);
+    expect(result.story).toMatch(/LAD|SF/);
+    expect(result.postgameStory).toMatchObject({
+      headline: expect.stringContaining(result.winnerTeamId),
+      summary: expect.stringContaining('beat'),
+      turningPoint: expect.any(String),
+      topPerformers: expect.any(Array),
+    });
   });
 
   it('lets commissioners control whether GMs can sim against vacant CPU teams', () => {
@@ -249,6 +515,12 @@ describe('matchup request state helpers', () => {
         homeAbbr: 'LAL',
         centerText: 'LAL',
       }),
+    });
+    expect(result.postgameStory).toMatchObject({
+      headline: expect.any(String),
+      summary: expect.stringContaining('points'),
+      turningPoint: expect.any(String),
+      topPerformers: expect.any(Array),
     });
   });
 
@@ -711,6 +983,201 @@ describe('matchup request state helpers', () => {
     expect(story).toContain('third quarter');
   });
 
+  it('builds a structured postgame recap for result screens and history', () => {
+    const recap = postgameStoryFromResult({
+      homeTeamId: 'MIA',
+      awayTeamId: 'CHI',
+      homeScore: 104,
+      awayScore: 102,
+      winnerTeamId: 'MIA',
+      quarters: [
+        { quarter: 1, home: 24, away: 31 },
+        { quarter: 2, home: 25, away: 22 },
+        { quarter: 3, home: 29, away: 24 },
+        { quarter: 4, home: 26, away: 25 },
+      ],
+      boxScore: {
+        home: {
+          players: [
+            { name: 'LeBron James', starter: true, points: 38, rebounds: 12, assists: 9, steals: 2, blocks: 1, turnovers: 3 },
+            { name: 'Shane Battier', starter: false, points: 17, rebounds: 4, assists: 2, steals: 1, blocks: 0, turnovers: 0 },
+          ],
+        },
+        away: {
+          players: [
+            { name: 'Derrick Rose', starter: true, points: 34, rebounds: 4, assists: 8, steals: 1, blocks: 0, turnovers: 3 },
+          ],
+        },
+      },
+      coachingImpact: {
+        homeFirstHalfPresetId: 'pace_and_space',
+        homeSecondHalfPresetId: 'grit_and_grind',
+      },
+    });
+
+    expect(recap).toMatchObject({
+      headline: 'MIA 104, CHI 102',
+      summary: expect.stringContaining('LeBron James powered the win'),
+      turningPoint: expect.stringContaining('third quarter'),
+      coachingImpact: expect.stringContaining('Pace and Space'),
+    });
+    expect(recap.coachingImpact).not.toContain('pace_and_space');
+    expect(recap.topPerformers).toEqual(['LeBron James', 'Derrick Rose', 'Shane Battier']);
+  });
+
+  it('builds spoiler-safe live game ready notifications for both GMs', () => {
+    const notifications = liveGameReadyNotifications({
+      leagueId: 'league-1',
+      leagueName: 'Launch League',
+      competition: 'regular',
+      game: {
+        id: 'game-live',
+        sport: 'nba',
+        homeTeamId: 'LAL',
+        awayTeamId: 'BOS',
+        homeGmId: 'home-gm',
+        awayGmId: 'away-gm',
+        liveTimeline: { version: 2 },
+      },
+      createdAt: '2026-07-02T19:00:00.000Z',
+    });
+
+    expect(notifications).toEqual([
+      {
+        uid: 'home-gm',
+        notification: expect.objectContaining({
+          id: 'game-ready:league-1:game-live:home-gm',
+          type: 'game_ready',
+          leagueId: 'league-1',
+          gameId: 'game-live',
+          competition: 'regular',
+          liveTimeline: true,
+          message: 'Launch League is live. Watch the game unfold now.',
+        }),
+      },
+      {
+        uid: 'away-gm',
+        notification: expect.objectContaining({
+          id: 'game-ready:league-1:game-live:away-gm',
+          type: 'game_ready',
+          liveTimeline: true,
+        }),
+      },
+    ]);
+    expect(JSON.stringify(notifications)).not.toContain('homeScore');
+    expect(JSON.stringify(notifications)).not.toContain('awayScore');
+  });
+
+  it('writes live game ready notifications through the provided FieldValue dependency', () => {
+    const writes: any[] = [];
+    const userCollection = {
+      doc: vi.fn((uid: string) => ({ uid })),
+    };
+    const db = {
+      collection: vi.fn((name: string) => (name === 'users' ? userCollection : { doc: vi.fn() })),
+    };
+    const FieldValue = {
+      arrayUnion: vi.fn((notification: any) => ({ arrayUnion: notification })),
+    };
+    const tx = {
+      set: vi.fn((ref: any, payload: any, options: any) => writes.push({ ref, payload, options })),
+    };
+
+    writeLiveGameReadyNotifications({
+      tx,
+      db,
+      FieldValue,
+      leagueId: 'league-1',
+      leagueName: 'Launch League',
+      competition: 'regular',
+      game: {
+        id: 'game-live',
+        sport: 'nba',
+        homeGmId: 'home-gm',
+        awayGmId: 'away-gm',
+        liveTimeline: { version: 2 },
+      },
+      createdAt: '2026-07-02T19:00:00.000Z',
+    });
+
+    expect(tx.set).toHaveBeenCalledTimes(2);
+    expect(writes[0]).toMatchObject({
+      ref: { uid: 'home-gm' },
+      payload: {
+        notifications: {
+          arrayUnion: expect.objectContaining({
+            type: 'game_ready',
+            liveTimeline: true,
+          }),
+        },
+      },
+      options: { merge: true },
+    });
+  });
+
+  it('keeps full live timelines out of schedule update payloads', () => {
+    const heavyEvents = Array.from({ length: 120 }, (_, index) => ({
+      id: `event-${index}`,
+      elapsedMs: index * 1000,
+      period: 1,
+      periodLabel: 'Q1',
+      clockSeconds: 720 - index,
+      homeScore: index,
+      awayScore: index - 1,
+      eventType: 'score',
+      actingTeamId: 'home',
+      text: `Detailed visual play event ${index} with shot context, stats, lineups, motion cues, and matchup notes.`,
+      x: 50,
+      y: 50,
+      momentum: 1,
+      tags: ['live', 'visual'],
+      statDeltas: [{
+        playerId: `player-${index}`,
+        playerName: `Player ${index}`,
+        teamId: 'home',
+        stats: { points: 2 },
+      }],
+      currentLineups: {
+        home: ['h1', 'h2', 'h3', 'h4', 'h5'],
+        away: ['a1', 'a2', 'a3', 'a4', 'a5'],
+      },
+    }));
+    const game = seedAvailableGame({
+      status: 'final',
+      homeScore: 110,
+      awayScore: 104,
+      liveTimeline: {
+        version: 2,
+        gameId: 'heavy-live-game',
+        sport: 'nba',
+        homeTeamId: 'home',
+        awayTeamId: 'away',
+        homeScore: 110,
+        awayScore: 104,
+        revealDurationMs: 900_000,
+        periods: [{ period: 1, label: 'Q1', home: 30, away: 25 }],
+        events: heavyEvents,
+        starterMatchups: [{ position: 'PG', homePlayer: { playerId: 'h1', name: 'Home PG', teamId: 'home' }, awayPlayer: { playerId: 'a1', name: 'Away PG', teamId: 'away' } }],
+      },
+      liveMode: { status: 'ready', simulationStartedAtMs: 1_000, simulationEndsAtMs: 901_000 },
+    });
+
+    const payload = updatePayloadForCompetition('regular', [game]);
+    const writtenGame = payload.games[0] as any;
+
+    expect(writtenGame.liveTimeline).toMatchObject({
+      version: 2,
+      gameId: 'heavy-live-game',
+      homeTeamId: 'home',
+      awayTeamId: 'away',
+      revealDurationMs: 900_000,
+      storage: 'liveTimelines',
+    });
+    expect(writtenGame.liveTimeline.events).toBeUndefined();
+    expect(writtenGame.liveTimeline.starterMatchups).toBeUndefined();
+    expect(JSON.stringify(payload).length).toBeLessThan(8_000);
+  });
+
   it('uses grade-based player profiles without inflating average assists and rebounds', () => {
     const homeTeam = {
       players: [
@@ -896,6 +1363,161 @@ describe('matchup request state helpers', () => {
     expect(team.players.map((player: any) => player.full_name)).toEqual(['Tim Duncan', 'Tony Parker']);
   });
 
+  it('tops up under-linked claimed schedule teams from the era player pool before simulation', async () => {
+    const game = seedAvailableGame({
+      id: 'nba_3dhh2u',
+      homeTeamId: 'CHA',
+      awayTeamId: 'LAL',
+      homeGmId: 'gm-cha',
+      awayGmId: 'gm-lal',
+    });
+    const schedule = {
+      participants: [
+        { scheduleTeamId: 'CHA', abbreviation: 'CHA', gmId: 'gm-cha' },
+        { scheduleTeamId: 'LAL', abbreviation: 'LAL', gmId: 'gm-lal' },
+      ],
+      games: [game],
+    };
+    const leagueRef = { collection: vi.fn() };
+    const scheduleRef = { collection: vi.fn() };
+    const chaRef = {};
+    const lalRef = {};
+    const poolRef = {};
+    const prepRef = {};
+    const usersCollection = { doc: vi.fn((uid: string) => ({ uid })) };
+    const teamsCollection = {
+      doc: vi.fn((id: string) => (id === 'CHA' ? chaRef : lalRef)),
+      where: vi.fn(),
+    };
+    const schedulesCollection = { doc: vi.fn(() => scheduleRef) };
+    const poolCollection = { doc: vi.fn(() => poolRef) };
+    const liveTimelineRef = { id: 'nba_3dhh2u-live-timeline' };
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn(() => prepRef) };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return schedulesCollection;
+      if (name === 'teams') return teamsCollection;
+      return { doc: vi.fn() };
+    });
+    const poolPlayers = [
+      ...Array.from({ length: 7 }, (_, index) => ({
+        player_id: `cha-pool-${index}`,
+        full_name: `Charlotte Pool ${index + 1}`,
+        team: 'CHA',
+        hidden: { shooting: 78 + index, playmaking: 76, defense: 74 },
+      })),
+      ...Array.from({ length: 7 }, (_, index) => ({
+        player_id: `lal-pool-${index}`,
+        full_name: `Lakers Pool ${index + 1}`,
+        team: 'LAL',
+        hidden: { shooting: 82, playmaking: 80, defense: 78 },
+      })),
+    ];
+    const tx = {
+      get: vi.fn(async ref => {
+        if (ref === leagueRef) return { exists: true, data: () => ({ commissionerId: 'commissioner', scheduleId: '2026', era: 'current', sport: 'nba', name: 'NBA League' }) };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === chaRef) return {
+          exists: true,
+          data: () => ({
+            teamId: 'CHA',
+            abbreviation: 'CHA',
+            gmId: 'gm-cha',
+            players: [{ player_id: 'cha-linked-1', full_name: 'One Linked Hornet', team: 'CHA', hidden: { shooting: 80, playmaking: 77, defense: 75 } }],
+          }),
+        };
+        if (ref === lalRef) return {
+          exists: true,
+          data: () => ({
+            teamId: 'LAL',
+            abbreviation: 'LAL',
+            gmId: 'gm-lal',
+            players: poolPlayers.filter((player: any) => player.team === 'LAL'),
+          }),
+        };
+        if (ref === poolRef) return { exists: true, data: () => ({ players: poolPlayers }) };
+        if (ref === prepRef) return { exists: false, data: () => ({}) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === 'leagues') return { doc: vi.fn(() => leagueRef) };
+        if (name === 'era_player_pools') return poolCollection;
+        if (name === 'users') return usersCollection;
+        return { doc: vi.fn() };
+      }),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimulateScheduledGameHandler({
+      getFirestore: () => db,
+      FieldValue: { arrayUnion: (value: any) => value },
+      now: () => 12_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const result = await handler({
+      auth: { uid: 'gm-cha' },
+      data: { leagueId: 'league-1', gameId: 'nba_3dhh2u', competition: 'regular' },
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.boxScore.home.players.length).toBeGreaterThanOrEqual(5);
+    expect(tx.update).toHaveBeenCalledWith(scheduleRef, expect.objectContaining({
+      games: [expect.objectContaining({ id: 'nba_3dhh2u', status: 'final' })],
+    }));
+    expect(tx.set).toHaveBeenCalledWith(liveTimelineRef, expect.objectContaining({
+      gameId: 'nba_3dhh2u',
+      liveTimeline: expect.objectContaining({
+        events: expect.arrayContaining([expect.objectContaining({ eventType: expect.any(String) })]),
+      }),
+    }), { merge: true });
+    const scheduleUpdate = tx.update.mock.calls.find(([ref]: any[]) => ref === scheduleRef)?.[1];
+    expect(scheduleUpdate.games[0].liveTimeline.events).toBeUndefined();
+  });
+
+  it('surfaces unexpected simulate transaction failures with the original message', async () => {
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimulateScheduledGameHandler({
+      getFirestore: () => ({
+        collection: () => ({ doc: () => ({}) }),
+        runTransaction: async () => {
+          throw new Error('Firestore rejected nested array payload');
+        },
+      }),
+      FieldValue: { arrayUnion: (value: any) => value },
+      now: () => 12_000,
+      HttpsError: TestHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'gm-1' },
+      data: { leagueId: 'league-1', gameId: 'game-1', competition: 'regular' },
+    })).rejects.toMatchObject({
+      code: 'internal',
+      message: 'Firestore rejected nested array payload',
+    });
+  });
+
   it('returns persistent team condition after simulated games', () => {
     const game = seedAvailableGame();
     const result = simulateScheduledGameResult({
@@ -959,6 +1581,7 @@ describe('matchup request state helpers', () => {
       liveTimeline: { version: 1, events: [] },
       liveMode: { status: 'ready' },
       story: 'Old result',
+      postgameStory: { headline: 'Old result', summary: 'Old recap' },
     });
 
     const result = resetScheduledGame({ game, uid: 'commissioner', nowMs: 7_000 });
@@ -983,6 +1606,7 @@ describe('matchup request state helpers', () => {
     expect(result.liveTimeline).toBeUndefined();
     expect(result.liveMode).toBeUndefined();
     expect(result.story).toBeUndefined();
+    expect(result.postgameStory).toBeUndefined();
   });
 
   it('submits a played final score without allowing ties', () => {
@@ -1049,6 +1673,51 @@ describe('matchup request state helpers', () => {
     expect(result.game.boxScore.away.points).toBe(result.game.awayScore);
     expect(result.game.boxScore.home.points).toBe(result.game.homeScore);
     expect(result.game.liveTimeline.events.length).toBeGreaterThan(0);
+    expect(result.game.postgameStory).toMatchObject({
+      headline: expect.any(String),
+      summary: expect.stringContaining('points'),
+      topPerformers: expect.any(Array),
+    });
+  });
+
+  it('respects winner-only outcomes for NFL and MLB generated results', () => {
+    const nflGame = seedAvailableGame({ sport: 'madden', homeTeamId: 'KC', awayTeamId: 'LV' });
+    const nflResult = finalScoreGameResult({
+      game: nflGame,
+      uid: nflGame.homeGmId,
+      nowMs: 9_500,
+      winnerTeamId: nflGame.awayTeamId,
+      homeTeam: seedNflRoster('Home', 92),
+      awayTeam: seedNflRoster('Away', 70),
+    });
+
+    expect(nflResult.game.winnerTeamId).toBe(nflGame.awayTeamId);
+    expect(nflResult.game.awayScore).toBeGreaterThan(nflResult.game.homeScore);
+    expect(nflResult.game.liveTimeline.sport).toBe('madden');
+
+    const mlbGame = seedAvailableGame({ sport: 'mlb', homeTeamId: 'LAD', awayTeamId: 'SF' });
+    const mlbResult = finalScoreGameResult({
+      game: mlbGame,
+      uid: mlbGame.homeGmId,
+      nowMs: 9_700,
+      winnerTeamId: mlbGame.awayTeamId,
+      homeTeam: seedMlbRoster('Home', 90),
+      awayTeam: seedMlbRoster('Away', 72),
+    });
+
+    expect(mlbResult.game.winnerTeamId).toBe(mlbGame.awayTeamId);
+    expect(mlbResult.game.awayScore).toBeGreaterThan(mlbResult.game.homeScore);
+    expect(mlbResult.game.liveTimeline.sport).toBe('mlb');
+    expect(nflResult.game.liveMode).toMatchObject({ status: 'ready' });
+    expect(mlbResult.game.liveMode).toMatchObject({ status: 'ready' });
+    expect(nflResult.game.postgameStory).toMatchObject({
+      summary: expect.stringContaining('beat'),
+      topPerformers: expect.any(Array),
+    });
+    expect(mlbResult.game.postgameStory).toMatchObject({
+      summary: expect.stringContaining('beat'),
+      topPerformers: expect.any(Array),
+    });
   });
 
   it('adds simulated box score production to roster season stats', () => {
@@ -1096,6 +1765,152 @@ describe('matchup request state helpers', () => {
       games: 1,
       points: 9,
     });
+  });
+
+  it('adds football and baseball box score production to roster season stats', () => {
+    expect(teamPersistencePayload({
+      state: {
+        fatigue: 1,
+        fatigueSequence: 1,
+        minorInjuryCount: 0,
+        severeInjuryCount: 0,
+        injuries: [],
+      },
+      team: {
+        players: [
+          { player_id: 'qb-1', full_name: 'QB One', seasonStats: { games: 2, passingYards: 410 } },
+        ],
+      },
+      teamBoxScore: {
+        players: [
+          { playerId: 'qb-1', name: 'QB One', passingYards: 265, passingTouchdowns: 2, interceptions: 1 },
+        ],
+      },
+    }).players[0].seasonStats).toMatchObject({
+      games: 3,
+      passingYards: 675,
+      passingTouchdowns: 2,
+      interceptions: 1,
+    });
+
+    expect(teamPersistencePayload({
+      state: {
+        fatigue: 1,
+        fatigueSequence: 1,
+        minorInjuryCount: 0,
+        severeInjuryCount: 0,
+        injuries: [],
+      },
+      team: {
+        players: [
+          { player_id: 'bat-1', full_name: 'Bat One', seasonStats: { games: 4, hits: 5 } },
+        ],
+      },
+      teamBoxScore: {
+        players: [
+          { playerId: 'bat-1', name: 'Bat One', atBats: 4, hits: 2, runs: 1, rbi: 3, homeRuns: 1 },
+        ],
+      },
+    }).players[0].seasonStats).toMatchObject({
+      games: 5,
+      atBats: 4,
+      hits: 7,
+      runs: 1,
+      rbi: 3,
+      homeRuns: 1,
+    });
+  });
+
+  it('does not emit undefined fields in simulated game payloads written to Firestore', () => {
+    const cases = [
+      {
+        game: seedAvailableGame({ sport: 'nba', homeTeamId: 'NYK', awayTeamId: 'MEM' }),
+        homeTeam: seedRoster('knicks'),
+        awayTeam: seedRoster('grizzlies'),
+      },
+      {
+        game: seedAvailableGame({ sport: 'madden', homeTeamId: 'NYG', awayTeamId: 'DAL' }),
+        homeTeam: seedNflRoster('giants'),
+        awayTeam: seedNflRoster('cowboys'),
+      },
+      {
+        game: seedAvailableGame({ sport: 'mlb', homeTeamId: 'NYY', awayTeamId: 'BOS' }),
+        homeTeam: seedMlbRoster('yankees'),
+        awayTeam: seedMlbRoster('red-sox'),
+      },
+    ];
+
+    cases.forEach(({ game, homeTeam, awayTeam }, index) => {
+      const result = simulateScheduledGameResult({
+        game,
+        uid: game.homeGmId,
+        nowMs: 20_000 + index,
+        homeTeam,
+        awayTeam,
+      });
+
+      expect(undefinedPaths(result.game, 'game')).toEqual([]);
+      expect(undefinedPaths(result.teamStates, 'teamStates')).toEqual([]);
+    });
+  });
+
+  it('removes undefined fields from roster persistence payloads before Firestore writes', () => {
+    const payload = teamPersistencePayload({
+      state: {
+        fatigue: undefined,
+        fatigueSequence: 2,
+        minorInjuryCount: undefined,
+        severeInjuryCount: 0,
+        injuries: [{ id: 'injury-1', note: undefined }],
+      },
+      team: {
+        players: [
+          {
+            player_id: 'nyk-1',
+            full_name: 'Dirty Player',
+            nickname: undefined,
+            hidden: { shooting: 80, defense: undefined },
+            seasonStats: { games: 4, points: undefined },
+          },
+        ],
+      },
+      teamBoxScore: {
+        players: [
+          { playerId: 'nyk-1', name: 'Dirty Player', points: 18, rebounds: 7, assists: 3 },
+        ],
+      },
+    });
+
+    expect(undefinedPaths(payload, 'payload')).toEqual([]);
+    expect(payload.players[0]).toMatchObject({
+      player_id: 'nyk-1',
+      full_name: 'Dirty Player',
+      hidden: { shooting: 80 },
+      seasonStats: {
+        games: 5,
+        points: 18,
+        rebounds: 7,
+        assists: 3,
+      },
+    });
+  });
+
+  it('removes undefined values inside arrays before Firestore writes', () => {
+    const cleaned = cleanFirestoreData({
+      games: [
+        seedAvailableGame({ id: 'clean-game' }),
+        undefined,
+        { id: 'dirty-game', status: 'scheduled', notes: [undefined, 'ready'] },
+      ],
+      nested: {
+        values: [1, undefined, { keep: true, drop: undefined }],
+      },
+    });
+
+    expect(undefinedPaths(cleaned, 'cleaned')).toEqual([]);
+    expect(cleaned.games).toHaveLength(2);
+    expect(cleaned.games[1]).toMatchObject({ id: 'dirty-game', notes: ['ready'] });
+    expect(cleaned.nested.values).toEqual([1, { keep: true }]);
   });
 
   it('records coaching snapshots as postgame scouting history', () => {

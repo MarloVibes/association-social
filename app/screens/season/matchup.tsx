@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
-import { COACHING_PRESETS, buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
+import { buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coaching';
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { defaultPresetsForSport } from '@/domain/sports/coachingPresets';
+import { scorePeriodsForSport } from '@/domain/sports/gamePeriods';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 
 type Team = {
@@ -54,17 +56,21 @@ type MatchupGame = Omit<NbaScheduleGame, 'status'> & {
   resetAtMs?: number;
   finalScoreSubmittedByUid?: string;
   liveTimeline?: unknown;
+  sport?: string;
   boxScore?: {
     home?: { points?: number; players?: BoxScorePlayer[] };
     away?: { points?: number; players?: BoxScorePlayer[] };
   };
   quarters?: { quarter: number; home: number; away: number }[];
+  innings?: { inning: number; period?: number; label?: string; home: number; away: number }[];
+  periods?: { period: number; label?: string; home: number; away: number }[];
   story?: string;
 };
 
 type BoxScorePlayer = {
   playerId?: string;
   name?: string;
+  position?: string;
   minutes?: number;
   points?: number;
   rebounds?: number;
@@ -72,15 +78,94 @@ type BoxScorePlayer = {
   steals?: number;
   blocks?: number;
   turnovers?: number;
+  passingYards?: number;
+  passingTouchdowns?: number;
+  interceptions?: number;
+  rushingYards?: number;
+  rushingTouchdowns?: number;
+  receivingYards?: number;
+  receivingTouchdowns?: number;
+  sacks?: number;
+  tackles?: number;
+  atBats?: number;
+  hits?: number;
+  runs?: number;
+  rbi?: number;
+  homeRuns?: number;
+  stolenBases?: number;
+  inningsPitched?: number;
+  strikeouts?: number;
+  earnedRuns?: number;
 };
 
-function playerImpactScore(player: BoxScorePlayer) {
+function prepPhaseLabels(sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'mlb') return ['Early', 'Late'];
+  return ['1H', '2H'];
+}
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function playerImpactScore(player: BoxScorePlayer, sport: 'nba' | 'madden' | 'mlb' = 'nba') {
+  if (sport === 'madden') {
+    return Number(player.passingYards || 0)
+      + Number(player.rushingYards || 0) * 1.15
+      + Number(player.receivingYards || 0) * 1.15
+      + Number(player.passingTouchdowns || 0) * 45
+      + Number(player.rushingTouchdowns || 0) * 45
+      + Number(player.receivingTouchdowns || 0) * 45
+      + Number(player.sacks || 0) * 35
+      + Number(player.interceptions || 0) * 35;
+  }
+  if (sport === 'mlb') {
+    return Number(player.hits || 0) * 12
+      + Number(player.rbi || 0) * 10
+      + Number(player.homeRuns || 0) * 25
+      + Number(player.stolenBases || 0) * 8
+      + Number(player.inningsPitched || 0) * 8
+      + Number(player.strikeouts || 0) * 5
+      - Number(player.earnedRuns || 0) * 5;
+  }
   return Number(player.points || 0) * 2
     + Number(player.rebounds || 0) * 1.15
     + Number(player.assists || 0) * 1.35
     + Number(player.steals || 0) * 2
     + Number(player.blocks || 0) * 2
     - Number(player.turnovers || 0) * 0.8;
+}
+
+function playerStatLine(player: BoxScorePlayer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    const lines = [];
+    if (Number(player.passingYards || 0) > 0) lines.push(`${Number(player.passingYards || 0)} PASS YDS`, `${Number(player.passingTouchdowns || 0)} TD`);
+    if (Number(player.rushingYards || 0) > 0) lines.push(`${Number(player.rushingYards || 0)} RUSH YDS`);
+    if (Number(player.receivingYards || 0) > 0) lines.push(`${Number(player.receivingYards || 0)} REC YDS`);
+    if (Number(player.sacks || 0) > 0) lines.push(`${Number(player.sacks || 0)} SACK`);
+    if (Number(player.interceptions || 0) > 0) lines.push(`${Number(player.interceptions || 0)} INT`);
+    return lines.slice(0, 3).join(' · ') || `${player.position || 'NFL'} impact`;
+  }
+  if (sport === 'mlb') {
+    if (Number(player.inningsPitched || 0) > 0 || Number(player.strikeouts || 0) > 0) {
+      return `${Number(player.inningsPitched || 0)} IP · ${Number(player.strikeouts || 0)} K · ${Number(player.earnedRuns || 0)} ER`;
+    }
+    return `${Number(player.hits || 0)} H · ${Number(player.rbi || 0)} RBI · ${Number(player.homeRuns || 0)} HR`;
+  }
+  return `${Number(player.points || 0)} PTS · ${Number(player.rebounds || 0)} REB · ${Number(player.assists || 0)} AST`;
+}
+
+function callableErrorMessage(error: any) {
+  const message = String(error?.message || '').trim();
+  const details = typeof error?.details === 'string'
+    ? error.details.trim()
+    : error?.details && typeof error.details === 'object'
+      ? JSON.stringify(error.details)
+      : '';
+  const code = String(error?.code || '').replace('functions/', '').trim();
+  return [message, details].filter(Boolean).join('\n') || code || 'Please try again.';
 }
 
 export default function MatchupScreen() {
@@ -148,6 +233,7 @@ export default function MatchupScreen() {
     () => scheduledGames.find(item => item.id === gameId) || null,
     [gameId, scheduledGames],
   );
+  const sport = normalizeSport(league?.sport || game?.sport);
   const myTeam = teams.find(team => (
     team.gmId === uid
     && game
@@ -194,9 +280,9 @@ export default function MatchupScreen() {
   const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
   const presets = useMemo(() => {
     const byId = new Map<string, CoachingPreset>();
-    [...COACHING_PRESETS, ...(myTeam?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
+    [...defaultPresetsForSport(sport), ...(myTeam?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
     return [...byId.values()];
-  }, [myTeam?.coachingPresets]);
+  }, [myTeam?.coachingPresets, sport]);
 
   useEffect(() => {
     if (myTeam?.defaultCoachingPresetId) {
@@ -228,7 +314,7 @@ export default function MatchupScreen() {
         Alert.alert('Reset unavailable', 'Reset needs the latest cloud functions so player stats roll back correctly. Deploy functions, then try again.');
         return;
       }
-      Alert.alert('Matchup action failed', error.message || 'Please try again.');
+      Alert.alert('Matchup action failed', callableErrorMessage(error));
     } finally {
       setWorking(false);
     }
@@ -279,15 +365,15 @@ export default function MatchupScreen() {
     setWorking(true);
     try {
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
-      await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'preparation', `${game.id}_${myTeam.id}`), {
+      await setDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'preparation', `${game.id}_${myTeam.id}`), {
         teamId: myTeam.id,
         gameId: game.id,
         presetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
         firstHalfPresetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
         secondHalfPresetSnapshot: buildCoachingSnapshot(secondHalfPreset, myTeam.id, game.id),
         updatedAt: serverTimestamp(),
-      });
-      Alert.alert('Saved', 'Your first-half and second-half game prep has been saved.');
+      }, { merge: true });
+      Alert.alert('Saved', sport === 'mlb' ? 'Your early-game and late-game prep has been saved.' : 'Your opening plan and adjustment plan have been saved.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -306,8 +392,9 @@ export default function MatchupScreen() {
   const topPerformers = [
     ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: 'home' as const, sideAbbr: homeAbbr })),
     ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: 'away' as const, sideAbbr: awayAbbr })),
-  ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left)).slice(0, 4);
-  const resultStory = game && typeof game.homeScore === 'number' && typeof game.awayScore === 'number'
+  ].sort((left, right) => playerImpactScore(right, sport) - playerImpactScore(left, sport)).slice(0, 4);
+  const displayedPeriods = scorePeriodsForSport(sport, game);
+  const resultStory = sport === 'nba' && game && typeof game.homeScore === 'number' && typeof game.awayScore === 'number'
     ? displayScheduleEventText(buildPostgameStory({
       storedStory: game.story,
       homeLabel,
@@ -319,7 +406,8 @@ export default function MatchupScreen() {
       quarters: game.quarters,
       performers: topPerformers,
     }))
-    : '';
+    : displayScheduleEventText(game?.story) || '';
+  const [firstPrepLabel, secondPrepLabel] = prepPhaseLabels(sport);
 
   return (
     <View style={styles.screen}>
@@ -330,9 +418,9 @@ export default function MatchupScreen() {
         ListHeaderComponent={(
           <>
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+              <Pressable onPress={() => router.back()} style={styles.iconButton}>
                 <Ionicons color="#ffffff" name="chevron-back" size={24} />
-              </TouchableOpacity>
+              </Pressable>
               <View style={styles.headerCopy}>
                 <Text style={styles.eyebrow}>{league?.name || 'League'}</Text>
                 <Text style={styles.title}>Matchup</Text>
@@ -346,7 +434,7 @@ export default function MatchupScreen() {
                   <View style={styles.matchupVisual}>
                     <View style={styles.matchupTeam}>
                       <View style={styles.matchupLogoDisc}>
-                        <SportTeamLogo sport="nba" abbr={leftAbbr} era={league?.currentYear} style={styles.matchupLogo} fontSize={12} />
+                        <SportTeamLogo sport={sport} abbr={leftAbbr} era={league?.currentYear} style={styles.matchupLogo} fontSize={12} />
                       </View>
                       <Text style={styles.matchupTeamLabel} numberOfLines={1}>{leftLabel}</Text>
                     </View>
@@ -355,7 +443,7 @@ export default function MatchupScreen() {
                     </View>
                     <View style={styles.matchupTeam}>
                       <View style={styles.matchupLogoDisc}>
-                        <SportTeamLogo sport="nba" abbr={rightAbbr} era={league?.currentYear} style={styles.matchupLogo} fontSize={12} />
+                        <SportTeamLogo sport={sport} abbr={rightAbbr} era={league?.currentYear} style={styles.matchupLogo} fontSize={12} />
                       </View>
                       <Text style={styles.matchupTeamLabel} numberOfLines={1}>{rightLabel}</Text>
                     </View>
@@ -372,12 +460,12 @@ export default function MatchupScreen() {
                 {hasFinalScore && (resultStory || game.quarters?.length || game.boxScore) ? (
                   <View style={styles.resultCard}>
                     {resultStory ? <Text style={styles.storyText}>{resultStory}</Text> : null}
-                    {game.quarters?.length ? (
+                    {displayedPeriods.length ? (
                       <View style={styles.quarterRow}>
-                        {game.quarters.map(quarter => (
-                          <View key={quarter.quarter} style={styles.quarterCell}>
-                            <Text style={styles.quarterLabel}>Q{quarter.quarter}</Text>
-                            <Text style={styles.quarterScore}>{quarter.away}-{quarter.home}</Text>
+                        {displayedPeriods.slice(0, sport === 'mlb' ? 9 : 5).map(period => (
+                          <View key={period.period} style={styles.quarterCell}>
+                            <Text style={styles.quarterLabel}>{period.label}</Text>
+                            <Text style={styles.quarterScore}>{period.away}-{period.home}</Text>
                           </View>
                         ))}
                       </View>
@@ -387,7 +475,7 @@ export default function MatchupScreen() {
                         <Text style={styles.resultSectionTitle}>Top Performers</Text>
                         {topPerformers.map(player => (
                           <Text key={player.playerId || player.name} style={styles.performerLine}>
-                            {player.name || player.playerId}: {Number(player.points || 0)} PTS · {Number(player.rebounds || 0)} REB · {Number(player.assists || 0)} AST
+                            {player.name || player.playerId}: {playerStatLine(player, sport)}
                           </Text>
                         ))}
                       </View>
@@ -396,47 +484,47 @@ export default function MatchupScreen() {
                 ) : null}
                 <View style={styles.actionRow}>
                   {canRequest && (
-                    <TouchableOpacity disabled={working} onPress={() => call('requestMatchup')} style={styles.actionButton}>
+                    <Pressable disabled={working} onPress={() => call('requestMatchup')} style={styles.actionButton}>
                       <Text style={styles.actionText}>Request</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                   {canAccept && (
-                    <TouchableOpacity disabled={working} onPress={() => call('acceptMatchup')} style={styles.actionButton}>
+                    <Pressable disabled={working} onPress={() => call('acceptMatchup')} style={styles.actionButton}>
                       <Text style={styles.actionText}>Accept</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                   {canSimulate && (
-                    <TouchableOpacity disabled={working} onPress={() => call('simulateScheduledGame')} style={styles.actionButtonAlt}>
+                    <Pressable disabled={working} onPress={() => call('simulateScheduledGame')} style={styles.actionButtonAlt}>
                       <Text style={styles.actionTextAlt}>Simulate</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                 </View>
                 {canReset && (
-                  <TouchableOpacity disabled={working} onPress={confirmResetGame} style={styles.resetButton}>
+                  <Pressable disabled={working} onPress={confirmResetGame} style={styles.resetButton}>
                     <Ionicons color="#ff6b6b" name="refresh" size={16} />
                     <Text style={styles.resetText}>
-                      {isCupGame ? `Reset NBA Cup, Game ${game.sequence}` : `Reset Week ${game.week}, Game ${game.sequence}`}
+                      {isCupGame ? `Reset NBA Cup, Game ${game.sequence}` : isPlayoffGame ? `Reset Playoff Game ${game.playoffGame || game.sequence}` : `Reset Week ${game.week}, Game ${game.sequence}`}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
                 {canReportScore && game && (
                   <View style={styles.winnerEntry}>
                     <Text style={styles.winnerEntryTitle}>Choose Winner</Text>
                     <Text style={styles.winnerEntryHelp}>The sim engine will create the final score, box score, and Live Mode replay.</Text>
                     <View style={styles.winnerButtonRow}>
-                      <TouchableOpacity disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
+                      <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
                         <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.awayTeamId)} Wins</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity disabled={working} onPress={() => submitWinnerOutcome(game.homeTeamId)} style={styles.winnerButton}>
+                      </Pressable>
+                      <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.homeTeamId)} style={styles.winnerButton}>
                         <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.homeTeamId)} Wins</Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     </View>
                   </View>
                 )}
                 {myTeam && (
                   <View style={styles.prepHeader}>
                     <Text style={styles.sectionTitle}>Private Game Prep</Text>
-                    <Text style={styles.prepHelp}>Pick an opening plan and a halftime adjustment.</Text>
+                    <Text style={styles.prepHelp}>Pick an opening plan and a matchup adjustment.</Text>
                   </View>
                 )}
               </>
@@ -453,26 +541,26 @@ export default function MatchupScreen() {
                 <Text style={styles.presetMeta}>{item.offense.replace(/_/g, ' ')} · {item.defense.replace(/_/g, ' ')}</Text>
               </View>
               <View style={styles.halfPicker}>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => setFirstHalfPresetId(item.id)}
                   style={[styles.halfButton, firstSelected && styles.halfButtonActive]}
                 >
-                  <Text style={[styles.halfButtonText, firstSelected && styles.halfButtonTextActive]}>1H</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                  <Text style={[styles.halfButtonText, firstSelected && styles.halfButtonTextActive]}>{firstPrepLabel}</Text>
+                </Pressable>
+                <Pressable
                   onPress={() => setSecondHalfPresetId(item.id)}
                   style={[styles.halfButton, secondSelected && styles.halfButtonActive]}
                 >
-                  <Text style={[styles.halfButtonText, secondSelected && styles.halfButtonTextActive]}>2H</Text>
-                </TouchableOpacity>
+                  <Text style={[styles.halfButtonText, secondSelected && styles.halfButtonTextActive]}>{secondPrepLabel}</Text>
+                </Pressable>
               </View>
             </View>
           );
         }}
         ListFooterComponent={game && myTeam ? (
-          <TouchableOpacity disabled={working} onPress={savePrivatePrep} style={styles.saveButton}>
-            <Text style={styles.saveText}>Save Private Prep</Text>
-          </TouchableOpacity>
+          <Pressable disabled={working} onPress={savePrivatePrep} style={styles.saveButton}>
+            <Text style={styles.saveText}>Save Preparations</Text>
+          </Pressable>
         ) : null}
       />
     </View>

@@ -9,7 +9,7 @@ class ScheduleError extends Error {
   }
 }
 
-const APPROVED_LENGTHS = new Set([14, 29, 58, 82]);
+const APPROVED_LENGTHS = new Set([14, 17, 29, 58, 82, 162]);
 const NBA_TEAM_IDS = Object.freeze([
   'ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW',
   'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NOP', 'NYK',
@@ -95,7 +95,7 @@ function buildNbaCupSchedule({ scheduleTeamIds, currentYear, seed }) {
 }
 
 function gameId(seed, sequence, awayTeamId, homeTeamId) {
-  return `nba_${hash(`${seed}:${sequence}:${awayTeamId}:${homeTeamId}`).toString(36)}`;
+  return `game_${hash(`${seed}:${sequence}:${awayTeamId}:${homeTeamId}`).toString(36)}`;
 }
 
 function seededTeams(teams, seed) {
@@ -256,10 +256,10 @@ function assignHomeTeams(pairings, teams, seed) {
 
 function generateServerSchedule({ teams, gamesPerTeam, seed }) {
   if (!Array.isArray(teams) || teams.length < 30 || teams.length > 36 || new Set(teams).size !== teams.length) {
-    throw new ScheduleError('failed-precondition', 'NBA schedules require 30 to 36 unique teams.');
+    throw new ScheduleError('failed-precondition', 'Schedules require 30 to 36 unique teams.');
   }
   if (!APPROVED_LENGTHS.has(gamesPerTeam)) {
-    throw new ScheduleError('invalid-argument', 'Choose an approved NBA schedule length.');
+    throw new ScheduleError('invalid-argument', 'Choose an approved schedule length.');
   }
   if ((teams.length * gamesPerTeam) % 2 !== 0) {
     throw new ScheduleError('invalid-argument', 'Schedule length must create an even number of team games.');
@@ -595,20 +595,28 @@ function createGenerateScheduleHandler({ getFirestore, serverTimestamp, HttpsErr
       const leagueSnap = await tx.get(leagueRef);
       if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
       const league = leagueSnap.data() || {};
-      if (league.sport !== 'nba') throw new HttpsError('failed-precondition', 'Schedules are only available for NBA leagues.');
       if (!isCommissioner(uid, league)) throw new HttpsError('permission-denied', 'Only commissioners can create schedules.');
       if (league.scheduleLocked === true) throw new HttpsError('failed-precondition', 'Schedule is already locked.');
 
       const teamsSnap = await tx.get(leagueRef.collection('teams'));
-      const eraKey = league.era && league.era !== 'null' ? league.era : 'current';
-      const eraTeamsSnap = await tx.get(db.collection('era_rosters').doc(eraKey).collection('teams'));
-      const eraTeamIds = eraTeamsSnap.docs.map(scheduleTeamIdFromDoc).filter(Boolean);
-      const scheduleTeamIds = eraTeamIds.length >= 30 && eraTeamIds.length <= 36 ? [...new Set(eraTeamIds)] : NBA_TEAM_IDS;
+      const sport = String(league.sport || 'nba').toLowerCase() === 'nfl' ? 'madden' : String(league.sport || 'nba').toLowerCase();
+      const claimedTeamIds = teamsSnap.docs.map(scheduleTeamIdFromDoc).filter(Boolean);
+      let scheduleTeamIds = claimedTeamIds.length >= 30 && claimedTeamIds.length <= 36 ? [...new Set(claimedTeamIds)] : [];
+      if (sport === 'nba') {
+        const eraKey = league.era && league.era !== 'null' ? league.era : 'current';
+        const eraTeamsSnap = await tx.get(db.collection('era_rosters').doc(eraKey).collection('teams'));
+        const eraTeamIds = eraTeamsSnap.docs.map(scheduleTeamIdFromDoc).filter(Boolean);
+        scheduleTeamIds = eraTeamIds.length >= 30 && eraTeamIds.length <= 36 ? [...new Set(eraTeamIds)] : NBA_TEAM_IDS;
+      } else if (scheduleTeamIds.length < 30) {
+        const sportTeamsSnap = await tx.get(db.collection('sport_rosters').doc(sport).collection('teams'));
+        const sportTeamIds = sportTeamsSnap.docs.map(scheduleTeamIdFromDoc).filter(Boolean);
+        scheduleTeamIds = sportTeamIds.length >= 30 && sportTeamIds.length <= 36 ? [...new Set(sportTeamIds)] : scheduleTeamIds;
+      }
       const participants = buildNbaScheduleParticipants(teamsSnap.docs, scheduleTeamIds);
       const teams = participants.map(team => team.scheduleTeamId);
       const seed = `${leagueId}:${league.currentYear || 2025}:${gamesPerTeam}`;
       const currentYear = Number(league.currentYear || 2025);
-      const rawNbaCup = supportsNbaCupSchedule({ era: league.era, currentYear })
+      const rawNbaCup = sport === 'nba' && supportsNbaCupSchedule({ era: league.era, currentYear })
         ? buildNbaCupSchedule({ scheduleTeamIds: teams, currentYear, seed })
         : null;
       const nbaCup = rawNbaCup

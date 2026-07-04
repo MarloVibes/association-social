@@ -10,6 +10,7 @@ import { auth, db, functions } from '@/constants/firebase';
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { scorePeriodsForSport } from '@/domain/sports/gamePeriods';
 
 type Team = {
   id: string;
@@ -39,6 +40,26 @@ type BoxScorePlayer = {
   freeThrowsAttempted?: number;
   plusMinus?: number;
   starter?: boolean;
+  passingYards?: number;
+  passingTouchdowns?: number;
+  interceptions?: number;
+  rushingYards?: number;
+  rushingTouchdowns?: number;
+  receivingYards?: number;
+  receivingTouchdowns?: number;
+  receptions?: number;
+  sacks?: number;
+  tackles?: number;
+  atBats?: number;
+  hits?: number;
+  runs?: number;
+  rbi?: number;
+  homeRuns?: number;
+  stolenBases?: number;
+  inningsPitched?: number;
+  strikeouts?: number;
+  earnedRuns?: number;
+  walks?: number;
 };
 
 type ResultGame = NbaScheduleGame & {
@@ -57,7 +78,17 @@ type ResultGame = NbaScheduleGame & {
     away?: { points?: number; players?: BoxScorePlayer[] };
   };
   quarters?: { quarter: number; home: number; away: number }[];
+  innings?: { inning: number; period?: number; label?: string; home: number; away: number }[];
+  periods?: { period: number; label?: string; home: number; away: number }[];
   story?: string;
+  postgameStory?: {
+    headline?: string;
+    summary?: string;
+    turningPoint?: string;
+    topPerformers?: string[];
+    coachingImpact?: string;
+  };
+  sport?: string;
 };
 
 type ScheduleDoc = {
@@ -78,15 +109,21 @@ function stat(value: unknown) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : '0';
 }
 
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
 function scoreText(game: ResultGame | null) {
   if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return 'Final Score';
   return `${game.awayScore} - ${game.homeScore}`;
 }
 
-function periodLabel(quarter: { quarter?: number }) {
-  const period = Number(quarter.quarter || 0);
-  if (period <= 4) return `Q${period}`;
-  return quarter.quarter === 5 ? 'OT' : `${period - 4}OT`;
+function periodTableTitle(sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'mlb') return 'Inning Scores';
+  return 'Quarter Scores';
 }
 
 function playerScore(player: BoxScorePlayer) {
@@ -96,6 +133,74 @@ function playerScore(player: BoxScorePlayer) {
     + Number(player.steals || 0) * 2
     + Number(player.blocks || 0) * 2
     - Number(player.turnovers || 0) * 0.8;
+}
+
+function sportPlayerScore(player: BoxScorePlayer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    return Number(player.passingYards || 0)
+      + Number(player.rushingYards || 0) * 1.15
+      + Number(player.receivingYards || 0) * 1.15
+      + Number(player.passingTouchdowns || 0) * 45
+      + Number(player.rushingTouchdowns || 0) * 45
+      + Number(player.receivingTouchdowns || 0) * 45
+      + Number(player.sacks || 0) * 35
+      + Number(player.interceptions || 0) * 35;
+  }
+  if (sport === 'mlb') {
+    return Number(player.hits || 0) * 12
+      + Number(player.rbi || 0) * 10
+      + Number(player.homeRuns || 0) * 25
+      + Number(player.stolenBases || 0) * 8
+      + Number(player.inningsPitched || 0) * 8
+      + Number(player.strikeouts || 0) * 5
+      - Number(player.earnedRuns || 0) * 5;
+  }
+  return playerScore(player);
+}
+
+function playerSummaryStats(player: BoxScorePlayer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    if (Number(player.passingYards || 0) > 0) return [`${stat(player.passingYards)} PASS YDS`, `${stat(player.passingTouchdowns)} TD`, `${stat(player.interceptions)} INT`];
+    if (Number(player.rushingYards || 0) > 0) return [`${stat(player.rushingYards)} RUSH YDS`, `${stat(player.rushingTouchdowns)} TD`, `${stat(player.receivingYards)} REC`];
+    if (Number(player.receivingYards || 0) > 0) return [`${stat(player.receivingYards)} REC YDS`, `${stat(player.receivingTouchdowns)} TD`, `${stat(player.receptions)} REC`];
+    return [`${stat(player.tackles)} TKL`, `${stat(player.sacks)} SACK`, `${stat(player.interceptions)} INT`];
+  }
+  if (sport === 'mlb') {
+    if (Number(player.inningsPitched || 0) > 0 || Number(player.strikeouts || 0) > 0) return [`${stat(player.inningsPitched)} IP`, `${stat(player.strikeouts)} K`, `${stat(player.earnedRuns)} ER`];
+    return [`${stat(player.hits)} H`, `${stat(player.rbi)} RBI`, `${stat(player.homeRuns)} HR`];
+  }
+  return [`${stat(player.points)} PTS`, `${stat(player.rebounds)} REB`, `${stat(player.assists)} AST`];
+}
+
+function boxScoreStats(player: BoxScorePlayer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    return [
+      `${stat(player.passingYards)} PASS`,
+      `${stat(player.rushingYards)} RUSH`,
+      `${stat(player.receivingYards)} REC`,
+      `${stat(player.passingTouchdowns || player.rushingTouchdowns || player.receivingTouchdowns)} TD`,
+      `${stat(player.sacks)} SACK`,
+      `${stat(player.interceptions)} INT`,
+    ];
+  }
+  if (sport === 'mlb') {
+    if (Number(player.inningsPitched || 0) > 0 || Number(player.strikeouts || 0) > 0) {
+      return [`${stat(player.inningsPitched)} IP`, `${stat(player.strikeouts)} K`, `${stat(player.earnedRuns)} ER`, `${stat(player.walks)} BB`];
+    }
+    return [`${stat(player.atBats)} AB`, `${stat(player.hits)} H`, `${stat(player.runs)} R`, `${stat(player.rbi)} RBI`, `${stat(player.homeRuns)} HR`, `${stat(player.stolenBases)} SB`];
+  }
+  return [
+    `${stat(player.points)} PTS`,
+    `${stat(player.rebounds)} REB`,
+    `${stat(player.assists)} AST`,
+    `${stat(player.steals)} STL`,
+    `${stat(player.blocks)} BLK`,
+    `FG ${formatShot(player.fieldGoalsMade, player.fieldGoalsAttempted)}`,
+    `3PT ${formatShot(player.threePointersMade, player.threePointersAttempted)}`,
+    `FT ${formatShot(player.freeThrowsMade, player.freeThrowsAttempted)}`,
+    `TO ${stat(player.turnovers)}`,
+    `+/- ${plusMinusText(player.plusMinus)}`,
+  ];
 }
 
 function formatShot(made?: number, attempted?: number) {
@@ -185,6 +290,7 @@ export default function GameResultScreen() {
   const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
+  const sport = normalizeSport(league?.sport || game?.sport);
   const awayAbbr = displayScheduleAbbr(awayTeam?.abbreviation || awayTeam?.teamId || game?.awayTeamId || '');
   const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
   const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
@@ -192,13 +298,16 @@ export default function GameResultScreen() {
   const topPerformers = useMemo(() => [
     ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: awayLabel, sideAbbr: awayAbbr })),
     ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: homeLabel, sideAbbr: homeAbbr })),
-  ].sort((a, b) => playerScore(b) - playerScore(a)).slice(0, 6), [awayAbbr, awayLabel, game?.boxScore, homeAbbr, homeLabel]);
+  ].sort((a, b) => sportPlayerScore(b, sport) - sportPlayerScore(a, sport)).slice(0, 6), [awayAbbr, awayLabel, game?.boxScore, homeAbbr, homeLabel, sport]);
   const fullBoxScore = useMemo(() => ({
-    away: [...(game?.boxScore?.away?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
-    home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || playerScore(b) - playerScore(a)),
-  }), [game?.boxScore]);
+    away: [...(game?.boxScore?.away?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || sportPlayerScore(b, sport) - sportPlayerScore(a, sport)),
+    home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || sportPlayerScore(b, sport) - sportPlayerScore(a, sport)),
+  }), [game?.boxScore, sport]);
+  const displayedPeriods = useMemo(() => scorePeriodsForSport(sport, game), [game, sport]);
   const resultStory = useMemo(() => {
     if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return displayScheduleEventText(game?.story);
+    if (game.postgameStory?.summary) return displayScheduleEventText(game.postgameStory.summary);
+    if (sport !== 'nba') return displayScheduleEventText(game.story);
     return displayScheduleEventText(buildPostgameStory({
       storedStory: game.story,
       awayLabel,
@@ -210,7 +319,8 @@ export default function GameResultScreen() {
       quarters: game.quarters,
       performers: topPerformers,
     }));
-  }, [awayAbbr, awayLabel, game, homeAbbr, homeLabel, topPerformers]);
+  }, [awayAbbr, awayLabel, game, homeAbbr, homeLabel, sport, topPerformers]);
+  const resultPostgameStory = game?.postgameStory || null;
   const isLeagueAdmin = Boolean(
     uid
     && league
@@ -287,7 +397,7 @@ export default function GameResultScreen() {
             <View style={styles.scoreboard}>
               <View style={styles.teamBlock}>
                 <View style={styles.logoDisc}>
-                  <SportTeamLogo sport="nba" abbr={awayAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
+                  <SportTeamLogo sport={sport} abbr={awayAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
                 </View>
                 <Text numberOfLines={1} style={styles.teamName}>{awayLabel}</Text>
                 <Text style={styles.teamScore}>{stat(game.awayScore)}</Text>
@@ -298,7 +408,7 @@ export default function GameResultScreen() {
               </View>
               <View style={styles.teamBlock}>
                 <View style={styles.logoDisc}>
-                  <SportTeamLogo sport="nba" abbr={homeAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
+                  <SportTeamLogo sport={sport} abbr={homeAbbr} era={league?.currentYear} style={styles.logo} fontSize={10} />
                 </View>
                 <Text numberOfLines={1} style={styles.teamName}>{homeLabel}</Text>
                 <Text style={styles.teamScore}>{stat(game.homeScore)}</Text>
@@ -332,32 +442,44 @@ export default function GameResultScreen() {
 
             {resultStory ? (
               <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Game Story</Text>
+                <Text style={styles.panelTitle}>{resultPostgameStory?.headline || 'Game Story'}</Text>
                 <Text style={styles.story}>{resultStory}</Text>
+                {resultPostgameStory?.turningPoint ? (
+                  <View style={styles.storyDetail}>
+                    <Text style={styles.storyDetailLabel}>Turning Point</Text>
+                    <Text style={styles.storyDetailText}>{displayScheduleEventText(resultPostgameStory.turningPoint)}</Text>
+                  </View>
+                ) : null}
+                {resultPostgameStory?.coachingImpact ? (
+                  <View style={styles.storyDetail}>
+                    <Text style={styles.storyDetailLabel}>Coaching Impact</Text>
+                    <Text style={styles.storyDetailText}>{displayScheduleEventText(resultPostgameStory.coachingImpact)}</Text>
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
-            {game.quarters?.length ? (
+            {displayedPeriods.length ? (
               <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Quarter Scores</Text>
+                <Text style={styles.panelTitle}>{periodTableTitle(sport)}</Text>
                 <View style={styles.tableHeader}>
                   <Text style={styles.tableTeam}>Team</Text>
-                  {game.quarters.map(quarter => (
-                    <Text key={quarter.quarter} style={styles.tableCell}>{periodLabel(quarter)}</Text>
+                  {displayedPeriods.map(period => (
+                    <Text key={period.period} style={styles.tableCell}>{period.label}</Text>
                   ))}
                   <Text style={styles.tableCell}>T</Text>
                 </View>
                 <View style={styles.tableRow}>
                   <Text style={styles.tableTeam}>{awayLabel}</Text>
-                  {game.quarters.map(quarter => (
-                    <Text key={`away-${quarter.quarter}`} style={styles.tableCell}>{quarter.away}</Text>
+                  {displayedPeriods.map(period => (
+                    <Text key={`away-${period.period}`} style={styles.tableCell}>{period.away}</Text>
                   ))}
                   <Text style={styles.tableCell}>{stat(game.awayScore)}</Text>
                 </View>
                 <View style={styles.tableRow}>
                   <Text style={styles.tableTeam}>{homeLabel}</Text>
-                  {game.quarters.map(quarter => (
-                    <Text key={`home-${quarter.quarter}`} style={styles.tableCell}>{quarter.home}</Text>
+                  {displayedPeriods.map(period => (
+                    <Text key={`home-${period.period}`} style={styles.tableCell}>{period.home}</Text>
                   ))}
                   <Text style={styles.tableCell}>{stat(game.homeScore)}</Text>
                 </View>
@@ -379,9 +501,9 @@ export default function GameResultScreen() {
                     <Text numberOfLines={1} style={styles.playerName}>{player.name || 'Player'}</Text>
                     <Text style={styles.playerTeam}>{player.side}</Text>
                   </View>
-                  <Text style={styles.playerStat}>{stat(player.points)} PTS</Text>
-                  <Text style={styles.playerMini}>{stat(player.rebounds)} REB</Text>
-                  <Text style={styles.playerMini}>{stat(player.assists)} AST</Text>
+                  {playerSummaryStats(player, sport).map((line, statIndex) => (
+                    <Text key={`${player.playerId || player.name}-${statIndex}`} style={statIndex === 0 ? styles.playerStat : styles.playerMini}>{line}</Text>
+                  ))}
                 </TouchableOpacity>
               )) : (
                 <Text style={styles.emptySmall}>Box score details will appear after a simulated result is finalized.</Text>
@@ -417,16 +539,9 @@ export default function GameResultScreen() {
                             <Text style={styles.boxPlayerMeta}>{[player.position, player.starter ? 'Starter' : null].filter(Boolean).join(' · ') || group.abbr}</Text>
                           </View>
                           <View style={styles.boxStatsGrid}>
-                            <Text style={styles.boxStatStrong}>{stat(player.points)} PTS</Text>
-                            <Text style={styles.boxStat}>{stat(player.rebounds)} REB</Text>
-                            <Text style={styles.boxStat}>{stat(player.assists)} AST</Text>
-                            <Text style={styles.boxStat}>{stat(player.steals)} STL</Text>
-                            <Text style={styles.boxStat}>{stat(player.blocks)} BLK</Text>
-                            <Text style={styles.boxStat}>FG {formatShot(player.fieldGoalsMade, player.fieldGoalsAttempted)}</Text>
-                            <Text style={styles.boxStat}>3PT {formatShot(player.threePointersMade, player.threePointersAttempted)}</Text>
-                            <Text style={styles.boxStat}>FT {formatShot(player.freeThrowsMade, player.freeThrowsAttempted)}</Text>
-                            <Text style={styles.boxStat}>TO {stat(player.turnovers)}</Text>
-                            <Text style={styles.boxStat}>+/- {plusMinusText(player.plusMinus)}</Text>
+                            {boxScoreStats(player, sport).map((line, statIndex) => (
+                              <Text key={`${player.playerId || player.name}-${statIndex}`} style={statIndex === 0 ? styles.boxStatStrong : styles.boxStat}>{line}</Text>
+                            ))}
                           </View>
                         </TouchableOpacity>
                       )) : (
@@ -445,7 +560,7 @@ export default function GameResultScreen() {
       <PlayerCard
         player={selectedPlayerCard?.player || null}
         era={league?.era || league?.currentYear || 'current'}
-        sport="nba"
+        sport={sport}
         leagueId={leagueId}
         teamId={selectedPlayerCard?.teamId || ''}
         leagueDate={leagueDateFromRecord(league)}
@@ -486,6 +601,9 @@ const styles = StyleSheet.create({
   smallOutlineButton: { minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2c3d34', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   smallOutlineButtonText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
   story: { color: '#ccc', fontSize: 13, lineHeight: 20 },
+  storyDetail: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#202020', gap: 3 },
+  storyDetailLabel: { color: '#777', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  storyDetailText: { color: '#d8d8d8', fontSize: 12, fontWeight: '800', lineHeight: 18 },
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#202020' },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
   tableTeam: { flex: 1, color: '#fff', fontSize: 12, fontWeight: '900' },

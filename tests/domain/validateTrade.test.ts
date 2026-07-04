@@ -8,6 +8,7 @@ const { validateTrade: validateTradeJs } = require('../../functions/domain/valid
 type Player = {
   player_id: string;
   salary: number;
+  contractType?: string;
 };
 
 function team(prefix: string, players: number, payroll: number, picks: string[] = []) {
@@ -40,6 +41,7 @@ describe('validateTrade', () => {
       valid: true,
       errors: [],
       messages: [],
+      warnings: [],
       payrollAfter: { teamA: 40, teamB: 30 },
       rosterAfter: { teamA: 3, teamB: 2 },
     });
@@ -108,9 +110,11 @@ describe('validateTrade', () => {
     }).errors).toContain('financial_limit');
   });
 
-  it('applies NBA salary matching and roster limits without treating salaryCap as a hard cap', () => {
+  it('allows NBA trades up to 18 only when overflow players are minimum or two-way eligible', () => {
     const teamA = team('a', 15, 140);
     const teamB = team('b', 15, 120);
+    teamA.players[14] = { ...teamA.players[14], salary: 1_200_000 };
+    teamB.players[1] = { ...teamB.players[1], salary: 1_200_000 };
 
     const result = validateTrade({
       sport: 'nba',
@@ -124,9 +128,53 @@ describe('validateTrade', () => {
       nbaMatchingBuffer: 0,
     });
 
-    expect(result.errors).toContain('roster_limit');
+    expect(result.rosterAfter.teamA).toBe(16);
+    expect(result.errors).not.toContain('roster_limit');
+    expect(result.warnings).toContain('Team A will use 1 two-way/minimum overflow spot after this trade.');
     expect(result.errors).not.toContain('financial_limit');
     expect(result.errors).toContain('nba_matching');
+  });
+
+  it('blocks NBA overflow spots when the extra players are not minimum or two-way eligible', () => {
+    const teamA = team('a', 15, 150_000_000);
+    const teamB = team('b', 15, 150_000_000);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      const result = validate({
+        sport: 'nba',
+        teamA,
+        teamB,
+        teamALabel: 'Toronto',
+        teamBLabel: 'Miami',
+        offerA: [teamA.players[0]],
+        offerB: [teamB.players[0], teamB.players[1]],
+        nbaMatchingTolerance: 10,
+        nbaMatchingBuffer: 0,
+      });
+
+      expect(result.errors).toContain('roster_limit');
+      expect(result.messages).toContain('Toronto has 16 players after this trade. Extra NBA roster spots 16-18 must be two-way or minimum-contract players.');
+    }
+  });
+
+  it('rejects NBA trades that push a team over 18 total players', () => {
+    const teamA = team('a', 18, 180);
+    const teamB = team('b', 18, 180);
+
+    for (const validate of [validateTrade, validateTradeJs]) {
+      const result = validate({
+        sport: 'nba',
+        teamA,
+        teamB,
+        teamALabel: 'Toronto',
+        teamBLabel: 'Miami',
+        offerA: [],
+        offerB: [teamB.players[0]],
+      });
+
+      expect(result.errors).toContain('roster_limit');
+      expect(result.messages).toContain('Toronto will exceed the 18-player roster limit with 19 players after this trade.');
+    }
   });
 
   it('explains NBA salary matching and roster failures in plain language', () => {
@@ -159,8 +207,8 @@ describe('validateTrade', () => {
     expect(result.valid).toBe(false);
     expect(result.messages).toEqual(expect.arrayContaining([
       'Miami needs to add about $9.4M more outgoing salary for NBA matching.',
-      'Toronto will exceed the 15-player roster limit with 16 players after this trade.',
     ]));
+    expect(result.messages).not.toContain('Toronto will exceed the 15-player roster limit with 16 players after this trade.');
   });
 
   it('keeps server and app trade explanations equivalent', () => {

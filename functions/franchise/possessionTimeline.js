@@ -727,6 +727,7 @@ function deltaFor(player, stats) {
 }
 
 function eventFromPossession({ input, period, clockSeconds, possession, elapsedIndex, homeScore, awayScore, home, away }) {
+  const insight = commandInsightForPossession(possession, homeScore - awayScore);
   return withoutUndefined({
     id: `${input.gameId}-${period}-${elapsedIndex}`,
     period,
@@ -742,6 +743,10 @@ function eventFromPossession({ input, period, clockSeconds, possession, elapsedI
     y: possession.y,
     momentum: homeScore - awayScore,
     tags: [possession.eventType, periodLabel(period).toLowerCase()],
+    importance: insight.importance,
+    spotlight: insight.spotlight,
+    why: insight.why,
+    pressure: insight.pressure,
     playerId: possession.player && possession.player.playerId,
     playerName: possession.player && possession.player.name,
     points: possession.points,
@@ -752,6 +757,58 @@ function eventFromPossession({ input, period, clockSeconds, possession, elapsedI
       away: away.starters.map(player => player.playerId),
     },
   });
+}
+
+function commandInsightForPossession(possession, margin) {
+  const player = possession && possession.player;
+  const name = shortName(player && player.name);
+  const pressure = Math.abs(Number(margin || 0)) <= 5 ? 'clutch' : Math.abs(Number(margin || 0)) <= 12 ? 'medium' : 'low';
+  if (!possession || !possession.eventType || !player) return {};
+  if (possession.eventType === 'score') {
+    const points = Number(possession.points || 0);
+    if (points >= 3) {
+      return {
+        importance: 2,
+        spotlight: 'score',
+        pressure,
+        why: `${name} found a clean perimeter look because the offense created enough spacing to punish the help defense.`,
+      };
+    }
+    return {
+      importance: pressure === 'clutch' ? 2 : 1,
+      spotlight: 'score',
+      pressure,
+      why: `${name} attacked the matchup before the defense could load up, turning the possession into a high-value paint touch.`,
+    };
+  }
+  if (possession.eventType === 'turnover') {
+    return {
+      importance: 2,
+      spotlight: 'turnover',
+      pressure,
+      why: `${name} was pressured into a loose decision, and the defensive ball pressure changed the possession without needing a shot.`,
+    };
+  }
+  if (possession.eventType === 'miss') {
+    const blocked = String(possession.text || '').toLowerCase().includes('blocked');
+    return {
+      importance: blocked ? 2 : 1,
+      spotlight: 'stop',
+      pressure,
+      why: blocked
+        ? `${name} met rim protection at the release point, turning a scoring chance into a defensive stop.`
+        : `${name} was forced into a contested look, and the defense finished the possession by securing the rebound.`,
+    };
+  }
+  if (possession.eventType === 'free_throw_trip') {
+    return {
+      importance: Number(possession.points || 0) > 0 ? 1 : 0,
+      spotlight: 'score',
+      pressure,
+      why: `${name} put pressure on the defense by attacking contact instead of settling for a tougher jumper.`,
+    };
+  }
+  return {};
 }
 
 function periodEndEvent({ input, period, elapsedIndex, homeScore, awayScore, home, away }) {

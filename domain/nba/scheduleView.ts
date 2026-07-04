@@ -1,8 +1,11 @@
+import { getSportTeamName } from '@/constants/sportTeams';
+
 export type ScheduleViewTeam = {
   id?: string | null;
   teamId?: string | null;
   abbreviation?: string | null;
   gmId?: string | null;
+  sport?: string | null;
 };
 
 type ScheduleLiveEvent = {
@@ -42,19 +45,48 @@ export function normalizeScheduleKey(value?: string | null) {
 
 export function displayScheduleAbbr(value?: string | null) {
   const key = normalizeScheduleKey(value);
-  const eraSuffixMatch = key.match(/^([A-Z]{2,4})_\d{4}$/);
+  const cpuMatch = key.match(/^CPU[_-]?(.+)$/);
+  if (cpuMatch) return displayScheduleAbbr(cpuMatch[1]);
+  const currentSuffixMatch = key.match(/^(.+)_CURRENT$/);
+  if (currentSuffixMatch) return currentSuffixMatch[1];
+  const eraSuffixMatch = key.match(/^(.+)_\d{4}$/);
   return eraSuffixMatch ? eraSuffixMatch[1] : key;
 }
 
 export function displayScheduleEventText(value?: string | null) {
-  return String(value || '').replace(/\b[A-Z]{2,4}_\d{4}\b/gi, match => displayScheduleAbbr(match));
+  return String(value || '').replace(/\b[A-Z][A-Z0-9_]*_(?:\d{4}|CURRENT)\b/gi, match => displayScheduleAbbr(match));
 }
 
-export function displayScheduleTeamLabel(teamName?: string | null, fallbackTeamId?: string | null) {
+function normalizeSportKey(value?: string | null) {
+  const sport = String(value || 'nba').trim().toLowerCase();
+  if (sport === 'nfl') return 'madden';
+  if (sport === 'madden' || sport === 'mlb') return sport;
+  return 'nba';
+}
+
+function sportTeamDisplayName(sport?: string | null, value?: string | null) {
+  const sportKey = normalizeSportKey(sport);
+  if (sportKey === 'nba') return '';
+  const abbr = displayScheduleAbbr(value);
+  if (!abbr) return '';
+  const teamName = getSportTeamName(sportKey, abbr);
+  return teamName && teamName !== abbr ? teamName : '';
+}
+
+export function displayScheduleTeamLabel(teamName?: string | null, fallbackTeamId?: string | null, sport?: string | null) {
   const name = String(teamName || '').trim();
   const cleanedName = displayScheduleEventText(name);
+  const fallbackAbbr = displayScheduleAbbr(fallbackTeamId);
+  const nameAbbr = displayScheduleAbbr(cleanedName);
+  const sportDisplay = sportTeamDisplayName(sport, nameAbbr || fallbackAbbr);
+  const normalizedName = normalizeScheduleKey(cleanedName);
+  const looksLikeInternalTeamId = !cleanedName
+    || normalizedName === normalizeScheduleKey(fallbackTeamId)
+    || normalizedName === fallbackAbbr
+    || normalizedName.startsWith('CPU_');
+  if (sportDisplay && looksLikeInternalTeamId) return sportDisplay;
   if (cleanedName) return cleanedName;
-  return displayScheduleAbbr(fallbackTeamId);
+  return fallbackAbbr;
 }
 
 const TEAM_ALIASES: Record<string, string[]> = {
@@ -86,10 +118,21 @@ export function displayScheduleName(team: {
   scheduleTeamId?: string | null;
   teamId?: string | null;
   id?: string | null;
+  sport?: string | null;
 }) {
   const name = displayScheduleEventText(String(team.name || team.full_name || '').trim());
+  const fallback = team.abbreviation || team.abbr || team.scheduleTeamId || team.teamId || team.id;
+  const fallbackAbbr = displayScheduleAbbr(fallback);
+  const nameAbbr = displayScheduleAbbr(name);
+  const sportDisplay = sportTeamDisplayName(team.sport, nameAbbr || fallbackAbbr);
+  const normalizedName = normalizeScheduleKey(name);
+  const looksLikeInternalTeamId = !name
+    || normalizedName === normalizeScheduleKey(fallback)
+    || normalizedName === fallbackAbbr
+    || normalizedName.startsWith('CPU_');
+  if (sportDisplay && looksLikeInternalTeamId) return sportDisplay;
   if (name) return name;
-  return displayScheduleAbbr(team.abbreviation || team.abbr || team.scheduleTeamId || team.teamId || team.id);
+  return fallbackAbbr;
 }
 
 export function isLiveResultRevealed(game?: (Partial<ScheduleViewGame> & {

@@ -398,14 +398,14 @@ export default function OffseasonScreen() {
                     <View style={styles.lotteryRevealPick}>
                       <Text style={styles.lotteryRevealPickText}>{pick.pick}</Text>
                     </View>
-                    <Text style={styles.teamName}>{pick.name || pick.abbreviation || pick.teamId}</Text>
+                    <Text style={styles.teamName}>{displayScheduleTeamLabel(pick.name || pick.abbreviation, pick.teamId, league?.sport)}</Text>
                   </View>
                 ))}
                 <Text style={styles.lotterySubheading}>Full draft order</Text>
                 {(league.draftLottery.picks || []).slice(0, 14).map(pick => (
                   <View key={`${pick.pick}:${pick.teamId}`} style={styles.teamRow}>
                     <Text style={styles.lotteryPick}>{pick.pick}</Text>
-                    <Text style={styles.teamName}>{pick.name || pick.abbreviation || pick.teamId}</Text>
+                    <Text style={styles.teamName}>{displayScheduleTeamLabel(pick.name || pick.abbreviation, pick.teamId, league?.sport)}</Text>
                     <Text style={styles.lotterySource}>
                       {pick.source === 'lottery_draw' ? 'drawn' : 'standings'}
                     </Text>
@@ -428,7 +428,7 @@ export default function OffseasonScreen() {
                     {lotteryWheelTeams.map((team, index) => (
                       <View key={`${team.teamId}:${index}`} style={styles.lotteryWheelSlot}>
                         <Text style={styles.lotteryWheelText} numberOfLines={1}>
-                          {displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId)}
+                          {displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId, league?.sport)}
                         </Text>
                       </View>
                     ))}

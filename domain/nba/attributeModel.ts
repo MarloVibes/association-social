@@ -389,7 +389,7 @@ export function buildAttributeModel({
   const strongReboundFloor = rpg >= 10 && drebPct >= 18 && mpg >= 24 ? 89 : 0;
   const reboundFloor = Math.max(eliteReboundFloor, strongReboundFloor);
   const hasEliteMidrangeProof = eliteMidRangeBonus > 0 || mvpBonus > 0 || allStarBonus > 0 || highUsageBonus > 0;
-  const midrangeProofCap = !hasEliteMidrangeProof && midRangeAttemptRate < 0.22 ? 86.4 : 100;
+  const midrangeProofCap = !hasEliteMidrangeProof && midRangeAttemptRate < 0.22 ? 84.4 : 100;
   const genericBigDunkCap = big
     && rimPressureBonus <= 0
     && burstBonus <= 0

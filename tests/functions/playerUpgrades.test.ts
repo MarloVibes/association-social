@@ -4,12 +4,81 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   applySeasonUpgradeGrants,
+  completeDevelopmentAssignment,
   createUpgradePointNotifications,
   prepareSeasonGrantUpdates,
   spendTeamUpgradePoint,
+  startDevelopmentAssignment,
 } = require('../../functions/franchise/playerUpgrades.js');
 
 describe('player upgrade callable helpers', () => {
+  it('starts and completes a one-week minimum-contract development assignment', () => {
+    const nowMs = Date.parse('2026-07-04T12:00:00.000Z');
+    const started = startDevelopmentAssignment({
+      team: {
+        players: [
+          {
+            id: 'bench-wing',
+            full_name: 'Bench Wing',
+            contractType: 'minimum',
+            salary: 1_200_000,
+            skill_grades: { perimeterDefense: 'C' },
+          },
+        ],
+      },
+      playerId: 'bench-wing',
+      gradeKey: 'perimeterDefense',
+      nowMs,
+    });
+
+    expect(started.valid).toBe(true);
+    expect(started.assignment.completesAtMs).toBe(nowMs + 7 * 24 * 60 * 60 * 1000);
+
+    const completed = completeDevelopmentAssignment({
+      team: {
+        players: [
+          {
+            id: 'bench-wing',
+            full_name: 'Bench Wing',
+            contractType: 'minimum',
+            salary: 1_200_000,
+            skill_grades: { perimeterDefense: 'C' },
+            hidden: { perimeterDefense: 65 },
+          },
+        ],
+        developmentAssignment: started.assignment,
+      },
+      nowMs: started.assignment.completesAtMs,
+    });
+
+    expect(completed.valid).toBe(true);
+    expect(completed.players[0].skill_grades.perimeterDefense).toBe('B-');
+    expect(completed.players[0].hidden.perimeterDefense).toBe(75);
+  });
+
+  it('blocks a second active development assignment on the same team', () => {
+    const result = startDevelopmentAssignment({
+      team: {
+        developmentAssignment: {
+          playerId: 'first-player',
+          gradeKey: 'threePoint',
+          status: 'active',
+          startedAtMs: 1000,
+          completesAtMs: 1000 + 7 * 24 * 60 * 60 * 1000,
+        },
+        players: [
+          { id: 'second-player', contractType: 'minimum', salary: 1_200_000, skill_grades: { threePoint: 'C' } },
+        ],
+      },
+      playerId: 'second-player',
+      gradeKey: 'threePoint',
+      nowMs: 2000,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('assignment_active');
+  });
+
   it('spends one point and moves one visible grade step', () => {
     const result = spendTeamUpgradePoint({
       team: { upgradePoints: 3 },

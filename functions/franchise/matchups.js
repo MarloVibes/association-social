@@ -8,6 +8,7 @@ const {
   boxScoreFromPossessionTimeline,
   buildPossessionTimeline,
 } = require('./possessionTimeline');
+const { normalizeSport, simulateSportGame } = require('./sportSimulation');
 
 const REQUEST_WINDOW_MS = 60 * 60 * 1000;
 const PREPARATION_WINDOW_MS = 5 * 60 * 1000;
@@ -61,9 +62,13 @@ function simulatedScore(game, nowMs) {
 }
 
 function displayScheduleAbbr(value) {
-  const raw = String(value || '').trim();
-  const eraMatch = raw.toUpperCase().match(/^([A-Z]{2,3})_\d{4}$/);
-  return eraMatch ? eraMatch[1] : raw;
+  const key = String(value || '').trim().toUpperCase();
+  const cpuMatch = key.match(/^CPU[_-]?(.+)$/);
+  if (cpuMatch) return displayScheduleAbbr(cpuMatch[1]);
+  const currentSuffixMatch = key.match(/^(.+)_CURRENT$/);
+  if (currentSuffixMatch) return currentSuffixMatch[1];
+  const eraMatch = key.match(/^([A-Z]{2,3})_\d{4}$/);
+  return eraMatch ? eraMatch[1] : key;
 }
 
 function periodLabel(period) {
@@ -80,6 +85,10 @@ function storyPeriodLabel(period) {
   if (value === 4) return 'fourth quarter';
   if (value === 5) return 'overtime';
   return periodLabel(value);
+}
+
+function storyPeriodValue(period) {
+  return Number((period && (period.quarter || period.period || period.inning)) || 0);
 }
 
 function numberFrom(value, fallback = 60) {
@@ -1029,6 +1038,45 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
   assertSimulationRoster(canonicalAwayTeam, game.awayTeamId);
   const homePresetIds = coachingPlanPresetIdsForSide(game, 'home');
   const awayPresetIds = coachingPlanPresetIdsForSide(game, 'away');
+  const sport = normalizeSport(game && (game.sport || game.leagueSport));
+  if (sport !== 'nba') {
+    const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
+    const result = simulateSportGame({
+      sport,
+      game: { ...game, sport },
+      homeTeam: canonicalHomeTeam,
+      awayTeam: canonicalAwayTeam,
+      seed,
+      preferredWinnerTeamId: winnerTeamId,
+      homePresetIds,
+      awayPresetIds,
+    });
+    const coachingImpact = {
+      homePresetId: homePresetIds[0],
+      awayPresetId: awayPresetIds[0],
+      homeFirstHalfPresetId: homePresetIds[0],
+      homeSecondHalfPresetId: homePresetIds[1],
+      awayFirstHalfPresetId: awayPresetIds[0],
+      awaySecondHalfPresetId: awayPresetIds[1],
+    };
+    return {
+      ...result,
+      coachingImpact,
+      postgameStory: postgameStoryFromResult({
+        homeTeamId: game.homeTeamId,
+        awayTeamId: game.awayTeamId,
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        quarters: result.quarters,
+        periods: result.periods,
+        innings: result.innings,
+        boxScore: result.boxScore,
+        winnerTeamId: result.homeScore > result.awayScore ? game.homeTeamId : game.awayTeamId,
+        coachingImpact,
+        summary: result.story,
+      }),
+    };
+  }
   const simulatedHomeTeam = applyCoachingToTeamForSimulation(canonicalHomeTeam, homePresetIds);
   const simulatedAwayTeam = applyCoachingToTeamForSimulation(canonicalAwayTeam, awayPresetIds);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
@@ -1054,21 +1102,32 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
     away: period.away,
   }));
   const boxScore = { home, away };
+  const story = gameStoryFromResult({
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeScore,
+    awayScore,
+    quarters,
+    boxScore,
+    winnerTeamId: simulatedWinnerTeamId,
+  });
+  const coachingImpact = {
+    homePresetId: homePresetIds[0],
+    awayPresetId: awayPresetIds[0],
+    homeFirstHalfPresetId: homePresetIds[0],
+    homeSecondHalfPresetId: homePresetIds[1],
+    awayFirstHalfPresetId: awayPresetIds[0],
+    awaySecondHalfPresetId: awayPresetIds[1],
+  };
   return {
     homeScore,
     awayScore,
     boxScore,
-    coachingImpact: {
-      homePresetId: homePresetIds[0],
-      awayPresetId: awayPresetIds[0],
-      homeFirstHalfPresetId: homePresetIds[0],
-      homeSecondHalfPresetId: homePresetIds[1],
-      awayFirstHalfPresetId: awayPresetIds[0],
-      awaySecondHalfPresetId: awayPresetIds[1],
-    },
+    coachingImpact,
     quarters,
     liveTimeline,
-    story: gameStoryFromResult({
+    story,
+    postgameStory: postgameStoryFromResult({
       homeTeamId: game.homeTeamId,
       awayTeamId: game.awayTeamId,
       homeScore,
@@ -1076,6 +1135,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       quarters,
       boxScore,
       winnerTeamId: simulatedWinnerTeamId,
+      coachingImpact,
+      summary: story,
     }),
   };
 }
@@ -1154,6 +1215,174 @@ function gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, qua
   return [opener, leaderLine, responseLine, benchLine, swingLine].filter(Boolean).join(' ');
 }
 
+function postgameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, quarters, periods, innings, boxScore, winnerTeamId, coachingImpact, summary }) {
+  const homeWon = homeScore > awayScore;
+  const winnerId = winnerTeamId || (homeWon ? homeTeamId : awayTeamId);
+  const loserId = winnerId === homeTeamId ? awayTeamId : homeTeamId;
+  const winnerLabel = displayScheduleAbbr(winnerId);
+  const loserLabel = displayScheduleAbbr(loserId);
+  const winnerScore = winnerId === homeTeamId ? homeScore : awayScore;
+  const loserScore = winnerId === homeTeamId ? awayScore : homeScore;
+  const winnerIsHome = winnerId === homeTeamId;
+  const performers = [
+    ...((boxScore && boxScore.away && boxScore.away.players) || []).map(player => ({ ...player, side: awayTeamId })),
+    ...((boxScore && boxScore.home && boxScore.home.players) || []).map(player => ({ ...player, side: homeTeamId })),
+  ].sort((left, right) => playerImpactScore(right) - playerImpactScore(left));
+  const scorePeriods = quarters || periods || innings || [];
+  const swing = scorePeriods
+    .map(period => {
+      const diff = Number(period.home || 0) - Number(period.away || 0);
+      return { period, winnerDiff: winnerIsHome ? diff : -diff };
+    })
+    .filter(item => item.winnerDiff > 0)
+    .sort((left, right) => right.winnerDiff - left.winnerDiff)[0];
+  const turningPoint = swing
+    ? `${winnerLabel}'s best stretch came in the ${storyPeriodLabel(storyPeriodValue(swing.period))}, winning that period by ${swing.winnerDiff}.`
+    : `${winnerLabel} protected the margin through the closing possessions.`;
+  const coachIds = [
+    coachingImpact && coachingImpact.homeFirstHalfPresetId,
+    coachingImpact && coachingImpact.homeSecondHalfPresetId,
+    coachingImpact && coachingImpact.awayFirstHalfPresetId,
+    coachingImpact && coachingImpact.awaySecondHalfPresetId,
+  ].filter(Boolean).map(coachingPresetLabel);
+  return compactObject({
+    headline: `${winnerLabel} ${winnerScore}, ${loserLabel} ${loserScore}`,
+    summary: summary || gameStoryFromResult({ homeTeamId, awayTeamId, homeScore, awayScore, quarters: scorePeriods, boxScore, winnerTeamId }),
+    turningPoint,
+    topPerformers: performers.slice(0, 3).map(player => player.name || player.playerName).filter(Boolean),
+    coachingImpact: coachIds.length > 0 ? `Game plans logged: ${coachIds.join(', ')}.` : undefined,
+  });
+}
+
+function liveGameReadyNotifications({ leagueId, leagueName, competition, game, createdAt }) {
+  if (!game || !game.liveTimeline) return [];
+  const recipients = [...new Set([game.homeGmId, game.awayGmId].filter(Boolean))];
+  return recipients.map(uid => ({
+    uid,
+    notification: {
+      id: `game-ready:${leagueId}:${game.id}:${uid}`,
+      type: 'game_ready',
+      leagueId,
+      leagueName: leagueName || '',
+      gameId: game.id,
+      competition: competition || 'regular',
+      sport: normalizeSport(game.sport || game.leagueSport),
+      liveTimeline: true,
+      createdAt,
+      message: `${leagueName || 'Your game'} is live. Watch the game unfold now.`,
+    },
+  }));
+}
+
+function writeLiveGameReadyNotifications({ tx, db, FieldValue, leagueId, leagueName, competition, game, createdAt }) {
+  if (!tx || !db || !FieldValue || typeof FieldValue.arrayUnion !== 'function') return;
+  liveGameReadyNotifications({ leagueId, leagueName, competition, game, createdAt }).forEach(({ uid, notification }) => {
+    tx.set(db.collection('users').doc(uid), {
+      notifications: FieldValue.arrayUnion(cleanFirestoreData(notification)),
+    }, { merge: true });
+  });
+}
+
+function coachingPresetLabel(value) {
+  const key = String(value || '').trim();
+  const labels = {
+    pace_and_space: 'Pace and Space',
+    seven_seconds: 'Seven Seconds',
+    grit_and_grind: 'Grit and Grind',
+    post_heavy: 'Post Heavy',
+    triangle_control: 'Triangle Control',
+    zone_trap: 'Zone Trap',
+    small_ball_switch: 'Small Ball Switch',
+    lob_city: 'Lob City',
+    twin_towers: 'Twin Towers',
+    bully_ball: 'Bully Ball',
+  };
+  if (labels[key]) return labels[key];
+  return key
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function compactObject(value) {
+  return Object.entries(value || {}).reduce((result, [key, item]) => {
+    if (item !== undefined) result[key] = item;
+    return result;
+  }, {});
+}
+
+function cleanFirestoreData(value) {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map(item => cleanFirestoreData(item))
+      .filter(item => item !== undefined);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+  return Object.entries(value).reduce((result, [key, item]) => {
+    const cleaned = cleanFirestoreData(item);
+    if (cleaned !== undefined) result[key] = cleaned;
+    return result;
+  }, {});
+}
+
+function definedObject(value) {
+  return cleanFirestoreData(value);
+}
+
+function compactLiveTimelineForSchedule(liveTimeline) {
+  if (!liveTimeline || typeof liveTimeline !== 'object') return liveTimeline;
+  return compactObject({
+    version: liveTimeline.version,
+    gameId: liveTimeline.gameId,
+    sport: liveTimeline.sport,
+    homeTeamId: liveTimeline.homeTeamId,
+    awayTeamId: liveTimeline.awayTeamId,
+    homeScore: liveTimeline.homeScore,
+    awayScore: liveTimeline.awayScore,
+    revealDurationMs: liveTimeline.revealDurationMs,
+    speedMultiplier: liveTimeline.speedMultiplier,
+    periods: liveTimeline.periods,
+    storage: 'liveTimelines',
+  });
+}
+
+function compactScheduleGameForWrite(game) {
+  if (!game || !game.liveTimeline) return game;
+  return {
+    ...game,
+    liveTimeline: compactLiveTimelineForSchedule(game.liveTimeline),
+  };
+}
+
+function compactScheduleGamesForWrite(games) {
+  return (games || []).map(compactScheduleGameForWrite);
+}
+
+function liveTimelinePayloadForGame(game, nowMs) {
+  if (!game || !game.id || !game.liveTimeline || typeof game.liveTimeline !== 'object') return null;
+  return cleanFirestoreData({
+    gameId: game.id,
+    liveTimeline: game.liveTimeline,
+    liveMode: game.liveMode,
+    updatedAtMs: nowMs,
+  });
+}
+
+function persistLiveTimelineForGame({ tx, scheduleRef, game, nowMs }) {
+  const payload = liveTimelinePayloadForGame(game, nowMs);
+  if (!payload || !tx || typeof tx.set !== 'function' || !scheduleRef || typeof scheduleRef.collection !== 'function') return;
+  tx.set(scheduleRef.collection('liveTimelines').doc(String(game.id)), payload, { merge: true });
+}
+
+function deleteLiveTimelineForGame({ tx, scheduleRef, game }) {
+  if (!game || !game.id || !tx || typeof tx.delete !== 'function' || !scheduleRef || typeof scheduleRef.collection !== 'function') return;
+  tx.delete(scheduleRef.collection('liveTimelines').doc(String(game.id)));
+}
+
 function teamStateForFinalization(team) {
   return {
     fatigue: team && team.fatigue,
@@ -1192,6 +1421,35 @@ function subtractStat(stats, key, value) {
   return next;
 }
 
+const BOX_SCORE_ID_KEYS = new Set(['playerId', 'player_id', 'id', 'name', 'full_name', 'fullName', 'position', 'starter', 'side', 'teamId']);
+const BASKETBALL_BOX_SCORE_KEYS = [
+  'minutes',
+  'points',
+  'rebounds',
+  'assists',
+  'steals',
+  'blocks',
+  'turnovers',
+  'fieldGoalsMade',
+  'fieldGoalsAttempted',
+  'threePointersMade',
+  'threePointersAttempted',
+  'freeThrowsMade',
+  'freeThrowsAttempted',
+  'offensiveRebounds',
+  'defensiveRebounds',
+  'fouls',
+  'plusMinus',
+];
+
+function numericBoxScoreKeys(line) {
+  const keys = new Set(BASKETBALL_BOX_SCORE_KEYS);
+  Object.entries(line || {}).forEach(([key, value]) => {
+    if (!BOX_SCORE_ID_KEYS.has(key) && Number.isFinite(Number(value))) keys.add(key);
+  });
+  return [...keys];
+}
+
 function applyBoxScoreToRoster(players, teamBoxScore) {
   if (!Array.isArray(players) || !teamBoxScore || !Array.isArray(teamBoxScore.players)) return players;
   const lines = new Map(teamBoxScore.players.map(line => [playerBoxScoreKey(line), line]));
@@ -1199,25 +1457,7 @@ function applyBoxScoreToRoster(players, teamBoxScore) {
     const line = lines.get(playerBoxScoreKey(player));
     if (!line) return player;
     let seasonStats = addStat(player.seasonStats, 'games', 1);
-    [
-      'minutes',
-      'points',
-      'rebounds',
-      'assists',
-      'steals',
-      'blocks',
-      'turnovers',
-      'fieldGoalsMade',
-      'fieldGoalsAttempted',
-      'threePointersMade',
-      'threePointersAttempted',
-      'freeThrowsMade',
-      'freeThrowsAttempted',
-      'offensiveRebounds',
-      'defensiveRebounds',
-      'fouls',
-      'plusMinus',
-    ].forEach((key) => {
+    numericBoxScoreKeys(line).forEach((key) => {
       seasonStats = addStat(seasonStats, key, line[key]);
     });
     return { ...player, seasonStats };
@@ -1231,25 +1471,7 @@ function rollbackBoxScoreFromRoster(players, teamBoxScore) {
     const line = lines.get(playerBoxScoreKey(player));
     if (!line) return player;
     let seasonStats = subtractStat(player.seasonStats, 'games', 1);
-    [
-      'minutes',
-      'points',
-      'rebounds',
-      'assists',
-      'steals',
-      'blocks',
-      'turnovers',
-      'fieldGoalsMade',
-      'fieldGoalsAttempted',
-      'threePointersMade',
-      'threePointersAttempted',
-      'freeThrowsMade',
-      'freeThrowsAttempted',
-      'offensiveRebounds',
-      'defensiveRebounds',
-      'fouls',
-      'plusMinus',
-    ].forEach((key) => {
+    numericBoxScoreKeys(line).forEach((key) => {
       seasonStats = subtractStat(seasonStats, key, line[key]);
     });
     return { ...player, seasonStats };
@@ -1262,7 +1484,7 @@ function teamPersistencePayload({ state, team, teamBoxScore }) {
   if (team && Array.isArray(team.players) && teamBoxScore) {
     payload.players = applyBoxScoreToRoster(team.players, teamBoxScore);
   }
-  return payload;
+  return cleanFirestoreData(payload);
 }
 
 function teamResetPayload({ game, side, team }) {
@@ -1286,7 +1508,7 @@ function teamResetPayload({ game, side, team }) {
   if (Array.isArray(team.players) && teamBoxScore) {
     payload.players = rollbackBoxScoreFromRoster(team.players, teamBoxScore);
   }
-  return payload;
+  return cleanFirestoreData(payload);
 }
 
 function safeCoachingSnapshot(snapshot) {
@@ -1351,8 +1573,8 @@ function persistTeamStates({ tx, homeTeam, awayTeam, result }) {
     team: awayTeam,
     teamBoxScore: result && result.game && result.game.boxScore && result.game.boxScore.away,
   });
-  if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, homePayload);
-  if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, awayPayload);
+  if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, cleanFirestoreData(homePayload));
+  if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, cleanFirestoreData(awayPayload));
 }
 
 function applyPayloadToCachedTeam(team, payload) {
@@ -1364,7 +1586,7 @@ function applyPayloadToCachedTeam(team, payload) {
   };
 }
 
-function requestMatchup({ game, uid, nowMs }) {
+function requestMatchup({ game, uid, nowMs, league, homeTeam, awayTeam }) {
   if (!game || game.status !== 'scheduled') {
     if (isActiveRequest(game)) throw new MatchupError('already-exists', 'This game already has an active request.');
     throw new MatchupError('failed-precondition', 'Only scheduled games can be requested.');
@@ -1372,7 +1594,7 @@ function requestMatchup({ game, uid, nowMs }) {
   assertParticipant(game, uid);
   const opponent = opponentUid(game, uid);
   if (!opponent) {
-    return simulateScheduledGame({ game, uid, nowMs });
+    return simulateScheduledGame({ game: { ...game, leagueSport: league && league.sport }, uid, nowMs, homeTeam, awayTeam });
   }
   return {
     ...game,
@@ -1442,13 +1664,17 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam, ski
   const simulatedGame = {
     ...result.game,
     ...(rosterSimulation
-      ? {
+      ? definedObject({
+        sport: rosterSimulation.sport,
         boxScore: rosterSimulation.boxScore,
         quarters: rosterSimulation.quarters,
+        innings: rosterSimulation.innings,
+        periods: rosterSimulation.periods,
         liveTimeline: rosterSimulation.liveTimeline,
         story: rosterSimulation.story,
+        postgameStory: rosterSimulation.postgameStory,
         coachingImpact: rosterSimulation.coachingImpact,
-      }
+      })
       : {
         quarters: quarterScores(homeScore, awayScore, seed),
       }),
@@ -1506,11 +1732,17 @@ function finalScoreGameResult({
     });
     const winnerGame = {
       ...result.game,
-      boxScore: rosterSimulation.boxScore,
-      quarters: rosterSimulation.quarters,
-      liveTimeline: rosterSimulation.liveTimeline,
-      story: rosterSimulation.story,
-      coachingImpact: rosterSimulation.coachingImpact,
+      ...definedObject({
+        sport: rosterSimulation.sport,
+        boxScore: rosterSimulation.boxScore,
+        quarters: rosterSimulation.quarters,
+        innings: rosterSimulation.innings,
+        periods: rosterSimulation.periods,
+        liveTimeline: rosterSimulation.liveTimeline,
+        story: rosterSimulation.story,
+        postgameStory: rosterSimulation.postgameStory,
+        coachingImpact: rosterSimulation.coachingImpact,
+      }),
     };
     return {
       ...result,
@@ -1581,6 +1813,9 @@ function resetScheduledGame({ game, uid, nowMs }) {
     liveMode,
     coachingImpact,
     story,
+    postgameStory,
+    innings,
+    periods,
     ...baseGame
   } = game;
   void requestedByUid;
@@ -1608,6 +1843,9 @@ function resetScheduledGame({ game, uid, nowMs }) {
   void liveMode;
   void coachingImpact;
   void story;
+  void postgameStory;
+  void innings;
+  void periods;
   return {
     ...baseGame,
     status: 'scheduled',
@@ -1818,9 +2056,10 @@ function updatePlayoffGames(schedule, games) {
 }
 
 function updatePayloadForCompetition(competition, games, schedule) {
-  if (competition === 'nbaCup') return { 'nbaCup.games': games };
-  if (competition === 'playoffs') return { playoffs: updatePlayoffGames(schedule, games) };
-  return { games };
+  const compactGames = compactScheduleGamesForWrite(games);
+  if (competition === 'nbaCup') return { 'nbaCup.games': compactGames };
+  if (competition === 'playoffs') return { playoffs: updatePlayoffGames(schedule, compactGames) };
+  return { games: compactGames };
 }
 
 function selectSimBatch({ games, competition = 'regular', scope = 'all', batchSize = 20 }) {
@@ -1840,7 +2079,27 @@ function mapError(error, HttpsError) {
   if (error instanceof MatchupError || error instanceof FinalizeGameError) {
     return new HttpsError(error.code, error.message, error.details);
   }
-  return error;
+  const callableCodes = new Set([
+    'cancelled',
+    'unknown',
+    'invalid-argument',
+    'deadline-exceeded',
+    'not-found',
+    'already-exists',
+    'permission-denied',
+    'resource-exhausted',
+    'failed-precondition',
+    'aborted',
+    'out-of-range',
+    'unimplemented',
+    'internal',
+    'unavailable',
+    'data-loss',
+    'unauthenticated',
+  ]);
+  const message = error && error.message ? String(error.message) : 'Unexpected matchup action failure.';
+  if (error && callableCodes.has(error.code)) return new HttpsError(error.code, message, error.details);
+  return new HttpsError('internal', message);
 }
 
 function createMatchupHandler({ getFirestore, HttpsError, now }) {
@@ -1878,21 +2137,23 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
+      const nowMs = now();
       let nextGame;
       try {
         nextGame = mutate({
-          game, uid, nowMs: now(), league,
+          game, uid, nowMs, league, homeTeam, awayTeam,
         });
       } catch (error) {
         throw mapError(error, HttpsError);
       }
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
+      persistLiveTimelineForGame({ tx, scheduleRef, game: nextGame, nowMs });
+      tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
       const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
-      if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, homePayload);
-      if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, awayPayload);
+      if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, cleanFirestoreData(homePayload));
+      if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, cleanFirestoreData(awayPayload));
       return nextGame;
     });
   };
@@ -1937,6 +2198,10 @@ function scheduleAliases(value) {
   if (key === 'NJN' || displayKey === 'NJN') add('NJN', 'BKN');
   if (key === 'OKC' || displayKey === 'OKC') add('OKC', 'SEA');
   if (key === 'SEA' || displayKey === 'SEA') add('SEA', 'OKC');
+  if (key === 'MEM' || displayKey === 'MEM') add('MEM', 'VAN');
+  if (key === 'VAN' || displayKey === 'VAN') add('VAN', 'MEM');
+  if (key === 'SAC' || displayKey === 'SAC') add('SAC', 'KCK');
+  if (key === 'KCK' || displayKey === 'KCK') add('KCK', 'SAC');
   return [...aliases];
 }
 
@@ -1973,8 +2238,8 @@ function teamFromParticipantFallback({ teamId, participant, poolPlayers = [] }) 
 
 async function eraPoolPlayersForLeague({ tx, db, league }) {
   if (!tx || !db || !league) return [];
-  const sport = String(league.sport || 'nba');
-  const poolKey = sport && sport !== 'nba' ? sport : String(league.era || 'current');
+  const sport = normalizeSport(league.sport || 'nba');
+  const poolKey = sport !== 'nba' ? sport : String(league.era || 'current');
   const poolSnap = await tx.get(db.collection('era_player_pools').doc(poolKey));
   if (!poolSnap.exists) return [];
   const pool = poolSnap.data() || {};
@@ -1982,16 +2247,27 @@ async function eraPoolPlayersForLeague({ tx, db, league }) {
 }
 
 async function withFallbackRoster({ tx, db, league, team, teamId, participant }) {
-  if (team && Array.isArray(team.players) && team.players.length > 0) return team;
+  const existingPlayers = Array.isArray(team && team.players) ? team.players : [];
+  if (existingPlayers.length >= 5) return team;
   const poolPlayers = await eraPoolPlayersForLeague({ tx, db, league });
   const fallback = teamFromParticipantFallback({ teamId, participant, poolPlayers });
   if (!fallback.players.length) return team || fallback;
+  const seen = new Set(existingPlayers.map(playerKey).filter(Boolean));
+  const mergedPlayers = [
+    ...existingPlayers,
+    ...fallback.players.filter(player => {
+      const key = playerKey(player);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  ];
   return {
     ...(team || fallback),
     teamId: (team && team.teamId) || fallback.teamId,
     abbreviation: (team && team.abbreviation) || fallback.abbreviation,
     name: (team && team.name) || fallback.name,
-    players: fallback.players,
+    players: mergedPlayers,
   };
 }
 
@@ -2122,21 +2398,26 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
       ]);
+      const nowMs = now();
       let nextGame;
       try {
         nextGame = mutate({
-          game, uid, nowMs: now(), league,
+          game, uid, nowMs, league,
         });
       } catch (error) {
         throw mapError(error, HttpsError);
       }
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
+      persistLiveTimelineForGame({ tx, scheduleRef, game: nextGame, nowMs });
+      if (game.liveTimeline && !nextGame.liveTimeline) {
+        deleteLiveTimelineForGame({ tx, scheduleRef, game });
+      }
+      tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
       const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
-      if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, homePayload);
-      if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, awayPayload);
+      if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, cleanFirestoreData(homePayload));
+      if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, cleanFirestoreData(awayPayload));
       return nextGame;
     });
   };
@@ -2173,18 +2454,19 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
         coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),
         coachingPlanForTeam({ tx, scheduleRef, game, team: awayTeam }),
       ]);
+      const nowMs = now();
       let result;
       try {
         result = finalScoreGameResult({
           game: gameWithCoachingSnapshots({
-            game,
+            game: { ...game, leagueSport: league.sport },
             homeSnapshot: homePlan.firstHalf,
             homeSecondHalfSnapshot: homePlan.secondHalf,
             awaySnapshot: awayPlan.firstHalf,
             awaySecondHalfSnapshot: awayPlan.secondHalf,
           }),
           uid,
-          nowMs: now(),
+          nowMs,
           homeScore: data.homeScore,
           awayScore: data.awayScore,
           winnerTeamId: data.winnerTeamId,
@@ -2197,7 +2479,8 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
       }
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
+      persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
+      tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
       return result.game;
     });
@@ -2207,7 +2490,7 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
 function createRequestMatchupHandler(deps) {
   return createGameMutationHandler({
     ...deps,
-    mutate: ({ game, uid, nowMs, league }) => {
+    mutate: ({ game, uid, nowMs, league, homeTeam, awayTeam }) => {
       const cpuGate = canUserSimulateVsCpu({ game, uid, league });
       if (!cpuGate.allowed) {
         throw new MatchupError(
@@ -2218,7 +2501,7 @@ function createRequestMatchupHandler(deps) {
           { reason: cpuGate.reason },
         );
       }
-      return requestMatchup({ game, uid, nowMs });
+      return requestMatchup({ game, uid, nowMs, league, homeTeam, awayTeam });
     },
   });
 }
@@ -2231,7 +2514,7 @@ function createAcceptMatchupHandler(deps) {
 }
 
 function createSimulateScheduledGameHandler(deps) {
-  const { getFirestore, HttpsError, now } = deps;
+  const { getFirestore, FieldValue, HttpsError, now } = deps;
   const base = createMatchupHandler({ getFirestore, HttpsError, now });
   return async (request) => {
     const { uid, leagueId, gameId, competition } = await base(request);
@@ -2268,18 +2551,19 @@ function createSimulateScheduledGameHandler(deps) {
         coachingPlanForTeam({ tx, scheduleRef, game, team: homeTeam }),
         coachingPlanForTeam({ tx, scheduleRef, game, team: awayTeam }),
       ]);
+      const nowMs = now();
       let result;
       try {
         result = simulateScheduledGameResult({
           game: gameWithCoachingSnapshots({
-            game,
+            game: { ...game, leagueSport: league.sport },
             homeSnapshot: homePlan.firstHalf,
             homeSecondHalfSnapshot: homePlan.secondHalf,
             awaySnapshot: awayPlan.firstHalf,
             awaySecondHalfSnapshot: awayPlan.secondHalf,
           }),
           uid,
-          nowMs: now(),
+          nowMs,
           homeTeam,
           awayTeam,
         });
@@ -2288,9 +2572,22 @@ function createSimulateScheduledGameHandler(deps) {
       }
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
-      tx.update(scheduleRef, updatePayloadForCompetition(competition, nextGames, schedule));
+      persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
+      tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
+      writeLiveGameReadyNotifications({
+        tx,
+        db,
+        FieldValue,
+        leagueId,
+        leagueName: league.name || '',
+        competition,
+        game: result.game,
+        createdAt: new Date(now()).toISOString(),
+      });
       return result.game;
+    }).catch((error) => {
+      throw mapError(error, HttpsError);
     });
   };
 }
@@ -2398,18 +2695,19 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
         if (gameIndex < 0) continue;
         const homeTeam = teamCache.get(context.homeKey);
         const awayTeam = teamCache.get(context.awayKey);
+        const nowMs = now();
         let result;
         try {
           result = simulateScheduledGameResult({
             game: gameWithCoachingSnapshots({
-              game,
+              game: { ...game, leagueSport: league.sport },
               homeSnapshot: homePlan.firstHalf,
               homeSecondHalfSnapshot: homePlan.secondHalf,
               awaySnapshot: awayPlan.firstHalf,
               awaySecondHalfSnapshot: awayPlan.secondHalf,
             }),
             uid,
-            nowMs: now(),
+            nowMs,
             homeTeam,
             awayTeam,
             skipParticipantCheck: true,
@@ -2418,6 +2716,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
           throw mapError(error, HttpsError);
         }
         nextGames[gameIndex] = result.game;
+        persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
         simmed.push(result.game.id);
         const homePayload = teamPersistencePayload({
           state: result.teamStates && result.teamStates[result.game.homeTeamId],
@@ -2430,11 +2729,11 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
           teamBoxScore: result.game.boxScore && result.game.boxScore.away,
         });
         if (homeTeam && homeTeam.ref && homePayload) {
-          tx.update(homeTeam.ref, homePayload);
+          tx.update(homeTeam.ref, cleanFirestoreData(homePayload));
           teamCache.set(context.homeKey, applyPayloadToCachedTeam(homeTeam, homePayload));
         }
         if (awayTeam && awayTeam.ref && awayPayload) {
-          tx.update(awayTeam.ref, awayPayload);
+          tx.update(awayTeam.ref, cleanFirestoreData(awayPayload));
           teamCache.set(context.awayKey, applyPayloadToCachedTeam(awayTeam, awayPayload));
         }
       }
@@ -2454,7 +2753,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
         cancelRequested: false,
       };
       tx.update(scheduleRef, {
-        ...updatePayloadForCompetition(competition, nextGames, schedule),
+        ...cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)),
         [controlKey]: control,
       });
       return control;
@@ -2484,6 +2783,7 @@ module.exports = {
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
   canonicalizeTeamForSimulation,
+  cleanFirestoreData,
   coachingGradeAdjustmentsForPlayer,
   createAcceptMatchupHandler,
   canUserSimulateVsCpu,
@@ -2499,6 +2799,8 @@ module.exports = {
   gameStoryFromResult,
   gameWithCoachingSnapshots,
   gamesForCompetition,
+  liveGameReadyNotifications,
+  postgameStoryFromResult,
   requestMatchup,
   resetScheduledGame,
   scheduleAliases,
@@ -2511,4 +2813,5 @@ module.exports = {
   teamResetPayload,
   teamStateUpdatePayload,
   updatePayloadForCompetition,
+  writeLiveGameReadyNotifications,
 };

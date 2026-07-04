@@ -25,8 +25,17 @@ export type PlayoffPicture = {
   bracketLocked: boolean;
 };
 
+export type ConferencePlayoffPictureLabel =
+  | 'Eastern Conference'
+  | 'Western Conference'
+  | 'AFC'
+  | 'NFC'
+  | 'American League'
+  | 'National League'
+  | 'League';
+
 export type ConferencePlayoffPicture = {
-  label: 'Eastern Conference' | 'Western Conference' | 'League';
+  label: ConferencePlayoffPictureLabel;
   picture: PlayoffPicture;
 };
 
@@ -81,20 +90,45 @@ function normalizedConference(value?: string | null): 'East' | 'West' | null {
   return null;
 }
 
+function normalizedSport(value?: string | null): 'nba' | 'madden' | 'mlb' {
+  if (value === 'nfl' || value === 'madden') return 'madden';
+  if (value === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function normalizedSportConference(value: string | null | undefined, sport: 'nba' | 'madden' | 'mlb'): ConferencePlayoffPictureLabel | null {
+  const next = normalized(value);
+  if (sport === 'madden') {
+    if (next === 'AFC') return 'AFC';
+    if (next === 'NFC') return 'NFC';
+    return null;
+  }
+  if (sport === 'mlb') {
+    if (next === 'AL' || next === 'AMERICAN' || next === 'AMERICAN LEAGUE') return 'American League';
+    if (next === 'NL' || next === 'NATIONAL' || next === 'NATIONAL LEAGUE') return 'National League';
+    return null;
+  }
+  const nbaConference = normalizedConference(value);
+  if (nbaConference === 'East') return 'Eastern Conference';
+  if (nbaConference === 'West') return 'Western Conference';
+  return null;
+}
+
 function teamKeys(team: StandingsTeam) {
   return [team.id, team.teamId, team.abbreviation, team.abbr, team.name, team.full_name]
     .map(normalized)
     .filter(Boolean);
 }
 
-function conferenceForRow(row: StandingsRow, teams: StandingsTeam[]): 'East' | 'West' | 'League' {
+function conferenceForRow(row: StandingsRow, teams: StandingsTeam[], sport: 'nba' | 'madden' | 'mlb'): ConferencePlayoffPictureLabel {
   const rowKeys = [row.teamId, row.abbreviation, row.name].map(normalized).filter(Boolean);
   const matchedTeam = teams.find(team => teamKeys(team).some(key => rowKeys.includes(key)));
-  const explicit = normalizedConference((matchedTeam as StandingsTeam & { conference?: string | null })?.conference);
+  const explicit = normalizedSportConference((matchedTeam as StandingsTeam & { conference?: string | null })?.conference, sport);
   if (explicit) return explicit;
+  if (sport !== 'nba') return 'League';
   const abbr = normalized(row.abbreviation || row.teamId);
-  if (EAST_TEAMS.has(abbr)) return 'East';
-  if (WEST_TEAMS.has(abbr)) return 'West';
+  if (EAST_TEAMS.has(abbr)) return 'Eastern Conference';
+  if (WEST_TEAMS.has(abbr)) return 'Western Conference';
   return 'League';
 }
 
@@ -131,28 +165,47 @@ export function buildPlayoffPicture({
 }
 
 export function buildConferencePlayoffPicture({
+  sport,
   standings,
   teams = [],
   format,
   completion,
   bracketExists = false,
 }: {
+  sport?: string | null;
   standings: StandingsRow[];
   teams?: StandingsTeam[];
   format: PlayoffFormat;
   completion: SeasonCompletion;
   bracketExists?: boolean;
 }): ConferencePlayoffPictureResult {
-  const grouped: Record<'East' | 'West' | 'League', StandingsRow[]> = {
-    East: [],
-    West: [],
+  const sportKey = normalizedSport(sport);
+  const grouped: Record<ConferencePlayoffPictureLabel, StandingsRow[]> = {
+    'Eastern Conference': [],
+    'Western Conference': [],
+    AFC: [],
+    NFC: [],
+    'American League': [],
+    'National League': [],
     League: [],
   };
-  standings.forEach(row => grouped[conferenceForRow(row, teams)].push(row));
+  standings.forEach(row => grouped[conferenceForRow(row, teams, sportKey)].push(row));
 
-  const source: Array<['Eastern Conference' | 'Western Conference' | 'League', StandingsRow[]]> = [
-    ['Eastern Conference', grouped.East],
-    ['Western Conference', grouped.West],
+  const source: Array<[ConferencePlayoffPictureLabel, StandingsRow[]]> = sportKey === 'madden'
+    ? [
+      ['AFC', grouped.AFC],
+      ['NFC', grouped.NFC],
+      ['League', grouped.League],
+    ]
+    : sportKey === 'mlb'
+      ? [
+        ['American League', grouped['American League']],
+        ['National League', grouped['National League']],
+        ['League', grouped.League],
+      ]
+      : [
+    ['Eastern Conference', grouped['Eastern Conference']],
+    ['Western Conference', grouped['Western Conference']],
     ['League', grouped.League],
   ];
   const conferences = source

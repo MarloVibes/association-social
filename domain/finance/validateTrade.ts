@@ -11,6 +11,11 @@ type TradeAsset = {
   bref_id?: string;
   full_name?: string;
   salary?: number;
+  contractType?: string;
+  contract_type?: string;
+  rosterSlot?: string;
+  roster_slot?: string;
+  status?: string;
 };
 
 type TradeTeam = {
@@ -41,9 +46,14 @@ export type TradeValidation = {
   valid: boolean;
   errors: TradeValidationError[];
   messages: string[];
+  warnings: string[];
   payrollAfter: { teamA: number; teamB: number };
   rosterAfter: { teamA: number; teamB: number };
 };
+
+const NBA_STANDARD_ROSTER_LIMIT = 15;
+const NBA_TOTAL_ROSTER_LIMIT = 18;
+const NBA_MINIMUM_CONTRACT_CUTOFF = 1_300_000;
 
 function playerKey(player: TradeAsset): string {
   return String(player.player_id || player.id || player.bref_id || player.full_name || '');
@@ -121,6 +131,57 @@ function offeredSalary(owned: TradeAsset[], offered: TradeAsset[]): number {
   }, 0);
 }
 
+function offeredPlayers(owned: TradeAsset[], offered: TradeAsset[]): TradeAsset[] {
+  const byKey = new Map(owned.map(player => [playerKey(player), player]));
+  return offered.map(asset => byKey.get(playerKey(asset))).filter((player): player is TradeAsset => !!player);
+}
+
+function finalRoster(owned: TradeAsset[], outgoing: TradeAsset[], incoming: TradeAsset[]): TradeAsset[] {
+  const outgoingKeys = new Set(outgoing.map(playerKey).filter(Boolean));
+  return [
+    ...owned.filter(player => !outgoingKeys.has(playerKey(player))),
+    ...incoming,
+  ];
+}
+
+function isNbaOverflowEligible(player: TradeAsset): boolean {
+  const label = String(
+    player.contractType
+      || player.contract_type
+      || player.rosterSlot
+      || player.roster_slot
+      || player.status
+      || '',
+  ).toLowerCase();
+  if (label.includes('two') && label.includes('way')) return true;
+  if (label.includes('minimum') || label === 'min') return true;
+  const playerSalary = salary(player);
+  return playerSalary > 0 && playerSalary <= NBA_MINIMUM_CONTRACT_CUTOFF;
+}
+
+function checkNbaOverflowRoster(
+  roster: TradeAsset[],
+  label: string,
+  errors: Set<TradeValidationError>,
+  messages: string[],
+  warnings: string[],
+) {
+  if (roster.length <= NBA_STANDARD_ROSTER_LIMIT) return;
+  if (roster.length > NBA_TOTAL_ROSTER_LIMIT) {
+    errors.add('roster_limit');
+    messages.push(`${label} will exceed the ${NBA_TOTAL_ROSTER_LIMIT}-player roster limit with ${roster.length} players after this trade.`);
+    return;
+  }
+  const overflow = roster.length - NBA_STANDARD_ROSTER_LIMIT;
+  const eligibleOverflowPlayers = roster.filter(isNbaOverflowEligible).length;
+  if (eligibleOverflowPlayers < overflow) {
+    errors.add('roster_limit');
+    messages.push(`${label} has ${roster.length} players after this trade. Extra NBA roster spots 16-18 must be two-way or minimum-contract players.`);
+    return;
+  }
+  warnings.push(`${label} will use ${overflow} two-way/minimum overflow ${overflow === 1 ? 'spot' : 'spots'} after this trade.`);
+}
+
 export function validateTrade(input: ValidateTradeInput): TradeValidation {
   const sport = normalizeSport(input.sport);
   const playersA = input.teamA.players || [];
@@ -133,6 +194,7 @@ export function validateTrade(input: ValidateTradeInput): TradeValidation {
   const pickOfferB = input.pickOfferB || [];
   const errors = new Set<TradeValidationError>();
   const messages: string[] = [];
+  const warnings: string[] = [];
   const labelA = teamLabel(input.teamALabel, 'Team A');
   const labelB = teamLabel(input.teamBLabel, 'Team B');
 
@@ -157,6 +219,8 @@ export function validateTrade(input: ValidateTradeInput): TradeValidation {
 
   const outgoingA = offeredSalary(playersA, offerA);
   const outgoingB = offeredSalary(playersB, offerB);
+  const offeredPlayersA = offeredPlayers(playersA, offerA);
+  const offeredPlayersB = offeredPlayers(playersB, offerB);
   const payrollAfter = {
     teamA: sumPayroll(playersA) - outgoingA + outgoingB,
     teamB: sumPayroll(playersB) - outgoingB + outgoingA,
@@ -166,14 +230,19 @@ export function validateTrade(input: ValidateTradeInput): TradeValidation {
     teamB: playersB.length - offerB.length + offerA.length,
   };
 
-  const rosterLimit = sport === 'madden' ? 53 : sport === 'mlb' ? 40 : 15;
-  if (rosterAfter.teamA > rosterLimit) {
-    errors.add('roster_limit');
-    messages.push(`${labelA} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamA} players after this trade.`);
-  }
-  if (rosterAfter.teamB > rosterLimit) {
-    errors.add('roster_limit');
-    messages.push(`${labelB} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamB} players after this trade.`);
+  if (sport === 'nba') {
+    checkNbaOverflowRoster(finalRoster(playersA, offerA, offeredPlayersB), labelA, errors, messages, warnings);
+    checkNbaOverflowRoster(finalRoster(playersB, offerB, offeredPlayersA), labelB, errors, messages, warnings);
+  } else {
+    const rosterLimit = sport === 'madden' ? 53 : 40;
+    if (rosterAfter.teamA > rosterLimit) {
+      errors.add('roster_limit');
+      messages.push(`${labelA} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamA} players after this trade.`);
+    }
+    if (rosterAfter.teamB > rosterLimit) {
+      errors.add('roster_limit');
+      messages.push(`${labelB} will exceed the ${rosterLimit}-player roster limit with ${rosterAfter.teamB} players after this trade.`);
+    }
   }
 
   if (sport !== 'nba') {
@@ -222,6 +291,7 @@ export function validateTrade(input: ValidateTradeInput): TradeValidation {
     valid: errorList.length === 0,
     errors: errorList,
     messages: errorList.length === 0 ? [] : [...new Set(messages)],
+    warnings: [...new Set(warnings)],
     payrollAfter,
     rosterAfter,
   };

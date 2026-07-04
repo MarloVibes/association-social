@@ -6,7 +6,7 @@ import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import { comparePlayersByTierForYear } from '@/constants/playstyle';
 import { getPositionGroups, groupForPosition } from '@/constants/positionGroups';
 import { getPositionFilters } from '@/domain/sports/playerFields';
-import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/domain/sports/rosterValue';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -18,6 +18,13 @@ import { pickLabel } from '@/constants/draftPicks';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 const getPlayerKey = (p: any) => p?.player_id || p?.bref_id || p?.full_name || '';
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').trim().toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
 
 function formatRosterMoney(value: any) {
   const salary = Number(value);
@@ -77,7 +84,7 @@ export default function TeamRosterScreen() {
           const numericYear = Number(d.currentYear);
           loadedCurrentYear = Number.isFinite(numericYear) ? numericYear : undefined;
           loadedEra = d.era || 'current';
-          loadedSport = d.sport || 'nba';
+          loadedSport = normalizeSport(d.sport);
           if (loadedCurrentYear) setCurrentYear(loadedCurrentYear);
           setLeagueEra(loadedEra);
           setSport(loadedSport);
@@ -92,7 +99,8 @@ export default function TeamRosterScreen() {
           // Vacant CPU team — build a read-only roster from the era pool
           const ld2 = leagueSnap.exists() ? (leagueSnap.data() as any) : {};
           const eraKey = ld2.era || 'current';
-          const poolKey = (ld2.sport && ld2.sport !== 'nba') ? ld2.sport : eraKey;
+          const loadedPoolSport = normalizeSport(ld2.sport);
+          const poolKey = loadedPoolSport !== 'nba' ? loadedPoolSport : eraKey;
           const poolSnap = await getDoc(doc(db, 'era_player_pools', poolKey));
           const poolPlayers = poolSnap.exists() ? ((poolSnap.data() as any).players || []) : [];
           let cpuName = cpuAbbr || 'CPU Team';
@@ -196,9 +204,11 @@ export default function TeamRosterScreen() {
   const tradeBlock: string[] = team.tradeBlock || [];
   const players: any[] = team.players || [];
   const positionFilters = getPositionFilters(sport);
+  const rosterComparator = compareSportRosterPlayersByValue(sport);
   const tradeRouteTeamLabel = displayScheduleTeamLabel(
     team.name || team.abbreviation,
     team.teamId || team.id || eraTeamId || 'Team',
+    sport,
   );
 
   const handleDeleteCustomPlayer = async (p: any) => {
@@ -289,7 +299,7 @@ export default function TeamRosterScreen() {
       <View style={[styles.teamHeader, { backgroundColor: colors[0] + '80', borderColor: colors[0] }]}>
         <SportTeamLogo sport={sport || 'nba'} abbr={abbr} era={currentYear} style={styles.teamLogo} textColor="#ffffff" fontSize={16} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || eraTeamId)}</Text>
+          <Text style={styles.teamName}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || eraTeamId, sport)}</Text>
           <Text style={styles.teamMeta}>{team.wins || 0}–{team.losses || 0}</Text>
           <Text style={styles.teamGm}>{isOwned ? (team.gmName || 'GM') : 'Unowned'}</Text>
         </View>
@@ -352,12 +362,12 @@ export default function TeamRosterScreen() {
         <Text style={styles.empty}>No players on this roster.</Text>
       ) : (() => {
         // For MLB/NFL, order by position group so the roster reads like a depth chart.
-        const groups = getPositionGroups(sport);
-        const displayPlayers = [...players]
-          .filter((p: any) => matchesRosterPosition(p, posFilter))
+         const groups = getPositionGroups(sport);
+         const displayPlayers = [...players]
+          .filter((p: any) => matchesSportRosterPosition(p, posFilter, sport))
           .sort((a: any, b: any) => groups
-            ? groupForPosition(sport, a.position).index - groupForPosition(sport, b.position).index || compareRosterPlayersByValue(a, b)
-            : compareRosterPlayersByValue(a, b));
+            ? groupForPosition(sport, a.position).index - groupForPosition(sport, b.position).index || rosterComparator(a, b)
+            : rosterComparator(a, b));
         return displayPlayers.map((p: any, i: number) => {
         const grpLabel = groups ? groupForPosition(sport, p.position).label : '';
         const showHeader = !!groups && (i === 0 || grpLabel !== groupForPosition(sport, displayPlayers[i - 1].position).label);

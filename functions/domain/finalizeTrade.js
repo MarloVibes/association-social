@@ -17,6 +17,35 @@ function displayTeamLabel(team, fallback) {
   return raw.replace(/\b[A-Z]{2,3}_\d{4}\b/g, match => displayTeamAbbr(match));
 }
 
+const SPORT_TEAM_NAMES = {
+  madden: {
+    ARI: 'Arizona Cardinals', ATL: 'Atlanta Falcons', BAL: 'Baltimore Ravens', BUF: 'Buffalo Bills',
+    CAR: 'Carolina Panthers', CHI: 'Chicago Bears', CIN: 'Cincinnati Bengals', CLE: 'Cleveland Browns',
+    DAL: 'Dallas Cowboys', DEN: 'Denver Broncos', DET: 'Detroit Lions', GB: 'Green Bay Packers',
+    HOU: 'Houston Texans', IND: 'Indianapolis Colts', JAX: 'Jacksonville Jaguars', KC: 'Kansas City Chiefs',
+    LAC: 'Los Angeles Chargers', LAR: 'Los Angeles Rams', LV: 'Las Vegas Raiders', MIA: 'Miami Dolphins',
+    MIN: 'Minnesota Vikings', NE: 'New England Patriots', NO: 'New Orleans Saints', NYG: 'New York Giants',
+    NYJ: 'New York Jets', PHI: 'Philadelphia Eagles', PIT: 'Pittsburgh Steelers', SEA: 'Seattle Seahawks',
+    SF: 'San Francisco 49ers', TB: 'Tampa Bay Buccaneers', TEN: 'Tennessee Titans', WAS: 'Washington Commanders',
+  },
+  mlb: {
+    ARI: 'Arizona Diamondbacks', ATH: 'Athletics', ATL: 'Atlanta Braves', BAL: 'Baltimore Orioles',
+    BOS: 'Boston Red Sox', CHC: 'Chicago Cubs', CIN: 'Cincinnati Reds', CLE: 'Cleveland Guardians',
+    COL: 'Colorado Rockies', CWS: 'Chicago White Sox', DET: 'Detroit Tigers', HOU: 'Houston Astros',
+    KC: 'Kansas City Royals', LAA: 'Los Angeles Angels', LAD: 'Los Angeles Dodgers', MIA: 'Miami Marlins',
+    MIL: 'Milwaukee Brewers', MIN: 'Minnesota Twins', NYM: 'New York Mets', NYY: 'New York Yankees',
+    PHI: 'Philadelphia Phillies', PIT: 'Pittsburgh Pirates', SD: 'San Diego Padres', SEA: 'Seattle Mariners',
+    SF: 'San Francisco Giants', STL: 'St. Louis Cardinals', TB: 'Tampa Bay Rays', TEX: 'Texas Rangers',
+    TOR: 'Toronto Blue Jays', WSH: 'Washington Nationals',
+  },
+};
+
+function sportTeamName(sport, abbreviation) {
+  const sportKey = sport === 'nfl' ? 'madden' : sport;
+  const abbr = displayTeamAbbr(abbreviation);
+  return (SPORT_TEAM_NAMES[sportKey] && SPORT_TEAM_NAMES[sportKey][abbr]) || abbr;
+}
+
 function pickKey(pick) {
   return String(pick.id || '');
 }
@@ -113,6 +142,7 @@ function canonicalCpuTeams(sport, poolPlayers, eraTeams) {
   return Array.from(abbreviations).sort().map((abbreviation) => ({
     id: abbreviation,
     abbreviation,
+    name: sportTeamName(sport, abbreviation),
   }));
 }
 
@@ -210,7 +240,153 @@ function numberFrom(...values) {
   return NaN;
 }
 
-function playerOverall(player) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function average(values) {
+  const finite = values.map(Number).filter(Number.isFinite);
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : NaN;
+}
+
+function normalizeSport(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (['madden', 'nfl', 'football'].includes(key)) return 'madden';
+  if (['mlb', 'baseball', 'the_show'].includes(key)) return 'mlb';
+  return 'nba';
+}
+
+function inferredSport(player, fallbackSport = 'nba') {
+  const direct = player && (player.sport || player.league_sport || player.franchiseSport);
+  if (direct) return normalizeSport(direct);
+  const normalizedFallback = normalizeSport(fallbackSport);
+  if (normalizedFallback !== 'nba') return normalizedFallback;
+  const pos = normalizedPosition(player);
+  if (['QB', 'RB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'OL', 'DL', 'DE', 'DT', 'EDGE', 'LB', 'MLB', 'OLB', 'CB', 'FS', 'SS', 'S', 'K', 'P'].includes(pos)) {
+    return 'madden';
+  }
+  if (['SP', 'RP', 'CP', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF'].includes(pos)) {
+    return 'mlb';
+  }
+  const keys = Object.keys(player || {});
+  if (keys.some((key) => /^(passing|rushing|receiving)_|^(sacks|tackles|interceptions)$/.test(key))) return 'madden';
+  if (keys.some((key) => /^(avg|obp|slg|ops|era|whip|hr|rbi|so|saves)$/.test(key))) return 'mlb';
+  return normalizedFallback;
+}
+
+function skillValue(player, ...aliases) {
+  const sources = [
+    player && player.hidden,
+    player && player.ratings,
+    player && player.attribute_model,
+  ].filter((source) => source && typeof source === 'object');
+  for (const alias of aliases) {
+    for (const source of sources) {
+      const value = Number(source[alias]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return NaN;
+}
+
+function ratingAverage(player, aliases) {
+  return average(aliases.map((alias) => skillValue(player, alias)));
+}
+
+function maddenOverall(player) {
+  const pos = normalizedPosition(player);
+  const awareness = skillValue(player, 'awareness', 'footballIq', 'basketballIq');
+  const technique = skillValue(player, 'technique', 'routeRunning', 'coverage');
+  const speed = skillValue(player, 'speed', 'athleticism');
+  const strength = skillValue(player, 'strength', 'power');
+  const defense = skillValue(player, 'defense', 'coverage', 'tackling');
+  const passingYards = numberFrom(player && player.passing_yards, player && player.pass_yards);
+  const passingTds = numberFrom(player && player.passing_tds, player && player.pass_tds);
+  const rushingYards = numberFrom(player && player.rushing_yards, player && player.rush_yards);
+  const receivingYards = numberFrom(player && player.receiving_yards, player && player.rec_yards);
+  const receivingTds = numberFrom(player && player.receiving_tds, player && player.rec_tds);
+  const sacks = numberFrom(player && player.sacks);
+  const tackles = numberFrom(player && player.tackles);
+  const interceptions = numberFrom(player && player.interceptions, player && player.ints);
+
+  if (pos === 'QB') {
+    const ratings = average([awareness, technique, speed]);
+    const passingStats = average([
+      Number.isFinite(passingYards) ? clamp(60 + passingYards / 180, 60, 88) : NaN,
+      Number.isFinite(passingTds) ? clamp(60 + passingTds * 0.8, 60, 90) : NaN,
+    ]);
+    const rushBonus = Number.isFinite(rushingYards) ? clamp(rushingYards / 220, 0, 4) : 0;
+    const value = average([ratings, passingStats, passingStats]);
+    return Number.isFinite(value) ? value + rushBonus : value;
+  }
+  if (['RB', 'FB'].includes(pos)) {
+    return average([
+      average([speed, strength, awareness]),
+      Number.isFinite(rushingYards) ? clamp(60 + rushingYards / 60, 60, 88) : NaN,
+      Number.isFinite(receivingYards) ? clamp(58 + receivingYards / 80, 58, 78) : NaN,
+    ]);
+  }
+  if (['WR', 'TE'].includes(pos)) {
+    return average([
+      average([speed, technique, awareness]),
+      Number.isFinite(receivingYards) ? clamp(60 + receivingYards / 55, 60, 90) : NaN,
+      Number.isFinite(receivingTds) ? clamp(60 + receivingTds * 1.8, 60, 88) : NaN,
+    ]);
+  }
+  if (['DE', 'DT', 'DL', 'EDGE', 'LB', 'MLB', 'OLB'].includes(pos)) {
+    return average([
+      average([defense, strength, technique, awareness]),
+      Number.isFinite(sacks) ? clamp(62 + sacks * 2.2, 62, 92) : NaN,
+      Number.isFinite(tackles) ? clamp(58 + tackles / 4, 58, 86) : NaN,
+    ]);
+  }
+  if (['CB', 'FS', 'SS', 'S'].includes(pos)) {
+    return average([
+      average([defense, speed, technique, awareness]),
+      Number.isFinite(interceptions) ? clamp(63 + interceptions * 3, 63, 90) : NaN,
+      Number.isFinite(tackles) ? clamp(58 + tackles / 5, 58, 82) : NaN,
+    ]);
+  }
+  if (['LT', 'LG', 'C', 'RG', 'RT', 'OL'].includes(pos)) {
+    return average([strength, technique, awareness]);
+  }
+  return ratingAverage(player, ['awareness', 'technique', 'strength', 'speed', 'defense']);
+}
+
+function mlbOverall(player) {
+  const pos = normalizedPosition(player);
+  const isPitcher = ['SP', 'RP', 'CP', 'P'].includes(pos);
+  if (isPitcher) {
+    const era = numberFrom(player && player.era);
+    const whip = numberFrom(player && player.whip);
+    const strikeouts = numberFrom(player && player.so, player && player.strikeouts);
+    const saves = numberFrom(player && player.saves, player && player.sv);
+    return average([
+      ratingAverage(player, ['command', 'stamina', 'velocity', 'arm']),
+      Number.isFinite(era) ? clamp(96 - era * 5, 58, 93) : NaN,
+      Number.isFinite(whip) ? clamp(96 - whip * 14, 58, 92) : NaN,
+      Number.isFinite(strikeouts) ? clamp(60 + strikeouts / 7, 60, 91) : NaN,
+      Number.isFinite(saves) ? clamp(62 + saves * 0.75, 62, 90) : NaN,
+    ]);
+  }
+  const battingAverage = numberFrom(player && player.avg, player && player.batting_avg);
+  const onBase = numberFrom(player && player.obp);
+  const slugging = numberFrom(player && player.slg);
+  const homers = numberFrom(player && player.hr, player && player.home_runs);
+  const rbi = numberFrom(player && player.rbi);
+  const steals = numberFrom(player && player.sb, player && player.stolen_bases);
+  return average([
+    ratingAverage(player, ['contact', 'power', 'fielding', 'speed', 'arm', 'discipline']),
+    Number.isFinite(battingAverage) ? clamp(45 + battingAverage * 140, 55, 90) : NaN,
+    Number.isFinite(onBase) ? clamp(45 + onBase * 120, 55, 90) : NaN,
+    Number.isFinite(slugging) ? clamp(40 + slugging * 95, 55, 92) : NaN,
+    Number.isFinite(homers) ? clamp(58 + homers * 0.8, 58, 91) : NaN,
+    Number.isFinite(rbi) ? clamp(58 + rbi / 4, 58, 86) : NaN,
+    Number.isFinite(steals) ? clamp(58 + steals * 0.6, 58, 84) : NaN,
+  ]);
+}
+
+function playerOverall(player, fallbackSport = 'nba') {
   const direct = numberFrom(
     player && player.overall,
     player && player.rating,
@@ -218,6 +394,15 @@ function playerOverall(player) {
     player && player.player_overall,
   );
   if (Number.isFinite(direct)) return direct;
+  const sport = inferredSport(player, fallbackSport);
+  if (sport === 'madden') {
+    const value = maddenOverall(player);
+    if (Number.isFinite(value)) return value;
+  }
+  if (sport === 'mlb') {
+    const value = mlbOverall(player);
+    if (Number.isFinite(value)) return value;
+  }
   const hidden = player && player.hidden;
   if (!hidden || typeof hidden !== 'object') return 70;
   const values = ['shooting', 'playmaking', 'defense', 'rebounding', 'basketballIq', 'athleticism']
@@ -237,9 +422,9 @@ function playerAge(player) {
   return 27;
 }
 
-function playerPotential(player) {
+function playerPotential(player, sport = 'nba') {
   const direct = numberFrom(player && player.potential, player && player.future_overall);
-  return Number.isFinite(direct) ? direct : playerOverall(player);
+  return Number.isFinite(direct) ? direct : playerOverall(player, sport);
 }
 
 function normalizedPosition(player) {
@@ -249,7 +434,7 @@ function normalizedPosition(player) {
     .toUpperCase() || 'UNK';
 }
 
-function teamIdentity(team) {
+function teamIdentity(team, sport = 'nba') {
   const wins = Number(team && team.wins);
   const losses = Number(team && team.losses);
   if (Number.isFinite(wins) && Number.isFinite(losses) && wins + losses > 0) {
@@ -259,8 +444,8 @@ function teamIdentity(team) {
   }
   const roster = Array.isArray(team && team.players) ? team.players : [];
   if (roster.length >= 5) {
-    const sorted = [...roster].sort((a, b) => playerOverall(b) - playerOverall(a)).slice(0, 5);
-    const topAverage = sorted.reduce((sum, player) => sum + playerOverall(player), 0) / sorted.length;
+    const sorted = [...roster].sort((a, b) => playerOverall(b, sport) - playerOverall(a, sport)).slice(0, 5);
+    const topAverage = sorted.reduce((sum, player) => sum + playerOverall(player, sport), 0) / sorted.length;
     const ageAverage = sorted.reduce((sum, player) => sum + playerAge(player), 0) / sorted.length;
     if (topAverage >= 84 && ageAverage <= 31) return 'competing';
     if (topAverage < 78 || ageAverage > 30) return 'rebuilding';
@@ -283,10 +468,10 @@ function teamNeeds(team) {
   return counts;
 }
 
-function playerTradeValue(player, identity, needs) {
-  const overall = playerOverall(player);
+function playerTradeValue(player, identity, needs, sport = 'nba') {
+  const overall = playerOverall(player, sport);
   const age = playerAge(player);
-  const potential = playerPotential(player);
+  const potential = playerPotential(player, sport);
   const currentValue = Math.max(1, (overall - 60) * 2);
   const youthBonus = age <= 23 ? 7 : age <= 25 ? 4 : age >= 33 ? -5 : age >= 31 ? -2 : 0;
   const potentialBonus = Math.max(0, potential - overall) * 0.65;
@@ -299,38 +484,38 @@ function playerTradeValue(player, identity, needs) {
   return Math.max(1, (currentValue + directionBonus) * needBonus);
 }
 
-function offeredPlayersValue(players, identity, needs) {
-  return (players || []).reduce((sum, player) => sum + playerTradeValue(player, identity, needs), 0);
+function offeredPlayersValue(players, identity, needs, sport = 'nba') {
+  return (players || []).reduce((sum, player) => sum + playerTradeValue(player, identity, needs, sport), 0);
 }
 
 function offeredPicksValue(picks, identity) {
   return (picks || []).reduce((sum, pick) => sum + pickTradeValue(pick, identity), 0);
 }
 
-function topCpuAssetKeys(cpuTeam) {
+function topCpuAssetKeys(cpuTeam, sport = 'nba') {
   return new Set((cpuTeam && cpuTeam.players || [])
     .slice()
-    .sort((a, b) => playerTradeValue(b, 'balanced', null) - playerTradeValue(a, 'balanced', null))
+    .sort((a, b) => playerTradeValue(b, 'balanced', null, sport) - playerTradeValue(a, 'balanced', null, sport))
     .slice(0, 2)
     .map(playerKey)
     .filter(Boolean));
 }
 
 function evaluateCpuTrade({ league, source, proposerTeam, cpuTeam }) {
-  const identity = teamIdentity(cpuTeam || {});
+  const sport = normalizeSport(league && league.sport || 'nba');
+  const identity = teamIdentity(cpuTeam || {}, sport);
   const needs = teamNeeds(cpuTeam || {});
   const incomingPlayers = source && source.give || [];
   const outgoingPlayers = source && source.get || [];
   const incomingPicks = source && source.givePicks || [];
   const outgoingPicks = source && source.getPicks || [];
-  const incomingValue = offeredPlayersValue(incomingPlayers, identity, needs) + offeredPicksValue(incomingPicks, identity);
-  const outgoingValue = offeredPlayersValue(outgoingPlayers, identity, null) + offeredPicksValue(outgoingPicks, identity);
-  const protectedKeys = topCpuAssetKeys(cpuTeam || {});
+  const incomingValue = offeredPlayersValue(incomingPlayers, identity, needs, sport) + offeredPicksValue(incomingPicks, identity);
+  const outgoingValue = offeredPlayersValue(outgoingPlayers, identity, null, sport) + offeredPicksValue(outgoingPicks, identity);
+  const protectedKeys = topCpuAssetKeys(cpuTeam || {}, sport);
   const givesStar = outgoingPlayers.some((player) => {
     const key = playerKey(player);
-    return key && protectedKeys.has(key) && playerTradeValue(player, 'balanced', null) >= 45;
+    return key && protectedKeys.has(key) && playerTradeValue(player, 'balanced', null, sport) >= 45;
   });
-  const sport = league && league.sport || 'nba';
   const acceptThreshold = identity === 'rebuilding' ? 0.9 : identity === 'competing' ? 1.14 : 1.02;
   const reviewThreshold = identity === 'rebuilding' ? 0.8 : identity === 'competing' ? 1.02 : 0.92;
   const reasons = [];

@@ -7,7 +7,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { buildNbaScoutingReport } from '@/domain/nba/scouting';
-import { normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 
 type Team = {
   id: string;
@@ -20,6 +20,51 @@ type Team = {
 type ScheduleDoc = {
   games?: NbaScheduleGame[];
 };
+
+type ScoutingPerformer = {
+  playerId: string;
+  name: string;
+  teamSide: 'team' | 'opponent';
+  minutes: number;
+  points?: number;
+  rebounds?: number;
+  assists?: number;
+  passingYards?: number;
+  passingTouchdowns?: number;
+  rushingYards?: number;
+  receivingYards?: number;
+  sacks?: number;
+  interceptions?: number;
+  hits?: number;
+  rbi?: number;
+  homeRuns?: number;
+  inningsPitched?: number;
+  strikeouts?: number;
+  earnedRuns?: number;
+};
+
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function performerLine(player: ScoutingPerformer, sport: 'nba' | 'madden' | 'mlb') {
+  if (sport === 'madden') {
+    const yards = Number(player.passingYards || 0) + Number(player.rushingYards || 0) + Number(player.receivingYards || 0);
+    const touchdowns = Number(player.passingTouchdowns || 0);
+    if (yards > 0) return `${yards} yds, ${touchdowns} td`;
+    return `${Number(player.sacks || 0)} sacks, ${Number(player.interceptions || 0)} int`;
+  }
+  if (sport === 'mlb') {
+    if (Number(player.inningsPitched || 0) > 0 || Number(player.strikeouts || 0) > 0) {
+      return `${Number(player.inningsPitched || 0)} IP, ${Number(player.strikeouts || 0)} K, ${Number(player.earnedRuns || 0)} ER`;
+    }
+    return `${Number(player.hits || 0)} H, ${Number(player.rbi || 0)} RBI, ${Number(player.homeRuns || 0)} HR`;
+  }
+  return `${player.points} pts, ${player.rebounds} reb, ${player.assists} ast`;
+}
 
 export default function ScoutingScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -60,14 +105,16 @@ export default function ScoutingScreen() {
     };
   }, [leagueId]);
 
+  const sport = normalizeSport(league?.sport);
   const myTeam = teams.find(team => team.gmId === uid);
   const scoutingTeamId = myTeam
     ? [...teamScheduleKeys(myTeam)][0] || normalizeScheduleKey(myTeam.abbreviation || myTeam.teamId || myTeam.id)
     : '';
   const report = useMemo(() => buildNbaScoutingReport({
+    sport,
     teamId: scoutingTeamId,
     games: schedule?.games || [],
-  }), [schedule?.games, scoutingTeamId]);
+  }), [schedule?.games, scoutingTeamId, sport]);
 
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
 
@@ -98,10 +145,10 @@ export default function ScoutingScreen() {
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={styles.logoDisc}>
-                <SportTeamLogo sport="nba" abbr={item.opponentTeamId} era={league?.currentYear} style={styles.logo} fontSize={9} />
+                <SportTeamLogo sport={sport} abbr={displayScheduleAbbr(item.opponentTeamId)} era={league?.currentYear} style={styles.logo} fontSize={9} />
               </View>
               <View style={styles.copy}>
-                <Text style={styles.opponent}>vs {item.opponentTeamId}</Text>
+                <Text style={styles.opponent}>vs {displayScheduleAbbr(item.opponentTeamId)}</Text>
                 <Text style={styles.meta}>
                   {item.result} · {item.teamScore}-{item.opponentScore}
                 </Text>
@@ -116,7 +163,7 @@ export default function ScoutingScreen() {
                 <Text style={styles.detailTitle}>Top Performers</Text>
                 {item.topPerformers.map(player => (
                   <Text key={`${item.gameId}-${player.playerId}-top`} style={styles.detailLine} numberOfLines={1}>
-                    {player.teamSide === 'team' ? 'You' : 'Opp'} · {player.name}: {player.points} pts, {player.rebounds} reb, {player.assists} ast
+                    {player.teamSide === 'team' ? 'You' : 'Opp'} · {player.name}: {performerLine(player, sport)}
                   </Text>
                 ))}
               </View>

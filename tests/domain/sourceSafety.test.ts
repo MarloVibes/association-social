@@ -142,6 +142,38 @@ describe('source safety regressions', () => {
     expect(tradeRoom).toContain("from '@/components/FranchisePlayerRow'");
   });
 
+  it('shows NBA tier, archetypes, and development outlook separately from potential grades', () => {
+    const playerCard = source('components/PlayerCard.tsx');
+    const sharedRow = source('components/FranchisePlayerRow.tsx');
+
+    expect(playerCard).toContain('nbaIdentity.tier');
+    expect(playerCard).toContain('nbaIdentity.archetypes');
+    expect(playerCard).toContain('Development Outlook');
+    expect(playerCard).toContain('Potential Ceiling');
+    expect(playerCard).not.toContain("Potential: C - Contributor");
+    expect(sharedRow).toContain('rowIdentity?.tier');
+    expect(sharedRow).toContain('rowIdentity?.archetypes');
+    const roster = source('app/screens/roster.tsx');
+    expect(roster).toContain('tierFilter');
+    expect(roster).toContain('archetypeFilter');
+    expect(roster).toContain('matchesNbaClassificationFilter');
+    expect(playerCard).toContain('compareMode');
+    expect(playerCard).toContain("same_tier");
+    expect(playerCard).toContain("same_archetype");
+    const tradeChannel = source('app/screens/trade-channel.tsx');
+    expect(tradeChannel).toContain('tradeTierFilter');
+    expect(tradeChannel).toContain('tradeArchetypeFilter');
+    expect(tradeChannel).toContain('matchesNbaClassificationFilter');
+    const scoutingGrades = source('domain/nba/scoutingGrades.ts');
+    expect(scoutingGrades).not.toContain('Starter Upside');
+    expect(scoutingGrades).not.toContain('starter-level');
+    expect(scoutingGrades).toContain('Rotation Upside');
+    expect(scoutingGrades).toContain('High-Impact Upside');
+    const createPlayer = source('app/screens/create-player.tsx');
+    expect(createPlayer).toContain('Archetype Notes');
+    expect(createPlayer).not.toContain('Starter, rotation, prospect');
+  });
+
   it('keeps custom player edit and delete actions wired on team roster cards', () => {
     const teamRoster = source('app/screens/team-roster.tsx');
 
@@ -257,6 +289,28 @@ describe('source safety regressions', () => {
     expect(channels).toContain('Payroll, cap room, and player contracts');
     expect(league).not.toContain('isNBASport && myTeam && (');
     expect(league).not.toContain('Season Hub');
+  });
+
+  it('separates Team Player Stats from League Stats in Stats and Standings', () => {
+    const channels = source('app/screens/channels.tsx');
+    const standings = source('app/screens/season/standings.tsx');
+
+    expect(channels).toContain('Player Stats');
+    expect(channels).toContain("statsMode: 'teamPlayers'");
+    expect(channels).toContain('League Stats');
+    expect(channels).toContain("statsMode: 'leaguePlayers'");
+    expect(standings).toContain("type StandingsContentMode = 'standings' | 'teamPlayers' | 'leaguePlayers'");
+    expect(standings).toContain("mode === 'teamPlayers'");
+    expect(standings).toContain("activeContentMode === 'leaguePlayers'");
+    expect(standings).toContain('teamScopedPlayerLeaders');
+    expect(standings).toContain('leaguePlayerLeaders');
+  });
+
+  it('keeps the stats screen mode synced when Command Center opens another stats card', () => {
+    const standings = source('app/screens/season/standings.tsx');
+
+    expect(standings).toContain('setContentMode(initialContentMode)');
+    expect(standings).toContain('[initialContentMode]');
   });
 
   it('puts NBA schedule setup in the league creation flow', () => {
@@ -858,6 +912,21 @@ describe('source safety regressions', () => {
     expect(functionsIndex).toContain('exports.manageTeamInjury');
   });
 
+  it('exposes Development League as its own Command Center page', () => {
+    const channels = source('app/screens/channels.tsx');
+    const seasonLayout = source('app/screens/season/_layout.tsx');
+    const developmentLeague = source('app/screens/season/development-league.tsx');
+    const functionsIndex = source('functions/index.js');
+
+    expect(channels).toContain('/screens/season/development-league');
+    expect(channels).toContain('Development League');
+    expect(seasonLayout).toContain('development-league');
+    expect(developmentLeague).toContain("httpsCallable(functions, 'startDevelopmentAssignment')");
+    expect(developmentLeague).toContain("httpsCallable(functions, 'completeDevelopmentAssignment')");
+    expect(functionsIndex).toContain('exports.startDevelopmentAssignment');
+    expect(functionsIndex).toContain('exports.completeDevelopmentAssignment');
+  });
+
   it('does not show raw player OVR labels in NBA franchise management screens', () => {
     const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
 
@@ -914,6 +983,13 @@ describe('source safety regressions', () => {
     expect(tradeRoom).toContain('paddingHorizontal: 14');
     expect(tradeRoom).toContain('height: 36');
     expect(tradeRoom).not.toContain("positionFilterBtn: { minWidth: 50");
+  });
+
+  it('shows NBA roster overflow warnings inside trade rooms', () => {
+    const tradeRoom = source('app/screens/trade-room.tsx');
+
+    expect(tradeRoom).toContain('tradeValidation.warnings');
+    expect(tradeRoom).toContain('balanceWarningText');
   });
 
   it('keeps trade center filter chips from collapsing into unreadable labels', () => {

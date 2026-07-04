@@ -3,36 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image, Act
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
-
-function statSummary(player: any, sport: string) {
-  const season = player.seasons?.[0] || {};
-  if (sport === 'madden' || sport === 'nfl') {
-    const position = player.position || '';
-    let fields: string[][];
-    if (position === 'QB') {
-      fields = [['passing_yards', 'PASS YDS'], ['passing_tds', 'PASS TD'], ['interceptions_thrown', 'INT']];
-    } else if (['HB', 'RB', 'FB'].includes(position)) {
-      fields = [['rushing_yards', 'RUSH YDS'], ['rushing_tds', 'RUSH TD'], ['receptions', 'REC']];
-    } else if (['WR', 'TE'].includes(position)) {
-      fields = [['receiving_yards', 'REC YDS'], ['receptions', 'REC'], ['receiving_tds', 'REC TD']];
-    } else if (position === 'K') {
-      fields = [['field_goal_pct', 'FG%'], ['gp', 'GP']];
-    } else if (position === 'P') {
-      fields = [['punt_average', 'PUNT AVG'], ['gp', 'GP']];
-    } else {
-      fields = [['tackles', 'TACKLES'], ['sacks', 'SACKS'], ['interceptions', 'INT']];
-    }
-    return fields.map(([key, label]) => `${season[key] || 0} ${label}`).join(' · ');
-  }
-  if (sport === 'mlb') {
-    const pitcher = ['SP', 'RP', 'CP', 'P', 'TWP'].includes(player.position)
-      || ['era', 'whip', 'wins', 'saves'].some(key => season[key] !== undefined);
-    return pitcher
-      ? `${season.era || 0} ERA · ${season.whip || 0} WHIP · ${season.so || 0} SO`
-      : `${season.avg || 0} AVG · ${season.hr || 0} HR · ${season.rbi || 0} RBI`;
-  }
-  return `${season.ppg || 0} PPG · ${season.rpg || 0} RPG · ${season.apg || 0} APG`;
-}
+import { playerStatSummary } from '@/domain/sports/playerStatSummary';
 
 export default function PendingPlayersScreen() {
   const params = useLocalSearchParams<{ leagueId: string }>();
@@ -162,7 +133,7 @@ export default function PendingPlayersScreen() {
                   <View style={styles.cardInfo}>
                     <Text style={styles.playerName}>{p.full_name}</Text>
                     <Text style={styles.playerMeta}>{p.position} · Age {p.age} · {p.height}</Text>
-                    <Text style={styles.statsLine}>{statSummary(p, leagueSport)}</Text>
+                    <Text style={styles.statsLine}>{playerStatSummary(p, leagueSport)}</Text>
                   </View>
                 </View>
                 <View style={styles.actionRow}>

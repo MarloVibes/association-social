@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { arrayRemove, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '@/constants/firebase';
 import LeagueAvatar from '@/components/LeagueAvatar';
 import GlobalNav from '@/components/GlobalNav';
@@ -135,10 +135,24 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }, [loadData]);
 
+  const performSignOut = async () => {
+    await signOut(auth);
+    router.replace('/');
+  };
+
   const handleSignOut = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof globalThis.confirm === 'function'
+        ? globalThis.confirm('Sign out?')
+        : true;
+      if (confirmed) {
+        performSignOut().catch((error) => Alert.alert('Sign out failed', error.message || 'Please try again.'));
+      }
+      return;
+    }
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(auth); } },
+      { text: 'Sign Out', style: 'destructive', onPress: () => { performSignOut().catch((error) => Alert.alert('Sign out failed', error.message || 'Please try again.')); } },
     ]);
   };
   const focusFranchiseModes = () => {

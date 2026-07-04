@@ -67,6 +67,13 @@ export function seasonLabel(sport: SportKey | string | null, year: number): stri
   return String(year);
 }
 
+export function defaultScheduleGamesPerTeam(sportInput?: string | null): number {
+  const sport = normalizeSport(sportInput);
+  if (sport === 'madden') return 17;
+  if (sport === 'mlb') return 162;
+  return 29;
+}
+
 export function buildLeagueDefaults(sportInput?: string | null) {
   const rules = getSportRules(sportInput);
   const currentYear = rules.initialSeasonYear;
@@ -81,5 +88,6 @@ export function buildLeagueDefaults(sportInput?: string | null) {
     draftTimerSeconds: rules.defaultDraftTimerSeconds,
     financeMode: rules.financeMode,
     defaultFinanceLimit: rules.defaultFinanceLimit,
+    gamesPerTeam: defaultScheduleGamesPerTeam(rules.key),
   };
 }

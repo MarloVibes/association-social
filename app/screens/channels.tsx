@@ -15,6 +15,7 @@ type RoomAction = {
   kind: 'channel' | 'route' | 'trade';
   id?: string;
   pathname?: string;
+  statsMode?: 'teamPlayers' | 'leaguePlayers';
   nbaOnly?: boolean;
   commissionerOnly?: boolean;
 };
@@ -61,7 +62,7 @@ function commandRooms(isCommOrCoComm: boolean): CommandRoom[] {
       actions: [
         { label: 'News Board', desc: 'Commissioner posts and league updates', icon: 'megaphone-outline', channelIcon: 'News', kind: 'channel', id: 'announcements' },
         { label: 'Activity Report', desc: 'Moves, claims, resets, and league events', icon: 'receipt-outline', kind: 'route', pathname: '/screens/league-activity' },
-        { label: 'Awards', desc: 'Trophy case and season honors', icon: 'trophy-outline', kind: 'route', pathname: '/screens/season/awards', nbaOnly: true },
+        { label: 'Awards', desc: 'Trophy case and season honors', icon: 'trophy-outline', kind: 'route', pathname: '/screens/season/awards' },
       ],
     },
     {
@@ -84,8 +85,8 @@ function commandRooms(isCommOrCoComm: boolean): CommandRoom[] {
       icon: 'pulse-outline',
       actions: [
         { label: 'Highlights', desc: 'Clips, box scores, and comments', icon: 'film-outline', channelIcon: 'Media', kind: 'channel', id: 'highlights' },
-        { label: 'Scouting', desc: 'Upcoming matchup reports and intel', icon: 'search-outline', kind: 'route', pathname: '/screens/season/scouting', nbaOnly: true },
-        { label: 'Injuries', desc: 'League injury report', icon: 'medkit-outline', kind: 'route', pathname: '/screens/season/injuries', nbaOnly: true },
+        { label: 'Scouting', desc: 'Upcoming matchup reports and intel', icon: 'search-outline', kind: 'route', pathname: '/screens/season/scouting' },
+        { label: 'Injuries', desc: 'League injury report', icon: 'medkit-outline', kind: 'route', pathname: '/screens/season/injuries' },
         { label: 'Upgrades', desc: 'Spend earned player upgrade points', icon: 'trending-up-outline', kind: 'route', pathname: '/screens/season/player-upgrades', nbaOnly: true },
       ],
     },
@@ -106,11 +107,11 @@ function commandRooms(isCommOrCoComm: boolean): CommandRoom[] {
       accent: '#d7b56d',
       icon: 'briefcase-outline',
       actions: [
-        { label: 'Offseason HQ', desc: 'Timed offseason stages and readiness', icon: 'calendar-number-outline', kind: 'route', pathname: '/screens/offseason', nbaOnly: true },
-        { label: 'Finances', desc: 'Payroll, cap room, and player contracts', icon: 'wallet-outline', kind: 'route', pathname: '/screens/season/finances', nbaOnly: true },
-        { label: 'Draft Class', desc: 'Upcoming prospects and draft board', icon: 'school-outline', kind: 'route', pathname: '/screens/offseason/draft-class', nbaOnly: true },
-        { label: 'Re-Signing', desc: 'Keep your own free agents', icon: 'create-outline', kind: 'route', pathname: '/screens/offseason/re-signing', nbaOnly: true },
-        { label: 'Free Agency', desc: 'Open-market contract offers', icon: 'person-add-outline', kind: 'route', pathname: '/screens/offseason/free-agency', nbaOnly: true },
+        { label: 'Offseason HQ', desc: 'Timed offseason stages and readiness', icon: 'calendar-number-outline', kind: 'route', pathname: '/screens/offseason' },
+        { label: 'Finances', desc: 'Payroll, cap room, and player contracts', icon: 'wallet-outline', kind: 'route', pathname: '/screens/season/finances' },
+        { label: 'Draft Class', desc: 'Upcoming prospects and draft board', icon: 'school-outline', kind: 'route', pathname: '/screens/offseason/draft-class' },
+        { label: 'Re-Signing', desc: 'Keep your own free agents', icon: 'create-outline', kind: 'route', pathname: '/screens/offseason/re-signing' },
+        { label: 'Free Agency', desc: 'Open-market contract offers', icon: 'person-add-outline', kind: 'route', pathname: '/screens/offseason/free-agency' },
       ],
     },
     {
@@ -119,9 +120,11 @@ function commandRooms(isCommOrCoComm: boolean): CommandRoom[] {
       accent: '#b18cff',
       icon: 'stats-chart-outline',
       actions: [
-        { label: 'Calendar', desc: 'Schedule, NBA Cup, and game access', icon: 'calendar-outline', kind: 'route', pathname: '/screens/season/calendar', nbaOnly: true },
-        { label: 'Standings', desc: 'Season and Cup standings', icon: 'podium-outline', kind: 'route', pathname: '/screens/season/standings', nbaOnly: true },
-        { label: 'Playoff Picture', desc: 'Live seeds, bracket, and postseason start', icon: 'git-branch-outline', kind: 'route', pathname: '/screens/season/playoffs', nbaOnly: true },
+        { label: 'Calendar', desc: 'Schedule and game access', icon: 'calendar-outline', kind: 'route', pathname: '/screens/season/calendar' },
+        { label: 'Standings', desc: 'Season standings', icon: 'podium-outline', kind: 'route', pathname: '/screens/season/standings' },
+        { label: 'Player Stats', desc: 'Your team player stat leaders', icon: 'people-circle-outline', kind: 'route', pathname: '/screens/season/standings', statsMode: 'teamPlayers' },
+        { label: 'League Stats', desc: 'All player stat leaders across the league', icon: 'analytics-outline', kind: 'route', pathname: '/screens/season/standings', statsMode: 'leaguePlayers' },
+        { label: 'Playoff Picture', desc: 'Live seeds, bracket, and postseason start', icon: 'git-branch-outline', kind: 'route', pathname: '/screens/season/playoffs' },
       ],
     },
     {
@@ -130,9 +133,10 @@ function commandRooms(isCommOrCoComm: boolean): CommandRoom[] {
       accent: '#ff5f85',
       icon: 'clipboard-outline',
       actions: [
-        { label: 'Coaching', desc: 'Preset styles and team strategy', icon: 'clipboard-outline', kind: 'route', pathname: '/screens/season/coaching-presets', nbaOnly: true },
+        { label: 'Coaching', desc: 'Preset styles and team strategy', icon: 'clipboard-outline', kind: 'route', pathname: '/screens/season/coaching-presets' },
         { label: 'Rotation', desc: 'Drag order and minute allocation', icon: 'reorder-three-outline', kind: 'route', pathname: '/screens/season/rotation', nbaOnly: true },
-        { label: 'Draft Room', desc: 'Live draft and pre-draft list', icon: 'timer-outline', kind: 'route', pathname: '/screens/offseason/live-draft', nbaOnly: true },
+        { label: 'Development League', desc: 'Send one minimum-contract player for one-week grade training', icon: 'barbell-outline', kind: 'route', pathname: '/screens/season/development-league', nbaOnly: true },
+        { label: 'Draft Room', desc: 'Live draft and pre-draft list', icon: 'timer-outline', kind: 'route', pathname: '/screens/offseason/live-draft' },
       ],
     },
   ];
@@ -222,7 +226,7 @@ export default function ChannelsScreen() {
     }
     router.push({
       pathname: action.pathname as any,
-      params: { leagueId, sport: resolvedSport },
+      params: { leagueId, sport: resolvedSport, mode: action.statsMode },
     });
   };
 

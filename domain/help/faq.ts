@@ -19,7 +19,7 @@ export function getHelpFaqSections(): HelpFaqSection[] {
         },
         {
           question: 'Where do I manage my league?',
-          answer: 'Open a league from My Leagues. Inside The NBA keeps league news, GM controls, coaching, front office tools, and season management together.',
+          answer: 'Open a league from My Leagues. The league hub keeps news, GM controls, coaching, front office tools, and season management together.',
         },
       ],
     },
@@ -32,7 +32,7 @@ export function getHelpFaqSections(): HelpFaqSection[] {
         },
         {
           question: 'How do player grades work?',
-          answer: 'Players are shown through letter grades, tendencies, roles, and basketball context. Raw numbers stay hidden so evaluation feels like scouting.',
+          answer: 'Players are shown through letter grades, tendencies, roles, and sport context. Raw numbers stay hidden so evaluation feels like scouting.',
         },
       ],
     },

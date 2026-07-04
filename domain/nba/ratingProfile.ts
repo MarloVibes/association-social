@@ -6,7 +6,7 @@ import {
   type LeagueContext,
   type PublicStatLine,
 } from './attributeModel';
-import type { NbaGrade } from './identity';
+import { buildVisibleIdentity, type NbaGrade, type VisibleNbaIdentity } from './identity';
 import { applyEraAdjustment, type EraAdjustmentContext } from './eraAdjustedProfiles';
 import { buildSkillGrades, type SkillGrades } from './skillGrades';
 import { buildPlayerTendencies, type PlayerTendencies } from './tendencies';
@@ -64,6 +64,8 @@ export type PlayerRatingProfile = {
   era_adjusted_profiles: AttributeModel;
   skill_grades: Partial<Record<keyof AttributeModel, NbaGrade>>;
   category_skill_grades: SkillGrades;
+  identity: VisibleNbaIdentity;
+  visibleIdentity: VisibleNbaIdentity;
   tendencies: PlayerTendencies;
   archetypes: string[];
   traits: string[];
@@ -116,6 +118,191 @@ function traitsFor(model: AttributeModel) {
   if (model.offenseIq >= 84 && model.passing >= 84) traits.push('low mistake rate');
   if (model.clutch >= 84) traits.push('late-game poise');
   return traits.length > 0 ? traits.slice(0, 5) : ['steady role fit'];
+}
+
+function average(values: number[]): number {
+  const finite = values.filter(value => Number.isFinite(value));
+  if (finite.length === 0) return 0;
+  return Math.round(finite.reduce((total, value) => total + value, 0) / finite.length);
+}
+
+function accoladesFromSource(source: PublicStatLine): Record<string, number> {
+  const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
+  const accolades = { ...((source as any).accolades || {}) } as Record<string, number>;
+  const inactiveProjection = tags.includes('season_unavailable') || tags.includes('pre_breakout');
+  if (inactiveProjection) return accolades;
+  return accolades;
+}
+
+function reputationScoreFromSource(source: PublicStatLine): number {
+  const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
+  if (tags.includes('season_unavailable') || tags.includes('pre_breakout')) return 0;
+
+  const age = Math.max(0, Number(source.age || 0));
+  const points = Math.max(0, Number(source.pointsPerGame || 0));
+  const rebounds = Math.max(0, Number(source.reboundsPerGame || 0));
+  const assists = Math.max(0, Number(source.assistsPerGame || 0));
+  const minutes = Math.max(0, Number(source.minutesPerGame || 0));
+  const winShares = Math.max(0, Number(source.winShares || 0));
+  const usage = Math.max(0, Number(source.usagePct || 0));
+  const productionScore = points * 1.25 + rebounds * 0.65 + assists * 0.9;
+  const loadScore = Math.max(0, minutes - 24) * 0.45 + Math.max(0, usage - 20) * 0.55;
+  const winningScore = Math.min(22, winShares * 1.6);
+  const tagScore = (
+    (tags.includes('generational') ? 16 : 0)
+    + (tags.includes('legacy_star') ? 10 : 0)
+    + (tags.includes('all_star') ? 8 : 0)
+    + (tags.includes('high_usage_creator') ? 6 : 0)
+    + (tags.includes('elite_passer') ? 4 : 0)
+    + (tags.includes('defensive_anchor') ? 4 : 0)
+  );
+
+  const score = Math.min(100, productionScore + loadScore + winningScore + tagScore);
+  const protectedLegacy = tags.includes('generational') || tags.includes('legacy_star') || tags.includes('aging_resistant');
+  if (age >= 37 && !protectedLegacy) return Math.round(Math.min(72, score));
+  return Math.round(score);
+}
+
+function addUniqueRole(roles: string[], role: string) {
+  if (!roles.includes(role)) roles.push(role);
+}
+
+function cardRolesFor(model: AttributeModel, source: PublicStatLine): [string, string] {
+  const roles: string[] = [];
+  const position = String(source.position || '').toUpperCase();
+  const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
+  const isGuard = position.includes('PG') || position.includes('SG') || position === 'G';
+  const isWing = position.includes('SG') || position.includes('SF') || position === 'G' || position === 'F';
+  const isNaturalWing = position.includes('SG') || position.includes('SF');
+  const isForward = position.includes('SF') || position.includes('PF') || position === 'F';
+  const isBig = position.includes('PF') || position.includes('C');
+  const points = Number(source.pointsPerGame || 0);
+  const assists = Number(source.assistsPerGame || 0);
+  const usage = Number(source.usagePct || 0);
+  const threes = Number(source.threePointAttemptsPerGame || 0);
+
+  if (isBig && (tags.includes('elite_shooter') || (model.threePoint >= 88 && points >= 13))) {
+    addUniqueRole(roles, 'Stretch Big');
+  }
+  if (isBig && tags.includes('midrange_big')) {
+    addUniqueRole(roles, 'Midrange Big');
+  }
+  if (isBig && (tags.includes('post_scorer') || (model.postOffense >= 88 && points >= 15))) {
+    addUniqueRole(roles, 'Post Scorer');
+  }
+  if (isBig && points >= 18 && roles.length === 0) {
+    addUniqueRole(roles, 'Interior Scorer');
+  }
+  if (isBig && (tags.includes('rim_protector') || model.blocking >= 88 || (model.postDefense >= 88 && model.helpDefense >= 88))) {
+    addUniqueRole(roles, 'Rim Protector');
+  }
+  if (isBig && (tags.includes('elite_rebounder') || model.rebounding >= 92)) {
+    addUniqueRole(roles, 'Glass Cleaner');
+  }
+  if (isGuard && (assists >= 6 || tags.includes('elite_passer') || tags.includes('floor_general') || (model.passing >= 86 && model.offenseIq >= 84))) {
+    addUniqueRole(roles, 'Floor General');
+  }
+  if (
+    (isWing || isGuard)
+    && (tags.includes('defensive_wing_assignment') || model.perimeterDefense >= 86)
+    && (model.threePoint >= 84 || points >= 14 || model.dunking >= 84)
+  ) {
+    addUniqueRole(roles, position.includes('PG') ? 'Two-Way Guard' : 'Two-Way Wing');
+  }
+  if (!tags.includes('elite_shooter') && (points >= 18 || usage >= 27)) {
+    addUniqueRole(roles, isWing ? 'Scoring Wing' : isGuard ? 'Shot Creator' : 'Interior Scorer');
+  }
+  if (tags.includes('elite_shooter') || (model.threePoint >= 89 && threes >= 3.5)) {
+    addUniqueRole(roles, 'Movement Shooter');
+  }
+  if (!isGuard && (assists >= 6 || tags.includes('elite_passer') || tags.includes('floor_general') || (model.passing >= 86 && model.offenseIq >= 84))) {
+    addUniqueRole(roles, 'Floor General');
+  }
+  if (isNaturalWing && model.perimeterDefense >= 72 && points <= 12 && model.threePoint < 80) {
+    addUniqueRole(roles, 'Defensive Wing');
+  }
+  if (isForward && model.perimeterDefense >= 74 && model.postDefense >= 76 && model.dunking >= 80) {
+    addUniqueRole(roles, 'Switch Forward');
+  }
+  if ((isWing || isGuard) && model.dunking >= 84 && points >= 11) {
+    addUniqueRole(roles, isGuard && !position.includes('SF') ? 'Slashing Guard' : 'Slashing Wing');
+  }
+  if (points >= 18 || usage >= 27) {
+    addUniqueRole(roles, isWing ? 'Scoring Wing' : isGuard ? 'Shot Creator' : 'Interior Scorer');
+  }
+  if (isBig && model.postOffense >= 84) {
+    addUniqueRole(roles, 'Post Scorer');
+  }
+  if (roles.length === 0) {
+    addUniqueRole(roles, isBig ? 'Interior Anchor' : 'Connector');
+  }
+  if (roles.length === 1) {
+    addUniqueRole(roles, isBig ? 'Interior Finisher' : 'Connector');
+  }
+  return [roles[0], roles[1]];
+}
+
+function seasonsPlayedForVisibleIdentity(source: PublicStatLine): number | undefined {
+  const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
+  if (tags.includes('pre_rookie_projection') || tags.includes('season_unavailable')) return 0;
+  if (tags.includes('rookie_projection')) return 1;
+  if (tags.includes('early_career_projection')) return 2;
+  const age = Number(source.age || 0);
+  return age > 0 ? Math.max(0, age - 19) : undefined;
+}
+
+function visibleIdentityFor(model: AttributeModel, source: PublicStatLine): VisibleNbaIdentity {
+  const age = Number(source.age || 0);
+  const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
+  const identity = buildVisibleIdentity({
+    shooting: average([model.midRange, model.threePoint, model.freeThrow, model.shotIq, model.shotConsistency]),
+    playmaking: average([model.passing, model.passIq, model.passVision, model.ballHandle, model.offenseIq]),
+    defense: average([model.perimeterDefense, model.postDefense, model.blocking, model.steals, model.defenseIq, model.helpDefense]),
+    rebounding: average([model.rebounding, model.offensiveRebound, model.defensiveRebound]),
+    athleticism: average([model.speed, model.acceleration, model.vertical, model.agility, model.strength, model.stamina, model.hustle]),
+    basketballIq: average([model.offenseIq, model.defenseIq, model.shotIq, model.passIq, model.clutch]),
+    consistency: average([model.shotConsistency, model.stamina, model.durability]),
+    chemistry: average([model.passIq, model.offenseIq, model.defenseIq, model.helpDefense]),
+    potential: model.potential,
+    closeShot: model.closeShot,
+    midRange: model.midRange,
+    threePoint: model.threePoint,
+    freeThrow: model.freeThrow,
+    dunking: model.dunking,
+    shotIq: model.shotIq,
+    passing: model.passing,
+    ballHandle: model.ballHandle,
+    offenseIq: model.offenseIq,
+    clutch: model.clutch,
+    perimeterDefense: model.perimeterDefense,
+    postDefense: model.postDefense,
+    blocking: model.blocking,
+    steals: model.steals,
+    defenseIq: model.defenseIq,
+    helpDefense: model.helpDefense,
+    speed: model.speed,
+    acceleration: model.acceleration,
+    strength: model.strength,
+    postOffense: model.postOffense,
+    stamina: model.stamina,
+    age,
+    seasonsPlayed: seasonsPlayedForVisibleIdentity(source),
+    accolades: accoladesFromSource(source),
+    pointsPerGame: source.pointsPerGame,
+    reboundsPerGame: source.reboundsPerGame,
+    assistsPerGame: source.assistsPerGame,
+    minutesPerGame: source.minutesPerGame,
+    winShares: source.winShares,
+    usagePct: source.usagePct,
+    reputationScore: reputationScoreFromSource(source),
+    legacyProtected: tags.includes('generational') || tags.includes('legacy_star') || tags.includes('aging_resistant'),
+  });
+  const [primaryRole, secondaryRole] = cardRolesFor(model, source);
+  return {
+    ...identity,
+    primaryRole,
+    secondaryRole,
+  };
 }
 
 function developmentCurve(model: AttributeModel, source: PublicStatLine) {
@@ -296,6 +483,7 @@ export function buildPlayerRatingProfile({
     shotVolumeModifier: shotVolumeModifier(resolvedSource),
     eliteShooterProof: (resolvedSource.scoutingTags || []).some(tag => String(tag).toLowerCase() === 'elite_shooter'),
   });
+  const visibleIdentity = visibleIdentityFor(era_adjusted_profiles, sourceWithAge);
   const tendencies = buildPlayerTendencies(sourceWithAge);
 
   return {
@@ -318,6 +506,8 @@ export function buildPlayerRatingProfile({
     era_adjusted_profiles,
     skill_grades,
     category_skill_grades,
+    identity: visibleIdentity,
+    visibleIdentity,
     tendencies,
     archetypes: archetypesFor(era_adjusted_profiles, sourceWithAge),
     traits: traitsFor(era_adjusted_profiles),

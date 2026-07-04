@@ -8,9 +8,47 @@ import FranchisePlayerRow from '@/components/FranchisePlayerRow';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import { getPositionFilters } from '@/domain/sports/playerFields';
 import { getFreeAgentAction } from '@/domain/offseason/viewModel';
-import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/domain/sports/rosterValue';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
+import { matchesNbaClassificationFilter, type NbaArchetype, type NbaPlayerTier, type VisibleNbaIdentity } from '@/domain/nba/identity';
+import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { scanCustomPlayerReferences, executeCustomPlayerDelete } from '@/utils/deleteCustomPlayer';
+
+const NBA_TIER_FILTERS: Array<NbaPlayerTier | 'ALL'> = [
+  'ALL',
+  'Legend',
+  'Superstar',
+  'Star',
+  'High-Impact Contributor',
+  'Valuable Rotation Player',
+  'Specialist / Depth Piece',
+  'Prospect',
+];
+
+const NBA_ARCHETYPE_FILTERS: Array<NbaArchetype | 'ALL'> = [
+  'ALL',
+  '3-and-D Wing',
+  'Perimeter Defender',
+  'Stretch Big',
+  'Rim Protector',
+  'Defensive Anchor',
+  'Primary Creator',
+  'Floor General',
+  'Spot-Up Shooter',
+  'Catch-and-Shoot Specialist',
+  'Versatile Connector',
+  'Athletic Finisher',
+  'Roll Big',
+  'Microwave Scorer',
+  'Mid-Range Technician',
+];
+
+function rosterVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | null {
+  const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
+  if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
+  if (!identity.tier || !Array.isArray(identity.archetypes)) return null;
+  return identity as VisibleNbaIdentity;
+}
 
 export default function RosterScreen() {
   const { leagueId, sport, teamId, era } = useLocalSearchParams<{
@@ -26,6 +64,8 @@ export default function RosterScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('ALL');
+  const [tierFilter, setTierFilter] = useState<NbaPlayerTier | 'ALL'>('ALL');
+  const [archetypeFilter, setArchetypeFilter] = useState<NbaArchetype | 'ALL'>('ALL');
   const [sortBy, setSortBy] = useState<'default' | 'first' | 'last'>('default');
   const [activeTab, setActiveTab] = useState<'my_team' | 'free_agents'>('my_team');
   const [league, setLeague] = useState<any>(null);
@@ -37,9 +77,20 @@ export default function RosterScreen() {
   const eraKey = (era && era !== 'null' && era !== '') ? era : 'current';
   const authoritativeSport = league?.sport || sport || 'nba';
   const positionFilters = getPositionFilters(authoritativeSport);
+  const rosterComparator = useMemo(() => compareSportRosterPlayersByValue(authoritativeSport), [authoritativeSport]);
+  const matchesClassification = useCallback((player: any) => {
+    if (authoritativeSport !== 'nba') return true;
+    if (tierFilter === 'ALL' && archetypeFilter === 'ALL') return true;
+    const profile = selectRosterRatingProfile(player, profilesByName, { era: eraKey, currentYear, leagueDate: leagueDateFromRecord(league) });
+    return matchesNbaClassificationFilter(rosterVisibleIdentity(player, profile), {
+      tier: tierFilter,
+      archetype: archetypeFilter,
+    });
+  }, [authoritativeSport, tierFilter, archetypeFilter, profilesByName, eraKey, currentYear, league]);
   const activityTeamLabel = () => displayScheduleTeamLabel(
     team?.name || team?.abbreviation,
     team?.teamId || teamId || 'Team',
+    authoritativeSport,
   );
 
   useEffect(() => { loadData(); }, [teamId, eraKey]);
@@ -280,9 +331,10 @@ export default function RosterScreen() {
       list = allEraPlayers.filter(p => myPlayerIds.includes(p.player_id));
     }
     return [...list]
-      .filter(p => matchesRosterPosition(p, posFilter))
-      .sort(compareRosterPlayersByValue);
-  }, [team, allEraPlayers, myPlayerIds, posFilter]);
+      .filter(p => matchesSportRosterPosition(p, posFilter, authoritativeSport))
+      .filter(matchesClassification)
+      .sort(rosterComparator);
+  }, [team, allEraPlayers, myPlayerIds, posFilter, rosterComparator, authoritativeSport, matchesClassification]);
 
   const freeAgents = useMemo(() => {
     const isDraftMode = league?.mode === 'draft';
@@ -294,21 +346,22 @@ export default function RosterScreen() {
         || (p.full_name || '').toLowerCase().startsWith(q)
         || (p.first_name || '').toLowerCase().startsWith(q)
         || (p.last_name || '').toLowerCase().startsWith(q);
-      const matchesPos = matchesRosterPosition(p, posFilter);
+      const matchesPos = matchesSportRosterPosition(p, posFilter, authoritativeSport);
+      const matchesTier = matchesClassification(p);
       // In draft mode - show ALL players not already on a roster
       if (isDraftMode) {
         const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
-        return matchesSearch && matchesPos && !isTaken;
+        return matchesSearch && matchesPos && matchesTier && !isTaken;
       }
       // In random/current mode - show all untaken players
       if (isRandomMode) {
         const isTaken = takenPlayerIds.has(pid) || takenPlayerNames.has(p.full_name || '');
-        return matchesSearch && matchesPos && !isTaken;
+        return matchesSearch && matchesPos && matchesTier && !isTaken;
       }
       // Legacy - teamless or dropped players
       const hasNoTeam = !p.team || p.team === '';
       const wasDropped = !takenPlayerNames.has(p.full_name || '') && !takenPlayerIds.has(pid) && p.team && droppedPlayerNames.has(p.full_name || '');
-      return matchesSearch && matchesPos && (hasNoTeam || wasDropped);
+      return matchesSearch && matchesPos && matchesTier && (hasNoTeam || wasDropped);
     }).sort((a, b) => {
       if (sortBy === 'first') {
         return (a.first_name || a.full_name || '').localeCompare(b.first_name || b.full_name || '');
@@ -318,9 +371,9 @@ export default function RosterScreen() {
         const bLast = b.last_name || (b.full_name || '').split(' ').slice(-1)[0] || '';
         return aLast.localeCompare(bLast);
       }
-      return compareRosterPlayersByValue(a, b);
+      return rosterComparator(a, b);
     });
-  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, league?.mode, search, posFilter, sortBy]);
+  }, [allEraPlayers, takenPlayerIds, takenPlayerNames, droppedPlayerNames, league?.mode, search, posFilter, sortBy, rosterComparator, authoritativeSport, matchesClassification]);
 
   const handlePlayerAction = (player: any, isOwned: boolean | undefined = true) => {
     if (isOwned === undefined) {
@@ -457,7 +510,7 @@ export default function RosterScreen() {
         return;
       }
       const buttons: any[] = otherTeams.map((t: any) => ({
-        text: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Team'),
+        text: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Team', authoritativeSport),
         onPress: () => {
           router.push({
             pathname: '/screens/trade-room',
@@ -465,7 +518,7 @@ export default function RosterScreen() {
               leagueId,
               otherUid: t.gmId,
               otherTeamId: t.id,
-              otherTeamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Opponent'),
+              otherTeamName: displayScheduleTeamLabel(t.name || t.abbreviation, t.teamId || t.id || 'Opponent', authoritativeSport),
               prefillMyPlayer: JSON.stringify(player),
             },
           });
@@ -726,6 +779,58 @@ export default function RosterScreen() {
               ))}
             </View>
           </ScrollView>
+          {authoritativeSport === 'nba' ? (
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.posFilterScroll}
+                contentContainerStyle={styles.posFilterContent}
+              >
+                <View style={styles.posFilters}>
+                  {NBA_TIER_FILTERS.map(tier => (
+                    <TouchableOpacity
+                      key={tier}
+                      style={[styles.filterBtn, tierFilter === tier && styles.filterBtnActive]}
+                      onPress={() => setTierFilter(tier)}
+                    >
+                      <Text
+                        style={[styles.filterBtnText, tierFilter === tier && styles.filterBtnTextActive]}
+                        numberOfLines={1}
+                        allowFontScaling={false}
+                      >
+                        {tier === 'ALL' ? 'ALL TIERS' : tier}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.posFilterScroll}
+                contentContainerStyle={styles.posFilterContent}
+              >
+                <View style={styles.posFilters}>
+                  {NBA_ARCHETYPE_FILTERS.map(archetype => (
+                    <TouchableOpacity
+                      key={archetype}
+                      style={[styles.filterBtn, archetypeFilter === archetype && styles.filterBtnActive]}
+                      onPress={() => setArchetypeFilter(archetype)}
+                    >
+                      <Text
+                        style={[styles.filterBtnText, archetypeFilter === archetype && styles.filterBtnTextActive]}
+                        numberOfLines={1}
+                        allowFontScaling={false}
+                      >
+                        {archetype === 'ALL' ? 'ALL ARCHETYPES' : archetype}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          ) : null}
           <View style={styles.sortRow}>
             <Text style={styles.sortLabel}>SORT</Text>
             {[
@@ -891,6 +996,10 @@ const styles = StyleSheet.create({
   posBtnActive: { backgroundColor: '#092817', borderColor: '#00ff87' },
   posBtnText: { color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
   posBtnTextActive: { color: '#00ff87' },
+  filterBtn: { height: 34, maxWidth: 190, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#121212', borderWidth: 1, borderColor: '#292929', alignItems: 'center', justifyContent: 'center' },
+  filterBtnActive: { backgroundColor: '#071f14', borderColor: '#00ff87' },
+  filterBtnText: { color: '#8a8a8a', fontSize: 10, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
+  filterBtnTextActive: { color: '#00ff87' },
   sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   sortLabel: { color: '#666', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 4 },
   sortBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1a1a1a', borderRadius: 999, borderWidth: 1, borderColor: '#2a2a2a' },

@@ -328,5 +328,22 @@ describe('NBA scouting grades', () => {
     expect(veteranSummary.label).toBe('Near Peak');
     expect(veteranSummary.label).not.toBe('Contributor');
     expect(veteranSummary.description).toContain('already close to his ceiling');
+
+    const rotationSummary = getPotentialScoutingSummary({
+      age: 26,
+      hidden: {
+        shooting: 78,
+        playmaking: 76,
+        defense: 75,
+        athleticism: 77,
+        basketballIq: 76,
+        potential: 84,
+        developmentRate: 86,
+        workEthic: 84,
+      },
+    });
+
+    expect(rotationSummary.label).toBe('Rotation Upside');
+    expect(rotationSummary.label).not.toMatch(/Starter|Contributor|Role/i);
   });
 });

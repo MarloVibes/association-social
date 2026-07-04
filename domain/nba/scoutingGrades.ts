@@ -60,7 +60,7 @@ export type CompareGradeRow = {
 };
 
 export type PotentialScoutingSummary = {
-  label: 'High Upside' | 'Starter Upside' | 'Star Upside' | 'Near Peak' | 'Declining' | 'Limited Growth';
+  label: 'High Upside' | 'High-Impact Upside' | 'Rotation Upside' | 'Star Upside' | 'Near Peak' | 'Declining' | 'Limited Growth';
   description: string;
 };
 
@@ -723,10 +723,16 @@ export function getPotentialScoutingSummary(player: Record<string, any>, profile
       description: 'Profile supports real star-level growth if minutes, health, and role stay aligned.',
     };
   }
+  if (potential >= gradeRank('B+')) {
+    return {
+      label: 'High-Impact Upside',
+      description: 'Growth profile can reach a high-impact contributor outcome without implying a fixed lineup role.',
+    };
+  }
   if (potential >= gradeRank('B')) {
     return {
-      label: 'Starter Upside',
-      description: 'Enough growth runway to become or remain a reliable starter-level piece.',
+      label: 'Rotation Upside',
+      description: 'Enough growth runway to become or remain a useful rotation-level piece.',
     };
   }
   if (age <= 24 && potential >= gradeRank('C+')) {

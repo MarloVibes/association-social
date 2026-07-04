@@ -5,9 +5,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { getTeamColors } from '@/constants/teamColors';
-import { getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
+import { getSportTeamName, getSportTeams, getSportTeamTheme } from '@/constants/sportTeams';
 import SportTeamLogo from '@/components/SportTeamLogo';
-import { compareRosterPlayersByValue } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue } from '@/domain/sports/rosterValue';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 // Adjust hex color brightness by percentage. Negative = darker, positive = lighter.
@@ -56,7 +56,7 @@ export default function LeagueRostersScreen() {
           eraTeams = eraTeamsSnap.docs.map(d => d.data() as any);
         } else {
           eraTeams = Object.values(getSportTeams(sportVal) || {}).map((t: any) => ({
-            id: t.abbr, abbreviation: t.abbr, full_name: `${t.city} ${t.name}`,
+            id: t.abbr, abbreviation: t.abbr, full_name: getSportTeamName(sportVal, t.abbr),
           }));
         }
         const leagueTeams = leagueTeamsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
@@ -155,7 +155,7 @@ export default function LeagueRostersScreen() {
         const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         const textColor = lum < 0.5 ? '#ffffff' : '#0a0a0a';
         const subColor = lum < 0.5 ? '#ffffffcc' : '#0a0a0acc';
-        const topPlayers = [...(team.players || [])].sort(compareRosterPlayersByValue).slice(0, 3);
+        const topPlayers = [...(team.players || [])].sort(compareSportRosterPlayersByValue(sport)).slice(0, 3);
         return (
           <TouchableOpacity
             key={team.id || team.eraTeamId || team.abbreviation}
@@ -185,7 +185,7 @@ export default function LeagueRostersScreen() {
               <SportTeamLogo sport={sport} abbr={abbr} era={era} style={styles.teamLogo} textColor={textColor} fontSize={15} />
               <View style={styles.teamInfo}>
                 <View style={styles.teamNameRow}>
-                  <Text style={[styles.teamName, { color: textColor }]}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id)}</Text>
+                  <Text style={[styles.teamName, { color: textColor }]}>{displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id, sport)}</Text>
                   {team.gmId === auth.currentUser?.uid ? (
                     <View style={styles.yourTeamBadge}><Text style={styles.yourTeamBadgeText}>YOUR TEAM</Text></View>
                   ) : null}

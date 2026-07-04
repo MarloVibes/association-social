@@ -69,6 +69,12 @@ function prospectInitials(prospect: Prospect) {
     .join('') || '?';
 }
 
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  if (value === 'nfl' || value === 'madden') return 'madden';
+  if (value === 'mlb') return 'mlb';
+  return 'nba';
+}
+
 export default function DraftClassScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -84,6 +90,7 @@ export default function DraftClassScreen() {
   const [name, setName] = useState('');
   const [position, setPosition] = useState('');
   const [round, setRound] = useState('1');
+  const sport = normalizeSport(league?.sport);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -105,7 +112,7 @@ export default function DraftClassScreen() {
   }, [leagueId, router]);
 
   const seasonYear = league?.offseason?.seasonYear
-    || (league?.sport === 'nba' && typeof league?.currentYear === 'number' ? league.currentYear + 1 : undefined);
+    || (sport === 'nba' && typeof league?.currentYear === 'number' ? league.currentYear + 1 : undefined);
   useEffect(() => {
     if (!leagueId || !seasonYear) return;
     const unsubscribeLeagueClass = onSnapshot(
@@ -130,14 +137,14 @@ export default function DraftClassScreen() {
     ),
   );
   const historicalNbaPreOffseason = Boolean(
-    league?.sport === 'nba'
+    sport === 'nba'
     && !league?.offseason
     && typeof league?.currentYear === 'number'
     && league.currentYear + 1 < FIRST_GENERATED_NBA_DRAFT_YEAR
   );
   const hasSavedDraftSource = Boolean((draftClass?.players?.length || 0) + (vaultDraftClass?.players?.length || 0));
   const nbaLockedDraftYear = Boolean(
-    league?.sport === 'nba'
+    sport === 'nba'
     && typeof seasonYear === 'number'
     && seasonYear < FIRST_GENERATED_NBA_DRAFT_YEAR
     && !hasSavedDraftSource
@@ -145,26 +152,26 @@ export default function DraftClassScreen() {
   const editable = isCommissioner
     && (
       league?.offseason?.stage === 'draft_class_review'
-      || (league?.sport === 'nba' && !league?.offseason && !historicalNbaPreOffseason)
+      || (sport === 'nba' && !league?.offseason && !historicalNbaPreOffseason)
     )
     && !nbaLockedDraftYear
     && !vaultDraftClass
     && draftClass?.published !== true;
   const expectedVersion = league?.offseason?.version ?? 0;
-  const positions = league?.sport === 'nba'
+  const positions = sport === 'nba'
     ? NBA_DRAFT_POSITIONS
-    : league?.sport === 'mlb'
+    : sport === 'mlb'
       ? MLB_DRAFT_POSITIONS
       : NFL_DRAFT_POSITIONS;
   const sourceDraftClass = draftClass || vaultDraftClass;
   const draftDisplay = useMemo(() => draftClassPlayersForDisplay({
     players: sourceDraftClass?.players || [],
-    sport: league?.sport || 'nba',
+    sport,
     seasonYear,
     teamCount,
     seed: `${leagueId || 'league'}:${league?.name || 'draft'}`,
     lockedHistoricalNba: historicalNbaPreOffseason || nbaLockedDraftYear,
-  }), [sourceDraftClass?.players, league?.sport, league?.name, seasonYear, teamCount, leagueId, historicalNbaPreOffseason, nbaLockedDraftYear]);
+  }), [sourceDraftClass?.players, sport, league?.name, seasonYear, teamCount, leagueId, historicalNbaPreOffseason, nbaLockedDraftYear]);
   const players = useMemo(
     () => [...draftDisplay.players].sort((left: any, right: any) => (
       Number(left.projectedRound || left.draft_round || 99) - Number(right.projectedRound || right.draft_round || 99)
@@ -226,7 +233,7 @@ export default function DraftClassScreen() {
 
   const saveProspect = async () => {
     const projectedRound = Number(round);
-    const maxRound = league?.sport === 'nba' ? 2 : league?.sport === 'mlb' ? 5 : 7;
+    const maxRound = sport === 'nba' ? 2 : sport === 'mlb' ? 5 : 7;
     if (!name.trim() || !positions.includes(position as never)) {
       Alert.alert('Invalid prospect', 'Enter a name and valid position.');
       return;
@@ -246,7 +253,7 @@ export default function DraftClassScreen() {
           name: name.trim(),
           position,
           projectedRound,
-          age: league?.sport === 'nba' ? 19 : league?.sport === 'mlb' ? 21 : 22,
+          age: sport === 'nba' ? 19 : sport === 'mlb' ? 21 : 22,
           archetype: 'Custom Prospect',
           summary: `${name.trim()} is a commissioner-created ${position} prospect.`,
         },
@@ -388,7 +395,7 @@ export default function DraftClassScreen() {
                   fallback={<Text style={styles.prospectInitials}>{prospectInitials(prospect)}</Text>}
                   imageStyle={styles.prospectHeadshot}
                   player={prospect}
-                  sport={league?.sport || 'nba'}
+                  sport={sport}
                 />
               </View>
               <View style={styles.prospectCopy}>

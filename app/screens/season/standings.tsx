@@ -5,11 +5,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
-import { db } from '@/constants/firebase';
-import { buildBasketballPlayerLeaderboard, type BasketballPlayerLeaderboardRow, type BasketballPlayerLeaderboardStat } from '@/domain/nba/playerLeaderboards';
+import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { isLiveResultRevealed } from '@/domain/nba/scheduleView';
 import { buildNbaCupGroupStandings, buildNbaStandings, type StandingsRow } from '@/domain/nba/standings';
+import {
+  buildSportPlayerLeaderboard,
+  playerLeaderboardTabsForSport,
+  type SportPlayerLeaderboardRow,
+  type SportPlayerLeaderboardStat,
+} from '@/domain/sports/playerLeaderboards';
 
 type Team = {
   id: string;
@@ -21,7 +26,7 @@ type Team = {
 };
 
 type StandingsViewMode = 'regular' | 'cup';
-type StandingsContentMode = 'teams' | 'players';
+type StandingsContentMode = 'standings' | 'teamPlayers' | 'leaguePlayers';
 
 type ScheduleDoc = {
   games?: NbaScheduleGame[];
@@ -47,26 +52,34 @@ function gamesBehindText(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-const PLAYER_STAT_TABS: { key: BasketballPlayerLeaderboardStat; label: string }[] = [
-  { key: 'ppg', label: 'PPG' },
-  { key: 'rpg', label: 'RPG' },
-  { key: 'apg', label: 'APG' },
-  { key: 'spg', label: 'SPG' },
-  { key: 'bpg', label: 'BPG' },
-];
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  if (value === 'nfl' || value === 'madden') return 'madden';
+  if (value === 'mlb') return 'mlb';
+  return 'nba';
+}
+
+function teamName(team?: Team) {
+  return team?.name || team?.abbreviation || 'Team';
+}
 
 export default function StandingsScreen() {
-  const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
+  const { leagueId, mode } = useLocalSearchParams<{ leagueId: string; mode?: StandingsContentMode }>();
   const router = useRouter();
   const [league, setLeague] = useState<any>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<StandingsViewMode>('regular');
-  const [contentMode, setContentMode] = useState<StandingsContentMode>('teams');
-  const [playerStat, setPlayerStat] = useState<BasketballPlayerLeaderboardStat>('ppg');
-  const [selectedPlayerRow, setSelectedPlayerRow] = useState<BasketballPlayerLeaderboardRow | null>(null);
+  const initialContentMode: StandingsContentMode = mode === 'teamPlayers' || mode === 'leaguePlayers' ? mode : 'standings';
+  const [contentMode, setContentMode] = useState<StandingsContentMode>(initialContentMode);
+  const [playerStat, setPlayerStat] = useState<SportPlayerLeaderboardStat>('ppg');
+  const [selectedPlayerRow, setSelectedPlayerRow] = useState<SportPlayerLeaderboardRow | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    setContentMode(initialContentMode);
+    setSelectedPlayerRow(null);
+  }, [initialContentMode]);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -106,10 +119,15 @@ export default function StandingsScreen() {
   const regularGames = useMemo(() => (
     (schedule?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
   ), [nowMs, schedule?.games]);
+  const sport = normalizeSport(league?.sport);
+  const supportsCup = sport === 'nba';
+  const playerStatTabs = useMemo(() => playerLeaderboardTabsForSport(sport), [sport]);
+  const activePlayerStat = playerStatTabs.some(tab => tab.key === playerStat) ? playerStat : playerStatTabs[0].key;
+  const activeContentMode: StandingsContentMode = contentMode;
   const cupGames = useMemo(() => (
-    (schedule?.nbaCup?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
-  ), [nowMs, schedule?.nbaCup?.games]);
-  const hasNbaCup = cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
+    supportsCup ? (schedule?.nbaCup?.games || []).filter(game => isLiveResultRevealed(game, nowMs)) : []
+  ), [nowMs, schedule?.nbaCup?.games, supportsCup]);
+  const hasNbaCup = supportsCup && cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
   const selectedViewMode: StandingsViewMode = viewMode === 'cup' && hasNbaCup ? 'cup' : 'regular';
   const standingsGames = selectedViewMode === 'cup' ? cupGames : regularGames;
   const standings = useMemo<StandingsRow[]>(() => buildNbaStandings({
@@ -130,13 +148,26 @@ export default function StandingsScreen() {
   const sections = selectedViewMode === 'cup' && cupSections.length > 0
     ? cupSections
     : [{ id: 'regular', title: 'League', data: standings }];
-  const playerLeaders = useMemo(() => buildBasketballPlayerLeaderboard({
-    teams,
-    stat: playerStat,
-    limit: 75,
-  }), [playerStat, teams]);
-  const visibleSections = contentMode === 'players'
-    ? [{ id: `players-${playerStat}`, title: `${playerStat.toUpperCase()} Leaders`, data: playerLeaders }]
+  const myTeam = useMemo(() => teams.find(team => team.gmId === auth.currentUser?.uid) || teams[0], [teams]);
+  const teamScopedPlayerLeaders = useMemo(() => (
+    buildSportPlayerLeaderboard({
+      sport,
+      teams: myTeam ? [myTeam] : [],
+      stat: activePlayerStat,
+      limit: 75,
+    })
+  ), [activePlayerStat, myTeam, sport]);
+  const leaguePlayerLeaders = useMemo(() => (
+    buildSportPlayerLeaderboard({
+      sport,
+      teams,
+      stat: activePlayerStat,
+      limit: 75,
+    })
+  ), [activePlayerStat, sport, teams]);
+  const activePlayerLeaders = activeContentMode === 'teamPlayers' ? teamScopedPlayerLeaders : leaguePlayerLeaders;
+  const visibleSections = activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers'
+    ? [{ id: `players-${activePlayerStat}`, title: `${activePlayerStat.toUpperCase()} Leaders`, data: activePlayerLeaders }]
     : sections;
   const completedGames = useMemo(() => standingsGames.filter(game => game.status === 'final').length, [standingsGames]);
   const leagueDate = useMemo(() => leagueDateFromRecord(league || {}), [league]);
@@ -149,7 +180,7 @@ export default function StandingsScreen() {
         contentContainerStyle={styles.content}
         sections={visibleSections}
         stickySectionHeadersEnabled={false}
-        keyExtractor={(item: any, index) => contentMode === 'players' ? `${item.playerId}-${index}` : `${item.teamId}-${index}`}
+        keyExtractor={(item: any, index) => activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers' ? `${item.playerId}-${index}` : `${item.teamId}-${index}`}
         ListHeaderComponent={(
           <>
             <View style={styles.header}>
@@ -158,68 +189,79 @@ export default function StandingsScreen() {
               </TouchableOpacity>
               <View style={styles.headerCopy}>
                 <Text style={styles.eyebrow}>{league?.name || 'League'}</Text>
-                <Text style={styles.title}>Standings</Text>
+                <Text style={styles.title}>
+                  {activeContentMode === 'teamPlayers' ? 'Player Stats' : activeContentMode === 'leaguePlayers' ? 'League Stats' : 'Standings'}
+                </Text>
               </View>
             </View>
             <View style={styles.summary}>
-              <Text style={styles.summaryText}>{contentMode === 'players' ? 'Player stat leaders' : selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
+              <Text style={styles.summaryText}>{activeContentMode === 'teamPlayers' ? `${teamName(myTeam)} player stats` : activeContentMode === 'leaguePlayers' ? 'League-wide player stat leaders' : selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
               <Text style={styles.summaryMeta}>
-                {contentMode === 'players'
-                  ? `Sorted by ${playerStat.toUpperCase()} · Tap any player for their card`
-                  : `${completedGames} final games recorded · GB tracks the leader like NBA standings`}
+                {activeContentMode === 'teamPlayers'
+                  ? `Team roster sorted by ${activePlayerStat.toUpperCase()}`
+                  : activeContentMode === 'leaguePlayers'
+                  ? `Sorted by ${activePlayerStat.toUpperCase()} · Tap any player for their card`
+                  : `${completedGames} final games recorded · GB tracks the leader`}
               </Text>
             </View>
             <View style={styles.segment}>
               <TouchableOpacity
-                style={[styles.segmentButton, contentMode === 'teams' && styles.segmentButtonActive]}
-                onPress={() => setContentMode('teams')}
+                style={[styles.segmentButton, activeContentMode === 'standings' && styles.segmentButtonActive]}
+                onPress={() => setContentMode('standings')}
               >
-                <Text style={[styles.segmentText, contentMode === 'teams' && styles.segmentTextActive]}>Teams</Text>
+                <Text style={[styles.segmentText, activeContentMode === 'standings' && styles.segmentTextActive]}>Standings</Text>
                 <Text style={styles.segmentCount}>{standings.length}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.segmentButton, contentMode === 'players' && styles.segmentButtonActive]}
-                onPress={() => setContentMode('players')}
+                style={[styles.segmentButton, activeContentMode === 'teamPlayers' && styles.segmentButtonActive]}
+                onPress={() => setContentMode('teamPlayers')}
               >
-                <Text style={[styles.segmentText, contentMode === 'players' && styles.segmentTextActive]}>Players</Text>
-                <Text style={styles.segmentCount}>{playerLeaders.length}</Text>
+                <Text style={[styles.segmentText, activeContentMode === 'teamPlayers' && styles.segmentTextActive]}>Player Stats</Text>
+                <Text style={styles.segmentCount}>{teamScopedPlayerLeaders.length}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentButton, activeContentMode === 'leaguePlayers' && styles.segmentButtonActive]}
+                onPress={() => setContentMode('leaguePlayers')}
+              >
+                <Text style={[styles.segmentText, activeContentMode === 'leaguePlayers' && styles.segmentTextActive]}>League Stats</Text>
+                <Text style={styles.segmentCount}>{leaguePlayerLeaders.length}</Text>
               </TouchableOpacity>
             </View>
-            {contentMode === 'teams' ? (
+            {activeContentMode === 'standings' ? (
               <View style={styles.segment}>
-              <TouchableOpacity
-                style={[styles.segmentButton, selectedViewMode === 'regular' && styles.segmentButtonActive]}
-                onPress={() => setViewMode('regular')}
-              >
-                <Text style={[styles.segmentText, selectedViewMode === 'regular' && styles.segmentTextActive]}>Season</Text>
-                <Text style={styles.segmentCount}>{regularGames.filter(game => game.status === 'final').length}</Text>
-              </TouchableOpacity>
-              {hasNbaCup ? (
                 <TouchableOpacity
-                  style={[styles.segmentButton, selectedViewMode === 'cup' && styles.segmentButtonActive]}
-                  onPress={() => setViewMode('cup')}
+                  style={[styles.segmentButton, selectedViewMode === 'regular' && styles.segmentButtonActive]}
+                  onPress={() => setViewMode('regular')}
                 >
-                  <Text style={[styles.segmentText, selectedViewMode === 'cup' && styles.segmentTextActive]}>NBA Cup</Text>
-                  <Text style={styles.segmentCount}>{cupGames.filter(game => game.status === 'final').length}</Text>
+                  <Text style={[styles.segmentText, selectedViewMode === 'regular' && styles.segmentTextActive]}>Season</Text>
+                  <Text style={styles.segmentCount}>{regularGames.filter(game => game.status === 'final').length}</Text>
                 </TouchableOpacity>
-              ) : null}
+                {hasNbaCup ? (
+                  <TouchableOpacity
+                    style={[styles.segmentButton, selectedViewMode === 'cup' && styles.segmentButtonActive]}
+                    onPress={() => setViewMode('cup')}
+                  >
+                    <Text style={[styles.segmentText, selectedViewMode === 'cup' && styles.segmentTextActive]}>NBA Cup</Text>
+                    <Text style={styles.segmentCount}>{cupGames.filter(game => game.status === 'final').length}</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.playerStatScroll}>
                 <View style={styles.playerStatTabs}>
-                  {PLAYER_STAT_TABS.map(tab => (
+                  {playerStatTabs.map(tab => (
                     <TouchableOpacity
                       key={tab.key}
-                      style={[styles.playerStatTab, playerStat === tab.key && styles.playerStatTabActive]}
+                      style={[styles.playerStatTab, activePlayerStat === tab.key && styles.playerStatTabActive]}
                       onPress={() => setPlayerStat(tab.key)}
                     >
-                      <Text style={[styles.playerStatTabText, playerStat === tab.key && styles.playerStatTabTextActive]}>{tab.label}</Text>
+                      <Text style={[styles.playerStatTabText, activePlayerStat === tab.key && styles.playerStatTabTextActive]}>{tab.label}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </ScrollView>
             )}
-            {contentMode === 'teams' ? (
+            {activeContentMode === 'standings' ? (
               <View style={styles.tableHeader}>
                 <Text style={[styles.headerCell, { flex: 1 }]}>Team</Text>
                 <Text style={styles.headerCell}>W</Text>
@@ -231,36 +273,36 @@ export default function StandingsScreen() {
                 <Text style={[styles.headerCell, { flex: 1 }]}>Player</Text>
                 <Text style={styles.headerCell}>Team</Text>
                 <Text style={styles.headerCell}>GP</Text>
-                <Text style={styles.headerCell}>{playerStat.toUpperCase()}</Text>
+                <Text style={styles.headerCell}>{activePlayerStat.toUpperCase()}</Text>
               </View>
             )}
           </>
         )}
         renderSectionHeader={({ section }) => (
-          contentMode === 'teams' && selectedViewMode === 'cup' && cupSections.length > 0 ? (
+          activeContentMode === 'standings' && selectedViewMode === 'cup' && cupSections.length > 0 ? (
             <Text style={styles.groupHeader}>{section.title}</Text>
           ) : null
         )}
         renderItem={({ item, index }) => (
-          contentMode === 'players' ? (
-            <TouchableOpacity style={styles.row} onPress={() => setSelectedPlayerRow(item as unknown as BasketballPlayerLeaderboardRow)} activeOpacity={0.78}>
+          activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers' ? (
+            <TouchableOpacity style={styles.row} onPress={() => setSelectedPlayerRow(item as unknown as SportPlayerLeaderboardRow)} activeOpacity={0.78}>
               <Text style={styles.rank}>{index + 1}</Text>
               <View style={styles.playerLeaderBadge}>
-                <Text style={styles.playerLeaderInitial}>{String((item as unknown as BasketballPlayerLeaderboardRow).name || '?')[0]}</Text>
+                <Text style={styles.playerLeaderInitial}>{String((item as unknown as SportPlayerLeaderboardRow).name || '?')[0]}</Text>
               </View>
               <View style={styles.teamCopy}>
-                <Text style={styles.teamName} numberOfLines={1}>{(item as unknown as BasketballPlayerLeaderboardRow).name}</Text>
-                <Text style={styles.teamMeta}>{(item as unknown as BasketballPlayerLeaderboardRow).position} · {(item as unknown as BasketballPlayerLeaderboardRow).teamName}</Text>
+                <Text style={styles.teamName} numberOfLines={1}>{(item as unknown as SportPlayerLeaderboardRow).name}</Text>
+                <Text style={styles.teamMeta}>{(item as unknown as SportPlayerLeaderboardRow).position} · {(item as unknown as SportPlayerLeaderboardRow).teamName}</Text>
               </View>
-              <Text style={styles.value}>{(item as unknown as BasketballPlayerLeaderboardRow).teamAbbreviation}</Text>
-              <Text style={styles.value}>{(item as unknown as BasketballPlayerLeaderboardRow).games}</Text>
-              <Text style={[styles.value, styles.statValue]}>{(item as unknown as BasketballPlayerLeaderboardRow).valueText}</Text>
+              <Text style={styles.value}>{(item as unknown as SportPlayerLeaderboardRow).teamAbbreviation}</Text>
+              <Text style={styles.value}>{(item as unknown as SportPlayerLeaderboardRow).games}</Text>
+              <Text style={[styles.value, styles.statValue]}>{(item as unknown as SportPlayerLeaderboardRow).valueText}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.row}>
               <Text style={styles.rank}>{index + 1}</Text>
               <View style={styles.logoDisc}>
-                <SportTeamLogo sport="nba" abbr={(item as StandingsRow).abbreviation} era={league?.currentYear} style={styles.logo} fontSize={9} />
+                <SportTeamLogo sport={sport} abbr={(item as StandingsRow).abbreviation} era={league?.currentYear} style={styles.logo} fontSize={9} />
               </View>
               <View style={styles.teamCopy}>
                 <Text style={styles.teamName} numberOfLines={1}>{(item as StandingsRow).name}</Text>
@@ -272,13 +314,13 @@ export default function StandingsScreen() {
             </View>
           )
         )}
-        ListEmptyComponent={<Text style={styles.empty}>{contentMode === 'players' ? 'No player stats yet. Sim games to populate player leaders.' : selectedViewMode === 'cup' ? 'No NBA Cup standings yet. Complete or simulate Cup games to start the table.' : 'No standings yet. Complete or simulate games to start the table.'}</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{activeContentMode === 'teamPlayers' ? 'No team player stats yet. Sim games with this team to populate player stats.' : activeContentMode === 'leaguePlayers' ? 'No league player stats yet. Sim games to populate league leaders.' : selectedViewMode === 'cup' ? 'No NBA Cup standings yet. Complete or simulate Cup games to start the table.' : 'No standings yet. Complete or simulate games to start the table.'}</Text>}
       />
       {selectedPlayerRow ? (
         <PlayerCard
           player={selectedPlayerRow.player}
           era={league?.era || 'current'}
-          sport={league?.sport || 'nba'}
+          sport={sport}
           leagueId={String(leagueId || '')}
           teamId={selectedPlayerRow.teamId}
           leagueDate={leagueDate}

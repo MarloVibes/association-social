@@ -32,14 +32,80 @@ function splitName(name) {
   };
 }
 
+const PROSPECT_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
+const ROLE_BY_VALUE = {
+  shooting: 'Shot Creator',
+  playmaking: 'Floor General',
+  defense: 'Stopper',
+  rebounding: 'Glass Cleaner',
+  athleticism: 'Slasher',
+  basketballIq: 'Connector',
+};
+
+function inferredPosition(player) {
+  if (player.position) return player.position;
+  return PROSPECT_POSITIONS[Math.max(0, Number(player.pick || 1) - 1) % PROSPECT_POSITIONS.length];
+}
+
+function gradeFromValue(value) {
+  if (value >= 99) return 'S';
+  if (value >= 95) return 'A+';
+  if (value >= 92) return 'A';
+  if (value >= 89) return 'A-';
+  if (value >= 85) return 'B+';
+  if (value >= 80) return 'B';
+  if (value >= 75) return 'B-';
+  if (value >= 70) return 'C+';
+  if (value >= 65) return 'C';
+  if (value >= 60) return 'C-';
+  if (value >= 57) return 'D+';
+  if (value >= 53) return 'D';
+  if (value >= 50) return 'D-';
+  return 'F';
+}
+
+function buildDraftProspectIdentity(player) {
+  const position = inferredPosition(player);
+  const slot = Math.max(1, Number(player.pick || 60));
+  const roundPenalty = Math.max(0, Number(player.round || 1) - 1) * 9;
+  const base = Math.max(54, Math.min(88, 88 - Math.floor((slot - 1) / 4) * 2 - roundPenalty));
+  const guard = position === 'PG' || position === 'SG';
+  const wing = position === 'SF';
+  const big = position === 'PF' || position === 'C';
+  const values = {
+    shooting: base + (guard || wing ? 2 : -3),
+    playmaking: base + (position === 'PG' ? 4 : guard ? 1 : -4),
+    defense: base + (wing || big ? 2 : -1),
+    rebounding: base + (big ? 4 : wing ? 1 : -5),
+    athleticism: base + 1,
+    basketballIq: base,
+  };
+  const ordered = Object.entries(values).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  const grades = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, gradeFromValue(value)]));
+  const primary = ordered[0]?.[0] || 'basketballIq';
+  const secondary = ordered.find(([key]) => key !== primary)?.[0] || primary;
+  return {
+    grades,
+    primaryRole: ROLE_BY_VALUE[primary] || 'Connector',
+    secondaryRole: ROLE_BY_VALUE[secondary] || 'Connector',
+    strengths: ordered.filter(([, value]) => value >= 80).slice(0, 3).map(([key]) => key),
+    weaknesses: [...ordered].reverse().filter(([, value]) => value > 0 && value < 60).slice(0, 3).map(([key]) => key),
+    consistency: gradeFromValue(Math.max(50, base - 7)),
+    chemistry: gradeFromValue(Math.max(54, base - 4)),
+    reputation: 'Prospect',
+    developmentTrait: base >= 82 ? 'Breakout' : 'Rising',
+  };
+}
+
 function vaultDocForDraftPick(draft, player) {
   const names = splitName(player.name);
+  const visibleIdentity = buildDraftProspectIdentity(player);
   return {
     bref_id: playerId(player.name, player.pick),
     full_name: player.name,
     first_name: names.first_name,
     last_name: names.last_name,
-    position: player.position || '',
+    position: inferredPosition(player),
     height: player.height || '',
     weight: player.weight || '',
     birth_date: player.birthDate || '',
@@ -65,6 +131,11 @@ function vaultDocForDraftPick(draft, player) {
     projectedRound: player.round,
     source: draft.source,
     sourceUpdatedAt: draft.sourceUpdatedAt,
+    identity: visibleIdentity,
+    visibleIdentity,
+    grades: visibleIdentity.grades,
+    playerLabel: visibleIdentity.reputation.toUpperCase(),
+    developmentTrait: visibleIdentity.developmentTrait,
   };
 }
 
@@ -77,6 +148,7 @@ async function main() {
 
   const players = draft.players.map((player) => {
     const names = splitName(player.name);
+    const visibleIdentity = buildDraftProspectIdentity(player);
     return {
       player_id: playerId(player.name, player.pick),
       first_name: names.first_name,
@@ -89,7 +161,7 @@ async function main() {
       rights_team: player.rightsTeam,
       team: player.rightsTeam,
       college: player.school,
-      position: player.position || '',
+      position: inferredPosition(player),
       height: player.height || '',
       weight: player.weight || '',
       birth_date: player.birthDate || '',
@@ -101,6 +173,11 @@ async function main() {
       projectedOverall: player.pick,
       projectedRound: player.round,
       source: draft.source,
+      identity: visibleIdentity,
+      visibleIdentity,
+      grades: visibleIdentity.grades,
+      playerLabel: visibleIdentity.reputation.toUpperCase(),
+      developmentTrait: visibleIdentity.developmentTrait,
     };
   });
   const vaultPlayers = draft.players.map((player) => ({

@@ -1,10 +1,11 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
-import type { NbaGrade } from '@/domain/nba/identity';
+import type { NbaGrade, VisibleNbaIdentity } from '@/domain/nba/identity';
 import { gradeRank } from '@/domain/nba/gradeScale';
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
+import { buildSportGradePreview } from '@/domain/sports/playerIdentity';
 
 type PlayerRowStatus = {
   label: string;
@@ -101,6 +102,13 @@ function actionStyles(variant: PlayerRowAction['variant']) {
   return { box: styles.actionPrimary, text: styles.actionPrimaryText };
 }
 
+function visibleNbaIdentity(player: any, profile: any): VisibleNbaIdentity | null {
+  const rowIdentity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
+  if (!rowIdentity || typeof rowIdentity !== 'object' || rowIdentity.overall !== undefined) return null;
+  if (!rowIdentity.grades || typeof rowIdentity.grades !== 'object') return null;
+  return rowIdentity as VisibleNbaIdentity;
+}
+
 export default function FranchisePlayerRow({
   player,
   index,
@@ -123,9 +131,14 @@ export default function FranchisePlayerRow({
   onLongPress,
 }: PlayerRowProps) {
   const profile = selectRosterRatingProfile(player, profilesByName, { era, currentYear, leagueDate });
-  const grades = buildScoutingGrades(player || {}, profile || null);
-  const preview = sport === 'nba' ? gradePreview(player, profile, gradeCount) : [];
-  const badgeGrade = grades.overall || preview[0]?.grade || 'C';
+  const isNbaSport = !sport || sport === 'nba';
+  const grades = isNbaSport ? buildScoutingGrades(player || {}, profile || null) : null;
+  const preview = (isNbaSport ? gradePreview(player, profile, gradeCount) : buildSportGradePreview(player, sport, gradeCount))
+    .map(item => ({
+      ...item,
+      colors: gradeColors(item.grade),
+    }));
+  const badgeGrade = grades?.overall || preview[0]?.grade || 'C';
   const badgeColors = gradeColors(badgeGrade as NbaGrade);
   const accentColor = preview[0]?.colors.borderColor || badgeColors.borderColor || '#00ff87';
   const archetypeYear = typeof currentYear === 'number' ? currentYear : Number(currentYear);
@@ -135,6 +148,9 @@ export default function FranchisePlayerRow({
     Number.isFinite(archetypeYear) ? archetypeYear : undefined,
     sport,
   );
+  const rowIdentity = isNbaSport ? visibleNbaIdentity(player, profile) : null;
+  const tierLabel = rowIdentity?.tier || archetype.label;
+  const archetypeLabel = rowIdentity?.archetypes?.length ? rowIdentity.archetypes.slice(0, 2).join(' / ') : '';
   const salaryText = salaryLabel || (showSalary ? `${formatFranchisePlayerMoney(salary ?? player?.salary ?? player?.contract?.salary ?? player?.currentSalary)} salary` : '');
   const metaText = meta || [player?.position, player?.jersey_number ? '#' + player.jersey_number : null, player?.age ? 'Age ' + player.age : null]
     .filter(Boolean)
@@ -183,11 +199,12 @@ export default function FranchisePlayerRow({
           <Text style={[styles.position, { color: accentColor }]}>{player?.position || '?'}</Text>
           <View style={[styles.tierBadge, { borderColor: archetype.color + '88', backgroundColor: archetype.color + '18' }]}>
             <Text style={[styles.tierText, { color: archetype.color }]} numberOfLines={1}>
-              {archetype.label}
+              {tierLabel}
             </Text>
           </View>
         </View>
         <Text style={styles.name} numberOfLines={1}>{player?.full_name || player?.name || 'Unknown Player'}</Text>
+        {archetypeLabel ? <Text style={styles.archetypeMeta} numberOfLines={1}>{archetypeLabel}</Text> : null}
         {metaText ? <Text style={styles.meta} numberOfLines={1}>{metaText}</Text> : null}
         {showSalary && salaryText ? <Text style={styles.salary} numberOfLines={1}>{salaryText}</Text> : null}
         {preview.length > 0 ? (
@@ -275,6 +292,7 @@ const styles = StyleSheet.create({
   tierBadge: { maxWidth: 132, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   tierText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
   name: { color: '#fff', fontSize: 16, fontWeight: '900', marginTop: 2 },
+  archetypeMeta: { color: '#9cf5c3', fontSize: 10, fontWeight: '900', marginTop: 2 },
   meta: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 2 },
   salary: { color: '#00ff87', fontSize: 12, fontWeight: '900', marginTop: 2, textTransform: 'capitalize' },
   gradeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 8 },

@@ -31,6 +31,12 @@ function channelTeamAbbr(team?: any) {
   return displayScheduleAbbr(team.abbreviation || team.abbr || team.teamId || team.id || '');
 }
 
+function sportIconForChannel(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') return '🏈';
+  if (sport === 'mlb') return '⚾';
+  return '🏀';
+}
+
 export default function ChannelScreen() {
   const { leagueId, leagueName, channelId, channelLabel, channelIcon, commissionerId, coCommissioners, sport } =
     useLocalSearchParams<{
@@ -1222,7 +1228,7 @@ export default function ChannelScreen() {
                       <Text style={styles.resetInfoValue}>{req.gameDate || 'Not specified'}</Text>
                     </View>
                     <View style={styles.resetInfoRow}>
-                      <Text style={styles.resetInfoLabel}>🏀 VS</Text>
+                      <Text style={styles.resetInfoLabel}>{sportIconForChannel(resolvedSport)} VS</Text>
                       <Text style={styles.resetInfoValue}>{req.opponent || 'Not specified'}</Text>
                     </View>
                     <View style={styles.resetInfoRow}>

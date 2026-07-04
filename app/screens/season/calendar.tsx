@@ -103,6 +103,13 @@ function sectionRowId(prefix: string, value: string | number) {
   return `${prefix}-${String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
 
+function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
+  const sport = String(value || 'nba').toLowerCase();
+  if (sport === 'nfl' || sport === 'madden') return 'madden';
+  if (sport === 'mlb') return 'mlb';
+  return 'nba';
+}
+
 export default function CalendarScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -163,6 +170,8 @@ export default function CalendarScreen() {
     };
   }, [leagueId]);
 
+  const sport = normalizeSport(league?.sport);
+  const supportsCup = sport === 'nba';
   const myTeam = teams.find(team => team.gmId === uid);
   const scheduleId = league?.scheduleId || String(league?.currentYear || 2025);
   const isLeagueAdmin = Boolean(
@@ -213,8 +222,8 @@ export default function CalendarScreen() {
   }, [schedule?.participants, teams]);
   const myTeamIds = useMemo(() => teamScheduleKeys(myTeam), [myTeam]);
   const allGames = useMemo(() => [...(schedule?.games || [])].sort((a, b) => a.sequence - b.sequence), [schedule?.games]);
-  const cupGames = useMemo(() => [...(schedule?.nbaCup?.games || [])].sort((a, b) => a.sequence - b.sequence), [schedule?.nbaCup?.games]);
-  const hasNbaCup = cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
+  const cupGames = useMemo(() => supportsCup ? [...(schedule?.nbaCup?.games || [])].sort((a, b) => a.sequence - b.sequence) : [], [schedule?.nbaCup?.games, supportsCup]);
+  const hasNbaCup = supportsCup && cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
   const myGames = useMemo(() => allGames.filter(game => gameMatchesMyTeam(game, myTeam, uid)), [allGames, myTeam, uid]);
   const myCupGames = useMemo(() => cupGames.filter(game => gameMatchesMyTeam(game, myTeam, uid)), [cupGames, myTeam, uid]);
   const selectedViewMode: CalendarViewMode = viewMode === 'cup' && hasNbaCup ? 'cup' : myTeam ? viewMode : 'league';
@@ -276,6 +285,7 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     if (!leagueId || !league || !schedule || !scheduleId || !isLeagueAdmin) return;
+    if (!supportsCup) return;
     if (hasNbaCup || schedule.nbaCup?.enabled === false) return;
     const currentYear = Number(league.currentYear || scheduleId || 2025);
     if (!supportsNbaCupSchedule({ era: league.era, currentYear })) return;
@@ -304,7 +314,7 @@ export default function CalendarScreen() {
     }).catch(error => {
       console.warn('Failed to add NBA Cup to existing schedule:', error);
     });
-  }, [hasNbaCup, isLeagueAdmin, league, leagueId, schedule, scheduleId]);
+  }, [hasNbaCup, isLeagueAdmin, league, leagueId, schedule, scheduleId, supportsCup]);
 
   const scheduleParticipants = useMemo<NbaScheduleParticipant[]>(() => (
     (schedule?.participants || [])
@@ -548,7 +558,7 @@ export default function CalendarScreen() {
             {sectionRow.games.map((item) => {
               const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || displayScheduleName({ scheduleTeamId: item.homeTeamId }), abbr: displayScheduleAbbr(item.homeTeamId) };
               const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || displayScheduleName({ scheduleTeamId: item.awayTeamId }), abbr: displayScheduleAbbr(item.awayTeamId) };
-              const cupGame = selectedViewMode === 'cup' || item.competition === 'nbaCup';
+              const cupGame = supportsCup && (selectedViewMode === 'cup' || item.competition === 'nbaCup');
               const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
               const mine = Boolean(myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid));
               const openable = Boolean(mine || isLeagueAdmin);
@@ -594,7 +604,7 @@ export default function CalendarScreen() {
                   <View style={styles.tileMatchup}>
                     <View style={styles.tileTeam}>
                       <View style={[styles.tileLogoDisc, styles.awayLogoDisc]}>
-                        <SportTeamLogo sport="nba" abbr={away.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+                        <SportTeamLogo sport={sport} abbr={away.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
                       </View>
                       <Text style={styles.teamLabel} numberOfLines={1}>{away.abbr}</Text>
                       <Text style={styles.teamName} numberOfLines={1}>{away.label}</Text>
@@ -614,7 +624,7 @@ export default function CalendarScreen() {
                     </View>
                     <View style={styles.tileTeam}>
                       <View style={[styles.tileLogoDisc, styles.homeLogoDisc]}>
-                        <SportTeamLogo sport="nba" abbr={home.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
+                        <SportTeamLogo sport={sport} abbr={home.abbr} era={league?.currentYear} style={styles.teamLogo} fontSize={10} />
                       </View>
                       <Text style={styles.teamLabel} numberOfLines={1}>{home.abbr}</Text>
                       <Text style={styles.teamName} numberOfLines={1}>{home.label}</Text>

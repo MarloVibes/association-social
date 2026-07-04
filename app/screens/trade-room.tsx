@@ -11,7 +11,7 @@ import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/Fra
 import { leagueDateFromRecord } from '@/components/PlayerCard';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getPositionFilters } from '@/domain/sports/playerFields';
-import { compareRosterPlayersByValue, matchesRosterPosition } from '@/domain/nba/rotation';
+import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/domain/sports/rosterValue';
 import { validateTrade } from '@/domain/finance/validateTrade';
 import { isTradeRoomExpired, tradeRoomExpiryFromNow } from '@/domain/tradeRoomExpiry';
 
@@ -53,6 +53,12 @@ function expiredRoomPatch() {
     expiredAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+}
+
+function teamFinanceLimit(team: any, sport: string) {
+  if (!team) return undefined;
+  if (sport === 'mlb') return team.teamBudget ?? team.budget ?? team.salaryCap;
+  return team.salaryCap ?? team.cap ?? team.teamBudget ?? team.budget;
 }
 
 function TradePickerPlayerRow({
@@ -139,6 +145,7 @@ export default function TradeRoomScreen() {
   const [room, setRoom] = useState<any>(null);
   const [overridesMap, setOverridesMap] = useState<Record<string, number>>({});
   const [myTeam, setMyTeam] = useState<any>(null);
+  const [otherTeam, setOtherTeam] = useState<any>(null);
   const [myRoster, setMyRoster] = useState<any[]>([]);
   const [otherRoster, setOtherRoster] = useState<any[]>([]);
   const [otherUntouchables, setOtherUntouchables] = useState<string[]>([]);
@@ -207,10 +214,11 @@ export default function TradeRoomScreen() {
         if (cancelled) return;
         if (mine) {
           setMyTeam(mine);
-          setMyRoster([...(mine.players || [])].sort(compareRosterPlayersByValue));
+          setMyRoster([...(mine.players || [])]);
         }
         if (theirs) {
-          setOtherRoster([...(theirs.players || [])].sort(compareRosterPlayersByValue));
+          setOtherTeam(theirs);
+          setOtherRoster([...(theirs.players || [])]);
           setOtherUntouchables(theirs.untouchables || []);
           setOtherTeamPicks(theirs.picks || []);
         }
@@ -533,6 +541,8 @@ export default function TradeRoomScreen() {
   const canEditOtherSide = !isPushedByMe && !isPushedToMe && room.status !== 'cancelled' && room.status !== 'executed' && !anyConfirmed;
   const hostRoster = withEffectiveSalaries(isHost ? myRoster : otherRoster);
   const guestRoster = withEffectiveSalaries(isHost ? otherRoster : myRoster);
+  const hostTeam = isHost ? myTeam : otherTeam;
+  const guestTeam = isHost ? otherTeam : myTeam;
   const tradeValidation = validateTrade({
     sport: leagueSport,
     teamA: { players: hostRoster, picks: isHost ? (myTeam?.picks || []) : otherTeamPicks },
@@ -543,10 +553,10 @@ export default function TradeRoomScreen() {
     pickOfferB: room?.guestPicks || [],
     teamALabel: room?.hostTeamName || 'Host team',
     teamBLabel: room?.guestTeamName || 'Guest team',
-    teamACap: myTeam?.salaryCap,
-    teamBCap: undefined,
-    teamABudget: myTeam?.budget,
-    teamBBudget: undefined,
+    teamACap: teamFinanceLimit(hostTeam, leagueSport),
+    teamBCap: teamFinanceLimit(guestTeam, leagueSport),
+    teamABudget: teamFinanceLimit(hostTeam, leagueSport),
+    teamBBudget: teamFinanceLimit(guestTeam, leagueSport),
     nbaMatchingTolerance: tradeApronTolerance,
     nbaMatchingBuffer: 100000,
     commissionerOverride: !!room?.salaryOverrideApplied || !!overrideAppliedLocal,
@@ -556,6 +566,7 @@ export default function TradeRoomScreen() {
     : tradeValidation.valid
       ? ['This trade is ready from a salary and roster view.']
       : [];
+  const userFacingTradeWarnings = tradeValidation.warnings || [];
 
   const updateRoom = async (patch: any) => {
     await updateDoc(doc(db, 'leagues', leagueId, 'trade_rooms', roomId), {
@@ -1212,6 +1223,9 @@ export default function TradeRoomScreen() {
               {!tradeValidation.valid && userFacingTradeMessages.slice(1).map((message, index) => (
                 <Text key={index} style={styles.balanceHelpText}>{message}</Text>
               ))}
+              {userFacingTradeWarnings.map((warning, index) => (
+                <Text key={index} style={styles.balanceWarningText}>{warning}</Text>
+              ))}
               {room?.pendingOverrideReview && !room?.salaryOverrideApplied ? (
                 <Text style={styles.balanceOverrideText}>⏳ Pending commissioner review</Text>
               ) : null}
@@ -1344,8 +1358,8 @@ export default function TradeRoomScreen() {
             {otherRoster.length === 0 ? (
               <Text style={styles.emptySide}>Opponent roster not loaded</Text>
             ) : otherRoster
-              .filter((p: any) => matchesRosterPosition(p, theirPickerPosFilter))
-              .sort(compareRosterPlayersByValue)
+              .filter((p: any) => matchesSportRosterPosition(p, theirPickerPosFilter, leagueSport))
+              .sort(compareSportRosterPlayersByValue(leagueSport))
               .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = otherOffer.some((mp: any) => getPlayerKey(mp) === key);
@@ -1408,8 +1422,8 @@ export default function TradeRoomScreen() {
           </ScrollView>
           <ScrollView contentContainerStyle={styles.modalBody}>
             {myRoster
-              .filter((p: any) => matchesRosterPosition(p, myPickerPosFilter))
-              .sort(compareRosterPlayersByValue)
+              .filter((p: any) => matchesSportRosterPosition(p, myPickerPosFilter, leagueSport))
+              .sort(compareSportRosterPlayersByValue(leagueSport))
               .map((p: any, i: number) => {
               const key = getPlayerKey(p);
               const onTable = myOffer.some((mp: any) => getPlayerKey(mp) === key);
@@ -1524,6 +1538,7 @@ const styles = StyleSheet.create({
   balanceRow: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1 },
   balanceText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   balanceHelpText: { color: '#ffb3b3', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
+  balanceWarningText: { color: '#F5A623', fontSize: 11, fontWeight: '800', textAlign: 'center', marginTop: 4 },
   balanceOverrideText: { color: '#F5A623', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   overrideBtnRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
   overrideApproveBtn: { backgroundColor: '#0a2a1a', borderWidth: 1, borderColor: '#00ff87', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },

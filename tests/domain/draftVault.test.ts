@@ -39,6 +39,12 @@ describe('draft vault source', () => {
     });
     expect(vaultDoc.seasons).toEqual([]);
     expect(vaultDoc.accolades).toEqual([]);
+    expect(vaultDoc.visibleIdentity?.reputation).toBe('Prospect');
+    expect(vaultDoc.visibleIdentity?.primaryRole).toBeTruthy();
+    expect(vaultDoc.visibleIdentity?.grades).toBeTruthy();
+    expect(vaultDoc.identity).toEqual(vaultDoc.visibleIdentity);
+    expect(vaultDoc.grades).toEqual(vaultDoc.visibleIdentity?.grades);
+    expect(vaultDoc.playerLabel).toBe('PROSPECT');
   });
 
   it('preserves sourced prospect metadata for richer draft class cards', () => {

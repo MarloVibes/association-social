@@ -76,7 +76,9 @@ const {
 } = require('./franchise/matchups');
 const {
   createApplyUpgradeGrantsHandler,
+  createCompleteDevelopmentAssignmentHandler,
   createSpendPlayerUpgradeHandler,
+  createStartDevelopmentAssignmentHandler,
 } = require('./franchise/playerUpgrades');
 const {
   createFinalizeSeasonAwardsHandler,
@@ -95,11 +97,24 @@ const {
 
 initializeApp();
 
+const matchupFunctionOptions = {
+  memory: '512MiB',
+  timeoutSeconds: 120,
+  concurrency: 20,
+};
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const tradeAuthSecret = defineSecret('TRADE_AUTH_SECRET');
 
+function sportIconForNotification(sport) {
+  const normalized = String(sport || 'nba').toLowerCase();
+  if (normalized === 'madden' || normalized === 'nfl') return '🏈';
+  if (normalized === 'mlb') return '⚾';
+  return '🏀';
+}
+
 // Title shown on the device. Body falls back to the notification's own message.
-function titleFor(type) {
+function titleFor(type, sport) {
   switch (type) {
     case 'trade_offer': return '🤝 New Trade Offer';
     case 'trade_executed': return '✅ Trade Completed';
@@ -117,7 +132,7 @@ function titleFor(type) {
     case 'cocomm_promoted': return '🏛️ You\'re a Co-Commissioner';
     case 'cocomm_demoted': return 'Role Updated';
     case 'mention': return '📣 You were mentioned';
-    case 'matchup_request': return '🏀 Matchup Request';
+    case 'matchup_request': return `${sportIconForNotification(sport)} Matchup Request`;
     case 'matchup_accepted': return '✅ Matchup Accepted';
     case 'game_ready': return '🎮 Game Ready';
     case 'game_simulated': return '📊 Game Simulated';
@@ -209,7 +224,7 @@ exports.pushOnNotification = onDocumentUpdated('users/{uid}', async (event) => {
   const messages = fresh.map((n) => ({
     to: token,
     sound: 'default',
-    title: titleFor(n.type),
+    title: titleFor(n.type, n.sport || n.leagueSport),
     body: n.message || 'You have a new update.',
     data: {
       type: n.type || '',
@@ -533,43 +548,44 @@ exports.advanceNbaCup = onCall(createAdvanceNbaCupHandler({
   HttpsError,
 }));
 
-exports.requestMatchup = onCall(createRequestMatchupHandler({
+exports.requestMatchup = onCall(matchupFunctionOptions, createRequestMatchupHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
 }));
 
-exports.acceptMatchup = onCall(createAcceptMatchupHandler({
+exports.acceptMatchup = onCall(matchupFunctionOptions, createAcceptMatchupHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
 }));
 
-exports.simulateScheduledGame = onCall(createSimulateScheduledGameHandler({
+exports.simulateScheduledGame = onCall(matchupFunctionOptions, createSimulateScheduledGameHandler({
+  getFirestore,
+  FieldValue,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.simScheduleBatch = onCall(matchupFunctionOptions, createSimScheduleBatchHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
 }));
 
-exports.simScheduleBatch = onCall(createSimScheduleBatchHandler({
+exports.reportGameScore = onCall(matchupFunctionOptions, createReportGameScoreHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
 }));
 
-exports.reportGameScore = onCall(createReportGameScoreHandler({
+exports.expireMatchupRequest = onCall(matchupFunctionOptions, createExpireMatchupRequestHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
 }));
 
-exports.expireMatchupRequest = onCall(createExpireMatchupRequestHandler({
-  getFirestore,
-  now: () => Date.now(),
-  HttpsError,
-}));
-
-exports.resetScheduledGame = onCall(createResetScheduledGameHandler({
+exports.resetScheduledGame = onCall(matchupFunctionOptions, createResetScheduledGameHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,
@@ -584,6 +600,16 @@ exports.applyUpgradeGrants = onCall(createApplyUpgradeGrantsHandler({
   getFirestore,
   HttpsError,
   FieldValue,
+}));
+
+exports.startDevelopmentAssignment = onCall(createStartDevelopmentAssignmentHandler({
+  getFirestore,
+  HttpsError,
+}));
+
+exports.completeDevelopmentAssignment = onCall(createCompleteDevelopmentAssignmentHandler({
+  getFirestore,
+  HttpsError,
 }));
 
 exports.finalizeSeasonAwards = onCall(createFinalizeSeasonAwardsHandler({
@@ -1188,6 +1214,7 @@ exports.finalizeTrade = onCall({ secrets: [tradeAuthSecret] }, async (request) =
         {
           errors: validation.errors,
           messages: validation.messages,
+          warnings: validation.warnings,
           payrollAfter: validation.payrollAfter,
           rosterAfter: validation.rosterAfter,
         },

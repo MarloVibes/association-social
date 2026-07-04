@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
-import { getSportRules } from '@/domain/sports/rules';
+import { defaultScheduleGamesPerTeam, getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 import { suppressDeletedLeagueAlert } from '@/utils/deletedLeagueAlert';
 import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
@@ -29,6 +29,21 @@ const VOTE_THRESHOLDS = [
   { value: 'two_thirds', label: 'Two-Thirds', desc: 'At least ⅔ of voting GMs must approve' },
   { value: 'unanimous', label: 'Unanimous', desc: 'Every voting GM must approve' },
 ];
+
+function scheduleOptionsForSport(sport?: string | null) {
+  if (sport === 'madden' || sport === 'nfl') {
+    return [{ value: '17', label: '17 games', desc: 'Full NFL regular season' }];
+  }
+  if (sport === 'mlb') {
+    return [{ value: '162', label: '162 games', desc: 'Full MLB regular season' }];
+  }
+  return [
+    { value: '14', label: '14 games', desc: 'Condensed league season' },
+    { value: '29', label: '29 games', desc: 'Condensed league season' },
+    { value: '58', label: '58 games', desc: 'Condensed league season' },
+    { value: '82', label: '82 games', desc: 'Full-length season' },
+  ];
+}
 
 export default function LeagueSettingsScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -104,7 +119,7 @@ export default function LeagueSettingsScreen() {
       const soloDefault = !Array.isArray(data.members) || data.members.length <= 1;
       setAllowCpuGameSimulation(typeof data.allowCpuGameSimulation === 'boolean' ? data.allowCpuGameSimulation : soloDefault);
       setAllowCpuTrades(typeof data.allowCpuTrades === 'boolean' ? data.allowCpuTrades : soloDefault);
-      setScheduleGamesPerTeam(String(data.gamesPerTeam || 29));
+      setScheduleGamesPerTeam(String(data.gamesPerTeam || defaultScheduleGamesPerTeam(data.sport)));
       setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
@@ -118,6 +133,8 @@ export default function LeagueSettingsScreen() {
   const sportRules = getSportRules(league?.sport);
   const teamLimit = sportRules.teamCount;
   const financeMode = sportRules.financeMode;
+  const scheduleOptions = scheduleOptionsForSport(league?.sport);
+  const scheduleSectionTitle = league?.sport === 'madden' ? 'NFL SCHEDULE' : league?.sport === 'mlb' ? 'MLB SCHEDULE' : 'NBA SCHEDULE';
 
   if (loading) {
     return (
@@ -557,43 +574,39 @@ export default function LeagueSettingsScreen() {
           </View>
         </View>
 
-        {league?.sport === 'nba' && (
-          <>
-            <Text style={styles.sectionLabel}>NBA SCHEDULE</Text>
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>Games Per Team</Text>
-              {['14', '29', '58', '82'].map(value => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.optionRow, scheduleGamesPerTeam === value && styles.optionRowActive]}
-                  onPress={() => setScheduleGamesPerTeam(value)}
-                  disabled={league?.scheduleLocked === true}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.optionLabel, scheduleGamesPerTeam === value && styles.optionLabelActive]}>{value} games</Text>
-                    <Text style={styles.optionDesc}>{value === '82' ? 'Full-length season' : 'Condensed league season'}</Text>
-                  </View>
-                  {scheduleGamesPerTeam === value && <Text style={styles.check}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }, league?.scheduleLocked && { opacity: 0.45 }]}
-                onPress={generateSchedule}
-                disabled={saving || league?.scheduleLocked === true}
-              >
-                <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>
-                  {league?.scheduleLocked ? 'SCHEDULE LOCKED' : 'CREATE AND LOCK SCHEDULE'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.deleteBtn, { backgroundColor: '#101410', borderColor: '#00ff87', borderWidth: 1, marginTop: 12 }]}
-                onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
-              >
-                <Text style={[styles.deleteBtnText, { color: '#00ff87' }]}>VIEW CALENDAR</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+        <Text style={styles.sectionLabel}>{scheduleSectionTitle}</Text>
+        <View style={styles.card}>
+          <Text style={styles.fieldLabel}>Games Per Team</Text>
+          {scheduleOptions.map(option => (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.optionRow, scheduleGamesPerTeam === option.value && styles.optionRowActive]}
+              onPress={() => setScheduleGamesPerTeam(option.value)}
+              disabled={league?.scheduleLocked === true || scheduleOptions.length === 1}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.optionLabel, scheduleGamesPerTeam === option.value && styles.optionLabelActive]}>{option.label}</Text>
+                <Text style={styles.optionDesc}>{option.desc}</Text>
+              </View>
+              {scheduleGamesPerTeam === option.value && <Text style={styles.check}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={[styles.deleteBtn, { backgroundColor: '#0a1a2a', borderColor: '#3B82F6', borderWidth: 1, marginTop: 12 }, league?.scheduleLocked && { opacity: 0.45 }]}
+            onPress={generateSchedule}
+            disabled={saving || league?.scheduleLocked === true}
+          >
+            <Text style={[styles.deleteBtnText, { color: '#3B82F6' }]}>
+              {league?.scheduleLocked ? 'SCHEDULE LOCKED' : 'CREATE AND LOCK SCHEDULE'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.deleteBtn, { backgroundColor: '#101410', borderColor: '#00ff87', borderWidth: 1, marginTop: 12 }]}
+            onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+          >
+            <Text style={[styles.deleteBtnText, { color: '#00ff87' }]}>VIEW CALENDAR</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveBasics} disabled={saving}>
           {saving ? <ActivityIndicator color='#000' /> : <Text style={styles.saveBtnText}>SAVE CHANGES</Text>}
