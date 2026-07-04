@@ -1386,6 +1386,7 @@ describe('source safety regressions', () => {
     expect(sourceText).toContain('Jumbotron');
     expect(sourceText).toContain('crowd');
     expect(sourceText).toContain('BroadcastActor');
+    expect(sourceText).toContain('buildBroadcastMotionFrame');
     expect(sourceText).toContain('postgameStage');
     expect(sourceText).toContain('Locker');
   });

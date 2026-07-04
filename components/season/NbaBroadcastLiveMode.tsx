@@ -5,6 +5,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import type { ArenaTheme } from '@/domain/nba/arenaTheme';
 import type { BroadcastActor } from '@/domain/nba/broadcastActors';
 import { buildBroadcastScene, type BroadcastScene } from '@/domain/nba/broadcastDirector';
+import { buildBroadcastMotionFrame } from '@/domain/nba/broadcastMotion';
 import type { LiveTimelineEvent } from '@/domain/nba/liveTimeline';
 
 export type NbaBroadcastLiveModeProps = {
@@ -45,34 +46,6 @@ function translucentColor(value: string | null | undefined, alpha: string, fallb
   return /^#[0-9a-f]{6}$/i.test(color) && /^[0-9a-f]{2}$/i.test(alpha) ? `${color}${alpha}` : fallback;
 }
 
-function actorPosition(actor: BroadcastActor, scene: BroadcastScene, tick: number) {
-  const side = scene.side === 'neutral' ? (tick % 2 === 0 ? 'home' : 'away') : scene.side;
-  const offense = actor.side === side;
-  const attackingTop = side === 'away';
-  const slot = actor.slot;
-  const baseX = [50, 27, 73, 38, 62][slot] ?? 50;
-  const offenseY = attackingTop ? [71, 57, 57, 38, 28][slot] : [25, 40, 40, 59, 70][slot];
-  const defenseY = attackingTop ? [25, 39, 39, 56, 68][slot] : [72, 58, 58, 39, 28][slot];
-  const energy = Math.sin((tick + slot * 9) / 6) * (scene.type === 'postgame' ? 1 : 2.4);
-  if (scene.type === 'postgame') {
-    if (scene.postgameStage === 'celebration' && actor.side === (scene.side === 'away' ? 'away' : 'home')) {
-      return { x: 45 + slot * 2.3, y: 45 + Math.sin(tick / 3 + slot) * 4 };
-    }
-    if (scene.postgameStage === 'sportsmanship') {
-      return { x: 34 + slot * 8, y: actor.side === 'home' ? 51 : 45 };
-    }
-    if (scene.postgameStage === 'locker_exit' || scene.postgameStage === 'settled') {
-      return { x: baseX, y: actor.side === 'home' ? 91 - slot * 2 : 9 + slot * 2 };
-    }
-  }
-  if (offense) {
-    if (scene.type === 'deep_three' || scene.type === 'three') return { x: slot === 0 ? scene.x : baseX, y: slot === 0 ? scene.y : offenseY + energy };
-    if (scene.type === 'dunk' || scene.type === 'rim_finish') return { x: slot === 0 ? 50 : baseX, y: slot === 0 ? (attackingTop ? 13 : 87) : offenseY + energy };
-    return { x: baseX + energy, y: offenseY };
-  }
-  return { x: baseX - energy, y: defenseY };
-}
-
 function Jumbotron({ scene, homeAbbr, awayAbbr, theme }: { scene: BroadcastScene; homeAbbr: string; awayAbbr: string; theme: ArenaTheme }) {
   return (
     <View style={[styles.jumbotron, { borderColor: theme.secondary || '#2f2f2f' }]}>
@@ -104,6 +77,7 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
   const boardWidth = Math.max(300, Math.min(width, 430));
   const boardHeight = Math.round(boardWidth * 1.56);
   const scene = useMemo(() => buildBroadcastScene({ event, homeTeamId, awayTeamId, elapsedAfterFinalMs }), [awayTeamId, elapsedAfterFinalMs, event, homeTeamId]);
+  const motionFrame = useMemo(() => buildBroadcastMotionFrame({ actors, scene, tick }), [actors, scene, tick]);
   const homeAccent = theme.primary || '#006bb6';
   const awayAccent = '#5d76a9';
   const crowdOpacity = scene.crowdEnergy === 'eruption' ? 0.95 : scene.crowdEnergy === 'swell' ? 0.72 : scene.crowdEnergy === 'quiet' ? 0.28 : 0.46;
@@ -159,19 +133,20 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
           <Rect x="24" y="89.3" width="12" height="1.2" rx="0.4" fill="#2f2f2f" />
           <Circle cx="30" cy="8" r="1.5" fill="none" stroke="#f97316" strokeWidth="1" />
           <Circle cx="30" cy="88" r="1.5" fill="none" stroke="#f97316" strokeWidth="1" />
-          {actors.map(actor => {
-            const pos = actorPosition(actor, scene, tick);
+          {motionFrame.players.map(player => {
+            const actor = player.actor;
             const isBig = actor.identity.bodyBuild === 'big';
             const skin = actor.identity.skinTone === 'deep' ? '#5b321d' : actor.identity.skinTone === 'dark' ? '#7b4a2a' : actor.identity.skinTone === 'medium' ? '#b8754b' : '#d7a376';
+            const actionLift = player.action === 'shoot' || player.action === 'block' ? -1.8 : player.action === 'celebrate' ? Math.sin(tick / 3 + actor.slot) * 1.8 : 0;
             return (
               <G key={actor.id}>
-                <Circle cx={x(clamp(pos.x, 8, 92))} cy={y(clamp(pos.y, 6, 94)) - (isBig ? 2.8 : 2.4)} r={isBig ? 2.1 : 1.8} fill={skin} stroke="#111111" strokeWidth="0.25" />
-                <Rect x={x(pos.x) - (isBig ? 2.4 : 2)} y={y(pos.y) - 1.3} width={isBig ? 4.8 : 4} height={isBig ? 5.5 : 4.8} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.45" />
-                <SvgText x={x(pos.x)} y={y(pos.y) + 2} fill={actor.uniform.numberColor} fontSize="2.4" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
+                <Circle cx={x(clamp(player.x, 8, 92))} cy={y(clamp(player.y, 6, 94)) - (isBig ? 2.8 : 2.4) + actionLift} r={isBig ? 2.1 : 1.8} fill={skin} stroke="#111111" strokeWidth="0.25" />
+                <Rect x={x(player.x) - (isBig ? 2.4 : 2)} y={y(player.y) - 1.3 + actionLift} width={isBig ? 4.8 : 4} height={isBig ? 5.5 : 4.8} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.45" />
+                <SvgText x={x(player.x)} y={y(player.y) + 2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.4" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
               </G>
             );
           })}
-          <Circle cx={x(scene.x)} cy={y(scene.y)} r="1.35" fill="#f97316" stroke="#fff1d6" strokeWidth="0.5" />
+          <Circle cx={x(motionFrame.ball.x)} cy={y(motionFrame.ball.y)} r="1.35" fill="#f97316" stroke="#fff1d6" strokeWidth="0.5" />
         </Svg>
       </View>
 
