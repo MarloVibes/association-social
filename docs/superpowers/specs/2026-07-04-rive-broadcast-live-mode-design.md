@@ -32,6 +32,7 @@ The Rive file should have these top-level layer groups:
 
 1. `Arena_Background`
    - Crowd rows
+   - Crowd signs and poster boards
    - Lower bowl
    - Light rigs
    - Ambient arena glow
@@ -66,6 +67,7 @@ The Rive file should have these top-level layer groups:
 
 6. `Reactions`
    - Crowd bounce
+   - Crowd signs popping up after big plays
    - bench pop
    - camera shake
    - jumbotron flash
@@ -80,6 +82,7 @@ Recommended frequency:
 - Common every game: step-back shots, flashy passes, hard rebounds, fast-break finishes.
 - A few times per game: ankle breakers, chasedown blocks, logo threes, putback dunks.
 - Big viral moments: poster dunks, defender falls, bench reactions, jumbotron replay.
+- Crowd signs should appear during funny or viral moments, with short messages like `POSTER`, `COOKED`, `LOGO RANGE`, `NO WAY`, and team-colored handmade signs.
 - Rare clutch moments: game-winner celebration, team mob, crowd eruption.
 
 The rule is: normal basketball flow, then someone gets embarrassed.
