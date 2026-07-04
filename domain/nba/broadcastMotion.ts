@@ -59,6 +59,8 @@ function offenseX({ side, slot, progress, scene }: { side: 'home' | 'away'; slot
     : scene.type === 'three' ? (side === 'home' ? 62 : 38)
       : scene.type === 'dunk' || scene.type === 'rim_finish' || scene.type === 'rebound' || scene.type === 'block'
         ? rim
+        : scene.type === 'steal'
+          ? (side === 'home' ? 70 : 30)
         : side === 'home' ? 66 : 34;
   const end = slot === 0 ? actionTarget : interpolate(actionTarget, 50, [0, 0.3, -0.28, 0.12, -0.08][slot] + 0.5);
   return interpolate(start, end, progress);
@@ -137,6 +139,7 @@ function actionForScene(scene: BroadcastScene, actor: BroadcastActor, offense: b
   if (actor.slot === 0 && (scene.type === 'three' || scene.type === 'deep_three')) return 'shoot';
   if (actor.slot === 0 && (scene.type === 'dunk' || scene.type === 'rim_finish')) return 'finish';
   if (actor.slot === 0 && scene.type === 'ankle_breaker') return 'run';
+  if (actor.slot === 0 && scene.type === 'steal') return 'run';
   return actor.slot === 0 ? 'run' : 'space';
 }
 
@@ -187,7 +190,13 @@ export function buildBroadcastMotionFrame({ actors, scene, tick }: { actors: Bro
   const shotProgress = clamp((progress - 0.18) / 0.58, 0, 1);
   const shotArc = Math.sin(shotProgress * Math.PI) * 11;
   const isShot = ['three', 'deep_three', 'dunk', 'rim_finish', 'free_throw', 'miss'].includes(scene.type);
-  const ball = isShot && scene.side !== 'neutral'
+  const ball = scene.type === 'turnover' && scene.side !== 'neutral'
+    ? {
+        x: clamp((handler?.x || scene.x) + (side === 'home' ? -12 : 12), 8, 92),
+        y: clamp((handler?.y || scene.y) + Math.sin(tick / 4) * 5, 5, 95),
+        detached: true,
+      }
+    : isShot && scene.side !== 'neutral'
     ? {
         x: clamp(interpolate(handler?.x || scene.x, rimX, shotProgress), 8, 92),
         y: clamp(interpolate(handler?.y || scene.y, rimY, shotProgress) - shotArc, 5, 95),

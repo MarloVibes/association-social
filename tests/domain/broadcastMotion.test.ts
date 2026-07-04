@@ -111,6 +111,46 @@ describe('broadcast motion', () => {
     expect(Math.abs((fallenDefender?.x || 0) - (ballHandler?.x || 0))).toBeLessThan(16);
   });
 
+  it('turns steals into a live-ball runout for the stealing team', () => {
+    const stealScene: BroadcastScene = {
+      ...flowScene,
+      id: 'steal',
+      type: 'steal',
+      side: 'home',
+      jumbotronCue: 'STEAL',
+      crowdEnergy: 'swell',
+      x: 61,
+      y: 49,
+    };
+
+    const frame = buildBroadcastMotionFrame({ actors, scene: stealScene, tick: 46 });
+    const thief = frame.players.find(player => player.side === 'home' && player.action === 'run');
+
+    expect(thief?.slot).toBe(0);
+    expect(frame.ball.detached).toBe(false);
+    expect(Math.abs(frame.ball.x - (thief?.x || 0))).toBeLessThan(6);
+    expect(thief?.x).toBeGreaterThan(45);
+  });
+
+  it('turns turnovers into a loose ball instead of keeping it glued to the handler', () => {
+    const turnoverScene: BroadcastScene = {
+      ...flowScene,
+      id: 'turnover',
+      type: 'turnover',
+      side: 'home',
+      jumbotronCue: 'TURNOVER',
+      crowdEnergy: 'dip',
+      x: 59,
+      y: 48,
+    };
+
+    const frame = buildBroadcastMotionFrame({ actors, scene: turnoverScene, tick: 36 });
+    const handler = frame.players.find(player => player.side === 'home' && player.slot === 0);
+
+    expect(frame.ball.detached).toBe(true);
+    expect(Math.abs(frame.ball.x - (handler?.x || 0))).toBeGreaterThan(7);
+  });
+
   it('moves players through postgame celebration, sportsmanship, and locker exit beats', () => {
     const celebration = buildBroadcastMotionFrame({ actors, scene: { ...flowScene, type: 'postgame', side: 'home', postgameStage: 'celebration' }, tick: 5 });
     const sportsmanship = buildBroadcastMotionFrame({ actors, scene: { ...flowScene, type: 'postgame', side: 'home', postgameStage: 'sportsmanship' }, tick: 5 });
