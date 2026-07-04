@@ -1434,6 +1434,16 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain('return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;');
   });
 
+  it('does not show placeholder matchup players when final replay details are missing', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+
+    expect(liveMode).toContain('fallbackMatchupsFromTeams');
+    expect(liveMode).toContain('hasDetailedReplay');
+    expect(liveMode).toContain('Detailed replay feed is unavailable for this sim.');
+    expect(liveMode).not.toContain("name: away[index]?.name || 'Away Player'");
+    expect(liveMode).not.toContain("name: home[index]?.name || 'Home Player'");
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

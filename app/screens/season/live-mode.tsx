@@ -151,14 +151,41 @@ function fallbackMatchupsFromStats({ away, home, sport }: { away: ReturnType<typ
     position,
     awayPlayer: {
       playerId: away[index]?.playerId || `away-${position}`,
-      name: away[index]?.name || 'Away Player',
+      name: away[index]?.name || `${position} Matchup`,
       teamId: away[index]?.teamId || '',
       skillChips: [],
     },
     homePlayer: {
       playerId: home[index]?.playerId || `home-${position}`,
-      name: home[index]?.name || 'Home Player',
+      name: home[index]?.name || `${position} Matchup`,
       teamId: home[index]?.teamId || '',
+      skillChips: [],
+    },
+  }));
+}
+
+function playerDisplayName(player: any, fallback: string) {
+  return String(player?.full_name || player?.name || player?.displayName || fallback).trim();
+}
+
+function fallbackMatchupsFromTeams({ awayPlayers, homePlayers, awayTeamId, homeTeamId, sport }: { awayPlayers: any[]; homePlayers: any[]; awayTeamId: string; homeTeamId: string; sport: 'nba' | 'madden' | 'mlb' }): LiveTimelineStarterMatchup[] {
+  const positions = sport === 'madden'
+    ? ['QB', 'HB', 'WR', 'EDGE', 'DB']
+    : sport === 'mlb'
+      ? ['SP', 'C', 'IF', 'OF', 'CL']
+      : ['PG', 'SG', 'SF', 'PF', 'C'];
+  return positions.map((position, index) => ({
+    position,
+    awayPlayer: {
+      playerId: playerKey(awayPlayers[index]) || `away-${position}`,
+      name: playerDisplayName(awayPlayers[index], `${position} Matchup`),
+      teamId: awayTeamId,
+      skillChips: [],
+    },
+    homePlayer: {
+      playerId: playerKey(homePlayers[index]) || `home-${position}`,
+      name: playerDisplayName(homePlayers[index], `${position} Matchup`),
+      teamId: homeTeamId,
       skillChips: [],
     },
   }));
@@ -268,6 +295,7 @@ export default function LiveModeScreen() {
     scheduleTimeline: game?.liveTimeline || null,
     storedTimeline: storedTimeline?.liveTimeline || null,
   });
+  const hasDetailedReplay = Boolean(liveTimeline?.events?.length);
   const hasLiveTimelineMarker = Boolean(game?.liveTimeline);
   const waitingForStoredTimeline = hasLiveTimelineMarker && !liveTimeline;
   const liveMode = storedTimeline?.liveMode || game?.liveMode;
@@ -340,7 +368,15 @@ export default function LiveModeScreen() {
   const starterMatchups = useMemo(() => starterMatchupsForTimeline(liveTimeline), [liveTimeline]);
   const matchupRows = starterMatchups.length > 0
     ? starterMatchups
-    : fallbackMatchupsFromStats({ away: liveStatsByTeam.away.slice(0, 5), home: liveStatsByTeam.home.slice(0, 5), sport });
+    : hasDetailedReplay
+      ? fallbackMatchupsFromStats({ away: liveStatsByTeam.away.slice(0, 5), home: liveStatsByTeam.home.slice(0, 5), sport })
+      : fallbackMatchupsFromTeams({
+          awayPlayers: broadcastAwayPlayers,
+          homePlayers: broadcastHomePlayers,
+          awayTeamId: game?.awayTeamId || '',
+          homeTeamId: game?.homeTeamId || '',
+          sport,
+        });
   const scoreboardBackground = translucentColor(arenaTheme.primary, '22', 'rgba(255,255,255,0.06)');
   const visualBoardState = useMemo(() => buildLiveVisualBoardState({
     event: currentEvent,
@@ -465,7 +501,7 @@ export default function LiveModeScreen() {
                 />
               )
             ) : null}
-            {isBasketball && waitingForStoredTimeline ? (
+            {isBasketball && waitingForStoredTimeline && !resultVisible ? (
               <View style={styles.panel}>
                 <ActivityIndicator color={arenaTheme.text} />
                 <Text style={styles.emptySmall}>Loading detailed replay events...</Text>
@@ -497,7 +533,9 @@ export default function LiveModeScreen() {
                   </View>
                   <Text style={styles.feedScore}>{event.awayScore}-{event.homeScore}</Text>
                 </View>
-              )) : (
+              )) : resultVisible ? (
+                <Text style={styles.emptySmall}>Detailed replay feed is unavailable for this sim.</Text>
+              ) : (
                 <Text style={styles.emptySmall}>Waiting for the first stored timeline event.</Text>
               )}
             </View>
