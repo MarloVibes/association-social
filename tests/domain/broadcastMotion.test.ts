@@ -168,9 +168,25 @@ describe('broadcast motion', () => {
       expect(player.riveState).toMatch(/^[a-z0-9_]+$/);
       expect(player.moment).toMatch(/^[a-z0-9_]+$/);
       expect(['ambient', 'normal', 'highlight']).toContain(player.intensity);
+      expect(player.stage.x).toBeGreaterThanOrEqual(6);
+      expect(player.stage.x).toBeLessThanOrEqual(94);
+      expect(player.stage.y).toBeGreaterThanOrEqual(39);
+      expect(player.stage.y).toBeLessThanOrEqual(66);
+      expect(player.stage.scale).toBeGreaterThan(0.65);
+      expect(player.stage.zIndex).toBeGreaterThanOrEqual(0);
     });
     expect(frame.players.some(player => player.riveState === 'poster_fall')).toBe(true);
     expect(frame.players.some(player => player.riveState === 'dunk_finish')).toBe(true);
+  });
+
+  it('projects closer sideline players lower and larger for broadcast depth', () => {
+    const frame = buildBroadcastMotionFrame({ actors, scene: flowScene, tick: 18 });
+    const backPlayer = frame.players.reduce((lowest, player) => player.y < lowest.y ? player : lowest, frame.players[0]);
+    const frontPlayer = frame.players.reduce((highest, player) => player.y > highest.y ? player : highest, frame.players[0]);
+
+    expect(frontPlayer.stage.y).toBeGreaterThan(backPlayer.stage.y);
+    expect(frontPlayer.stage.scale).toBeGreaterThan(backPlayer.stage.scale);
+    expect(frontPlayer.stage.zIndex).toBeGreaterThan(backPlayer.stage.zIndex);
   });
 
   it('moves players through postgame celebration, sportsmanship, and locker exit beats', () => {

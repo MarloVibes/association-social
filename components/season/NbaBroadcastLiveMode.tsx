@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Ellipse, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import type { ArenaTheme } from '@/domain/nba/arenaTheme';
 import type { BroadcastActor } from '@/domain/nba/broadcastActors';
@@ -74,6 +74,7 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
   const boardHeight = Math.round(boardWidth * 0.68);
   const scene = useMemo(() => buildBroadcastScene({ event, homeTeamId, awayTeamId, elapsedAfterFinalMs }), [awayTeamId, elapsedAfterFinalMs, event, homeTeamId]);
   const motionFrame = useMemo(() => buildBroadcastMotionFrame({ actors, scene, tick }), [actors, scene, tick]);
+  const stagedPlayers = useMemo(() => [...motionFrame.players].sort((a, b) => a.stage.zIndex - b.stage.zIndex), [motionFrame.players]);
   const homeAccent = theme.primary || '#006bb6';
   const awayAccent = '#5d76a9';
   const crowdOpacity = scene.crowdEnergy === 'eruption' ? 0.95 : scene.crowdEnergy === 'swell' ? 0.72 : scene.crowdEnergy === 'quiet' ? 0.28 : 0.46;
@@ -170,20 +171,25 @@ export default function NbaBroadcastLiveMode(props: NbaBroadcastLiveModeProps) {
             <Path d="M88 7l-18 31h25z" fill="rgba(255,255,255,0.13)" />
           </G>
           <SvgText x="50" y="50.8" fill="#ffffff" fontSize="4" fontWeight="900" textAnchor="middle">{homeAbbr.slice(0, 3)}</SvgText>
-          {motionFrame.players.map(player => {
+          {stagedPlayers.map(player => {
             const actor = player.actor;
             const isBig = actor.identity.bodyBuild === 'big';
             const skin = actor.identity.skinTone === 'deep' ? '#5b321d' : actor.identity.skinTone === 'dark' ? '#7b4a2a' : actor.identity.skinTone === 'medium' ? '#b8754b' : '#d7a376';
             const actionLift = player.action === 'shoot' || player.action === 'block' ? -1.8 : player.action === 'celebrate' ? Math.sin(tick / 3 + actor.slot) * 1.8 : 0;
-            const sx = stageX(player.x);
-            const sy = stageY(34 + player.y * 0.34);
+            const sx = stageX(player.stage.x);
+            const sy = stageY(player.stage.y);
+            const scale = player.stage.scale;
             const fallRotate = player.action === 'fall' ? (actor.side === 'home' ? -74 : 74) : 0;
             const fallY = player.action === 'fall' ? 3.2 : 0;
+            const shadowWidth = (isBig ? 7.4 : 6.4) * scale;
             return (
               <G key={actor.id} data-rive-state={player.riveState} transform={`rotate(${fallRotate} ${sx} ${sy}) translate(0 ${fallY})`}>
-                <Circle cx={sx} cy={sy - (isBig ? 3.1 : 2.7) + actionLift} r={isBig ? 2.2 : 1.9} fill={skin} stroke="#111111" strokeWidth="0.25" />
-                <Rect x={sx - (isBig ? 2.6 : 2.2)} y={sy - 1.4 + actionLift} width={isBig ? 5.2 : 4.4} height={isBig ? 5.8 : 5.1} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.5" />
-                <SvgText x={sx} y={sy + 2.2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.5" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
+                <Ellipse cx={sx} cy={sy + 5.7 * scale} rx={shadowWidth / 2} ry={1.35 * scale} fill="rgba(0,0,0,0.3)" />
+                <G transform={`translate(${sx} ${sy}) scale(${scale}) translate(${-sx} ${-sy})`}>
+                  <Circle cx={sx} cy={sy - (isBig ? 3.1 : 2.7) + actionLift} r={isBig ? 2.2 : 1.9} fill={skin} stroke="#111111" strokeWidth="0.25" />
+                  <Rect x={sx - (isBig ? 2.6 : 2.2)} y={sy - 1.4 + actionLift} width={isBig ? 5.2 : 4.4} height={isBig ? 5.8 : 5.1} rx="0.9" fill={actor.uniform.primary} stroke={actor.uniform.secondary} strokeWidth="0.5" />
+                  <SvgText x={sx} y={sy + 2.2 + actionLift} fill={actor.uniform.numberColor} fontSize="2.5" fontWeight="900" textAnchor="middle">{actor.label}</SvgText>
+                </G>
               </G>
             );
           })}

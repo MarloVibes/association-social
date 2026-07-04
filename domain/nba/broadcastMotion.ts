@@ -8,11 +8,19 @@ export type BroadcastMotionPlayer = {
   slot: number;
   x: number;
   y: number;
+  stage: BroadcastStageAnchor;
   role: 'handler' | 'wing' | 'corner' | 'big' | 'defender';
   action: 'run' | 'space' | 'defend' | 'shoot' | 'finish' | 'rebound' | 'block' | 'fall' | 'celebrate' | 'sportsmanship' | 'exit';
   riveState: BroadcastRiveState;
   moment: BroadcastAnimationMoment;
   intensity: BroadcastAnimationIntensity;
+};
+
+export type BroadcastStageAnchor = {
+  x: number;
+  y: number;
+  scale: number;
+  zIndex: number;
 };
 
 export type BroadcastAnimationIntensity = 'ambient' | 'normal' | 'highlight';
@@ -153,6 +161,19 @@ function laneY(slot: number, tick: number, offense: boolean) {
   return SLOT_LANE_Y[slot] + drift;
 }
 
+function stageAnchorFor({ x, y, actor, action }: { x: number; y: number; actor: BroadcastActor; action: BroadcastMotionPlayer['action'] }): BroadcastStageAnchor {
+  const depth = clamp(y, 8, 92) / 100;
+  const bodyScale = actor.identity.bodyBuild === 'big' ? 1.12 : actor.identity.bodyBuild === 'wing' ? 1.04 : 0.96;
+  const actionScale = action === 'finish' || action === 'block' || action === 'rebound' ? 1.08 : action === 'fall' ? 1.04 : 1;
+  const perspective = 0.72 + depth * 0.5;
+  return {
+    x: clamp(x, 6, 94),
+    y: clamp(38 + depth * 27, 39, 66),
+    scale: Number((bodyScale * actionScale * perspective).toFixed(3)),
+    zIndex: Math.round(depth * 1000 + actor.slot),
+  };
+}
+
 function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, tick: number): BroadcastMotionPlayer[] {
   const winner = scene.side === 'away' ? 'away' : 'home';
   return actors.map(actor => {
@@ -160,13 +181,16 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
     if (scene.postgameStage === 'celebration') {
       const celebrating = actor.side === winner;
       const action: BroadcastMotionPlayer['action'] = celebrating ? 'celebrate' : 'defend';
+      const x = celebrating ? 42 + actor.slot * 4.2 : SLOT_X[actor.slot];
+      const y = celebrating ? 45 + wave * 3 : actor.side === 'home' ? 72 - actor.slot * 2 : 24 + actor.slot * 2;
       return {
         actor,
         id: actor.id,
         side: actor.side,
         slot: actor.slot,
-        x: celebrating ? 42 + actor.slot * 4.2 : SLOT_X[actor.slot],
-        y: celebrating ? 45 + wave * 3 : actor.side === 'home' ? 72 - actor.slot * 2 : 24 + actor.slot * 2,
+        x,
+        y,
+        stage: stageAnchorFor({ x, y, actor, action }),
         role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
         action,
         riveState: riveStateFor({ scene, action, actor, offense: false }),
@@ -176,13 +200,16 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
     }
     if (scene.postgameStage === 'sportsmanship') {
       const action: BroadcastMotionPlayer['action'] = 'sportsmanship';
+      const x = 20 + actor.slot * 10;
+      const y = actor.side === 'home' ? 53 : 45;
       return {
         actor,
         id: actor.id,
         side: actor.side,
         slot: actor.slot,
-        x: 20 + actor.slot * 10,
-        y: actor.side === 'home' ? 53 : 45,
+        x,
+        y,
+        stage: stageAnchorFor({ x, y, actor, action }),
         role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
         action,
         riveState: riveStateFor({ scene, action, actor, offense: false }),
@@ -191,13 +218,16 @@ function buildPostgamePlayers(actors: BroadcastActor[], scene: BroadcastScene, t
       };
     }
     const action: BroadcastMotionPlayer['action'] = 'exit';
+    const x = SLOT_X[actor.slot];
+    const y = actor.side === 'home' ? 92 - actor.slot * 2 : 8 + actor.slot * 2;
     return {
       actor,
       id: actor.id,
       side: actor.side,
       slot: actor.slot,
-      x: SLOT_X[actor.slot],
-      y: actor.side === 'home' ? 92 - actor.slot * 2 : 8 + actor.slot * 2,
+      x,
+      y,
+      stage: stageAnchorFor({ x, y, actor, action }),
       role: actor.slot === 0 ? 'handler' : ROLE_BY_SLOT[actor.slot] || 'wing',
       action,
       riveState: riveStateFor({ scene, action, actor, offense: false }),
@@ -254,13 +284,16 @@ export function buildBroadcastMotionFrame({ actors, scene, tick }: { actors: Bro
         ? (slot === 0 ? 0 : slot % 2 === 0 ? 3 : -3)
         : 0;
     const action = actionForScene(scene, actor, offense);
+    const playerX = clamp(x + sceneXShift + cut, 8, 92);
+    const playerY = clamp(y, 6, 94);
     return {
       actor,
       id: actor.id,
       side: actor.side,
       slot,
-      x: clamp(x + sceneXShift + cut, 8, 92),
-      y: clamp(y, 6, 94),
+      x: playerX,
+      y: playerY,
+      stage: stageAnchorFor({ x: playerX, y: playerY, actor, action }),
       role: offense ? (slot === 0 ? 'handler' : ROLE_BY_SLOT[slot] || 'wing') : 'defender',
       action,
       riveState: riveStateFor({ scene, action, actor, offense }),

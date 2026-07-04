@@ -1471,6 +1471,20 @@ describe('source safety regressions', () => {
     expect(broadcast).toContain('player.riveState');
   });
 
+  it('renders broadcast players through side-view stage anchors instead of raw court coordinates', () => {
+    const motion = source('domain/nba/broadcastMotion.ts');
+    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
+
+    expect(motion).toContain('BroadcastStageAnchor');
+    expect(motion).toContain('stageAnchorFor');
+    expect(motion).toContain('zIndex');
+    expect(broadcast).toContain('stagedPlayers');
+    expect(broadcast).toContain('player.stage.scale');
+    expect(broadcast).toContain('a.stage.zIndex - b.stage.zIndex');
+    expect(broadcast).toContain('Ellipse');
+    expect(broadcast).not.toContain('stageY(34 + player.y * 0.34)');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 
