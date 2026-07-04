@@ -170,8 +170,8 @@ describe('broadcast motion', () => {
       expect(['ambient', 'normal', 'highlight']).toContain(player.intensity);
       expect(player.stage.x).toBeGreaterThanOrEqual(6);
       expect(player.stage.x).toBeLessThanOrEqual(94);
-      expect(player.stage.y).toBeGreaterThanOrEqual(39);
-      expect(player.stage.y).toBeLessThanOrEqual(66);
+      expect(player.stage.y).toBeGreaterThanOrEqual(60);
+      expect(player.stage.y).toBeLessThanOrEqual(116);
       expect(player.stage.scale).toBeGreaterThan(0.65);
       expect(player.stage.zIndex).toBeGreaterThanOrEqual(0);
     });

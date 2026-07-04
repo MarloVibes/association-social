@@ -1485,6 +1485,18 @@ describe('source safety regressions', () => {
     expect(broadcast).not.toContain('stageY(34 + player.y * 0.34)');
   });
 
+  it('keeps NBA broadcast mode portrait-first and avoids endless replay loading', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
+
+    expect(broadcast).toContain('ARENA_VIEWBOX_HEIGHT = 128');
+    expect(broadcast).toContain('boardWidth * 1.28');
+    expect(broadcast).toContain('viewBox={`0 0 100 ${ARENA_VIEWBOX_HEIGHT}`}');
+    expect(liveMode).toContain('replayWaitTimedOut');
+    expect(liveMode).toContain('replayStillLoading');
+    expect(liveMode).toContain('Detailed replay feed is not available yet.');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

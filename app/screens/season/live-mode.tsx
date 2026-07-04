@@ -211,6 +211,7 @@ export default function LiveModeScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const [replayWaitTimedOut, setReplayWaitTimedOut] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
@@ -317,6 +318,7 @@ export default function LiveModeScreen() {
     secondaryColor: homeTeam?.secondaryColor,
   });
   const resultVisible = isLiveResultRevealed(game, nowMs);
+  const replayStillLoading = waitingForStoredTimeline && !replayWaitTimedOut && !resultVisible;
   const homeScore = currentEvent?.homeScore ?? (resultVisible ? Number(game?.homeScore || 0) : 0);
   const awayScore = currentEvent?.awayScore ?? (resultVisible ? Number(game?.awayScore || 0) : 0);
   const broadcastEvent: LiveTimelineEvent | null = currentEvent || (resultVisible ? {
@@ -421,6 +423,15 @@ export default function LiveModeScreen() {
     });
   };
 
+  useEffect(() => {
+    if (!waitingForStoredTimeline || resultVisible) {
+      setReplayWaitTimedOut(false);
+      return;
+    }
+    const timeout = setTimeout(() => setReplayWaitTimedOut(true), 5_000);
+    return () => clearTimeout(timeout);
+  }, [resultVisible, waitingForStoredTimeline]);
+
   if (loading && !loadingTimedOut) {
     return (
       <View style={[styles.screen, { backgroundColor: '#050505' }]}>
@@ -517,7 +528,7 @@ export default function LiveModeScreen() {
                 />
               )
             ) : null}
-            {isBasketball && waitingForStoredTimeline && !resultVisible ? (
+            {isBasketball && replayStillLoading ? (
               <View style={styles.panel}>
                 <ActivityIndicator color={arenaTheme.text} />
                 <Text style={styles.emptySmall}>Loading detailed replay events...</Text>
@@ -551,6 +562,8 @@ export default function LiveModeScreen() {
                 </View>
               )) : resultVisible ? (
                 <Text style={styles.emptySmall}>Detailed replay feed is unavailable for this sim.</Text>
+              ) : waitingForStoredTimeline && replayWaitTimedOut ? (
+                <Text style={styles.emptySmall}>Detailed replay feed is not available yet. The broadcast view will keep running while the sim finishes writing events.</Text>
               ) : (
                 <Text style={styles.emptySmall}>Waiting for the first stored timeline event.</Text>
               )}

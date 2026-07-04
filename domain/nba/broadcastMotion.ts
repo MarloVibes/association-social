@@ -168,7 +168,7 @@ function stageAnchorFor({ x, y, actor, action }: { x: number; y: number; actor: 
   const perspective = 0.72 + depth * 0.5;
   return {
     x: clamp(x, 6, 94),
-    y: clamp(38 + depth * 27, 39, 66),
+    y: clamp(56 + depth * 58, 60, 116),
     scale: Number((bodyScale * actionScale * perspective).toFixed(3)),
     zIndex: Math.round(depth * 1000 + actor.slot),
   };
