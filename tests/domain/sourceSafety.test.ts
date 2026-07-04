@@ -1426,6 +1426,14 @@ describe('source safety regressions', () => {
     expect(liveMode).not.toContain('isBasketball && !waitingForStoredTimeline ? (');
   });
 
+  it('does not leave live mode on a black spinner-only loading screen', () => {
+    const liveMode = source('app/screens/season/live-mode.tsx');
+
+    expect(liveMode).toContain('loadingTimedOut');
+    expect(liveMode).toContain('Loading broadcast arena');
+    expect(liveMode).not.toContain('return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;');
+  });
+
   it('centers compact award marks in the trophy case', () => {
     const awards = source('app/screens/season/awards.tsx');
 

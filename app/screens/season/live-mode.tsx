@@ -183,6 +183,7 @@ export default function LiveModeScreen() {
   const [storedTimeline, setStoredTimeline] = useState<LiveTimelineDoc | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullPlayerStats, setShowFullPlayerStats] = useState(false);
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
@@ -193,6 +194,15 @@ export default function LiveModeScreen() {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timeout = setTimeout(() => setLoadingTimedOut(true), 4_000);
+    return () => clearTimeout(timeout);
+  }, [loading]);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -359,8 +369,26 @@ export default function LiveModeScreen() {
     });
   };
 
-  if (loading) {
-    return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
+  if (loading && !loadingTimedOut) {
+    return (
+      <View style={[styles.screen, { backgroundColor: '#050505' }]}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+              <Ionicons color="#ffffff" name="chevron-back" size={24} />
+            </TouchableOpacity>
+            <View style={styles.headerCopy}>
+              <Text style={styles.eyebrow}>Live Mode</Text>
+              <Text style={styles.title}>Loading broadcast arena</Text>
+            </View>
+          </View>
+          <View style={styles.panel}>
+            <ActivityIndicator color="#00e58b" />
+            <Text style={styles.emptySmall}>Preparing the game feed and arena view.</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
   }
 
   return (
