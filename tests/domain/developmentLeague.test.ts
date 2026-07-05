@@ -51,6 +51,29 @@ describe('NBA development league assignments', () => {
     expect(blocked.errors).toContain('assignment_active');
   });
 
+  it('blocks a new assignment while a previous assignment is ready but unclaimed', () => {
+    const result = startDevelopmentAssignment({
+      team: {
+        developmentAssignment: {
+          playerId: 'ready-player',
+          gradeKey: 'threePoint',
+          status: 'active',
+          startedAtMs: nowMs - DEVELOPMENT_ASSIGNMENT_DURATION_MS,
+          completesAtMs: nowMs - 1000,
+        },
+        players: [
+          { id: 'next-player', full_name: 'Next Player', salary: 1_200_000, skill_grades: { threePoint: 'C+' } },
+        ],
+      },
+      playerId: 'next-player',
+      gradeKey: 'threePoint',
+      nowMs,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('assignment_active');
+  });
+
   it('raises the selected grade two levels after one week and caps at S', () => {
     const started = startDevelopmentAssignment({
       team: {

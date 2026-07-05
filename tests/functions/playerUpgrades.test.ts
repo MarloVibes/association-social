@@ -80,6 +80,30 @@ describe('player upgrade callable helpers', () => {
     expect(result.errors).toContain('assignment_active');
   });
 
+  it('blocks a new development assignment while a ready assignment is unclaimed', () => {
+    const nowMs = Date.parse('2026-07-04T12:00:00.000Z');
+    const result = startDevelopmentAssignment({
+      team: {
+        developmentAssignment: {
+          playerId: 'ready-player',
+          gradeKey: 'threePoint',
+          status: 'active',
+          startedAtMs: nowMs - 7 * 24 * 60 * 60 * 1000,
+          completesAtMs: nowMs - 1000,
+        },
+        players: [
+          { id: 'next-player', full_name: 'Next Player', contractType: 'minimum', salary: 1_200_000, skill_grades: { threePoint: 'C+' } },
+        ],
+      },
+      playerId: 'next-player',
+      gradeKey: 'threePoint',
+      nowMs,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('assignment_active');
+  });
+
   it('spends one point and moves one visible grade step', () => {
     const result = spendTeamUpgradePoint({
       team: { upgradePoints: 3 },

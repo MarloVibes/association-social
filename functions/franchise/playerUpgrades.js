@@ -327,6 +327,10 @@ function isAssignmentActive(assignment, nowMs) {
   return Boolean(assignment && assignment.status === 'active' && numberFrom(assignment.completesAtMs) > nowMs);
 }
 
+function hasOpenDevelopmentAssignment(assignment) {
+  return Boolean(assignment && assignment.status === 'active');
+}
+
 function gradeFromEntry(entry) {
   if (typeof entry === 'string' && GRADE_LADDER.includes(entry)) return entry;
   if (!entry || typeof entry !== 'object') return null;
@@ -381,7 +385,7 @@ function applyDevelopmentGradeToPlayer(player, gradeKey, grade) {
 
 function startDevelopmentAssignment({ team, playerId: targetPlayerId, gradeKey, gradeLabel, nowMs }) {
   const errors = [];
-  if (isAssignmentActive(team && team.developmentAssignment, nowMs)) errors.push('assignment_active');
+  if (hasOpenDevelopmentAssignment(team && team.developmentAssignment)) errors.push('assignment_active');
   const player = ((team && team.players) || []).find(item => developmentPlayerId(item) === targetPlayerId);
   if (!player) errors.push('player_missing');
   if (player && !isDevelopmentEligiblePlayer(player)) errors.push('player_not_eligible');

@@ -13,10 +13,9 @@ import {
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { buildScoutingGrades } from '@/domain/nba/scoutingGrades';
 import {
-  DEVELOPMENT_ASSIGNMENT_DURATION_MS,
   advanceDevelopmentGrade,
   developmentPlayerId,
-  isAssignmentActive,
+  hasOpenDevelopmentAssignment,
   isDevelopmentEligiblePlayer,
   type DevelopmentAssignment,
 } from '@/domain/nba/developmentLeague';
@@ -146,7 +145,7 @@ export default function DevelopmentLeagueScreen() {
   ), [isLeagueAdmin, myTeam, sortedTeams]);
   const team = selectableTeams.find(item => item.id === selectedTeamId) || myTeam || (isLeagueAdmin ? sortedTeams[0] : undefined);
   const activeAssignment = team?.developmentAssignment;
-  const hasActiveAssignment = isAssignmentActive(activeAssignment, nowMs);
+  const hasOpenAssignment = hasOpenDevelopmentAssignment(activeAssignment);
   const eligiblePlayers = useMemo(() => (
     (team?.players || []).filter(player => isDevelopmentEligiblePlayer(player))
   ), [team?.players]);
@@ -297,12 +296,12 @@ export default function DevelopmentLeagueScreen() {
           const itemTarget = itemGrade ? advanceDevelopmentGrade(itemGrade, 2) : undefined;
           return (
             <TouchableOpacity
-              disabled={hasActiveAssignment || working}
+              disabled={hasOpenAssignment || working}
               onPress={() => {
                 setSelectedPlayerId(developmentPlayerId(item));
                 setSelectedGradeKey(gradeOptions[0]?.key || '');
               }}
-              style={[styles.playerCard, isSelected && styles.playerCardActive, hasActiveAssignment && styles.playerCardDisabled]}
+              style={[styles.playerCard, isSelected && styles.playerCardActive, hasOpenAssignment && styles.playerCardDisabled]}
               activeOpacity={0.82}
             >
               <View style={styles.playerHeader}>
@@ -317,7 +316,7 @@ export default function DevelopmentLeagueScreen() {
                 ) : null}
               </View>
 
-              {isSelected && !hasActiveAssignment ? (
+              {isSelected && !hasOpenAssignment ? (
                 <>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gradeChips}>
                     {gradeOptions.map(option => {
