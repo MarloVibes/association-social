@@ -302,6 +302,57 @@ describe('player upgrade callable helpers', () => {
     expect(result.find((team: any) => team.id === 'W5').upgradePoints).toBe(2);
   });
 
+  it('attaches player-bound award credits to the player current team', () => {
+    const teams = [
+      { id: 'E5', upgradePoints: 1, upgradePointGrants: {}, players: [] },
+      { id: 'W5', upgradePoints: 2, upgradePointGrants: {}, players: [{ id: 'p1', full_name: 'Award Winner' }] },
+    ];
+    const result = applySeasonUpgradeGrants({
+      teams,
+      seasonYear: 2026,
+      grants: [
+        {
+          teamId: 'E5',
+          awardPoints: 1,
+          lotteryBoostPoints: 0,
+          rebuildPoints: 0,
+          totalPoints: 1,
+          starTrainingTokens: 0,
+          playerCredits: [{ id: 'E5:mip:p1', playerId: 'p1', label: 'MIP Credit', remaining: 1 }],
+        },
+      ],
+    });
+
+    expect(result.find((team: any) => team.id === 'E5').upgradePoints).toBe(2);
+    expect(result.find((team: any) => team.id === 'E5').players).toEqual([]);
+    expect(result.find((team: any) => team.id === 'W5').players[0].playerUpgradeCredits['2026'][0].label).toBe('MIP Credit');
+  });
+
+  it('prepares player-credit updates when the award winner is on another team', () => {
+    const teams = [
+      { id: 'E5', ref: 'ref-e5', upgradePoints: 1, upgradePointGrants: {}, players: [] },
+      { id: 'W5', ref: 'ref-w5', upgradePoints: 2, upgradePointGrants: {}, players: [{ id: 'p1', full_name: 'Award Winner' }] },
+    ];
+    const updates = prepareSeasonGrantUpdates({
+      teams,
+      seasonYear: 2026,
+      grants: [
+        {
+          teamId: 'E5',
+          awardPoints: 1,
+          lotteryBoostPoints: 0,
+          rebuildPoints: 0,
+          totalPoints: 1,
+          starTrainingTokens: 0,
+          playerCredits: [{ id: 'E5:mip:p1', playerId: 'p1', label: 'MIP Credit', remaining: 1 }],
+        },
+      ],
+    });
+
+    expect(updates.map((update: any) => update.teamId)).toEqual(['E5', 'W5']);
+    expect(updates.find((update: any) => update.teamId === 'W5').players[0].playerUpgradeCredits['2026'][0].label).toBe('MIP Credit');
+  });
+
   it('prepares only changed team updates for season grant writes', () => {
     const teams = [
       { id: 'E5', ref: 'ref-e5', upgradePoints: 1, upgradePointGrants: {}, players: [] },

@@ -103,6 +103,12 @@ const matchupFunctionOptions = {
   concurrency: 20,
 };
 
+const upgradeFunctionOptions = {
+  memory: '512MiB',
+  timeoutSeconds: 120,
+  concurrency: 20,
+};
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const tradeAuthSecret = defineSecret('TRADE_AUTH_SECRET');
 
@@ -591,12 +597,12 @@ exports.resetScheduledGame = onCall(matchupFunctionOptions, createResetScheduled
   HttpsError,
 }));
 
-exports.spendPlayerUpgrade = onCall(createSpendPlayerUpgradeHandler({
+exports.spendPlayerUpgrade = onCall(upgradeFunctionOptions, createSpendPlayerUpgradeHandler({
   getFirestore,
   HttpsError,
 }));
 
-exports.applyUpgradeGrants = onCall(createApplyUpgradeGrantsHandler({
+exports.applyUpgradeGrants = onCall(upgradeFunctionOptions, createApplyUpgradeGrantsHandler({
   getFirestore,
   HttpsError,
   FieldValue,

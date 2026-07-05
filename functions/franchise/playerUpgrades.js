@@ -595,28 +595,63 @@ function applyPlayerCreditsToRoster(players, credits, seasonKey) {
   });
 }
 
+function teamKey(team) {
+  return String(team && (team.id || team.teamId || team.abbreviation || team.abbr || team.name) || '');
+}
+
+function assignPlayerCreditsToCurrentTeams(teams, grants) {
+  const assignments = new Map();
+  const unassignedCredits = [];
+
+  (grants || []).forEach((grant) => {
+    (Array.isArray(grant && grant.playerCredits) ? grant.playerCredits : []).forEach((credit) => {
+      let assignedTeamKey = '';
+      (teams || []).some((team) => {
+        const match = (team.players || []).some(player => creditMatchesPlayer(credit, player));
+        if (match) {
+          assignedTeamKey = teamKey(team);
+          return true;
+        }
+        return false;
+      });
+      if (!assignedTeamKey) {
+        unassignedCredits.push(credit);
+        return;
+      }
+      assignments.set(assignedTeamKey, [...(assignments.get(assignedTeamKey) || []), credit]);
+    });
+  });
+
+  return { assignments, unassignedCredits };
+}
+
 function applySeasonUpgradeGrants({ teams, grants, seasonYear }) {
   const grantByTeam = new Map((grants || []).map(grant => [String(grant.teamId), grant]));
   const seasonKey = String(seasonYear || 'current');
+  const { assignments } = assignPlayerCreditsToCurrentTeams(teams || [], grants || []);
   return (teams || []).map((team) => {
-    const grant = grantByTeam.get(String(team.id || team.teamId || team.abbreviation || ''));
-    if (!grant || Number(grant.totalPoints || 0) <= 0) return team;
+    const currentTeamKey = teamKey(team);
+    const grant = grantByTeam.get(currentTeamKey);
+    const assignedCredits = assignments.get(currentTeamKey) || [];
+    if (!grant && assignedCredits.length === 0) return team;
     const existingGrants = team.upgradePointGrants || {};
     if (existingGrants[seasonKey]) return team;
-    const playerCredits = Array.isArray(grant.playerCredits) ? grant.playerCredits : [];
+    const playerCredits = Array.isArray(grant && grant.playerCredits) ? grant.playerCredits : [];
+    const totalPoints = grant ? Number(grant.totalPoints || 0) : 0;
+    const starTrainingTokens = grant ? Number(grant.starTrainingTokens || 0) : 0;
     return {
       ...team,
-      upgradePoints: Number(team.upgradePoints || 0) + Number(grant.totalPoints || 0),
-      starTrainingTokens: Number(team.starTrainingTokens || 0) + Number(grant.starTrainingTokens || 0),
-      players: applyPlayerCreditsToRoster(team.players || [], playerCredits, seasonKey),
+      upgradePoints: Number(team.upgradePoints || 0) + totalPoints,
+      starTrainingTokens: Number(team.starTrainingTokens || 0) + starTrainingTokens,
+      players: applyPlayerCreditsToRoster(team.players || [], assignedCredits, seasonKey),
       upgradePointGrants: {
         ...existingGrants,
         [seasonKey]: {
-          awardPoints: Number(grant.awardPoints || 0),
-          lotteryBoostPoints: Number(grant.lotteryBoostPoints || 0),
-          rebuildPoints: Number(grant.rebuildPoints || 0),
-          totalPoints: Number(grant.totalPoints || 0),
-          starTrainingTokens: Number(grant.starTrainingTokens || 0),
+          awardPoints: grant ? Number(grant.awardPoints || 0) : 0,
+          lotteryBoostPoints: grant ? Number(grant.lotteryBoostPoints || 0) : 0,
+          rebuildPoints: grant ? Number(grant.rebuildPoints || 0) : 0,
+          totalPoints,
+          starTrainingTokens,
           playerCredits,
         },
       },
