@@ -253,4 +253,25 @@ describe('NBA upgrade points', () => {
     });
     expect(grants.find(grant => grant.teamId === 'E0')).toBeUndefined();
   });
+
+  it('does not duplicate unbound credits when an award has a named winner', () => {
+    const grants = seasonUpgradeGrants({
+      standings: [{ teamId: 'E5', conference: 'East', wins: 50, losses: 32 }],
+      awardLedger: {
+        E5: {
+          awards: { mvp: 1 },
+          awardWinners: [{ award: 'mvp', playerName: 'Award Winner', count: 1 }],
+        },
+      },
+    });
+
+    const grant = grants.find(item => item.teamId === 'E5');
+    expect(grant?.playerCredits).toEqual([
+      expect.objectContaining({
+        award: 'mvp',
+        playerName: 'Award Winner',
+        remaining: 1,
+      }),
+    ]);
+  });
 });

@@ -344,10 +344,12 @@ function awardLabel(award: string) {
 export function playerCreditsFromAwards(input: AwardUpgradeInput, teamId: string): PlayerUpgradeCredit[] {
   const credits: PlayerUpgradeCredit[] = [];
   const winners = input.awardWinners || [];
+  const winnerCreditCounts = new Map<string, number>();
   winners.forEach((winner, index) => {
     const award = String(winner.award || '');
     if (!PLAYER_CREDIT_AWARDS.has(award)) return;
     const count = Math.max(1, Number(winner.count || 1));
+    winnerCreditCounts.set(award, (winnerCreditCounts.get(award) || 0) + count);
     credits.push({
       id: `${teamId}:${award}:${winner.playerId || winner.playerName || index}`,
       label: awardLabel(award),
@@ -360,7 +362,7 @@ export function playerCreditsFromAwards(input: AwardUpgradeInput, teamId: string
   });
   Object.entries(input.awards || {}).forEach(([award, rawCount]) => {
     if (!PLAYER_CREDIT_AWARDS.has(award)) return;
-    const count = Math.max(0, Number(rawCount || 0));
+    const count = Math.max(0, Number(rawCount || 0) - (winnerCreditCounts.get(award) || 0));
     for (let index = 0; index < count; index += 1) {
       credits.push({
         id: `${teamId}:${award}:unbound:${index}`,
