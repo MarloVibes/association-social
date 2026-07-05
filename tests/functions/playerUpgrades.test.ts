@@ -6,6 +6,7 @@ const {
   applySeasonUpgradeGrants,
   completeDevelopmentAssignment,
   createUpgradePointNotifications,
+  prepareFreeAgentGrantUpdates,
   prepareSeasonGrantUpdates,
   spendTeamUpgradePoint,
   startDevelopmentAssignment,
@@ -351,6 +352,42 @@ describe('player upgrade callable helpers', () => {
 
     expect(updates.map((update: any) => update.teamId)).toEqual(['E5', 'W5']);
     expect(updates.find((update: any) => update.teamId === 'W5').players[0].playerUpgradeCredits['2026'][0].label).toBe('MIP Credit');
+  });
+
+  it('prepares free-agent updates when the award winner is unsigned', () => {
+    const updates = prepareFreeAgentGrantUpdates({
+      teams: [
+        { id: 'E5', players: [] },
+        { id: 'W5', players: [] },
+      ],
+      freeAgentDocs: [
+        { id: 'contracts_2026', ref: 'ref-free-agents', players: [{ id: 'p1', full_name: 'Award Winner' }] },
+      ],
+      seasonYear: 2026,
+      grants: [
+        {
+          teamId: 'E5',
+          awardPoints: 1,
+          lotteryBoostPoints: 0,
+          rebuildPoints: 0,
+          totalPoints: 1,
+          starTrainingTokens: 0,
+          playerCredits: [{ id: 'E5:mip:p1', playerId: 'p1', label: 'MIP Credit', remaining: 1 }],
+        },
+      ],
+    });
+
+    expect(updates).toEqual([{
+      ref: 'ref-free-agents',
+      id: 'contracts_2026',
+      players: [{
+        id: 'p1',
+        full_name: 'Award Winner',
+        playerUpgradeCredits: {
+          '2026': [{ id: 'E5:mip:p1', playerId: 'p1', label: 'MIP Credit', remaining: 1 }],
+        },
+      }],
+    }]);
   });
 
   it('prepares only changed team updates for season grant writes', () => {

@@ -599,9 +599,13 @@ function teamKey(team) {
   return String(team && (team.id || team.teamId || team.abbreviation || team.abbr || team.name) || '');
 }
 
-function assignPlayerCreditsToCurrentTeams(teams, grants) {
+function freeAgentDocKey(doc) {
+  return String(doc && (doc.id || doc.docId || doc.key || '') || '');
+}
+
+function assignPlayerCreditsToRosters(teams, freeAgentDocs, grants) {
   const assignments = new Map();
-  const unassignedCredits = [];
+  const freeAgentAssignments = new Map();
 
   (grants || []).forEach((grant) => {
     (Array.isArray(grant && grant.playerCredits) ? grant.playerCredits : []).forEach((credit) => {
@@ -615,20 +619,34 @@ function assignPlayerCreditsToCurrentTeams(teams, grants) {
         return false;
       });
       if (!assignedTeamKey) {
-        unassignedCredits.push(credit);
+        let assignedFreeAgentDocKey = '';
+        (freeAgentDocs || []).some((doc) => {
+          const match = (doc.players || []).some(player => creditMatchesPlayer(credit, player));
+          if (match) {
+            assignedFreeAgentDocKey = freeAgentDocKey(doc);
+            return true;
+          }
+          return false;
+        });
+        if (assignedFreeAgentDocKey) {
+          freeAgentAssignments.set(assignedFreeAgentDocKey, [
+            ...(freeAgentAssignments.get(assignedFreeAgentDocKey) || []),
+            credit,
+          ]);
+        }
         return;
       }
       assignments.set(assignedTeamKey, [...(assignments.get(assignedTeamKey) || []), credit]);
     });
   });
 
-  return { assignments, unassignedCredits };
+  return { assignments, freeAgentAssignments };
 }
 
 function applySeasonUpgradeGrants({ teams, grants, seasonYear }) {
   const grantByTeam = new Map((grants || []).map(grant => [String(grant.teamId), grant]));
   const seasonKey = String(seasonYear || 'current');
-  const { assignments } = assignPlayerCreditsToCurrentTeams(teams || [], grants || []);
+  const { assignments } = assignPlayerCreditsToRosters(teams || [], [], grants || []);
   return (teams || []).map((team) => {
     const currentTeamKey = teamKey(team);
     const grant = grantByTeam.get(currentTeamKey);
@@ -679,6 +697,24 @@ function prepareSeasonGrantUpdates({ teams, grants, seasonYear }) {
         starTrainingTokens: Number(team.starTrainingTokens || 0),
         players: team.players || [],
         upgradePointGrants: team.upgradePointGrants || {},
+      };
+    })
+    .filter(Boolean);
+}
+
+function prepareFreeAgentGrantUpdates({ teams, freeAgentDocs, grants, seasonYear }) {
+  const seasonKey = String(seasonYear || 'current');
+  const { freeAgentAssignments } = assignPlayerCreditsToRosters(teams || [], freeAgentDocs || [], grants || []);
+  return (freeAgentDocs || [])
+    .map((doc) => {
+      const assignedCredits = freeAgentAssignments.get(freeAgentDocKey(doc)) || [];
+      if (assignedCredits.length === 0) return null;
+      const players = applyPlayerCreditsToRoster(doc.players || [], assignedCredits, seasonKey);
+      if (JSON.stringify(players || []) === JSON.stringify(doc.players || [])) return null;
+      return {
+        ref: doc.ref,
+        id: doc.id,
+        players,
       };
     })
     .filter(Boolean);
@@ -929,9 +965,10 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
     const db = getFirestore();
     const leagueRef = db.collection('leagues').doc(leagueId);
     return db.runTransaction(async (tx) => {
-      const [leagueSnap, teamsSnap] = await Promise.all([
+      const [leagueSnap, teamsSnap, freeAgentsSnap] = await Promise.all([
         tx.get(leagueRef),
         tx.get(leagueRef.collection('teams')),
+        tx.get(leagueRef.collection('free_agents')),
       ]);
       if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
       const league = leagueSnap.data() || {};
@@ -939,12 +976,21 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
         throw new HttpsError('permission-denied', 'Only commissioners can apply season upgrade grants.');
       }
       const teams = teamsSnap.docs.map(doc => ({ id: doc.id, ref: doc.ref, ...(doc.data() || {}) }));
+      const freeAgentDocs = freeAgentsSnap.docs.map(doc => ({
+        id: doc.id,
+        ref: doc.ref,
+        players: (doc.data() || {}).players || [],
+      }));
       const updates = prepareSeasonGrantUpdates({ teams, grants, seasonYear });
+      const freeAgentUpdates = prepareFreeAgentGrantUpdates({ teams, freeAgentDocs, grants, seasonYear });
       updates.forEach(update => tx.update(update.ref, {
         upgradePoints: update.upgradePoints,
         starTrainingTokens: update.starTrainingTokens,
         players: update.players,
         upgradePointGrants: update.upgradePointGrants,
+      }));
+      freeAgentUpdates.forEach(update => tx.update(update.ref, {
+        players: update.players,
       }));
       if (FieldValue) {
         createUpgradePointNotifications({
@@ -963,6 +1009,7 @@ function createApplyUpgradeGrantsHandler({ getFirestore, HttpsError, FieldValue 
       return {
         seasonYear,
         updatedTeams: updates.map(update => update.teamId),
+        updatedFreeAgentDocs: freeAgentUpdates.map(update => update.id),
       };
     });
   };
@@ -982,6 +1029,7 @@ module.exports = {
   derivePlayerLabel,
   isDevelopmentEligiblePlayer,
   nextGrade,
+  prepareFreeAgentGrantUpdates,
   prepareSeasonGrantUpdates,
   startDevelopmentAssignment,
   spendTeamUpgradePoint,
