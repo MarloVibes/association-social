@@ -414,6 +414,36 @@ describe('player upgrade callable helpers', () => {
     }]);
   });
 
+  it('applies team grants by team abbreviation aliases', () => {
+    const updates = prepareSeasonGrantUpdates({
+      teams: [
+        { id: 'team_lal', ref: 'ref-lal', abbreviation: 'LAL', teamId: 'LAL', upgradePoints: 0, upgradePointGrants: {}, players: [] },
+      ],
+      seasonYear: 2026,
+      grants: [
+        { teamId: 'LAL', awardPoints: 4, lotteryBoostPoints: 0, rebuildPoints: 0, totalPoints: 4, starTrainingTokens: 1, playerCredits: [] },
+      ],
+    });
+
+    expect(updates).toEqual([{
+      ref: 'ref-lal',
+      teamId: 'team_lal',
+      upgradePoints: 4,
+      starTrainingTokens: 1,
+      players: [],
+      upgradePointGrants: {
+        '2026': {
+          awardPoints: 4,
+          lotteryBoostPoints: 0,
+          rebuildPoints: 0,
+          totalPoints: 4,
+          starTrainingTokens: 1,
+          playerCredits: [],
+        },
+      },
+    }]);
+  });
+
   it('prepares only changed team updates for season grant writes', () => {
     const teams = [
       { id: 'E5', ref: 'ref-e5', upgradePoints: 1, upgradePointGrants: {}, players: [] },

@@ -603,6 +603,16 @@ function teamKey(team) {
   return String(team && (team.id || team.teamId || team.abbreviation || team.abbr || team.name) || '');
 }
 
+function teamGrantKeys(team) {
+  return [
+    team && team.id,
+    team && team.teamId,
+    team && team.abbreviation,
+    team && team.abbr,
+    team && team.name,
+  ].map(value => String(value || '').trim()).filter(Boolean);
+}
+
 function freeAgentDocKey(doc) {
   return String(doc && (doc.id || doc.docId || doc.key || '') || '');
 }
@@ -648,12 +658,12 @@ function assignPlayerCreditsToRosters(teams, freeAgentDocs, grants) {
 }
 
 function applySeasonUpgradeGrants({ teams, grants, seasonYear }) {
-  const grantByTeam = new Map((grants || []).map(grant => [String(grant.teamId), grant]));
+  const grantByTeam = new Map((grants || []).map(grant => [normalizedTeamKey(grant && grant.teamId), grant]));
   const seasonKey = String(seasonYear || 'current');
   const { assignments } = assignPlayerCreditsToRosters(teams || [], [], grants || []);
   return (teams || []).map((team) => {
     const currentTeamKey = teamKey(team);
-    const grant = grantByTeam.get(currentTeamKey);
+    const grant = teamGrantKeys(team).map(key => grantByTeam.get(normalizedTeamKey(key))).find(Boolean);
     const assignedCredits = assignments.get(currentTeamKey) || [];
     if (!grant && assignedCredits.length === 0) return team;
     const existingGrants = team.upgradePointGrants || {};
