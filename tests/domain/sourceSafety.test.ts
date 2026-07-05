@@ -862,6 +862,19 @@ describe('source safety regressions', () => {
     expect(createLeague).not.toContain('coming soon');
   });
 
+  it('keeps Schedule directly accessible under League Rosters on the league dashboard', () => {
+    const league = source('app/screens/league.tsx');
+    const rostersIndex = league.indexOf('📋 League Rosters');
+    const scheduleIndex = league.indexOf('📅 Schedule');
+
+    expect(rostersIndex).toBeGreaterThan(-1);
+    expect(scheduleIndex).toBeGreaterThan(rostersIndex);
+    expect(scheduleIndex - rostersIndex).toBeLessThan(500);
+    expect(league).toContain("pathname: '/screens/season/calendar'");
+    expect(league).toContain('styles.scheduleBtn');
+    expect(league).toContain('styles.scheduleBtnText');
+  });
+
   it('shows NBA standard and two-way roster slots during roster cuts', () => {
     const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
 

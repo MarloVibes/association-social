@@ -419,10 +419,16 @@ export default function LeagueScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 16 }]}
+          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 10 }]}
           onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
         >
           <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.scheduleBtn, { backgroundColor: tintColor + '16', borderColor: teamTheme.borderColor + 'cc' }]}
+          onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+        >
+          <Text style={[styles.scheduleBtnText, { color: titleColor }]}>📅 Schedule</Text>
         </TouchableOpacity>
 
         {/* Commissioner Controls */}
@@ -548,6 +554,8 @@ const styles = StyleSheet.create({
   offseasonWarning: { color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 8, textAlign: 'center' },
   rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
   rostersBtnText: { fontSize: 15, fontWeight: '700' },
+  scheduleBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginBottom: 16 },
+  scheduleBtnText: { fontSize: 15, fontWeight: '700' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },
   leaveBtnText: { color: '#888', fontSize: 15, fontWeight: '600' },
   spacer: { height: 60 },
