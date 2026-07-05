@@ -230,8 +230,8 @@ describe('source safety regressions', () => {
     const hook = source('hooks/usePushNotifications.ts');
 
     expect(hook).toContain("pathname: '/screens/season/matchup'");
-    expect(hook).toContain("pathname: '/screens/season/live-mode'");
-    expect(hook).toContain("type === 'game_ready' && data.liveTimeline");
+    expect(hook).toContain("pathname: '/screens/season/game-result'");
+    expect(hook).not.toContain("pathname: '/screens/season/live-mode'");
     expect(hook).toContain("pathname: '/screens/season/calendar'");
     expect(hook).toContain("pathname: '/screens/season/injuries'");
     expect(hook).toContain("pathname: '/screens/offseason'");
@@ -248,9 +248,9 @@ describe('source safety regressions', () => {
 
     expect(notifications).toContain('routeNotification');
     expect(notifications).toContain("pathname: '/screens/season/matchup'");
-    expect(notifications).toContain("pathname: '/screens/season/live-mode'");
-    expect(notifications).toContain("type === 'game_ready' && n.liveTimeline");
-    expect(notifications).toContain("if (type === 'game_ready') return 'Watch Live");
+    expect(notifications).toContain("pathname: '/screens/season/game-result'");
+    expect(notifications).not.toContain("pathname: '/screens/season/live-mode'");
+    expect(notifications).toContain("if (type === 'game_ready') return 'View Result");
     expect(notifications).toContain("pathname: '/screens/season/calendar'");
     expect(notifications).toContain("pathname: '/screens/season/injuries'");
     expect(notifications).toContain("pathname: '/screens/offseason/live-draft'");
@@ -429,7 +429,8 @@ describe('source safety regressions', () => {
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/game-result');
     expect(seasonLayout).toContain('game-result');
-    expect(calendar).toContain("item.status === 'final' ? '/screens/season/game-result'");
+    expect(calendar).toContain("item.status === 'final' || (item.liveTimeline && !resultRevealed)");
+    expect(calendar).toContain("? '/screens/season/game-result'");
     expect(hook).toContain("pathname: '/screens/season/game-result'");
     expect(notifications).toContain("pathname: '/screens/season/game-result'");
     expect(result).toContain('Final Score');
@@ -494,52 +495,24 @@ describe('source safety regressions', () => {
     expect(rotation).not.toContain("item.closing ? 'Closing' : null");
   });
 
-  it('exposes NBA live mode without in-game adjustment controls', () => {
+  it('removes the old Live Mode page and app route while preserving results', () => {
     const rootLayout = source('app/_layout.tsx');
     const seasonLayout = source('app/screens/season/_layout.tsx');
-    const liveMode = source('app/screens/season/live-mode.tsx');
-
-    expect(rootLayout).toContain('screens/season');
-    expect(rootLayout).not.toContain('screens/season/live-mode');
-    expect(seasonLayout).toContain('live-mode');
-    expect(liveMode).toContain('liveTimeline');
-    expect(liveMode).toContain('arenaTheme');
-    expect(liveMode).toContain('currentTimelineEvent');
-    expect(liveMode).toContain('livePlayerStatsAt');
-    expect(liveMode).toContain('Matchups');
-    expect(liveMode).toContain('Event Feed');
-    expect(liveMode).not.toContain('Command Insights');
-    expect(liveMode).not.toContain('visibleCommandInsights');
-    expect(liveMode).not.toContain('commandInsightsForTimeline');
-    expect(liveMode).not.toContain("isBasketball ? 'Possession'");
-    expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
-    expect(liveMode).not.toContain('matchupChip');
-    expect(liveMode).toContain('See More Player Stats');
-    expect(liveMode).not.toContain('httpsCallable(functions');
-    expect(liveMode).not.toContain('Push Tempo');
-    expect(liveMode).not.toContain('Trap Star');
-  });
-
-  it('routes simulated games and timeline replays into live mode', () => {
     const matchup = source('app/screens/season/matchup.tsx');
     const calendar = source('app/screens/season/calendar.tsx');
     const result = source('app/screens/season/game-result.tsx');
-    const liveMode = source('app/screens/season/live-mode.tsx');
 
-    expect(matchup).toContain('/screens/season/live-mode');
-    expect(calendar).toContain('/screens/season/live-mode');
-    expect(result).toContain('/screens/season/live-mode');
-    expect(liveMode).toContain('replayStartedAtMs');
-    expect(liveMode).toContain('playableLiveTimeline');
-    expect(liveMode).toContain("'liveTimelines', gameId");
-    expect(liveMode).toContain('waitingForStoredTimeline');
-    expect(liveMode).toContain('Loading detailed replay events...');
-    expect(liveMode).toContain('liveTimeline?.events?.filter');
-    expect(liveMode).toContain('safeElapsedMs(game, liveTimeline, liveMode, nowMs, replayStartedAtMs)');
-    expect(liveMode).toContain('const replayStartMs = Number(replayStartedAtMs || 0);');
-    expect(liveMode.indexOf('const replayStartMs = Number(replayStartedAtMs || 0);')).toBeLessThan(
-      liveMode.indexOf('const startedAt = replayStartMs > 0'),
-    );
+    expect(rootLayout).toContain('screens/season');
+    expect(rootLayout).not.toContain('screens/season/live-mode');
+    expect(seasonLayout).not.toContain('live-mode');
+    expect(existsSync(resolve(root, 'app/screens/season/live-mode.tsx'))).toBe(false);
+    expect(existsSync(resolve(root, 'components/season/NbaBroadcastLiveMode.tsx'))).toBe(false);
+    expect(existsSync(resolve(root, 'components/season/NbaLiveVisualBoard.tsx'))).toBe(false);
+    expect(matchup).not.toContain('/screens/season/live-mode');
+    expect(calendar).not.toContain('/screens/season/live-mode');
+    expect(result).not.toContain('/screens/season/live-mode');
+    expect(matchup).toContain('/screens/season/game-result');
+    expect(calendar).toContain('/screens/season/game-result');
     expect(matchup).toContain("const responseData = response.data as any;");
     expect(matchup).toContain("responseData?.status === 'final' && responseData?.liveTimeline");
     expect(matchup).toContain("name === 'requestMatchup'");
@@ -550,11 +523,8 @@ describe('source safety regressions', () => {
     expect(matchup).not.toContain('homePlayers: [{ playerId:');
     expect(matchup).not.toContain('buildLiveTimeline');
     expect(calendar).toContain('const resultRevealed = isLiveResultRevealed(item, nowMs);');
-    expect(calendar).toContain("const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;");
-    expect(calendar).not.toContain('replayStartedAtMs: String(Date.now())');
     expect(result).toContain('!resultVisible');
     expect(result).toContain('The final score unlocks when the live simulation reaches the final buzzer.');
-    expect(result).toContain('replayStartedAtMs: String(Date.now())');
   });
 
   it('lets commissioners reset finalized games from the result screen', () => {
@@ -577,19 +547,11 @@ describe('source safety regressions', () => {
 
   it('labels overtime periods on the result screen', () => {
     const result = source('app/screens/season/game-result.tsx');
-    const liveMode = source('app/screens/season/live-mode.tsx');
     const periods = source('domain/sports/gamePeriods.ts');
 
     expect(result).toContain("from '@/domain/sports/gamePeriods'");
     expect(result).toContain('scorePeriodsForSport(sport, game)');
     expect(result).toContain('periodTableTitle(sport)');
-    expect(liveMode).toContain("from '@/domain/sports/gamePeriods'");
-    expect(liveMode).toContain('scorePeriodsForSport(sport, liveTimeline?.periods?.length');
-    expect(liveMode).toContain('periodLabelForSport(sport, { period: 1 })');
-    expect(liveMode).toContain('Event Feed');
-    expect(liveMode).not.toContain("sport === 'mlb' ? 'Current Swing' : 'Current Drive'");
-    expect(liveMode).not.toContain('fallbackPeriodLabel');
-    expect(liveMode).not.toContain("displayedPeriods[0]?.label || 'Q1'");
     expect(periods).toContain("return value === 5 ? 'OT'");
     expect(periods).toContain("if (sport === 'mlb') return ordinal");
   });
@@ -1133,15 +1095,6 @@ describe('source safety regressions', () => {
     expect(profileSetup).not.toContain('profileData = {\n        uid: user.uid,\n        preferredLanguage');
   });
 
-  it('renders Live Mode player stats as starter head-to-head matchups', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-
-    expect(liveMode).toContain('starterMatchupsForTimeline');
-    expect(liveMode).toContain('See More Player Stats');
-    expect(liveMode).toContain('Matchups');
-    expect(liveMode).not.toContain(['Starter', 'Matchups'].join(' '));
-  });
-
   it('keeps coaching game plans to sport-aware preset selection', () => {
     const coaching = source('app/screens/season/coaching-presets.tsx');
 
@@ -1429,40 +1382,6 @@ describe('source safety regressions', () => {
     expect(scouting).not.toContain('abbr={item.opponentTeamId}');
   });
 
-  it('keeps live mode logos scoped to the visual board header', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const board = source('components/season/NbaLiveVisualBoard.tsx');
-
-    expect(liveMode).not.toContain("import SportTeamLogo");
-    expect(liveMode).toContain('LiveTeamBadge');
-    expect(board).toContain("import SportTeamLogo");
-    expect(board).toContain('<SportTeamLogo');
-  });
-
-  it('renders NBA Live Mode through the authentic visual board component', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const board = source('components/season/NbaLiveVisualBoard.tsx');
-
-    expect(liveMode).toContain('NbaLiveVisualBoard');
-    expect(liveMode).toContain('isFinal={resultVisible || currentEvent?.eventType ===');
-    expect(board).toContain('react-native-svg');
-    expect(board).toContain('buildBasketballMotionFrame');
-    expect(board).toContain('motionFrame');
-    expect(board).toContain('isFinal');
-    expect(board).toContain('if (isFinal) return');
-    expect(board).toContain('scorePop');
-    expect(board).toContain('+2');
-    expect(board).toContain('+3');
-    expect(board).not.toContain('pathStart');
-    expect(board).not.toContain('state.ball.x + 31');
-    expect(board).not.toContain('KNICKS');
-    expect(board).not.toContain('GRIZZLIES');
-    expect(board).not.toContain('Visual play event');
-    expect(board).not.toContain('Coaching identity');
-    expect(board).not.toContain('Counter style');
-    expect(board).not.toContain('coachRow');
-  });
-
   it('does not show raw schedule ids in launch summary rows', () => {
     const awards = source('app/screens/season/awards.tsx');
     const offseason = source('app/screens/offseason/index.tsx');
@@ -1476,123 +1395,6 @@ describe('source safety regressions', () => {
     expect(expansion).toContain('displayScheduleAbbr(pick.sourceTeamId)');
     expect(expansion).not.toContain('{teamId}</Text>');
     expect(expansion).not.toContain('from {pick.sourceTeamId}');
-  });
-
-  it('renders NBA broadcast live mode with crowd, jumbotron, and player actors', () => {
-    const sourceText = source('components/season/NbaBroadcastLiveMode.tsx');
-
-    expect(sourceText).toContain('Jumbotron');
-    expect(sourceText).toContain('crowd');
-    expect(sourceText).toContain('BroadcastActor');
-    expect(sourceText).toContain('buildBroadcastMotionFrame');
-    expect(sourceText).toContain('seatRows');
-    expect(sourceText).toContain('backboard');
-    expect(sourceText).toContain('spotlight');
-    expect(sourceText).toContain('broadcastFloor');
-    expect(sourceText).toContain('postgameStage');
-    expect(sourceText).toContain('Locker');
-  });
-
-  it('keeps game details below the broadcast arena instead of above the visual', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const broadcastIndex = liveMode.indexOf('<NbaBroadcastLiveMode');
-    const eventFeedIndex = liveMode.indexOf('<Text style={styles.panelTitle}>Event Feed</Text>');
-    const matchupIndex = liveMode.indexOf('<Text style={styles.panelTitle}>Matchups</Text>');
-
-    expect(broadcastIndex).toBeGreaterThan(-1);
-    expect(eventFeedIndex).toBeGreaterThan(broadcastIndex);
-    expect(matchupIndex).toBeGreaterThan(eventFeedIndex);
-  });
-
-  it('uses NBA broadcast live mode while preserving the visual board fallback', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-
-    expect(liveMode).toContain('NbaBroadcastLiveMode');
-    expect(liveMode).toContain('buildBroadcastActorsForLineup');
-    expect(liveMode).toContain('NbaLiveVisualBoard');
-    expect(liveMode).toContain('elapsedAfterFinalMs');
-  });
-
-  it('does not hide NBA broadcast mode behind the stored timeline loading gate', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const broadcastIndex = liveMode.indexOf('<NbaBroadcastLiveMode');
-    const loadingIndex = liveMode.indexOf('Loading detailed replay events...');
-
-    expect(broadcastIndex).toBeGreaterThan(-1);
-    expect(loadingIndex).toBeGreaterThan(-1);
-    expect(broadcastIndex).toBeLessThan(loadingIndex);
-    expect(liveMode).not.toContain('isBasketball && !waitingForStoredTimeline ? (');
-  });
-
-  it('does not leave live mode on a black spinner-only loading screen', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-
-    expect(liveMode).toContain('loadingTimedOut');
-    expect(liveMode).toContain('Loading broadcast arena');
-    expect(liveMode).not.toContain('return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;');
-  });
-
-  it('does not show placeholder matchup players when final replay details are missing', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-
-    expect(liveMode).toContain('fallbackMatchupsFromTeams');
-    expect(liveMode).toContain('hasDetailedReplay');
-    expect(liveMode).toContain('Detailed replay feed is unavailable for this sim.');
-    expect(liveMode).not.toContain("name: away[index]?.name || 'Away Player'");
-    expect(liveMode).not.toContain("name: home[index]?.name || 'Home Player'");
-  });
-
-  it('shows final state in broadcast mode when a result exists without replay events', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
-
-    expect(liveMode).toContain('broadcastEvent');
-    expect(liveMode).toContain("eventType: 'final_buzzer'");
-    expect(liveMode).toContain('Detailed replay unavailable.');
-    expect(liveMode).toContain('event={broadcastEvent}');
-    expect(liveMode).toContain("period={broadcastEvent?.eventType === 'final_buzzer' ? 'Final'");
-    expect(broadcast).not.toContain('{awayScore}</SvgText>');
-    expect(broadcast).not.toContain('{homeScore}</SvgText>');
-  });
-
-  it('keeps broadcast motion Rive-ready with stable animation states', () => {
-    const motion = source('domain/nba/broadcastMotion.ts');
-    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
-
-    expect(motion).toContain('BroadcastRiveState');
-    expect(motion).toContain('BroadcastAnimationMoment');
-    expect(motion).toContain('riveStateFor');
-    expect(motion).toContain("'poster_fall'");
-    expect(motion).toContain("'stumble_fall'");
-    expect(motion).toContain("'runout_dribble'");
-    expect(motion).toContain("'deep_three_release'");
-    expect(broadcast).toContain('player.riveState');
-  });
-
-  it('renders broadcast players through side-view stage anchors instead of raw court coordinates', () => {
-    const motion = source('domain/nba/broadcastMotion.ts');
-    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
-
-    expect(motion).toContain('BroadcastStageAnchor');
-    expect(motion).toContain('stageAnchorFor');
-    expect(motion).toContain('zIndex');
-    expect(broadcast).toContain('stagedPlayers');
-    expect(broadcast).toContain('player.stage.scale');
-    expect(broadcast).toContain('a.stage.zIndex - b.stage.zIndex');
-    expect(broadcast).toContain('Ellipse');
-    expect(broadcast).not.toContain('stageY(34 + player.y * 0.34)');
-  });
-
-  it('keeps NBA broadcast mode portrait-first and avoids endless replay loading', () => {
-    const liveMode = source('app/screens/season/live-mode.tsx');
-    const broadcast = source('components/season/NbaBroadcastLiveMode.tsx');
-
-    expect(broadcast).toContain('ARENA_VIEWBOX_HEIGHT = 128');
-    expect(broadcast).toContain('boardWidth * 1.28');
-    expect(broadcast).toContain('viewBox={`0 0 100 ${ARENA_VIEWBOX_HEIGHT}`}');
-    expect(liveMode).toContain('replayWaitTimedOut');
-    expect(liveMode).toContain('replayStillLoading');
-    expect(liveMode).toContain('Detailed replay feed is not available yet.');
   });
 
   it('centers compact award marks in the trophy case', () => {

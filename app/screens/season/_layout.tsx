@@ -12,7 +12,6 @@ export default function SeasonLayout() {
       <Stack.Screen name="development-league" />
       <Stack.Screen name="injuries" />
       <Stack.Screen name="matchup" />
-      <Stack.Screen name="live-mode" />
       <Stack.Screen name="game-result" />
       <Stack.Screen name="rotation" />
       <Stack.Screen name="coaching-presets" />

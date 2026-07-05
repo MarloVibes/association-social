@@ -579,8 +579,9 @@ export default function CalendarScreen() {
                       : item.status === 'simulating'
                         ? 'Sim'
                         : 'Open';
-              const resultDestination = item.status === 'final' ? '/screens/season/game-result' : '/screens/season/matchup';
-              const destination = item.liveTimeline && !resultRevealed ? '/screens/season/live-mode' : resultDestination;
+              const destination = item.status === 'final' || (item.liveTimeline && !resultRevealed)
+                ? '/screens/season/game-result'
+                : '/screens/season/matchup';
               return (
                 <TouchableOpacity
                   key={item.id}

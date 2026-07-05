@@ -299,11 +299,11 @@ export default function MatchupScreen() {
       const response = await fn({ leagueId, gameId, competition: competitionParam });
       const responseData = response.data as any;
       if (name === 'simulateScheduledGame') {
-        router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
+        router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
         return;
       }
       if (name === 'requestMatchup' && responseData?.status === 'final' && responseData?.liveTimeline) {
-        router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
+        router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
       }
     } catch (error: any) {
       if (name === 'simulateScheduledGame' && isMissingCallable(error)) {
@@ -330,7 +330,7 @@ export default function MatchupScreen() {
     try {
       const fn = httpsCallable(functions, 'reportGameScore');
       await fn({ leagueId, gameId, competition: isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular', winnerTeamId });
-      router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } });
+      router.replace({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition: competitionParam } });
     } catch (error: any) {
       if (isMissingCallable(error) && isLeagueAdmin) {
         Alert.alert('Result unavailable', 'Winner selection needs the latest cloud functions so the box score and player stats stay synced. Deploy functions, then try again.');
@@ -510,7 +510,7 @@ export default function MatchupScreen() {
                 {canReportScore && game && (
                   <View style={styles.winnerEntry}>
                     <Text style={styles.winnerEntryTitle}>Choose Winner</Text>
-                    <Text style={styles.winnerEntryHelp}>The sim engine will create the final score, box score, and Live Mode replay.</Text>
+                    <Text style={styles.winnerEntryHelp}>The sim engine will create the final score and box score.</Text>
                     <View style={styles.winnerButtonRow}>
                       <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
                         <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.awayTeamId)} Wins</Text>

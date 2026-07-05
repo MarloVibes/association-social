@@ -329,7 +329,6 @@ export default function GameResultScreen() {
       || (league.coCommissioners || []).includes(uid)
     ),
   );
-  const showLiveReplay = Boolean(game?.liveTimeline);
   const resultVisible = isLiveResultRevealed(game, nowMs);
 
   const resetGame = () => {
@@ -372,7 +371,7 @@ export default function GameResultScreen() {
           </TouchableOpacity>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>{isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'League'}</Text>
-            <Text style={styles.title}>{resultVisible ? 'Final Score' : 'Live Mode'}</Text>
+            <Text style={styles.title}>{resultVisible ? 'Final Score' : 'Simulation'}</Text>
           </View>
         </View>
 
@@ -381,16 +380,9 @@ export default function GameResultScreen() {
         ) : !resultVisible ? (
           <>
             <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Live Mode in progress</Text>
+              <Text style={styles.panelTitle}>Simulation in progress</Text>
               <Text style={styles.story}>The final score unlocks when the live simulation reaches the final buzzer.</Text>
             </View>
-            <TouchableOpacity
-              onPress={() => router.replace({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam } })}
-              style={styles.replayButton}
-            >
-              <Ionicons color="#06130c" name="play" size={17} />
-              <Text style={styles.replayButtonText}>Watch Live Mode</Text>
-            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -414,15 +406,6 @@ export default function GameResultScreen() {
                 <Text style={styles.teamScore}>{stat(game.homeScore)}</Text>
               </View>
             </View>
-            {showLiveReplay ? (
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition: competitionParam, replayStartedAtMs: String(Date.now()) } })}
-                style={styles.replayButton}
-              >
-                <Ionicons color="#06130c" name="play" size={17} />
-                <Text style={styles.replayButtonText}>Replay Live Mode</Text>
-              </TouchableOpacity>
-            ) : null}
             {isLeagueAdmin && game.status === 'final' ? (
               <TouchableOpacity
                 disabled={resetting}
@@ -590,8 +573,6 @@ const styles = StyleSheet.create({
   scoreText: { color: '#fff', fontSize: 13, fontWeight: '900', textAlign: 'center' },
   status: { color: '#777', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   panel: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 14, marginBottom: 14 },
-  replayButton: { minHeight: 44, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 14 },
-  replayButtonText: { color: '#06130c', fontSize: 13, fontWeight: '900' },
   resetButton: { minHeight: 44, borderRadius: 8, backgroundColor: '#2a0c0c', borderWidth: 1, borderColor: '#ff5c5c88', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 14 },
   resetButtonDisabled: { opacity: 0.6 },
   resetButtonText: { color: '#fff', fontSize: 13, fontWeight: '900' },

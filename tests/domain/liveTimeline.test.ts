@@ -52,7 +52,7 @@ const baseInput: LiveTimelineInput = {
   ],
 };
 
-describe('Live Mode timeline', () => {
+describe('Live simulation timeline', () => {
   it('generates a deterministic score timeline that ends at the final score', () => {
     const first = buildLiveTimeline(baseInput);
     const second = buildLiveTimeline(baseInput);

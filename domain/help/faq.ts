@@ -27,8 +27,8 @@ export function getHelpFaqSections(): HelpFaqSection[] {
       title: 'Gameplay',
       items: [
         {
-          question: 'What is Live Mode?',
-          answer: 'Live Mode lets you watch a game unfold possession by possession. Final results should only appear after the live sim finishes.',
+          question: 'How do simulated games work?',
+          answer: 'The sim engine creates the score and box score. Final results stay locked until the simulation reveal window finishes.',
         },
         {
           question: 'How do player grades work?',

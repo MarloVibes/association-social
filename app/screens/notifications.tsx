@@ -51,7 +51,7 @@ function routeNotification(n: any) {
     if (n.deadlineKind === 'trade') router.push({ pathname: '/screens/trade-channel', params: { leagueId, channelId: 'trade-center' } });
     else router.push({ pathname: '/screens/season/contracts' as any, params: { leagueId } });
   } else if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) {
-    if (gameId && type === 'game_ready' && n.liveTimeline) router.push({ pathname: '/screens/season/live-mode', params: { leagueId, gameId, competition } });
+    if (gameId && type === 'game_ready') router.push({ pathname: '/screens/season/game-result', params: { leagueId, gameId, competition } });
     else if (gameId) router.push({ pathname: '/screens/season/matchup', params: { leagueId, gameId, competition } });
     else router.push({ pathname: '/screens/season/calendar', params: { leagueId } });
   } else if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) {
@@ -117,7 +117,7 @@ function notificationActionLabel(type: string) {
   if (type === 'injury_update') return 'View Injuries →';
   if (type === 'extension_interest' || type === 'extension_offer_submitted') return 'View Contract →';
   if (type === 'contract_deadline') return 'Review Deadline →';
-  if (type === 'game_ready') return 'Watch Live →';
+  if (type === 'game_ready') return 'View Result →';
   if (['matchup_request', 'matchup_accepted', 'game_ready'].includes(type)) return 'View Matchup →';
   if (['schedule_created', 'schedule_updated', 'nba_cup', 'nba_cup_advanced', 'game_reset'].includes(type)) return 'View Calendar →';
   if (['draft_started', 'draft_pick', 'draft_auto_pick', 'draft_turn'].includes(type)) return 'View Draft →';
