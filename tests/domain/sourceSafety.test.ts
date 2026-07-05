@@ -928,6 +928,8 @@ describe('source safety regressions', () => {
     expect(developmentLeague).toContain("httpsCallable(functions, 'completeDevelopmentAssignment')");
     expect(functionsIndex).toContain('exports.startDevelopmentAssignment');
     expect(functionsIndex).toContain('exports.completeDevelopmentAssignment');
+    expect(functionsIndex).toContain('exports.startDevelopmentAssignment = onCall(upgradeFunctionOptions');
+    expect(functionsIndex).toContain('exports.completeDevelopmentAssignment = onCall(upgradeFunctionOptions');
   });
 
   it('does not show raw player OVR labels in NBA franchise management screens', () => {

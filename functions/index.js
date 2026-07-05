@@ -608,12 +608,12 @@ exports.applyUpgradeGrants = onCall(upgradeFunctionOptions, createApplyUpgradeGr
   FieldValue,
 }));
 
-exports.startDevelopmentAssignment = onCall(createStartDevelopmentAssignmentHandler({
+exports.startDevelopmentAssignment = onCall(upgradeFunctionOptions, createStartDevelopmentAssignmentHandler({
   getFirestore,
   HttpsError,
 }));
 
-exports.completeDevelopmentAssignment = onCall(createCompleteDevelopmentAssignmentHandler({
+exports.completeDevelopmentAssignment = onCall(upgradeFunctionOptions, createCompleteDevelopmentAssignmentHandler({
   getFirestore,
   HttpsError,
 }));
