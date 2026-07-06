@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import SportBackground from '@/components/channel/SportBackground';
+import { channelReadKey, countUnreadChannelMessages, formatUnreadBadge } from '@/domain/channel/unread';
 
 type RoomAction = {
   label: string;
@@ -161,6 +162,8 @@ export default function ChannelsScreen() {
   const [resolvedCommissionerId, setResolvedCommissionerId] = useState(commissionerId || '');
   const [resolvedCoCommissioners, setResolvedCoCommissioners] = useState<string[]>(parseCoCommissioners(coCommissioners));
   const [activeRoomTitle, setActiveRoomTitle] = useState('GM Lounge');
+  const [leagueChatMessages, setLeagueChatMessages] = useState<{ uid?: string | null; createdAtMs?: number | null }[]>([]);
+  const [leagueChatLastOpenedAtMs, setLeagueChatLastOpenedAtMs] = useState<number | null>(null);
   const isCommOrCoComm = user?.uid === resolvedCommissionerId || resolvedCoCommissioners.includes(user?.uid || '');
   const isNba = resolvedSport === 'nba';
   const rooms = useMemo(() => commandRooms(isCommOrCoComm), [isCommOrCoComm]);
@@ -171,6 +174,11 @@ export default function ChannelsScreen() {
     }))
     .filter(room => room.actions.length > 0), [isNba, rooms]);
   const activeRoom = visibleRooms.find(room => room.title === activeRoomTitle) || visibleRooms[0];
+  const leagueChatUnreadCount = countUnreadChannelMessages(leagueChatMessages, {
+    currentUserId: user?.uid,
+    lastOpenedAtMs: leagueChatLastOpenedAtMs,
+  });
+  const leagueChatUnreadBadge = formatUnreadBadge(leagueChatUnreadCount);
 
   useEffect(() => {
     let active = true;
@@ -194,6 +202,40 @@ export default function ChannelsScreen() {
       setActiveRoomTitle(activeRoom.title);
     }
   }, [activeRoom, activeRoomTitle, visibleRooms]);
+
+  useEffect(() => {
+    if (!leagueId || !user?.uid) return;
+    const readKey = channelReadKey(leagueId, 'league-chat');
+    const unsub = onSnapshot(doc(db, 'users', user.uid), snapshot => {
+      const readState = snapshot.data()?.channelReads?.[readKey];
+      const lastOpenedAt = readState?.lastOpenedAt;
+      setLeagueChatLastOpenedAtMs(typeof lastOpenedAt?.toMillis === 'function' ? lastOpenedAt.toMillis() : null);
+    }, error => {
+      console.warn('league chat read state failed', error);
+    });
+    return () => unsub();
+  }, [leagueId, user?.uid]);
+
+  useEffect(() => {
+    if (!leagueId || !user?.uid) return;
+    const leagueChatQuery = query(
+      collection(db, 'leagues', leagueId, 'channels', 'league-chat', 'messages'),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    );
+    const unsub = onSnapshot(leagueChatQuery, snapshot => {
+      setLeagueChatMessages(snapshot.docs.map(messageDoc => {
+        const message = messageDoc.data();
+        return {
+          uid: message.uid || null,
+          createdAtMs: typeof message.createdAt?.toMillis === 'function' ? message.createdAt.toMillis() : null,
+        };
+      }));
+    }, error => {
+      if (error.code !== 'permission-denied') console.warn('league chat unread load failed', error);
+    });
+    return () => unsub();
+  }, [leagueId, user?.uid]);
 
   const openChannel = (action: RoomAction) => {
     const label = action.label === 'News Board' ? 'League News' : action.label;
@@ -260,7 +302,7 @@ export default function ChannelsScreen() {
             {[
               { label: 'Trade', icon: 'swap-horizontal-outline' as const, action: rooms.flatMap(room => room.actions).find(item => item.kind === 'trade') },
               { label: 'Calendar', icon: 'calendar-outline' as const, action: rooms.flatMap(room => room.actions).find(item => item.label === 'Calendar') },
-              { label: 'GM Lounge', icon: 'people-outline' as const, action: rooms.flatMap(room => room.actions).find(item => item.label === 'League Chat') },
+              { label: 'GM Lounge', icon: 'people-outline' as const, action: rooms.flatMap(room => room.actions).find(item => item.label === 'League Chat'), badge: leagueChatUnreadBadge },
             ].map(item => (
               <TouchableOpacity
                 key={item.label}
@@ -270,6 +312,11 @@ export default function ChannelsScreen() {
               >
                 <Ionicons color="#00e58b" name={item.icon} size={16} />
                 <Text style={styles.quickText}>{item.label}</Text>
+                {item.badge ? (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{item.badge}</Text>
+                  </View>
+                ) : null}
               </TouchableOpacity>
             ))}
           </View>
@@ -317,7 +364,14 @@ export default function ChannelsScreen() {
                       <Ionicons color={activeRoom.accent} name={action.icon} size={17} />
                     </View>
                     <View style={styles.actionCopy}>
-                      <Text style={styles.actionLabel}>{action.label}</Text>
+                      <View style={styles.actionLabelRow}>
+                        <Text style={styles.actionLabel}>{action.label}</Text>
+                        {action.id === 'league-chat' && leagueChatUnreadBadge ? (
+                          <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadBadgeText}>{leagueChatUnreadBadge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <Text style={styles.actionDesc} numberOfLines={2}>{action.desc}</Text>
                     </View>
                     <Ionicons color="#555" name="chevron-forward" size={17} />
@@ -352,6 +406,8 @@ const styles = StyleSheet.create({
   quickButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b44', backgroundColor: '#08160f', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   quickButtonDisabled: { opacity: 0.35 },
   quickText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
+  unreadBadgeText: { color: '#06130c', fontSize: 10, fontWeight: '900' },
   commandDeck: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   roomRail: { width: 112, gap: 8 },
   roomRailItem: { minHeight: 68, borderRadius: 8, borderWidth: 1, borderColor: '#222', backgroundColor: 'rgba(10,10,10,0.94)', padding: 9, justifyContent: 'space-between' },
@@ -367,6 +423,7 @@ const styles = StyleSheet.create({
   actionCard: { minHeight: 62, borderRadius: 8, backgroundColor: '#080808', borderWidth: 1, borderColor: '#232323', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
   actionIcon: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#141414' },
   actionCopy: { flex: 1 },
+  actionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   actionLabel: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
   actionDesc: { color: '#777', fontSize: 10, fontWeight: '700', lineHeight: 14, marginTop: 2 },
 });

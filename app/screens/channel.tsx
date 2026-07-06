@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc, collection, doc, getDoc, onSnapshot,
-  orderBy, query, serverTimestamp, updateDoc, arrayUnion, increment, deleteField, deleteDoc, getDocs, where } from 'firebase/firestore';
+  orderBy, query, serverTimestamp, setDoc, updateDoc, arrayUnion, increment, deleteField, deleteDoc, getDocs, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
 import { auth, db } from '@/constants/firebase';
 import { blockAndReport } from '@/constants/moderation';
 import SportBackground from '@/components/channel/SportBackground';
+import { channelReadKey } from '@/domain/channel/unread';
 import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 
 const GIPHY_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY;
@@ -144,6 +145,18 @@ export default function ChannelScreen() {
   // Channels that use chat-style messages
   const isChatChannel = ['league-chat', 'trade-talk', 'trade-block', 'announcements'].includes(channelId);
   const canPost = channelId === 'announcements' ? isCommOrCoComm : true;
+
+  useEffect(() => {
+    if (!user?.uid || !leagueId || !channelId || !isChatChannel) return;
+    const readKey = channelReadKey(leagueId, channelId);
+    setDoc(
+      doc(db, 'users', user.uid),
+      { channelReads: { [readKey]: { lastOpenedAt: serverTimestamp() } } },
+      { merge: true },
+    ).catch(error => {
+      console.warn('channel read marker failed', error);
+    });
+  }, [channelId, isChatChannel, leagueId, user?.uid]);
 
   useEffect(() => {
     loadMembers();

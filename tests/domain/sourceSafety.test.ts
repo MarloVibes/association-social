@@ -332,6 +332,20 @@ describe('source safety regressions', () => {
     expect(channel).toContain('renderMentionDropdown');
   });
 
+  it('shows an in-app unread badge for League Chat and resets it on open', () => {
+    const channels = source('app/screens/channels.tsx');
+    const channel = source('app/screens/channel.tsx');
+
+    expect(channels).toContain('countUnreadChannelMessages');
+    expect(channels).toContain('formatUnreadBadge');
+    expect(channels).toContain('leagueChatUnreadBadge');
+    expect(channels).toContain('styles.unreadBadge');
+    expect(channels).toContain("action.id === 'league-chat' && leagueChatUnreadBadge");
+    expect(channel).toContain('channelReadKey(leagueId, channelId)');
+    expect(channel).toContain('lastOpenedAt: serverTimestamp()');
+    expect(channel).toContain('{ merge: true }');
+  });
+
   it('separates Team Player Stats from League Stats in Stats and Standings', () => {
     const channels = source('app/screens/channels.tsx');
     const standings = source('app/screens/season/standings.tsx');
