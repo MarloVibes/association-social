@@ -100,6 +100,7 @@ type BoxScorePlayer = {
 
 function prepPhaseLabels(sport: 'nba' | 'madden' | 'mlb') {
   if (sport === 'mlb') return ['Early', 'Late'];
+  if (sport === 'nba') return ['OFF', 'DEF'];
   return ['1H', '2H'];
 }
 
@@ -524,7 +525,7 @@ export default function MatchupScreen() {
                 {myTeam && (
                   <View style={styles.prepHeader}>
                     <Text style={styles.sectionTitle}>Private Game Prep</Text>
-                    <Text style={styles.prepHelp}>Pick an opening plan and a matchup adjustment.</Text>
+                    <Text style={styles.prepHelp}>{sport === 'nba' ? 'Pick one offense and one defense before tipoff.' : 'Pick an opening plan and a matchup adjustment.'}</Text>
                   </View>
                 )}
               </>

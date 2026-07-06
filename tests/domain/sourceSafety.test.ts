@@ -1214,8 +1214,10 @@ describe('source safety regressions', () => {
     expect(coaching).toContain('phaseLabels[0]');
     expect(coaching).toContain('phaseLabels[1]');
     expect(coaching).toContain("['Early Game', 'Late Game']");
+    expect(coaching).toContain("['Offense', 'Defense']");
     expect(coaching).toContain("['Opening Plan', 'Adjustment Plan']");
     expect(coaching).toContain('matchup adjustment');
+    expect(coaching).toContain('Pick one offense and one defense.');
     expect(coaching).toContain('Save Game Plan');
     expect(coaching).toContain('halfCourtPreview');
     expect(coaching).not.toContain('halftime adjustment');
@@ -1455,6 +1457,7 @@ describe('source safety regressions', () => {
     expect(coachingScreen).not.toContain('Coaching presets are only available for NBA leagues.');
     expect(matchup).toContain("from '@/domain/sports/coachingPresets'");
     expect(matchup).toContain('matchup adjustment');
+    expect(matchup).toContain("['OFF', 'DEF']");
     expect(matchup).not.toContain('halftime adjustment');
     expect(matchup).not.toContain('const NFL_GAME_PRESETS');
     expect(matchup).not.toContain('const MLB_GAME_PRESETS');

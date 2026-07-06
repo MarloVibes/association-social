@@ -38,6 +38,12 @@ describe('NBA coaching presets', () => {
       'pick_and_roll',
       'motion_offense',
       'half_court_press',
+      'star_isolation',
+      'post_inside',
+      'transition_pace',
+      'switch_everything',
+      'double_star',
+      'protect_paint',
     ]));
     expect(COACHING_PRESETS.every(preset => validateCoachingPreset(preset).valid)).toBe(true);
   });

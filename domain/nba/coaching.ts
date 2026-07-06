@@ -124,6 +124,36 @@ export const COACHING_PRESETS: CoachingPreset[] = [
     counters: ['pressure', 'zone'],
   },
   {
+    id: 'star_isolation',
+    name: 'Star Isolation',
+    description: 'Clears a side for the top creator to attack one-on-one, draw help, and bend the defense late in the clock.',
+    boostSummary: 'Boosts handle, midrange, finishing, free throws, and clutch creation for high-usage scorers. It loses value when a defense commits to doubling the star.',
+    offense: 'isolation',
+    defense: 'drop',
+    modifiers: { pace: -4, threePointRate: -2, rimPressure: 5, midrangeRate: 8, turnovers: 1, fouls: 3, rebounding: -1, fatigue: 4 },
+    counters: ['switch_heavy', 'protect_paint'],
+  },
+  {
+    id: 'post_inside',
+    name: 'Post / Inside',
+    description: 'Plays through size, post seals, duck-ins, offensive glass, and paint touches.',
+    boostSummary: 'Boosts post offense, strength, rebounding, close shot, and foul pressure. It punishes switching, but packed paint defenses can slow it down.',
+    offense: 'post_heavy',
+    defense: 'protect_paint',
+    modifiers: { pace: -6, threePointRate: -6, rimPressure: 9, midrangeRate: 1, turnovers: -2, fouls: 4, rebounding: 8, fatigue: 3 },
+    counters: ['switch_heavy', 'drop'],
+  },
+  {
+    id: 'transition_pace',
+    name: 'Transition Pace',
+    description: 'Runs after stops, pushes early offense, and tries to score before the defense is organized.',
+    boostSummary: 'Boosts pace, speed, rim pressure, transition threes, and stamina for athletic lineups. Pressure and extended 3-2 looks can knock it off rhythm.',
+    offense: 'pace_and_space',
+    defense: 'switch_heavy',
+    modifiers: { pace: 10, threePointRate: 5, rimPressure: 7, midrangeRate: -5, turnovers: 4, fouls: 2, rebounding: -2, fatigue: 7 },
+    counters: ['drop', 'protect_paint'],
+  },
+  {
     id: 'half_court_press',
     name: 'Half Court Press',
     description: 'Picks up early, shades ball handlers into traps, and tries to turn the middle of the floor into rushed decisions.',
@@ -131,6 +161,36 @@ export const COACHING_PRESETS: CoachingPreset[] = [
     offense: 'balanced',
     defense: 'pressure',
     modifiers: { pace: 5, threePointRate: 1, rimPressure: 1, midrangeRate: -1, turnovers: 8, fouls: 4, rebounding: -2, fatigue: 7 },
+    counters: ['drop'],
+  },
+  {
+    id: 'switch_everything',
+    name: 'Switch Everything',
+    description: 'Switches screens across the floor to flatten pick-and-rolls and keep pull-up shooters in front.',
+    boostSummary: 'Boosts perimeter defense, speed, help defense, and defensive IQ for versatile lineups. Post size can punish smaller switches.',
+    offense: 'balanced',
+    defense: 'switch_heavy',
+    modifiers: { pace: 1, threePointRate: -2, rimPressure: -1, midrangeRate: 1, turnovers: 3, fouls: 2, rebounding: -3, fatigue: 5 },
+    counters: ['drop', 'zone'],
+  },
+  {
+    id: 'double_star',
+    name: 'Double Star',
+    description: 'Loads help toward the opponent’s top scorer and forces the ball into secondary decisions.',
+    boostSummary: 'Boosts defensive IQ, help defense, steals, and pressure against star-heavy attacks. Motion and quick passing can punish the extra attention.',
+    offense: 'balanced',
+    defense: 'pressure',
+    modifiers: { pace: 0, threePointRate: 0, rimPressure: -1, midrangeRate: -2, turnovers: 6, fouls: 3, rebounding: -1, fatigue: 4 },
+    counters: ['drop'],
+  },
+  {
+    id: 'protect_paint',
+    name: 'Protect Paint',
+    description: 'Drops bigs, walls off drives, and makes opponents win with pull-ups or kickout shooting.',
+    boostSummary: 'Boosts rim protection, rebounding, interior defense, and foul control. Spacing and transition pace can pull it into uncomfortable areas.',
+    offense: 'balanced',
+    defense: 'protect_paint',
+    modifiers: { pace: -3, threePointRate: -1, rimPressure: -5, midrangeRate: 3, turnovers: 0, fouls: -2, rebounding: 7, fatigue: 1 },
     counters: ['drop'],
   },
 ];
@@ -299,6 +359,87 @@ export function getCoachingGradeAdjustments(presetId: string | null | undefined,
     } else {
       add(adjustments, 'midRange', -1);
       add(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'star_isolation') {
+    const fits = skill(player, 'ballHandle') >= 76 || skill(player, 'midRange') >= 76 || skill(player, 'freeThrow') >= 78 || skill(player, 'usage') >= 76;
+    if (fits) {
+      add(adjustments, 'ballHandle', 2);
+      add(adjustments, 'midRange', 1);
+      add(adjustments, 'freeThrow', 1);
+      add(adjustments, 'clutch', 1);
+      add(adjustments, 'finishing', 1);
+    } else {
+      add(adjustments, 'passing', -1);
+      add(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'post_inside') {
+    const fits = isBig(player) || skill(player, 'strength') >= 76 || skill(player, 'postOffense') >= 76 || skill(player, 'rebounding') >= 76;
+    if (fits) {
+      add(adjustments, 'postOffense', 2);
+      add(adjustments, 'strength', 1);
+      add(adjustments, 'closeShot', 1);
+      add(adjustments, 'rebounding', 1);
+      add(adjustments, 'freeThrow', 1);
+    } else {
+      add(adjustments, 'threePoint', -1);
+      add(adjustments, 'speed', -1);
+    }
+  }
+
+  if (id === 'transition_pace') {
+    const fits = skill(player, 'speed') >= 76 || skill(player, 'athleticism') >= 78 || skill(player, 'finishing') >= 76 || skill(player, 'stamina') >= 76;
+    if (fits) {
+      add(adjustments, 'speed', 2);
+      add(adjustments, 'athleticism', 1);
+      add(adjustments, 'finishing', 1);
+      add(adjustments, 'stamina', 1);
+      add(adjustments, 'threePoint', 1);
+    } else {
+      add(adjustments, 'turnovers', -1);
+      add(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'switch_everything') {
+    const fits = skill(player, 'perimeterDefense') >= 76 || skill(player, 'speed') >= 76 || skill(player, 'helpDefense') >= 76 || text.includes('defen');
+    if (fits) {
+      add(adjustments, 'perimeterDefense', 2);
+      add(adjustments, 'speed', 1);
+      add(adjustments, 'helpDefense', 1);
+      add(adjustments, 'defenseIq', 1);
+    } else {
+      add(adjustments, 'postDefense', -1);
+      add(adjustments, 'rebounding', -1);
+    }
+  }
+
+  if (id === 'double_star') {
+    const fits = skill(player, 'defenseIq') >= 76 || skill(player, 'helpDefense') >= 76 || skill(player, 'steals') >= 74 || text.includes('defen');
+    if (fits) {
+      add(adjustments, 'defenseIq', 2);
+      add(adjustments, 'helpDefense', 2);
+      add(adjustments, 'steals', 1);
+      add(adjustments, 'perimeterDefense', 1);
+    } else {
+      add(adjustments, 'fouls', -1);
+      add(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'protect_paint') {
+    const fits = isBig(player) || skill(player, 'blocking') >= 74 || skill(player, 'postDefense') >= 76 || skill(player, 'rebounding') >= 76;
+    if (fits) {
+      add(adjustments, 'blocking', 2);
+      add(adjustments, 'postDefense', 2);
+      add(adjustments, 'rebounding', 1);
+      add(adjustments, 'defense', 1);
+    } else {
+      add(adjustments, 'perimeterDefense', -1);
+      add(adjustments, 'speed', -1);
     }
   }
 

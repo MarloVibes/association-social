@@ -498,6 +498,105 @@ function coachingGradeAdjustmentsForPlayer(presetId, player) {
     }
   }
 
+  if (id === 'star_isolation') {
+    const fits = detailedPlayerSkill(player, 'ballHandle', ['playmaking']) >= 76
+      || detailedPlayerSkill(player, 'midRange', ['shooting']) >= 76
+      || detailedPlayerSkill(player, 'freeThrow', ['shooting']) >= 78
+      || playerSkill(player, 'usage') >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'ballHandle', 2);
+      addCoachingAdjustment(adjustments, 'midRange', 1);
+      addCoachingAdjustment(adjustments, 'freeThrow', 1);
+      addCoachingAdjustment(adjustments, 'clutch', 1);
+      addCoachingAdjustment(adjustments, 'finishing', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'passing', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'post_inside') {
+    const fits = coachingIsBig(player)
+      || detailedPlayerSkill(player, 'strength', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'postOffense', ['shooting']) >= 76
+      || playerSkill(player, 'rebounding') >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'postOffense', 2);
+      addCoachingAdjustment(adjustments, 'strength', 1);
+      addCoachingAdjustment(adjustments, 'closeShot', 1);
+      addCoachingAdjustment(adjustments, 'rebounding', 1);
+      addCoachingAdjustment(adjustments, 'freeThrow', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'threePoint', -1);
+      addCoachingAdjustment(adjustments, 'speed', -1);
+    }
+  }
+
+  if (id === 'transition_pace') {
+    const fits = detailedPlayerSkill(player, 'speed', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'athleticism') >= 78
+      || detailedPlayerSkill(player, 'finishing', ['shooting']) >= 76
+      || detailedPlayerSkill(player, 'stamina', ['athleticism']) >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'speed', 2);
+      addCoachingAdjustment(adjustments, 'athleticism', 1);
+      addCoachingAdjustment(adjustments, 'finishing', 1);
+      addCoachingAdjustment(adjustments, 'stamina', 1);
+      addCoachingAdjustment(adjustments, 'threePoint', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'turnovers', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'switch_everything') {
+    const fits = detailedPlayerSkill(player, 'perimeterDefense', ['defense']) >= 76
+      || detailedPlayerSkill(player, 'speed', ['athleticism']) >= 76
+      || detailedPlayerSkill(player, 'helpDefense', ['defense']) >= 76
+      || text.includes('defen');
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'perimeterDefense', 2);
+      addCoachingAdjustment(adjustments, 'speed', 1);
+      addCoachingAdjustment(adjustments, 'helpDefense', 1);
+      addCoachingAdjustment(adjustments, 'defenseIq', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'postDefense', -1);
+      addCoachingAdjustment(adjustments, 'rebounding', -1);
+    }
+  }
+
+  if (id === 'double_star') {
+    const fits = detailedPlayerSkill(player, 'defenseIq', ['defense']) >= 76
+      || detailedPlayerSkill(player, 'helpDefense', ['defense']) >= 76
+      || detailedPlayerSkill(player, 'steals', ['defense']) >= 74
+      || text.includes('defen');
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'defenseIq', 2);
+      addCoachingAdjustment(adjustments, 'helpDefense', 2);
+      addCoachingAdjustment(adjustments, 'steals', 1);
+      addCoachingAdjustment(adjustments, 'perimeterDefense', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'fouls', -1);
+      addCoachingAdjustment(adjustments, 'stamina', -1);
+    }
+  }
+
+  if (id === 'protect_paint') {
+    const fits = coachingIsBig(player)
+      || detailedPlayerSkill(player, 'blocking', ['defense']) >= 74
+      || detailedPlayerSkill(player, 'postDefense', ['defense']) >= 76
+      || playerSkill(player, 'rebounding') >= 76;
+    if (fits) {
+      addCoachingAdjustment(adjustments, 'blocking', 2);
+      addCoachingAdjustment(adjustments, 'postDefense', 2);
+      addCoachingAdjustment(adjustments, 'rebounding', 1);
+      addCoachingAdjustment(adjustments, 'defense', 1);
+    } else {
+      addCoachingAdjustment(adjustments, 'perimeterDefense', -1);
+      addCoachingAdjustment(adjustments, 'speed', -1);
+    }
+  }
+
   if (id === 'midrange_clinic') {
     const fits = detailedPlayerSkill(player, 'midRange', ['shooting']) >= 76
       || detailedPlayerSkill(player, 'shotIq', ['basketballIq']) >= 76
@@ -618,6 +717,12 @@ function coachingPresetIdForSide(game, side) {
   if (name.includes('3-2') || name.includes('32')) return 'zone_32';
   if (name.includes('pick') || name.includes('roll') || name.includes('lob') || name.includes('bully')) return 'pick_and_roll';
   if (name.includes('motion') || name.includes('triangle') || name.includes('midrange')) return 'motion_offense';
+  if (name.includes('star') || name.includes('iso')) return 'star_isolation';
+  if (name.includes('post') || name.includes('inside')) return 'post_inside';
+  if (name.includes('transition')) return 'transition_pace';
+  if (name.includes('switch')) return 'switch_everything';
+  if (name.includes('double')) return 'double_star';
+  if (name.includes('protect') || name.includes('paint')) return 'protect_paint';
   if (name.includes('press') || name.includes('blitz')) return 'half_court_press';
   if (name.includes('zone')) return 'zone_23';
   return 'balanced';
@@ -1308,6 +1413,12 @@ function coachingPresetLabel(value) {
     pick_and_roll: 'Pick and Roll',
     motion_offense: 'Motion Offense',
     half_court_press: 'Half Court Press',
+    star_isolation: 'Star Isolation',
+    post_inside: 'Post / Inside',
+    transition_pace: 'Transition Pace',
+    switch_everything: 'Switch Everything',
+    double_star: 'Double Star',
+    protect_paint: 'Protect Paint',
     pace_and_space: '5-Out',
     seven_seconds: '5-Out',
     grit_and_grind: '2-3 Zone',

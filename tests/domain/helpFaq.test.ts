@@ -13,6 +13,9 @@ describe('help faq content', () => {
     expect(allText).toContain('letter grades');
     expect(allText).toContain('league hub');
     expect(allText).toContain('sport context');
+    expect(allText).toContain('5-out');
+    expect(allText).toContain('two defenses');
+    expect(allText).toContain('two counters');
     expect(allText).not.toContain('inside the nba');
     expect(allText).not.toContain('basketball context');
     expect(allText).not.toContain('numeric ratings');

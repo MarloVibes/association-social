@@ -168,8 +168,8 @@ function resolvePossession(ctx) {
   );
 
   const foulThreshold = shotValue === 3
-    ? 0.08 + shooter.foulDraw / 1000 + shooter.sourceFreeThrowPressure / 2200
-    : 0.13 + shooter.foulDraw / 360 + shooter.sourceFreeThrowPressure / 1350;
+    ? 0.08 + shooter.foulDraw / 1000 + shooter.sourceFreeThrowPressure / 2200 + (offenseTeam.freeThrowBoost || 0) * 0.2
+    : 0.13 + shooter.foulDraw / 360 + shooter.sourceFreeThrowPressure / 1350 + (offenseTeam.freeThrowBoost || 0);
   if (roll < foulThreshold) {
     if (shotValue === 3) {
       shooter.threePointAttemptsUsed = Math.max(0, Number(shooter.threePointAttemptsUsed || 0) - 1);
@@ -183,7 +183,7 @@ function resolvePossession(ctx) {
       freeThrowsAttempted: freeThrows,
     }));
     const rebounder = made < freeThrows ? weightedPick([...offenseTeam.rotation, ...defenseTeam.rotation], player => (
-      reboundWeight(player) * (player.side === ctx.offense ? 0.28 : 0.72)
+      reboundWeight(player) * (player.side === ctx.offense ? 0.28 + (offenseTeam.offensiveReboundBoost || 0) : 0.72 + (defenseTeam.defensiveReboundBoost || 0))
     ), ctx.rng) : null;
     if (rebounder) deltas.push(deltaFor(rebounder, {
       rebounds: 1,
@@ -236,7 +236,7 @@ function resolvePossession(ctx) {
 
   const blocked = ctx.rng() < clamp((defender.blocking - shooter.scoring + 30) / 260, 0.03, 0.16);
   const rebounder = weightedPick([...offenseTeam.rotation, ...defenseTeam.rotation], player => (
-    reboundWeight(player) * (player.side === ctx.offense ? 0.3 : 0.7)
+    reboundWeight(player) * (player.side === ctx.offense ? 0.3 + (offenseTeam.offensiveReboundBoost || 0) : 0.7 + (defenseTeam.defensiveReboundBoost || 0))
   ), ctx.rng);
   deltas.push(deltaFor(shooter, {
     fieldGoalsAttempted: 1,
@@ -297,6 +297,9 @@ function buildTeamContext(teamId, team, side, input) {
       shotChoicesUsed: 0,
     };
   });
+  const offenseStyle = side === 'home' ? input.gameplan.homeOffenseId : input.gameplan.awayOffenseId;
+  const defenseStyle = side === 'home' ? input.gameplan.homeDefenseId : input.gameplan.awayDefenseId;
+  const styleEffects = gameplanStyleEffects(offenseStyle, defenseStyle);
   return {
     teamId,
     side,
@@ -309,6 +312,43 @@ function buildTeamContext(teamId, team, side, input) {
     defenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'defense')
       + (side === 'home' ? input.gameplan.homeDefenseBoost : input.gameplan.awayDefenseBoost),
     closeGamePressure: input.gameplan.closeGamePressure,
+    offenseStyle,
+    defenseStyle,
+    threePointRateBoost: styleEffects.threePointRateBoost,
+    freeThrowBoost: styleEffects.freeThrowBoost,
+    offensiveReboundBoost: styleEffects.offensiveReboundBoost,
+    defensiveReboundBoost: styleEffects.defensiveReboundBoost,
+    turnoverPressureBoost: styleEffects.turnoverPressureBoost,
+    ballSecurityBoost: styleEffects.ballSecurityBoost,
+  };
+}
+
+function gameplanStyleEffects(offenseStyle, defenseStyle) {
+  const offenseEffects = {
+    five_out: { threePointRateBoost: 0.16, freeThrowBoost: -0.005, offensiveReboundBoost: -0.03, ballSecurityBoost: 0.006 },
+    pick_and_roll: { threePointRateBoost: -0.01, freeThrowBoost: 0.018, offensiveReboundBoost: 0.02, ballSecurityBoost: 0.002 },
+    motion_offense: { threePointRateBoost: 0.04, freeThrowBoost: 0.004, offensiveReboundBoost: 0, ballSecurityBoost: 0.018 },
+    star_isolation: { threePointRateBoost: -0.05, freeThrowBoost: 0.02, offensiveReboundBoost: -0.02, ballSecurityBoost: -0.006 },
+    post_inside: { threePointRateBoost: -0.2, freeThrowBoost: 0.032, offensiveReboundBoost: 0.12, ballSecurityBoost: 0.002 },
+    transition_pace: { threePointRateBoost: 0.06, freeThrowBoost: 0.015, offensiveReboundBoost: 0.03, ballSecurityBoost: -0.004 },
+  };
+  const defenseEffects = {
+    zone_23: { threePointRateBoost: 0.02, defensiveReboundBoost: 0.06, turnoverPressureBoost: 0.008 },
+    zone_32: { threePointRateBoost: -0.08, defensiveReboundBoost: -0.02, turnoverPressureBoost: 0.018 },
+    switch_everything: { threePointRateBoost: -0.04, defensiveReboundBoost: -0.04, turnoverPressureBoost: 0.012 },
+    double_star: { threePointRateBoost: 0.03, defensiveReboundBoost: -0.02, turnoverPressureBoost: 0.02 },
+    half_court_press: { threePointRateBoost: -0.02, defensiveReboundBoost: -0.03, turnoverPressureBoost: 0.028 },
+    protect_paint: { threePointRateBoost: 0.06, defensiveReboundBoost: 0.09, turnoverPressureBoost: -0.002 },
+  };
+  const offense = offenseEffects[offenseStyle] || {};
+  const defense = defenseEffects[defenseStyle] || {};
+  return {
+    threePointRateBoost: Number(offense.threePointRateBoost || 0) + Number(defense.threePointRateBoost || 0),
+    freeThrowBoost: Number(offense.freeThrowBoost || 0),
+    offensiveReboundBoost: Number(offense.offensiveReboundBoost || 0),
+    defensiveReboundBoost: Number(defense.defensiveReboundBoost || 0),
+    turnoverPressureBoost: Number(defense.turnoverPressureBoost || 0),
+    ballSecurityBoost: Number(offense.ballSecurityBoost || 0),
   };
 }
 
@@ -547,7 +587,7 @@ function chooseShotValue(player, team, rng) {
   player.shotChoicesUsed = choiceCount + 1;
   const perimeterProfile = player.threePoint * 0.58 + player.threePointFrequency * 0.24 + player.catchAndShoot * 0.1 + player.midRange * 0.08;
   const interiorProfile = player.finishing * 0.42 + player.paintAttack * 0.28 + player.rimFinish * 0.18 + player.scoring * 0.12;
-  const threeRate = clamp(0.1 + (perimeterProfile - interiorProfile + 46) / 155 + (team.offenseBoost || 0) / 120, 0.04, 0.7);
+  const threeRate = clamp(0.1 + (perimeterProfile - interiorProfile + 46) / 155 + (team.offenseBoost || 0) / 120 + Number(team.threePointRateBoost || 0), 0.04, 0.7);
   const provenShooterFloor = player.threePoint >= 88 && (player.threePointFrequency >= 64 || player.catchAndShoot >= 64 || player.threePoint >= 95);
   if ((provenShooterFloor && choiceCount % 3 === 0) || rng() < threeRate) {
     player.threePointAttemptsUsed = Number(player.threePointAttemptsUsed || 0) + 1;
@@ -561,6 +601,8 @@ function turnoverChance(shooter, defender, offenseTeam, defenseTeam, winnerBoost
     0.1
       + (defender.stealSkill + defenseTeam.defenseBoost - shooter.playmaking - offenseTeam.offenseBoost - winnerBoost) / 420
       + ((Number(shooter.sourceTurnoverPct || 12.5) - 12.5) / 310)
+      + Number(defenseTeam.turnoverPressureBoost || 0)
+      - Number(offenseTeam.ballSecurityBoost || 0)
       + (rng() - 0.5) * 0.03,
     0.055,
     0.18,
@@ -912,9 +954,81 @@ const GAMEPLAN_PRESETS = {
     label: 'Half Court Press',
     offense: 'pressure',
     defense: 'pressure',
-    strongAgainst: [],
-    vulnerableTo: ['motion_offense'],
     summary: 'half-court pressure rushed ball handlers and tested passing angles',
+  },
+  star_isolation: {
+    label: 'Star Isolation',
+    offense: 'isolation',
+    defense: 'drop',
+    summary: 'the star creator controlled late-clock space and forced help decisions',
+  },
+  post_inside: {
+    label: 'Post / Inside',
+    offense: 'paint',
+    defense: 'protect_paint',
+    summary: 'inside touches created paint pressure and offensive glass chances',
+  },
+  transition_pace: {
+    label: 'Transition Pace',
+    offense: 'tempo',
+    defense: 'switch',
+    summary: 'early offense attacked before the defense could load up',
+  },
+  switch_everything: {
+    label: 'Switch Everything',
+    offense: 'balanced',
+    defense: 'switch',
+    summary: 'switching flattened screening actions and kept creators in front',
+  },
+  double_star: {
+    label: 'Double Star',
+    offense: 'balanced',
+    defense: 'pressure',
+    summary: 'extra help forced the star scorer into earlier passes',
+  },
+  protect_paint: {
+    label: 'Protect Paint',
+    offense: 'balanced',
+    defense: 'protect_paint',
+    summary: 'the defense walled off drives and controlled the glass',
+  },
+};
+
+const OFFENSE_GAMEPLAN_IDS = ['five_out', 'pick_and_roll', 'motion_offense', 'star_isolation', 'post_inside', 'transition_pace'];
+const DEFENSE_GAMEPLAN_IDS = ['zone_23', 'zone_32', 'switch_everything', 'double_star', 'half_court_press', 'protect_paint'];
+const OFFENSE_MATCHUPS = {
+  five_out: { advantage: ['zone_23', 'protect_paint'], disadvantage: ['zone_32', 'switch_everything'] },
+  pick_and_roll: { advantage: ['zone_32', 'half_court_press'], disadvantage: ['switch_everything', 'zone_23'] },
+  motion_offense: { advantage: ['double_star', 'half_court_press'], disadvantage: ['zone_23', 'zone_32'] },
+  star_isolation: { advantage: ['switch_everything', 'protect_paint'], disadvantage: ['double_star', 'half_court_press'] },
+  post_inside: { advantage: ['switch_everything', 'double_star'], disadvantage: ['zone_23', 'protect_paint'] },
+  transition_pace: { advantage: ['protect_paint', 'double_star'], disadvantage: ['half_court_press', 'zone_32'] },
+};
+
+const RESULT_SUMMARIES = {
+  advantage: {
+    five_out: 'corners spacing created kickout threes against the coverage',
+    pick_and_roll: 'screen actions opened the lane before help could set',
+    motion_offense: 'cuts and quick reversals punished the defensive focus',
+    star_isolation: 'the primary creator found room to attack one-on-one',
+    post_inside: 'size created paint touches and second-chance pressure',
+    transition_pace: 'pace created chances before the defense organized',
+  },
+  disadvantage: {
+    five_out: 'perimeter coverage crowded the corners and rushed shooters',
+    pick_and_roll: 'the defense flattened screens and shrank passing windows',
+    motion_offense: 'the zone clogged cuts and disrupted timing',
+    star_isolation: 'extra pressure forced the star into tougher decisions',
+    post_inside: 'paint help made inside catches harder to finish',
+    transition_pace: 'pressure stopped clean outlets and early offense',
+  },
+  neutral: {
+    five_out: 'spacing helped, but the defense stayed connected',
+    pick_and_roll: 'screen actions generated normal half-court chances',
+    motion_offense: 'ball movement found ordinary rhythm',
+    star_isolation: 'the creator got touches without a clear matchup edge',
+    post_inside: 'inside play created normal paint pressure',
+    transition_pace: 'tempo helped without breaking the defense open',
   },
 };
 
@@ -932,37 +1046,77 @@ const GAMEPLAN_ALIASES = {
   bully_ball: 'pick_and_roll',
 };
 
-function primaryPresetId(presetIds) {
-  const rawId = String((Array.isArray(presetIds) && presetIds[0]) || 'balanced').toLowerCase();
+function normalizeGameplanId(value) {
+  const rawId = String(value || 'balanced').toLowerCase();
   const id = GAMEPLAN_ALIASES[rawId] || rawId;
   return GAMEPLAN_PRESETS[id] ? id : 'balanced';
 }
 
-function planAdvantage(ownId, opponentId) {
-  if (ownId === opponentId) return 0;
-  const own = GAMEPLAN_PRESETS[ownId] || GAMEPLAN_PRESETS.balanced;
-  const opponent = GAMEPLAN_PRESETS[opponentId] || GAMEPLAN_PRESETS.balanced;
-  let advantage = 0;
-  if ((own.strongAgainst || []).includes(opponentId)) advantage += 2;
-  if ((opponent.vulnerableTo || []).includes(ownId)) advantage += 1;
-  if ((own.vulnerableTo || []).includes(opponentId)) advantage -= 1;
-  return advantage;
+function primaryPresetId(presetIds) {
+  return normalizeGameplanId((Array.isArray(presetIds) && presetIds[0]) || 'balanced');
+}
+
+function selectedPresetIds(presetIds) {
+  return (Array.isArray(presetIds) ? presetIds : []).map(normalizeGameplanId).filter(id => id !== 'balanced');
+}
+
+function primaryOffenseId(presetIds) {
+  const ids = selectedPresetIds(presetIds);
+  return ids.find(id => OFFENSE_GAMEPLAN_IDS.includes(id)) || 'balanced';
+}
+
+function primaryDefenseId(presetIds) {
+  const ids = selectedPresetIds(presetIds);
+  return ids.find(id => DEFENSE_GAMEPLAN_IDS.includes(id)) || 'protect_paint';
+}
+
+function offenseVsDefenseResult(offenseId, defenseId) {
+  const matchup = OFFENSE_MATCHUPS[offenseId] || {};
+  if ((matchup.advantage || []).includes(defenseId)) return 'advantage';
+  if ((matchup.disadvantage || []).includes(defenseId)) return 'disadvantage';
+  return 'neutral';
+}
+
+function resultScore(result) {
+  if (result === 'advantage') return 2;
+  if (result === 'disadvantage') return -2;
+  return 0;
+}
+
+function resultSummary(result, offenseId) {
+  return (RESULT_SUMMARIES[result] && RESULT_SUMMARIES[result][offenseId])
+    || (GAMEPLAN_PRESETS[offenseId] && GAMEPLAN_PRESETS[offenseId].summary)
+    || GAMEPLAN_PRESETS.balanced.summary;
 }
 
 function buildGameplanMatchup(homePresetIds, awayPresetIds) {
   const homePresetId = primaryPresetId(homePresetIds);
   const awayPresetId = primaryPresetId(awayPresetIds);
-  const homePreset = GAMEPLAN_PRESETS[homePresetId] || GAMEPLAN_PRESETS.balanced;
-  const awayPreset = GAMEPLAN_PRESETS[awayPresetId] || GAMEPLAN_PRESETS.balanced;
-  const homeAdvantage = planAdvantage(homePresetId, awayPresetId);
-  const awayAdvantage = planAdvantage(awayPresetId, homePresetId);
+  const homeOffenseId = primaryOffenseId(homePresetIds);
+  const homeDefenseId = primaryDefenseId(homePresetIds);
+  const awayOffenseId = primaryOffenseId(awayPresetIds);
+  const awayDefenseId = primaryDefenseId(awayPresetIds);
+  const homeOffenseResult = offenseVsDefenseResult(homeOffenseId, awayDefenseId);
+  const awayOffenseResult = offenseVsDefenseResult(awayOffenseId, homeDefenseId);
+  const homeAdvantage = resultScore(homeOffenseResult) - resultScore(awayOffenseResult) * 0.35;
+  const awayAdvantage = resultScore(awayOffenseResult) - resultScore(homeOffenseResult) * 0.35;
   const bothMadeStrongChoices = Math.max(homeAdvantage, 0) > 0 && Math.max(awayAdvantage, 0) > 0;
   const closeGamePressure = bothMadeStrongChoices ? 22 : Math.max(homeAdvantage, awayAdvantage) >= 2 ? 8 : 0;
   return {
     homePresetId,
     awayPresetId,
-    homePresetName: homePreset.label,
-    awayPresetName: awayPreset.label,
+    homePresetName: GAMEPLAN_PRESETS[homePresetId].label,
+    awayPresetName: GAMEPLAN_PRESETS[awayPresetId].label,
+    homeOffenseId,
+    homeDefenseId,
+    awayOffenseId,
+    awayDefenseId,
+    homeOffenseName: GAMEPLAN_PRESETS[homeOffenseId].label,
+    homeDefenseName: GAMEPLAN_PRESETS[homeDefenseId].label,
+    awayOffenseName: GAMEPLAN_PRESETS[awayOffenseId].label,
+    awayDefenseName: GAMEPLAN_PRESETS[awayDefenseId].label,
+    homeOffenseResult,
+    awayOffenseResult,
     homeAdvantage,
     awayAdvantage,
     homeOffenseBoost: Math.max(0, homeAdvantage) * 10,
@@ -970,8 +1124,8 @@ function buildGameplanMatchup(homePresetIds, awayPresetIds) {
     homeDefenseBoost: Math.max(0, homeAdvantage) * 4,
     awayDefenseBoost: Math.max(0, awayAdvantage) * 4,
     closeGamePressure,
-    homeSummary: homeAdvantage > awayAdvantage ? homePreset.summary : homeAdvantage > 0 ? `${homePreset.summary}, but the opponent had answers` : homePreset.summary,
-    awaySummary: awayAdvantage > homeAdvantage ? awayPreset.summary : awayAdvantage > 0 ? `${awayPreset.summary}, but the opponent had answers` : awayPreset.summary,
+    homeSummary: resultSummary(homeOffenseResult, homeOffenseId),
+    awaySummary: resultSummary(awayOffenseResult, awayOffenseId),
   };
 }
 
@@ -980,10 +1134,10 @@ function coachingBoost(presetIds, kind) {
   if (ids.length === 0) return 0;
   const values = ids.map((id) => {
     if (kind === 'offense') {
-      if (['five_out', 'pick_and_roll', 'motion_offense'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
-      if (['zone_23'].includes(GAMEPLAN_ALIASES[id] || id)) return 1;
+      if (['five_out', 'pick_and_roll', 'motion_offense', 'star_isolation', 'post_inside', 'transition_pace'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
+      if (['zone_23', 'protect_paint'].includes(GAMEPLAN_ALIASES[id] || id)) return 1;
     }
-    if (['zone_23', 'zone_32', 'half_court_press'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
+    if (['zone_23', 'zone_32', 'switch_everything', 'double_star', 'half_court_press', 'protect_paint'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
     return 0;
   });
   return values.reduce((sum, value) => sum + value, 0) / values.length;

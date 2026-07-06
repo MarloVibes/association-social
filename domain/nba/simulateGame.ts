@@ -144,8 +144,6 @@ export type SimulatedGame = {
 type GameplanPreset = {
   label: string;
   summary: string;
-  strongAgainst?: string[];
-  vulnerableTo?: string[];
 };
 
 type GameplanMatchup = {
@@ -153,6 +151,16 @@ type GameplanMatchup = {
   awayPresetId: string;
   homePresetName: string;
   awayPresetName: string;
+  homeOffenseId: string;
+  homeDefenseId: string;
+  awayOffenseId: string;
+  awayDefenseId: string;
+  homeOffenseName: string;
+  homeDefenseName: string;
+  awayOffenseName: string;
+  awayDefenseName: string;
+  homeOffenseResult: 'advantage' | 'disadvantage' | 'neutral';
+  awayOffenseResult: 'advantage' | 'disadvantage' | 'neutral';
   homeAdvantage: number;
   awayAdvantage: number;
   homeSummary: string;
@@ -180,41 +188,91 @@ const GAMEPLAN_PRESETS: Record<string, GameplanPreset> = {
   },
   five_out: {
     label: '5-Out',
-    strongAgainst: ['zone_23'],
-    vulnerableTo: ['zone_32'],
     summary: 'corners spacing pulled the 2-3 shell away from the rim',
   },
   zone_23: {
     label: '2-3 Zone',
-    strongAgainst: ['motion_offense'],
-    vulnerableTo: ['five_out'],
     summary: 'the 2-3 zone clogged cuts and protected the paint',
   },
   zone_32: {
     label: '3-2 Zone',
-    strongAgainst: ['five_out'],
-    vulnerableTo: ['pick_and_roll'],
     summary: 'the 3-2 zone crowded shooters and closed the corners',
   },
   pick_and_roll: {
     label: 'Pick and Roll',
-    strongAgainst: ['zone_32'],
-    vulnerableTo: [],
     summary: 'high screens split the 3-2 top line and created rim pressure',
   },
   motion_offense: {
     label: 'Motion Offense',
-    strongAgainst: ['half_court_press'],
-    vulnerableTo: ['zone_23'],
     summary: 'motion cuts and second actions passed through the half-court press',
   },
   half_court_press: {
     label: 'Half Court Press',
-    strongAgainst: [],
-    vulnerableTo: ['motion_offense'],
     summary: 'half-court pressure rushed ball handlers and tested passing angles',
   },
+  star_isolation: {
+    label: 'Star Isolation',
+    summary: 'the star creator controlled late-clock space and forced help decisions',
+  },
+  post_inside: {
+    label: 'Post / Inside',
+    summary: 'inside touches created paint pressure and offensive glass chances',
+  },
+  transition_pace: {
+    label: 'Transition Pace',
+    summary: 'early offense attacked before the defense could load up',
+  },
+  switch_everything: {
+    label: 'Switch Everything',
+    summary: 'switching flattened screening actions and kept creators in front',
+  },
+  double_star: {
+    label: 'Double Star',
+    summary: 'extra help forced the star scorer into earlier passes',
+  },
+  protect_paint: {
+    label: 'Protect Paint',
+    summary: 'the defense walled off drives and controlled the glass',
+  },
 };
+
+const OFFENSE_GAMEPLAN_IDS = ['five_out', 'pick_and_roll', 'motion_offense', 'star_isolation', 'post_inside', 'transition_pace'];
+const DEFENSE_GAMEPLAN_IDS = ['zone_23', 'zone_32', 'switch_everything', 'double_star', 'half_court_press', 'protect_paint'];
+const OFFENSE_MATCHUPS: Record<string, { advantage: string[]; disadvantage: string[] }> = {
+  five_out: { advantage: ['zone_23', 'protect_paint'], disadvantage: ['zone_32', 'switch_everything'] },
+  pick_and_roll: { advantage: ['zone_32', 'half_court_press'], disadvantage: ['switch_everything', 'zone_23'] },
+  motion_offense: { advantage: ['double_star', 'half_court_press'], disadvantage: ['zone_23', 'zone_32'] },
+  star_isolation: { advantage: ['switch_everything', 'protect_paint'], disadvantage: ['double_star', 'half_court_press'] },
+  post_inside: { advantage: ['switch_everything', 'double_star'], disadvantage: ['zone_23', 'protect_paint'] },
+  transition_pace: { advantage: ['protect_paint', 'double_star'], disadvantage: ['half_court_press', 'zone_32'] },
+};
+
+const RESULT_SUMMARIES = {
+  advantage: {
+    five_out: 'corners spacing created kickout threes against the coverage',
+    pick_and_roll: 'screen actions opened the lane before help could set',
+    motion_offense: 'cuts and quick reversals punished the defensive focus',
+    star_isolation: 'the primary creator found room to attack one-on-one',
+    post_inside: 'size created paint touches and second-chance pressure',
+    transition_pace: 'pace created chances before the defense organized',
+  },
+  disadvantage: {
+    five_out: 'perimeter coverage crowded the corners and rushed shooters',
+    pick_and_roll: 'the defense flattened screens and shrank passing windows',
+    motion_offense: 'the zone clogged cuts and disrupted timing',
+    star_isolation: 'extra pressure forced the star into tougher decisions',
+    post_inside: 'paint help made inside catches harder to finish',
+    transition_pace: 'pressure stopped clean outlets and early offense',
+  },
+  neutral: {
+    five_out: 'spacing helped, but the defense stayed connected',
+    pick_and_roll: 'screen actions generated normal half-court chances',
+    motion_offense: 'ball movement found ordinary rhythm',
+    star_isolation: 'the creator got touches without a clear matchup edge',
+    post_inside: 'inside play created normal paint pressure',
+    transition_pace: 'tempo helped without breaking the defense open',
+  },
+} as const;
 
 const GAMEPLAN_ALIASES: Record<string, string> = {
   pace_and_space: 'five_out',
@@ -231,40 +289,81 @@ const GAMEPLAN_ALIASES: Record<string, string> = {
 };
 
 function primaryPresetId(presetIds?: string[]) {
-  const rawId = String(Array.isArray(presetIds) && presetIds[0] || 'balanced').toLowerCase();
+  return normalizeGameplanId(Array.isArray(presetIds) && presetIds[0] || 'balanced');
+}
+
+function normalizeGameplanId(value: unknown) {
+  const rawId = String(value || 'balanced').toLowerCase();
   const id = GAMEPLAN_ALIASES[rawId] || rawId;
   return GAMEPLAN_PRESETS[id] ? id : 'balanced';
 }
 
-function planAdvantage(ownId: string, opponentId: string) {
-  if (ownId === opponentId) return 0;
-  const own = GAMEPLAN_PRESETS[ownId] || GAMEPLAN_PRESETS.balanced;
-  const opponent = GAMEPLAN_PRESETS[opponentId] || GAMEPLAN_PRESETS.balanced;
-  let advantage = 0;
-  if ((own.strongAgainst || []).includes(opponentId)) advantage += 2;
-  if ((opponent.vulnerableTo || []).includes(ownId)) advantage += 1;
-  if ((own.vulnerableTo || []).includes(opponentId)) advantage -= 1;
-  return advantage;
+function selectedPresetIds(presetIds?: string[]) {
+  return (Array.isArray(presetIds) ? presetIds : []).map(normalizeGameplanId).filter(id => id !== 'balanced');
+}
+
+function primaryOffenseId(presetIds?: string[]) {
+  const ids = selectedPresetIds(presetIds);
+  return ids.find(id => OFFENSE_GAMEPLAN_IDS.includes(id)) || 'balanced';
+}
+
+function primaryDefenseId(presetIds?: string[]) {
+  const ids = selectedPresetIds(presetIds);
+  return ids.find(id => DEFENSE_GAMEPLAN_IDS.includes(id)) || 'protect_paint';
+}
+
+function offenseVsDefenseResult(offenseId: string, defenseId: string): 'advantage' | 'disadvantage' | 'neutral' {
+  const matchup = OFFENSE_MATCHUPS[offenseId] || { advantage: [], disadvantage: [] };
+  if (matchup.advantage.includes(defenseId)) return 'advantage';
+  if (matchup.disadvantage.includes(defenseId)) return 'disadvantage';
+  return 'neutral';
+}
+
+function resultScore(result: 'advantage' | 'disadvantage' | 'neutral') {
+  if (result === 'advantage') return 2;
+  if (result === 'disadvantage') return -2;
+  return 0;
+}
+
+function resultSummary(result: 'advantage' | 'disadvantage' | 'neutral', offenseId: string) {
+  const summaries = RESULT_SUMMARIES[result] as Record<string, string>;
+  return summaries[offenseId]
+    || GAMEPLAN_PRESETS[offenseId]?.summary
+    || GAMEPLAN_PRESETS.balanced.summary;
 }
 
 function buildGameplanMatchup(homePresetIds?: string[], awayPresetIds?: string[]): GameplanMatchup {
   const homePresetId = primaryPresetId(homePresetIds);
   const awayPresetId = primaryPresetId(awayPresetIds);
-  const homePreset = GAMEPLAN_PRESETS[homePresetId] || GAMEPLAN_PRESETS.balanced;
-  const awayPreset = GAMEPLAN_PRESETS[awayPresetId] || GAMEPLAN_PRESETS.balanced;
-  const homeAdvantage = planAdvantage(homePresetId, awayPresetId);
-  const awayAdvantage = planAdvantage(awayPresetId, homePresetId);
+  const homeOffenseId = primaryOffenseId(homePresetIds);
+  const homeDefenseId = primaryDefenseId(homePresetIds);
+  const awayOffenseId = primaryOffenseId(awayPresetIds);
+  const awayDefenseId = primaryDefenseId(awayPresetIds);
+  const homeOffenseResult = offenseVsDefenseResult(homeOffenseId, awayDefenseId);
+  const awayOffenseResult = offenseVsDefenseResult(awayOffenseId, homeDefenseId);
+  const homeAdvantage = resultScore(homeOffenseResult) - resultScore(awayOffenseResult) * 0.35;
+  const awayAdvantage = resultScore(awayOffenseResult) - resultScore(homeOffenseResult) * 0.35;
   const bothMadeStrongChoices = Math.max(homeAdvantage, 0) > 0 && Math.max(awayAdvantage, 0) > 0;
   return {
     homePresetId,
     awayPresetId,
-    homePresetName: homePreset.label,
-    awayPresetName: awayPreset.label,
+    homePresetName: GAMEPLAN_PRESETS[homePresetId].label,
+    awayPresetName: GAMEPLAN_PRESETS[awayPresetId].label,
+    homeOffenseId,
+    homeDefenseId,
+    awayOffenseId,
+    awayDefenseId,
+    homeOffenseName: GAMEPLAN_PRESETS[homeOffenseId].label,
+    homeDefenseName: GAMEPLAN_PRESETS[homeDefenseId].label,
+    awayOffenseName: GAMEPLAN_PRESETS[awayOffenseId].label,
+    awayDefenseName: GAMEPLAN_PRESETS[awayDefenseId].label,
+    homeOffenseResult,
+    awayOffenseResult,
     homeAdvantage,
     awayAdvantage,
     closeGamePressure: bothMadeStrongChoices ? 22 : Math.max(homeAdvantage, awayAdvantage) >= 2 ? 8 : 0,
-    homeSummary: homeAdvantage > awayAdvantage ? homePreset.summary : homeAdvantage > 0 ? `${homePreset.summary}, but the opponent had answers` : homePreset.summary,
-    awaySummary: awayAdvantage > homeAdvantage ? awayPreset.summary : awayAdvantage > 0 ? `${awayPreset.summary}, but the opponent had answers` : awayPreset.summary,
+    homeSummary: resultSummary(homeOffenseResult, homeOffenseId),
+    awaySummary: resultSummary(awayOffenseResult, awayOffenseId),
   };
 }
 

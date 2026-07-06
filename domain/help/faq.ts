@@ -31,6 +31,10 @@ export function getHelpFaqSections(): HelpFaqSection[] {
           answer: 'The sim engine creates the score and box score. Final results stay locked until the simulation reveal window finishes.',
         },
         {
+          question: 'How do coaching game plans affect NBA games?',
+          answer: 'Each GM can save one offense and one defense before the game. Every offense, like 5-Out, Pick and Roll, Motion Offense, Star Isolation, Post / Inside, or Transition Pace, beats two defenses, loses to two counters, and stays neutral against two looks. The box score reflects the matchup too: spacing creates more threes, inside play creates more free throws and rebounds, and pressure defenses create more steals and turnovers.',
+        },
+        {
           question: 'How do player grades work?',
           answer: 'Players are shown through letter grades, tendencies, roles, and sport context. Raw numbers stay hidden so evaluation feels like scouting.',
         },

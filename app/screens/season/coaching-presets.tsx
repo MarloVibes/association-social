@@ -62,7 +62,7 @@ export default function CoachingPresetsScreen() {
   const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
   const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
   const sport = normalizeSport(leagueSport);
-  const phaseLabels = sport === 'mlb' ? ['Early Game', 'Late Game'] : ['Opening Plan', 'Adjustment Plan'];
+  const phaseLabels = sport === 'nba' ? ['Offense', 'Defense'] : sport === 'mlb' ? ['Early Game', 'Late Game'] : ['Opening Plan', 'Adjustment Plan'];
 
   useEffect(() => {
     if (!leagueId) return;
@@ -112,7 +112,8 @@ export default function CoachingPresetsScreen() {
     setSavingId(preset.id);
     try {
       await httpsCallable(functions, 'saveTeamCoachingPreset')({ leagueId, preset, secondHalfPresetId });
-      Alert.alert('Saved', `${preset.name} will open games. ${secondHalfPreset?.name || preset.name} is saved as the matchup adjustment.`);
+      const secondLabel = sport === 'nba' ? 'defense' : 'matchup adjustment';
+      Alert.alert('Saved', `${preset.name} is saved as your ${sport === 'nba' ? 'offense' : 'opening plan'}. ${secondHalfPreset?.name || preset.name} is saved as the ${secondLabel}.`);
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -194,7 +195,7 @@ export default function CoachingPresetsScreen() {
                   <View style={styles.gamePlanHeader}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.gamePlanTitle}>Game Plan</Text>
-                      <Text style={styles.gamePlanMeta}>Pick a starting identity and a matchup adjustment.</Text>
+                      <Text style={styles.gamePlanMeta}>{sport === 'nba' ? 'Pick one offense and one defense.' : 'Pick a starting identity and a matchup adjustment.'}</Text>
                     </View>
                     <TouchableOpacity disabled={savingId === firstHalfPresetId || !selectedPreset} onPress={() => selectedPreset && savePreset(selectedPreset)} style={styles.customSave}>
                       <Ionicons color="#06130c" name="save-outline" size={15} />

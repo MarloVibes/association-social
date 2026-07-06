@@ -12,6 +12,10 @@ type BoxScorePlayer = {
   name: string;
   threePointersAttempted: number;
   freeThrowsAttempted: number;
+  assists?: number;
+  steals?: number;
+  turnovers?: number;
+  rebounds?: number;
 };
 
 function team(teamId: string, skill: number) {
@@ -49,6 +53,29 @@ function undefinedPaths(value: unknown, path = 'timeline'): string[] {
 }
 
 describe('possession timeline engine', () => {
+  it('balances each offense against exactly two defenses, two counters, and two neutral looks', () => {
+    const offenseIds = ['five_out', 'pick_and_roll', 'motion_offense', 'star_isolation', 'post_inside', 'transition_pace'];
+    const defenseIds = ['zone_23', 'zone_32', 'switch_everything', 'double_star', 'half_court_press', 'protect_paint'];
+
+    offenseIds.forEach((offenseId) => {
+      const results = defenseIds.map((defenseId) => buildPossessionTimeline({
+        gameId: `matrix-${offenseId}-${defenseId}`,
+        seed: `matrix-${offenseId}-${defenseId}`,
+        homeTeamId: 'OFF',
+        awayTeamId: 'DEF',
+        homeTeam: team('OFF', 80),
+        awayTeam: team('DEF', 80),
+        homeCoachingPresetIds: [offenseId, 'protect_paint'],
+        awayCoachingPresetIds: ['motion_offense', defenseId],
+        nowMs: 10_000,
+      }).gameplan.homeOffenseResult);
+
+      expect(results.filter(result => result === 'advantage')).toHaveLength(2);
+      expect(results.filter(result => result === 'disadvantage')).toHaveLength(2);
+      expect(results.filter(result => result === 'neutral')).toHaveLength(2);
+    });
+  });
+
   it('generates a Firestore-safe version 2 timeline from basketball possessions', () => {
     const timeline = buildPossessionTimeline({
       gameId: 'game-1',
@@ -248,6 +275,37 @@ describe('possession timeline engine', () => {
     expect(mirrored.gameplan.homeAdvantage).toBe(0);
     expect(mirrored.gameplan.awayAdvantage).toBe(0);
     expect(mirrored.gameplan.closeGamePressure).toBe(0);
+  });
+
+  it('makes player box scores reflect the selected offense and defensive matchup', () => {
+    const spaced = buildPossessionTimeline({
+      gameId: 'box-five-out',
+      seed: 'box-style-seed',
+      homeTeamId: 'OFF',
+      awayTeamId: 'DEF',
+      homeTeam: team('OFF', 84),
+      awayTeam: team('DEF', 80),
+      homeCoachingPresetIds: ['five_out', 'switch_everything'],
+      awayCoachingPresetIds: ['motion_offense', 'zone_23'],
+      nowMs: 10_000,
+    });
+    const inside = buildPossessionTimeline({
+      gameId: 'box-post',
+      seed: 'box-style-seed',
+      homeTeamId: 'OFF',
+      awayTeamId: 'DEF',
+      homeTeam: team('OFF', 84),
+      awayTeam: team('DEF', 80),
+      homeCoachingPresetIds: ['post_inside', 'switch_everything'],
+      awayCoachingPresetIds: ['motion_offense', 'protect_paint'],
+      nowMs: 10_000,
+    });
+
+    const spacedBox = boxScoreFromPossessionTimeline(spaced).home;
+    const insideBox = boxScoreFromPossessionTimeline(inside).home;
+
+    expect(spacedBox.threePointersAttempted).toBeGreaterThan(insideBox.threePointersAttempted);
+    expect(insideBox.freeThrowsAttempted + insideBox.rebounds).toBeGreaterThan(spacedBox.freeThrowsAttempted + spacedBox.rebounds);
   });
 
   it('uses category skill grades and tendencies for live shot profile', () => {
