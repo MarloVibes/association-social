@@ -839,6 +839,27 @@ describe('source safety regressions', () => {
     expect(league).toContain('styles.scheduleBtnText');
   });
 
+  it('keeps the league team page in the official operations-card visual system', () => {
+    const league = source('app/screens/league.tsx');
+
+    expect(league).toContain('styles.leagueCommandShell');
+    expect(league).toContain('styles.leagueActionStack');
+    expect(league).toContain('styles.myTeamOperationsCard');
+    expect(league).toContain('styles.leagueQuickLink');
+    expect(league).toContain('League Operations');
+    expect(league).toContain('Club Snapshot');
+    expect(league).not.toContain('styles.channelsTab');
+    expect(league).not.toContain('styles.myTeamCard');
+  });
+
+  it('keeps Trade Center board header labels inside their card', () => {
+    const tradeCenter = source('app/screens/trade-channel.tsx');
+
+    expect(tradeCenter).toContain('styles.boardHeroTextBlock');
+    expect(tradeCenter).toContain('<Text style={styles.boardTeamLabel} numberOfLines={1}');
+    expect(tradeCenter).toContain("overflow: 'hidden'");
+  });
+
   it('shows NBA standard and two-way roster slots during roster cuts', () => {
     const rosterCuts = source('app/screens/offseason/roster-cuts.tsx');
 

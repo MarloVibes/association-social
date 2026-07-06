@@ -341,49 +341,57 @@ export default function LeagueScreen() {
           </View>
         </View>
 
-        {/* Channels — front and center */}
-        <TouchableOpacity style={[styles.channelsTab, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '22' }]} onPress={goToChannels}>
-          <View style={styles.channelsTabLeft}>
-            <Text style={styles.channelsTabIcon}>{channelIcon}</Text>
-            <View style={styles.channelsTabTextBlock}>
-              <Text style={[styles.channelsTabLabel, { color: titleColor }]}>{channelLabel}</Text>
-              <Text style={styles.channelsTabSub} numberOfLines={2}>GM Controls and News</Text>
+        <View style={[styles.leagueCommandShell, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '18' }]}>
+          <View style={styles.leagueCommandHeader}>
+            <View>
+              <Text style={styles.leagueCommandEyebrow}>League Operations</Text>
+              <Text style={[styles.leagueCommandTitle, { color: titleColor }]} numberOfLines={1}>{league.name}</Text>
             </View>
+            <Text style={styles.leagueCommandMeta}>{sportDisplayLabel(league.sport)}</Text>
           </View>
-          <Text style={styles.channelsTabChevron}>›</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.leagueFeatureCard} onPress={goToChannels}>
+            <View style={styles.leagueFeatureLeft}>
+              <Text style={styles.leagueFeatureIcon}>{channelIcon}</Text>
+              <View style={styles.leagueFeatureTextBlock}>
+                <Text style={[styles.leagueFeatureLabel, { color: titleColor }]} numberOfLines={1}>{channelLabel}</Text>
+                <Text style={styles.leagueFeatureSub} numberOfLines={1}>GM Controls and News</Text>
+              </View>
+            </View>
+            <Text style={styles.leagueFeatureChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* My Team or Pick Team */}
         {myTeam ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.myTeamCard, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + "22" }]}
+            style={[styles.myTeamOperationsCard, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + "18" }]}
             onPress={() => router.push({
               pathname: '/screens/roster',
               params: { leagueId, sport: SPORT_KEY[league.sport] || league.sport, teamId: myTeam.id || '', era: league.era || 'current' },
             })}
           >
-            <View style={styles.myTeamCardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.myTeamCardLabel}>MY TEAM</Text>
-                <Text style={[styles.myTeamCardName, { color: titleColor }]}>{myTeamName}</Text>
-                <Text style={styles.myTeamCardSub}>{myTeamAbbr} · {myTeam.players?.length || 0} players</Text>
+            <View style={styles.clubCardHeader}>
+              <View style={styles.clubCardTitleBlock}>
+                <Text style={styles.clubCardLabel}>Club Snapshot</Text>
+                <Text style={[styles.clubCardName, { color: titleColor }]} numberOfLines={1}>{myTeamName}</Text>
+                <Text style={styles.clubCardSub}>{myTeamAbbr} · {myTeam.players?.length || 0} players</Text>
               </View>
-              <Text style={[styles.myTeamChevron, { color: teamText }]}>›</Text>
+              <Text style={[styles.clubCardChevron, { color: teamText }]}>›</Text>
             </View>
             {myTeam.players?.length > 0 && (
-              <View style={styles.myTeamPlayers}>
+              <View style={styles.clubPlayerStack}>
                 {myTeamPlayersByValue.slice(0, 3).map((p: any) => (
-                  <View key={p.player_id} style={styles.myTeamPlayerRow}>
-                    <Text style={[styles.myTeamPlayerPos, { color: teamText }]}>{p.position}</Text>
-                    <Text style={styles.myTeamPlayerName}>{p.full_name}</Text>
+                  <View key={p.player_id} style={styles.clubPlayerRow}>
+                    <Text style={[styles.clubPlayerPos, { color: teamText }]}>{p.position}</Text>
+                    <Text style={styles.clubPlayerName} numberOfLines={1}>{p.full_name}</Text>
                     {playerJerseyDisplay(p) ? (
-                      <Text style={styles.myTeamPlayerJersey}>{playerJerseyDisplay(p)}</Text>
+                      <Text style={styles.clubPlayerJersey}>{playerJerseyDisplay(p)}</Text>
                     ) : null}
                   </View>
                 ))}
                 {myTeamPlayersByValue.length > 3 && (
-                  <Text style={[styles.myTeamMorePlayers, { color: teamText }]}>+{myTeamPlayersByValue.length - 3} more players →</Text>
+                  <Text style={[styles.clubMorePlayers, { color: teamText }]}>+{myTeamPlayersByValue.length - 3} more players →</Text>
                 )}
               </View>
             )}
@@ -404,32 +412,36 @@ export default function LeagueScreen() {
 
         {league.mode === 'draft' && league.draftStatus !== 'complete' && (
           <TouchableOpacity
-            style={[styles.channelsTab, { borderColor: '#f4b942', backgroundColor: '#2a210d' }]}
+            style={[styles.leagueFeatureCard, { borderColor: '#f4b942', backgroundColor: '#2a210d', marginBottom: 12 }]}
             onPress={() => router.push({ pathname: '/screens/offseason/live-draft', params: { leagueId } })}
           >
-            <View style={styles.channelsTabLeft}>
-              <Text style={styles.channelsTabIcon}>🎯</Text>
+            <View style={styles.leagueFeatureLeft}>
+              <Text style={styles.leagueFeatureIcon}>🎯</Text>
               <View>
-                <Text style={[styles.channelsTabLabel, { color: '#f4b942' }]}>Fantasy Draft Room</Text>
-                <Text style={styles.channelsTabSub} numberOfLines={2}>80-second picks, draft boards, CPU auto-pick</Text>
+                <Text style={[styles.leagueFeatureLabel, { color: '#f4b942' }]}>Fantasy Draft Room</Text>
+                <Text style={styles.leagueFeatureSub} numberOfLines={2}>80-second picks, draft boards, CPU auto-pick</Text>
               </View>
             </View>
-            <Text style={styles.channelsTabChevron}>›</Text>
+            <Text style={styles.leagueFeatureChevron}>›</Text>
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={[styles.rostersBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, marginTop: 0, marginBottom: 10 }]}
-          onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
-        >
-          <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.scheduleBtn, { backgroundColor: tintColor + '16', borderColor: teamTheme.borderColor + 'cc' }]}
-          onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
-        >
-          <Text style={[styles.scheduleBtnText, { color: titleColor }]}>📅 Schedule</Text>
-        </TouchableOpacity>
+        <View style={styles.leagueActionStack}>
+          <TouchableOpacity
+            style={[styles.leagueQuickLink, styles.rostersBtn, { backgroundColor: tintColor + '18', borderColor: teamTheme.borderColor }]}
+            onPress={() => router.push({ pathname: '/screens/league-rosters', params: { leagueId } })}
+          >
+            <Text style={[styles.rostersBtnText, { color: titleColor }]}>📋 League Rosters</Text>
+            <Text style={styles.leagueQuickChevron}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.leagueQuickLink, styles.scheduleBtn, { backgroundColor: tintColor + '12', borderColor: teamTheme.borderColor + 'cc' }]}
+            onPress={() => router.push({ pathname: '/screens/season/calendar', params: { leagueId } })}
+          >
+            <Text style={[styles.scheduleBtnText, { color: titleColor }]}>📅 Schedule</Text>
+            <Text style={styles.leagueQuickChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Commissioner Controls */}
         {isCommissioner && (
@@ -499,25 +511,31 @@ const styles = StyleSheet.create({
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },
   metaText: { color: '#666', fontSize: 13 },
-  channelsTab: { backgroundColor: '#0a1a2a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 2, borderColor: '#1a3a5a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  channelsTabLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  channelsTabIcon: { fontSize: 32 },
-  channelsTabTextBlock: { flex: 1, minWidth: 0 },
-  channelsTabLabel: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 3 },
-  channelsTabSub: { fontSize: 12, color: '#4a7a9a', lineHeight: 16 },
-  channelsTabChevron: { color: '#4a7a9a', fontSize: 28, fontWeight: '300', marginLeft: 8 },
-  myTeamCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 2 },
-  myTeamChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
-  myTeamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  myTeamCardLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2, color: '#888' },
-  myTeamCardName: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 2 },
-  myTeamCardSub: { fontSize: 12, color: '#4a8a4a' },
-  myTeamPlayers: { gap: 8 },
-  myTeamPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  myTeamPlayerPos: { color: '#00ff87', fontSize: 11, fontWeight: '700', width: 28 },
-  myTeamPlayerName: { color: '#cccccc', fontSize: 13, flex: 1 },
-  myTeamPlayerJersey: { color: '#555', fontSize: 12 },
-  myTeamMorePlayers: { color: '#555', fontSize: 12, marginTop: 4 },
+  leagueCommandShell: { borderRadius: 8, padding: 14, marginBottom: 14, borderWidth: 2, gap: 12 },
+  leagueCommandHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  leagueCommandEyebrow: { color: '#888', fontSize: 10, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
+  leagueCommandTitle: { fontSize: 20, fontWeight: '900', marginTop: 2, maxWidth: 250 },
+  leagueCommandMeta: { color: '#aaa', fontSize: 11, fontWeight: '900', borderWidth: 1, borderColor: '#333', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  leagueFeatureCard: { backgroundColor: '#101010', borderRadius: 8, padding: 13, borderWidth: 1, borderColor: '#2a2a2a', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  leagueFeatureLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  leagueFeatureIcon: { fontSize: 26 },
+  leagueFeatureTextBlock: { flex: 1, minWidth: 0 },
+  leagueFeatureLabel: { fontSize: 16, fontWeight: '900', color: '#ffffff', marginBottom: 3 },
+  leagueFeatureSub: { fontSize: 11, color: '#777', lineHeight: 15, fontWeight: '800' },
+  leagueFeatureChevron: { color: '#777', fontSize: 26, fontWeight: '300', marginLeft: 8 },
+  myTeamOperationsCard: { borderRadius: 8, padding: 14, marginBottom: 14, borderWidth: 2 },
+  clubCardChevron: { fontSize: 28, fontWeight: '300', marginLeft: 8 },
+  clubCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  clubCardTitleBlock: { flex: 1, minWidth: 0 },
+  clubCardLabel: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 3, color: '#888', letterSpacing: 1 },
+  clubCardName: { fontSize: 18, fontWeight: '900', color: '#ffffff', marginBottom: 2 },
+  clubCardSub: { fontSize: 12, color: '#4a8a4a', fontWeight: '800' },
+  clubPlayerStack: { gap: 8 },
+  clubPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#11111166', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 7 },
+  clubPlayerPos: { color: '#00ff87', fontSize: 11, fontWeight: '900', width: 34 },
+  clubPlayerName: { color: '#e6e6e6', fontSize: 13, flex: 1, fontWeight: '800' },
+  clubPlayerJersey: { color: '#666', fontSize: 12, fontWeight: '900' },
+  clubMorePlayers: { color: '#555', fontSize: 12, marginTop: 4, fontWeight: '900' },
   pickTeamBtn: { backgroundColor: '#0a1a0a', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#1a3a1a', flexDirection: 'row', alignItems: 'center', gap: 12 },
   pickTeamBtnIcon: { fontSize: 28 },
   pickTeamBtnText: { color: '#00ff87', fontSize: 16, fontWeight: '700' },
@@ -552,10 +570,13 @@ const styles = StyleSheet.create({
   advanceSeasonBtn: { backgroundColor: '#0a2a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#00ff87', marginBottom: 0 },
   advanceSeasonBtnText: { color: '#00ff87', fontSize: 15, fontWeight: '700' },
   offseasonWarning: { color: '#ffaa00', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 8, textAlign: 'center' },
-  rostersBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginTop: 12, marginBottom: 16 },
-  rostersBtnText: { fontSize: 15, fontWeight: '700' },
-  scheduleBtn: { paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginBottom: 16 },
-  scheduleBtnText: { fontSize: 15, fontWeight: '700' },
+  leagueActionStack: { gap: 9, marginBottom: 18 },
+  leagueQuickLink: { minHeight: 58, borderRadius: 8, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  leagueQuickChevron: { color: '#777', fontSize: 24, fontWeight: '300' },
+  rostersBtn: { paddingVertical: 14, alignItems: 'center' },
+  rostersBtnText: { fontSize: 15, fontWeight: '900' },
+  scheduleBtn: { paddingVertical: 14, alignItems: 'center' },
+  scheduleBtnText: { fontSize: 15, fontWeight: '900' },
   leaveBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#444', marginBottom: 16 },
   leaveBtnText: { color: '#888', fontSize: 15, fontWeight: '600' },
   spacer: { height: 60 },

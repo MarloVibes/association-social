@@ -435,9 +435,9 @@ export default function TradeChannelScreen() {
       {activeTab === 'block' ? (
         <ScrollView contentContainerStyle={[styles.blockContent, { paddingBottom: 90 }]}>
           <View style={styles.boardHero}>
-            <View>
-              <Text style={styles.boardEyebrow}>{myTeam?.abbreviation || sport.toUpperCase()} OPERATIONS</Text>
-              <Text style={styles.boardTitle}>Front Office Trade Board</Text>
+            <View style={styles.boardHeroTextBlock}>
+              <Text style={styles.boardEyebrow} numberOfLines={1}>{myTeam?.abbreviation || sport.toUpperCase()} OPERATIONS</Text>
+              <Text style={styles.boardTitle} numberOfLines={1}>Front Office Trade Board</Text>
             </View>
             <Text style={styles.boardTeamLabel} numberOfLines={1}>{myTeam?.name || 'My Team'}</Text>
           </View>
@@ -872,10 +872,11 @@ const styles = StyleSheet.create({
   tabText: { color: '#555', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   tabTextActive: { color: '#00ff87' },
   blockContent: { padding: 14, paddingBottom: 100, gap: 12 },
-  boardHero: { borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#141414', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  boardHero: { borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#141414', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, overflow: 'hidden' },
+  boardHeroTextBlock: { flex: 1, minWidth: 0 },
   boardEyebrow: { color: '#777', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
-  boardTitle: { color: '#fff', fontSize: 20, fontWeight: '900', marginTop: 3 },
-  boardTeamLabel: { color: '#aaa', fontSize: 12, fontWeight: '800', maxWidth: 116, textAlign: 'right' },
+  boardTitle: { color: '#fff', fontSize: 19, fontWeight: '900', marginTop: 3 },
+  boardTeamLabel: { color: '#aaa', fontSize: 12, fontWeight: '800', width: 96, textAlign: 'right' },
   boardSummaryStrip: { flexDirection: 'row', borderRadius: 8, borderWidth: 1, borderColor: '#222', backgroundColor: '#101010', overflow: 'hidden' },
   boardSummaryItem: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRightWidth: 1, borderRightColor: '#1f1f1f' },
   boardSummaryValue: { color: '#fff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
