@@ -475,7 +475,8 @@ describe('source safety regressions', () => {
     expect(tradeRoom).toContain('gradeCount={3}');
     expect(tradeChannel).toContain("from '@/components/FranchisePlayerRow'");
     expect(tradeChannel).toContain('salaryLabel={`${formatFranchisePlayerMoney(playerSalary(p))} salary`}');
-    expect(tradeChannel).toContain('salaryLabel={`${formatFranchisePlayerMoney(playerSalary(item.player))} salary`}');
+    expect(tradeChannel).toContain('{formatFranchisePlayerMoney(playerSalary(item.player))}');
+    expect(tradeChannel).toContain('styles.blockPlayerRow');
     expect(tradeChannel).toContain('gradeCount={3}');
     expect(tradeChannel).not.toContain('styles.rosterRowName');
   });
@@ -804,7 +805,8 @@ describe('source safety regressions', () => {
     expect(sharedRow).toContain('selectRosterRatingProfile(player, profilesByName, { era, currentYear, leagueDate })');
     expect(sharedRow).toContain('getSportArchetypeForYear');
     expect(tradeChannel).toContain('selectRosterRatingProfile');
-    expect(tradeChannel).toContain('getSportArchetypeForYear');
+    expect(tradeChannel).toContain('tradeVisibleIdentity');
+    expect(tradeChannel).toContain('tradeSlotIdentity');
     expect(tradeChannel).not.toContain('getSportArchetype(player, sport, eraKey)');
     expect(tradeChannel).not.toContain("import { getPlaystyle }");
     expect(tradeChannel).toContain("era={league?.era || 'current'}");
@@ -956,6 +958,28 @@ describe('source safety regressions', () => {
     expect(tradeCenter).not.toContain('MY TRADE BLOCK');
     expect(tradeCenter).not.toContain('ON THE BLOCK');
     expect(tradeCenter).not.toContain('>PROPOSE<');
+  });
+
+  it('groups the Trade Center block feed by team with compact player rows', () => {
+    const tradeCenter = source('app/screens/trade-channel.tsx');
+
+    expect(tradeCenter).toContain('tradeBlockTeamSections');
+    expect(tradeCenter).toContain('styles.blockTeamSection');
+    expect(tradeCenter).toContain('styles.blockPlayerRow');
+    expect(tradeCenter).toContain('players.length');
+    expect(tradeCenter).toContain('Open Trade');
+    expect(tradeCenter).not.toContain('style={styles.listingCard}');
+    expect(tradeCenter).not.toContain('styles.listingPlayerCardWrap');
+  });
+
+  it('uses player tier identity instead of old role-player badges in the Trade Center board slots', () => {
+    const tradeCenter = source('app/screens/trade-channel.tsx');
+
+    expect(tradeCenter).toContain('TierBadge');
+    expect(tradeCenter).toContain('tradeSlotIdentity');
+    expect(tradeCenter).toContain('identity?.tier');
+    expect(tradeCenter).not.toContain('function PlaystyleBadge');
+    expect(tradeCenter).not.toContain('<PlaystyleBadge');
   });
 
   it('keeps trade-room player pickers readable like roster filters', () => {

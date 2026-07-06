@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import FranchisePlayerRow, { formatFranchisePlayerMoney } from '@/components/FranchisePlayerRow';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
-import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, getDoc, where, arrayUnion } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -25,8 +24,42 @@ function tradeVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | n
   return identity as VisibleNbaIdentity;
 }
 
+const TRADE_TIER_COLORS: Record<string, string> = {
+  Legend: '#f5d76e',
+  Superstar: '#f5c400',
+  Star: '#f5a623',
+  'High-Impact Contributor': '#8bffb5',
+  'Valuable Rotation Player': '#00ff87',
+  'Specialist / Depth Piece': '#69a7ff',
+  Prospect: '#b388ff',
+  'Depth Piece': '#888888',
+};
 
-function PlaystyleBadge({
+function tradeSlotIdentity(player: any, {
+  eraKey,
+  currentYear,
+  leagueDate,
+  sport,
+}: {
+  eraKey?: string;
+  currentYear?: number | string | null;
+  leagueDate?: string | Date | null;
+  sport?: string;
+}) {
+  if (sport && sport !== 'nba') {
+    return { tier: player?.position || 'Player', archetypes: [] as string[], color: '#69a7ff' };
+  }
+  const profile = selectRosterRatingProfile(player, {}, { era: eraKey, currentYear, leagueDate });
+  const identity = tradeVisibleIdentity(player, profile);
+  const tier = identity?.tier || 'Depth Piece';
+  return {
+    tier,
+    archetypes: identity?.archetypes || [],
+    color: TRADE_TIER_COLORS[tier] || '#00ff87',
+  };
+}
+
+function TierBadge({
   player,
   eraKey,
   sport,
@@ -39,12 +72,10 @@ function PlaystyleBadge({
   currentYear?: number | string | null;
   leagueDate?: string | Date | null;
 }) {
-  const profile = selectRosterRatingProfile(player, {}, { era: eraKey, currentYear, leagueDate });
-  const year = typeof currentYear === 'number' ? currentYear : Number(currentYear) || undefined;
-  const style = getSportArchetypeForYear(player, profile, year, sport);
+  const identity = tradeSlotIdentity(player, { eraKey, sport, currentYear, leagueDate });
   return (
-    <View style={[badgeStyles.badge, { borderColor: style.color + '88' }]}>
-      <Text style={[badgeStyles.badgeText, { color: style.color }]}>{style.label}</Text>
+    <View style={[badgeStyles.badge, { borderColor: identity.color + '88', backgroundColor: identity.color + '16' }]}>
+      <Text style={[badgeStyles.badgeText, { color: identity.color }]} numberOfLines={2}>{identity.tier}</Text>
     </View>
   );
 }
@@ -74,7 +105,7 @@ function PlayerSlot({ player, onPress, empty, style, eraKey, sport, currentYear,
         <View style={styles.playerSlotInfo}>
           <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
           <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
-          <PlaystyleBadge player={player} eraKey={eraKey} sport={sport} currentYear={currentYear} leagueDate={leagueDate} />
+          <TierBadge player={player} eraKey={eraKey} sport={sport} currentYear={currentYear} leagueDate={leagueDate} />
         </View>
       </View>
     </TouchableOpacity>
@@ -431,34 +462,74 @@ export default function TradeChannelScreen() {
               return true;
             });
             const sorted = [...filtered].sort((a, b) => (
-              rosterComparator(a.player || {}, b.player || {})
-              || (a.teamName || '').localeCompare(b.teamName || '')
+              (a.teamName || '').localeCompare(b.teamName || '')
+              || rosterComparator(a.player || {}, b.player || {})
             ));
-            return sorted.map(item => (
-              <View key={item.key} style={styles.listingCard}>
-                <Text style={styles.listingTeam}>{item.teamName}</Text>
-                <View style={styles.listingRow}>
-                  <View style={styles.listingPlayerCardWrap}>
-                    <FranchisePlayerRow
-                      player={item.player}
-                      sport={sport}
-                      era={leagueEra}
-                      currentYear={leagueYear}
-                      leagueDate={leagueDate}
-                      salary={playerSalary(item.player)}
-                      salaryLabel={`${formatFranchisePlayerMoney(playerSalary(item.player))} salary`}
-                      meta={[item.player?.position, item.teamName].filter(Boolean).join(' · ')}
-                      gradeCount={3}
-                      action={{ label: 'Offer', onPress: item.onOffer, variant: 'primary' }}
-                      onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
-                    />
+            const tradeBlockTeamSections = [...sorted.reduce((map, item) => {
+              const sectionKey = item.teamId || item.teamName || 'team';
+              const section = map.get(sectionKey) || {
+                key: sectionKey,
+                teamName: item.teamName || 'Team',
+                uid: item.uid,
+                teamId: item.teamId,
+                onDM: item.onDM,
+                players: [] as typeof sorted,
+              };
+              section.players.push(item);
+              map.set(sectionKey, section);
+              return map;
+            }, new Map<string, { key: string; teamName: string; uid: string; teamId: string; onDM: () => void; players: typeof sorted }>()).values()];
+            return tradeBlockTeamSections.map(section => (
+              <View key={section.key} style={styles.blockTeamSection}>
+                <View style={styles.blockTeamHeader}>
+                  <View>
+                    <Text style={styles.blockTeamName}>{section.teamName}</Text>
+                    <Text style={styles.blockTeamCount}>{section.players.length} player{section.players.length === 1 ? '' : 's'} available</Text>
                   </View>
-                  <View style={styles.listingBtns}>
-                    <TouchableOpacity style={styles.dmBtn} onPress={item.onDM}>
-                      <Text style={styles.dmBtnText}>💬 DM</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity style={styles.blockTeamDmBtn} onPress={section.onDM}>
+                    <Text style={styles.blockTeamDmText}>💬 DM</Text>
+                  </TouchableOpacity>
                 </View>
+                {section.players.map(item => {
+                  const identity = tradeSlotIdentity(item.player, { eraKey: leagueEra, sport, currentYear: leagueYear, leagueDate });
+                  const playerName = item.player?.full_name || item.player?.name || 'Player';
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={styles.blockPlayerRow}
+                      activeOpacity={0.82}
+                      onPress={() => setSelectedAvailPlayer({ player: item.player, uid: item.uid, teamId: item.teamId || item.player?.teamId || '', teamName: item.teamName || '' })}
+                    >
+                      <PlayerHeadshot
+                        player={item.player}
+                        sport={sport}
+                        imageStyle={styles.blockPlayerPhoto}
+                        fallback={(
+                          <View style={styles.blockPlayerFallback}>
+                            <Text style={styles.blockPlayerInitial}>{playerName[0]}</Text>
+                          </View>
+                        )}
+                      />
+                      <View style={styles.blockPlayerInfo}>
+                        <View style={styles.blockPlayerTopLine}>
+                          <Text style={styles.blockPlayerName} numberOfLines={1}>{playerName}</Text>
+                          <Text style={styles.blockPlayerMoney}>{formatFranchisePlayerMoney(playerSalary(item.player))}</Text>
+                        </View>
+                        <View style={styles.blockPlayerMetaRow}>
+                          <Text style={styles.blockPlayerMeta} numberOfLines={1}>
+                            {[item.player?.position, identity.archetypes[0]].filter(Boolean).join(' · ') || identity.tier}
+                          </Text>
+                          <View style={[styles.blockTierBadge, { borderColor: identity.color + '88', backgroundColor: identity.color + '16' }]}>
+                            <Text style={[styles.blockTierText, { color: identity.color }]} numberOfLines={1}>{identity.tier}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.blockOfferBtn} onPress={item.onOffer}>
+                        <Text style={styles.blockOfferText}>Open Trade</Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             ));
           })()}
@@ -727,11 +798,26 @@ const styles = StyleSheet.create({
   targetSlot: { borderColor: '#4444ff', backgroundColor: '#0a0a1a' },
   availableContent: { padding: 16, paddingBottom: 100 },
   proposeContent: { padding: 16, paddingBottom: 100 },
-  listingCard: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#222' },
-  listingTeam: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
-  listingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  listingPlayerCardWrap: { flex: 1, minWidth: 0 },
-  listingBtns: { gap: 6 },
+  blockTeamSection: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#222', gap: 8 },
+  blockTeamHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  blockTeamName: { color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 0.4, textTransform: 'uppercase' },
+  blockTeamCount: { color: '#666', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  blockTeamDmBtn: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', backgroundColor: '#151528' },
+  blockTeamDmText: { color: '#8888ff', fontSize: 10, fontWeight: '900' },
+  blockPlayerRow: { minHeight: 62, borderRadius: 10, borderWidth: 1, borderColor: '#242424', backgroundColor: '#171717', padding: 8, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  blockPlayerPhoto: { width: 42, height: 42, borderRadius: 6, backgroundColor: '#0a0a0a' },
+  blockPlayerFallback: { width: 42, height: 42, borderRadius: 6, backgroundColor: '#1a1a2a', alignItems: 'center', justifyContent: 'center' },
+  blockPlayerInitial: { color: '#8888ff', fontSize: 16, fontWeight: '900' },
+  blockPlayerInfo: { flex: 1, minWidth: 0 },
+  blockPlayerTopLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  blockPlayerName: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '900' },
+  blockPlayerMoney: { color: '#00ff87', fontSize: 10, fontWeight: '900' },
+  blockPlayerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  blockPlayerMeta: { flex: 1, color: '#888', fontSize: 10, fontWeight: '800' },
+  blockTierBadge: { maxWidth: 116, borderRadius: 6, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
+  blockTierText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.3 },
+  blockOfferBtn: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#00ff87', backgroundColor: '#062417' },
+  blockOfferText: { color: '#00ff87', fontSize: 10, fontWeight: '900' },
   dmBtn: { backgroundColor: '#1a1a2a', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#4444ff', alignItems: 'center' },
   dmBtnText: { color: '#8888ff', fontSize: 11, fontWeight: '700' },
   proposeTeamCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#222', gap: 12 },
