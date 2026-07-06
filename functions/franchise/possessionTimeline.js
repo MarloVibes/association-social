@@ -27,7 +27,7 @@ function buildPossessionTimeline(input) {
 
 function buildPossessionTimelineAttempt(input) {
   const rng = createRng(hashString(String(input.seed || input.gameId || 'game')));
-  const gameplan = buildGameplanMatchup(input.homeCoachingPresetIds, input.awayCoachingPresetIds);
+  const gameplan = buildGameplanSchedule(input);
   const inputWithGameplan = { ...input, gameplan };
   const home = buildTeamContext(input.homeTeamId, input.homeTeam, 'home', inputWithGameplan);
   const away = buildTeamContext(input.awayTeamId, input.awayTeam, 'away', inputWithGameplan);
@@ -43,15 +43,19 @@ function buildPossessionTimelineAttempt(input) {
     let clockSeconds = periodSeconds;
     let periodHome = 0;
     let periodAway = 0;
+    const periodGameplan = gameplanForPeriod(gameplan, period);
+    const periodInput = { ...input, gameplan: periodGameplan };
+    const periodHomeContext = applyGameplanToTeamContext(home, 'home', periodInput);
+    const periodAwayContext = applyGameplanToTeamContext(away, 'away', periodInput);
     while (clockSeconds > 0) {
       const possession = resolvePossession({
         rng,
-        input: inputWithGameplan,
+        input: periodInput,
         period,
         clockSeconds,
         offense,
-        home,
-        away,
+        home: periodHomeContext,
+        away: periodAwayContext,
         homeScore,
         awayScore,
       });
@@ -61,15 +65,15 @@ function buildPossessionTimelineAttempt(input) {
       periodHome += possession.homePoints;
       periodAway += possession.awayPoints;
       events.push(eventFromPossession({
-        input: inputWithGameplan,
+        input: periodInput,
         period,
         clockSeconds,
         possession,
         elapsedIndex: events.length,
         homeScore,
         awayScore,
-        home,
-        away,
+        home: periodHomeContext,
+        away: periodAwayContext,
         periodCount: period,
       }));
       offense = possession.nextOffense;
@@ -312,6 +316,30 @@ function buildTeamContext(teamId, team, side, input) {
     defenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'defense')
       + (side === 'home' ? input.gameplan.homeDefenseBoost : input.gameplan.awayDefenseBoost),
     closeGamePressure: input.gameplan.closeGamePressure,
+    offenseStyle,
+    defenseStyle,
+    threePointRateBoost: styleEffects.threePointRateBoost,
+    freeThrowBoost: styleEffects.freeThrowBoost,
+    offensiveReboundBoost: styleEffects.offensiveReboundBoost,
+    defensiveReboundBoost: styleEffects.defensiveReboundBoost,
+    turnoverPressureBoost: styleEffects.turnoverPressureBoost,
+    ballSecurityBoost: styleEffects.ballSecurityBoost,
+  };
+}
+
+function applyGameplanToTeamContext(team, side, input) {
+  const gameplan = input.gameplan || {};
+  const presetIds = side === 'home' ? gameplan.homePresetIds || input.homeCoachingPresetIds : gameplan.awayPresetIds || input.awayCoachingPresetIds;
+  const offenseStyle = side === 'home' ? gameplan.homeOffenseId : gameplan.awayOffenseId;
+  const defenseStyle = side === 'home' ? gameplan.homeDefenseId : gameplan.awayDefenseId;
+  const styleEffects = gameplanStyleEffects(offenseStyle, defenseStyle);
+  return {
+    ...team,
+    offenseBoost: coachingBoost(presetIds, 'offense')
+      + (side === 'home' ? gameplan.homeOffenseBoost : gameplan.awayOffenseBoost),
+    defenseBoost: coachingBoost(presetIds, 'defense')
+      + (side === 'home' ? gameplan.homeDefenseBoost : gameplan.awayDefenseBoost),
+    closeGamePressure: gameplan.closeGamePressure,
     offenseStyle,
     defenseStyle,
     threePointRateBoost: styleEffects.threePointRateBoost,
@@ -798,6 +826,14 @@ function eventFromPossession({ input, period, clockSeconds, possession, elapsedI
     spotlight: insight.spotlight,
     why: insight.why,
     pressure: insight.pressure,
+    gameplan: input.gameplan && {
+      homeOffenseId: input.gameplan.homeOffenseId,
+      homeDefenseId: input.gameplan.homeDefenseId,
+      awayOffenseId: input.gameplan.awayOffenseId,
+      awayDefenseId: input.gameplan.awayDefenseId,
+      homeOffenseResult: input.gameplan.homeOffenseResult,
+      awayOffenseResult: input.gameplan.awayOffenseResult,
+    },
     playerId: possession.player && possession.player.playerId,
     playerName: possession.player && possession.player.name,
     points: possession.points,
@@ -1103,6 +1139,8 @@ function buildGameplanMatchup(homePresetIds, awayPresetIds) {
   const bothMadeStrongChoices = Math.max(homeAdvantage, 0) > 0 && Math.max(awayAdvantage, 0) > 0;
   const closeGamePressure = bothMadeStrongChoices ? 22 : Math.max(homeAdvantage, awayAdvantage) >= 2 ? 8 : 0;
   return {
+    homePresetIds: selectedPresetIds(homePresetIds),
+    awayPresetIds: selectedPresetIds(awayPresetIds),
     homePresetId,
     awayPresetId,
     homePresetName: GAMEPLAN_PRESETS[homePresetId].label,
@@ -1127,6 +1165,35 @@ function buildGameplanMatchup(homePresetIds, awayPresetIds) {
     homeSummary: resultSummary(homeOffenseResult, homeOffenseId),
     awaySummary: resultSummary(awayOffenseResult, awayOffenseId),
   };
+}
+
+function normalizeQuarterPresetMatrix(quarterPresetIds, fallbackPresetIds) {
+  const fallback = Array.isArray(fallbackPresetIds) && fallbackPresetIds.length > 0 ? fallbackPresetIds : ['balanced'];
+  return [0, 1, 2, 3].map((index) => {
+    const value = Array.isArray(quarterPresetIds) ? quarterPresetIds[index] : null;
+    if (Array.isArray(value) && value.length > 0) return value;
+    if (value) return [value];
+    if (index < 2) return fallback;
+    return fallback;
+  });
+}
+
+function buildGameplanSchedule(input) {
+  const homeQuarters = normalizeQuarterPresetMatrix(input.homeQuarterCoachingPresetIds, input.homeCoachingPresetIds);
+  const awayQuarters = normalizeQuarterPresetMatrix(input.awayQuarterCoachingPresetIds, input.awayCoachingPresetIds);
+  const quarters = homeQuarters.map((homePresetIds, index) => ({
+    period: index + 1,
+    ...buildGameplanMatchup(homePresetIds, awayQuarters[index]),
+  }));
+  return {
+    ...quarters[0],
+    quarters,
+  };
+}
+
+function gameplanForPeriod(gameplan, period) {
+  const quarters = Array.isArray(gameplan && gameplan.quarters) ? gameplan.quarters : [];
+  return quarters[Math.min(Math.max(Number(period || 1), 1), 4) - 1] || gameplan;
 }
 
 function coachingBoost(presetIds, kind) {

@@ -308,6 +308,49 @@ describe('possession timeline engine', () => {
     expect(insideBox.freeThrowsAttempted + insideBox.rebounds).toBeGreaterThan(spacedBox.freeThrowsAttempted + spacedBox.rebounds);
   });
 
+  it('tracks quarter-by-quarter gameplans and uses Q4 for overtime', () => {
+    const timeline = buildPossessionTimeline({
+      gameId: 'quarter-gameplans',
+      seed: 'quarter-gameplans-seed',
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeTeam: team('HOME', 82),
+      awayTeam: team('AWAY', 82),
+      homeQuarterCoachingPresetIds: [
+        ['five_out', 'protect_paint'],
+        ['pick_and_roll', 'zone_32'],
+        ['motion_offense', 'switch_everything'],
+        ['star_isolation', 'double_star'],
+      ],
+      awayQuarterCoachingPresetIds: [
+        ['motion_offense', 'zone_23'],
+        ['post_inside', 'protect_paint'],
+        ['transition_pace', 'half_court_press'],
+        ['five_out', 'switch_everything'],
+      ],
+      nowMs: 10_000,
+    });
+
+    expect(timeline.gameplan.quarters.map((quarter: any) => ({
+      period: quarter.period,
+      homeOffenseId: quarter.homeOffenseId,
+      homeDefenseId: quarter.homeDefenseId,
+      awayOffenseId: quarter.awayOffenseId,
+      awayDefenseId: quarter.awayDefenseId,
+    }))).toEqual([
+      { period: 1, homeOffenseId: 'five_out', homeDefenseId: 'protect_paint', awayOffenseId: 'motion_offense', awayDefenseId: 'zone_23' },
+      { period: 2, homeOffenseId: 'pick_and_roll', homeDefenseId: 'zone_32', awayOffenseId: 'post_inside', awayDefenseId: 'protect_paint' },
+      { period: 3, homeOffenseId: 'motion_offense', homeDefenseId: 'switch_everything', awayOffenseId: 'transition_pace', awayDefenseId: 'half_court_press' },
+      { period: 4, homeOffenseId: 'star_isolation', homeDefenseId: 'double_star', awayOffenseId: 'five_out', awayDefenseId: 'switch_everything' },
+    ]);
+    expect(timeline.events.find((event: any) => event.period === 2 && event.eventType !== 'period_end')?.gameplan).toMatchObject({
+      homeOffenseId: 'pick_and_roll',
+      homeDefenseId: 'zone_32',
+      awayOffenseId: 'post_inside',
+      awayDefenseId: 'protect_paint',
+    });
+  });
+
   it('uses category skill grades and tendencies for live shot profile', () => {
     const timeline = buildPossessionTimeline({
       gameId: 'game-engine-profile',

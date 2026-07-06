@@ -98,6 +98,12 @@ type BoxScorePlayer = {
   earnedRuns?: number;
 };
 
+type QuarterPlan = {
+  quarter: number;
+  offensePresetId: string;
+  defensePresetId: string;
+};
+
 function prepPhaseLabels(sport: 'nba' | 'madden' | 'mlb') {
   if (sport === 'mlb') return ['Early', 'Late'];
   if (sport === 'nba') return ['OFF', 'DEF'];
@@ -178,6 +184,7 @@ export default function MatchupScreen() {
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
   const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
+  const [quarterPlans, setQuarterPlans] = useState<QuarterPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -303,7 +310,27 @@ export default function MatchupScreen() {
       : defensePresets[0]?.id || first;
     setFirstHalfPresetId(first);
     setSecondHalfPresetId(second);
+    setQuarterPlans([1, 2, 3, 4].map(quarter => ({
+      quarter,
+      offensePresetId: first,
+      defensePresetId: second,
+    })));
   }, [defensePresets, myTeam, offensePresets, sport]);
+
+  const setQuarterPlanPreset = (quarter: number, slot: 'offense' | 'defense', presetId: string) => {
+    setQuarterPlans(current => {
+      const existing = current.length === 4 ? current : [1, 2, 3, 4].map(item => ({
+        quarter: item,
+        offensePresetId: firstHalfPresetId,
+        defensePresetId: secondHalfPresetId,
+      }));
+      return existing.map(plan => (
+        plan.quarter === quarter
+          ? { ...plan, [slot === 'offense' ? 'offensePresetId' : 'defensePresetId']: presetId }
+          : plan
+      ));
+    });
+  };
 
   const call = async (name: string) => {
     if (!leagueId || !gameId) return;
@@ -376,6 +403,22 @@ export default function MatchupScreen() {
     if (!leagueId || !league || !game || !myTeam) return;
     const firstHalfPreset = offensePresets.find(item => item.id === firstHalfPresetId) || presets.find(item => item.id === firstHalfPresetId) || presets[0];
     const secondHalfPreset = defensePresets.find(item => item.id === secondHalfPresetId) || presets.find(item => item.id === secondHalfPresetId) || firstHalfPreset;
+    const nbaQuarterPlans = quarterPlans.length === 4 ? quarterPlans : [1, 2, 3, 4].map(quarter => ({
+      quarter,
+      offensePresetId: firstHalfPreset?.id || 'balanced',
+      defensePresetId: secondHalfPreset?.id || 'protect_paint',
+    }));
+    const quarterPresetSnapshots = sport === 'nba'
+      ? nbaQuarterPlans.map(plan => {
+        const offensePreset = offensePresets.find(item => item.id === plan.offensePresetId) || firstHalfPreset;
+        const defensePreset = defensePresets.find(item => item.id === plan.defensePresetId) || secondHalfPreset;
+        return {
+          quarter: plan.quarter,
+          offensePresetSnapshot: buildCoachingSnapshot(offensePreset, myTeam.id, game.id),
+          defensePresetSnapshot: buildCoachingSnapshot(defensePreset, myTeam.id, game.id),
+        };
+      })
+      : [];
     setWorking(true);
     try {
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
@@ -385,9 +428,10 @@ export default function MatchupScreen() {
         presetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
         firstHalfPresetSnapshot: buildCoachingSnapshot(firstHalfPreset, myTeam.id, game.id),
         secondHalfPresetSnapshot: buildCoachingSnapshot(secondHalfPreset, myTeam.id, game.id),
+        ...(sport === 'nba' ? { quarterPresetSnapshots } : {}),
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      Alert.alert('Saved', sport === 'nba' ? 'Your offense and defense have been saved.' : sport === 'mlb' ? 'Your early-game and late-game prep has been saved.' : 'Your opening plan and adjustment plan have been saved.');
+      Alert.alert('Saved', sport === 'nba' ? 'Your quarter-by-quarter gameplan has been saved.' : sport === 'mlb' ? 'Your early-game and late-game prep has been saved.' : 'Your opening plan and adjustment plan have been saved.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -539,48 +583,61 @@ export default function MatchupScreen() {
                   <>
                     <View style={styles.prepHeader}>
                       <Text style={styles.sectionTitle}>Private Game Prep</Text>
-                      <Text style={styles.prepHelp}>{sport === 'nba' ? 'Pick one offense and one defense before tipoff.' : 'Pick an opening plan and a matchup adjustment.'}</Text>
+                      <Text style={styles.prepHelp}>{sport === 'nba' ? 'Preset each quarter before tipoff. Overtime uses Q4.' : 'Pick an opening plan and a matchup adjustment.'}</Text>
                     </View>
                     {sport === 'nba' ? (
                       <View style={styles.prepChoiceGrid}>
-                        <View style={styles.offenseColumn}>
-                          <Text style={styles.prepColumnTitle}>Offense</Text>
-                          {offensePresets.map(preset => {
-                            const selected = preset.id === firstHalfPresetId;
-                            return (
-                              <Pressable
-                                key={`offense-${preset.id}`}
-                                onPress={() => setFirstHalfPresetId(preset.id)}
-                                style={[styles.prepChoiceCard, selected && styles.prepChoiceCardActive]}
-                              >
-                                <View style={[styles.prepChoiceBadge, selected && styles.prepChoiceBadgeActive]}>
-                                  <Text style={[styles.prepChoiceBadgeText, selected && styles.prepChoiceBadgeTextActive]}>{firstPrepLabel}</Text>
-                                </View>
-                                <Text style={[styles.prepChoiceName, selected && styles.prepChoiceNameActive]} numberOfLines={2}>{preset.name}</Text>
-                                <Text style={styles.prepChoiceMeta} numberOfLines={1}>{preset.offense.replace(/_/g, ' ')}</Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                        <View style={styles.defenseColumn}>
-                          <Text style={styles.prepColumnTitle}>Defense</Text>
-                          {defensePresets.map(preset => {
-                            const selected = preset.id === secondHalfPresetId;
-                            return (
-                              <Pressable
-                                key={`defense-${preset.id}`}
-                                onPress={() => setSecondHalfPresetId(preset.id)}
-                                style={[styles.prepChoiceCard, selected && styles.prepChoiceCardActive]}
-                              >
-                                <View style={[styles.prepChoiceBadge, selected && styles.prepChoiceBadgeActive]}>
-                                  <Text style={[styles.prepChoiceBadgeText, selected && styles.prepChoiceBadgeTextActive]}>{secondPrepLabel}</Text>
-                                </View>
-                                <Text style={[styles.prepChoiceName, selected && styles.prepChoiceNameActive]} numberOfLines={2}>{preset.name}</Text>
-                                <Text style={styles.prepChoiceMeta} numberOfLines={1}>{preset.defense.replace(/_/g, ' ')}</Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
+                        {(quarterPlans.length === 4 ? quarterPlans : [1, 2, 3, 4].map(quarter => ({
+                          quarter,
+                          offensePresetId: firstHalfPresetId,
+                          defensePresetId: secondHalfPresetId,
+                        }))).map(plan => (
+                          <View key={`quarter-plan-${plan.quarter}`} style={styles.quarterPrepRow}>
+                            <View style={styles.quarterPrepLabel}>
+                              <Text style={styles.quarterPrepLabelText}>Q{plan.quarter}</Text>
+                            </View>
+                            <View style={styles.offenseColumn}>
+                              <Text style={styles.prepColumnTitle}>{firstPrepLabel}</Text>
+                              <View style={styles.prepChipWrap}>
+                                {offensePresets.map(preset => {
+                                  const selected = preset.id === plan.offensePresetId;
+                                  return (
+                                    <Pressable
+                                      key={`q${plan.quarter}-offense-${preset.id}`}
+                                      onPress={() => {
+                                        setFirstHalfPresetId(plan.quarter <= 2 ? preset.id : firstHalfPresetId);
+                                        setQuarterPlanPreset(plan.quarter, 'offense', preset.id);
+                                      }}
+                                      style={[styles.prepChip, selected && styles.prepChipActive]}
+                                    >
+                                      <Text style={[styles.prepChipText, selected && styles.prepChipTextActive]} numberOfLines={1}>{preset.name}</Text>
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                            <View style={styles.defenseColumn}>
+                              <Text style={styles.prepColumnTitle}>{secondPrepLabel}</Text>
+                              <View style={styles.prepChipWrap}>
+                                {defensePresets.map(preset => {
+                                  const selected = preset.id === plan.defensePresetId;
+                                  return (
+                                    <Pressable
+                                      key={`q${plan.quarter}-defense-${preset.id}`}
+                                      onPress={() => {
+                                        setSecondHalfPresetId(plan.quarter <= 2 ? preset.id : secondHalfPresetId);
+                                        setQuarterPlanPreset(plan.quarter, 'defense', preset.id);
+                                      }}
+                                      style={[styles.prepChip, selected && styles.prepChipActive]}
+                                    >
+                                      <Text style={[styles.prepChipText, selected && styles.prepChipTextActive]} numberOfLines={1}>{preset.name}</Text>
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                          </View>
+                        ))}
                       </View>
                     ) : null}
                   </>
@@ -678,10 +735,18 @@ const styles = StyleSheet.create({
   prepHeader: { marginBottom: 10 },
   prepHelp: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3 },
   sectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 10 },
-  prepChoiceGrid: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  offenseColumn: { flex: 1, gap: 7 },
-  defenseColumn: { flex: 1, gap: 7 },
-  prepColumnTitle: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', marginBottom: 1 },
+  prepChoiceGrid: { gap: 8, marginBottom: 12 },
+  quarterPrepRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8, borderRadius: 8, borderWidth: 1, borderColor: '#202020', backgroundColor: '#0d0d0d', padding: 8 },
+  quarterPrepLabel: { width: 36, borderRadius: 7, backgroundColor: '#151515', borderWidth: 1, borderColor: '#2c2c2c', alignItems: 'center', justifyContent: 'center' },
+  quarterPrepLabelText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  offenseColumn: { flex: 1, gap: 5 },
+  defenseColumn: { flex: 1, gap: 5 },
+  prepColumnTitle: { color: '#888', fontSize: 9, fontWeight: '900', textTransform: 'uppercase', marginBottom: 1 },
+  prepChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  prepChip: { minHeight: 25, maxWidth: '100%', borderRadius: 7, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#151515', justifyContent: 'center', paddingHorizontal: 7 },
+  prepChipActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },
+  prepChipText: { color: '#aaa', fontSize: 9, fontWeight: '900' },
+  prepChipTextActive: { color: '#06130c' },
   prepChoiceCard: { minHeight: 76, borderRadius: 8, borderWidth: 1, borderColor: '#242424', backgroundColor: '#101010', padding: 9, justifyContent: 'space-between' },
   prepChoiceCardActive: { borderColor: '#00e58b', backgroundColor: '#082016' },
   prepChoiceBadge: { alignSelf: 'flex-start', minWidth: 34, minHeight: 22, borderRadius: 6, borderWidth: 1, borderColor: '#2c2c2c', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: '#171717' },

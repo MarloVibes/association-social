@@ -739,6 +739,23 @@ function coachingPlanPresetIdsForSide(game, side) {
   return [firstHalf || fallback, secondHalf || firstHalf || fallback].filter(Boolean).map(normalizeNbaCoachingPresetId);
 }
 
+function quarterCoachingPresetIdsForSide(game, side) {
+  const quarterIds = side === 'home' ? game && game.homeQuarterCoachingPresetIds : game && game.awayQuarterCoachingPresetIds;
+  if (Array.isArray(quarterIds) && quarterIds.length > 0) {
+    return [0, 1, 2, 3].map(index => {
+      const ids = Array.isArray(quarterIds[index]) ? quarterIds[index] : [quarterIds[index]].filter(Boolean);
+      return ids.filter(Boolean).map(normalizeNbaCoachingPresetId);
+    });
+  }
+  const ids = coachingPlanPresetIdsForSide(game, side);
+  return [
+    [ids[0]].filter(Boolean),
+    [ids[0]].filter(Boolean),
+    [ids[1] || ids[0]].filter(Boolean),
+    [ids[1] || ids[0]].filter(Boolean),
+  ];
+}
+
 function applyCoachingToTeamForSimulation(team, presetIds) {
   if (!team || !Array.isArray(team.players)) return team;
   const ids = (presetIds || []).filter(Boolean);
@@ -1158,6 +1175,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
   assertSimulationRoster(canonicalAwayTeam, game.awayTeamId);
   const homePresetIds = coachingPlanPresetIdsForSide(game, 'home');
   const awayPresetIds = coachingPlanPresetIdsForSide(game, 'away');
+  const homeQuarterPresetIds = quarterCoachingPresetIdsForSide(game, 'home');
+  const awayQuarterPresetIds = quarterCoachingPresetIdsForSide(game, 'away');
   const sport = normalizeSport(game && (game.sport || game.leagueSport));
   if (sport !== 'nba') {
     const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
@@ -1178,6 +1197,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       homeSecondHalfPresetId: homePresetIds[1],
       awayFirstHalfPresetId: awayPresetIds[0],
       awaySecondHalfPresetId: awayPresetIds[1],
+      homeQuarterPresetIds,
+      awayQuarterPresetIds,
     };
     return {
       ...result,
@@ -1197,8 +1218,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       }),
     };
   }
-  const simulatedHomeTeam = applyCoachingToTeamForSimulation(canonicalHomeTeam, homePresetIds);
-  const simulatedAwayTeam = applyCoachingToTeamForSimulation(canonicalAwayTeam, awayPresetIds);
+  const simulatedHomeTeam = applyCoachingToTeamForSimulation(canonicalHomeTeam, [...new Set(homeQuarterPresetIds.flat().length ? homeQuarterPresetIds.flat() : homePresetIds)]);
+  const simulatedAwayTeam = applyCoachingToTeamForSimulation(canonicalAwayTeam, [...new Set(awayQuarterPresetIds.flat().length ? awayQuarterPresetIds.flat() : awayPresetIds)]);
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const liveTimeline = buildPossessionTimeline({
     gameId: game.id,
@@ -1209,6 +1230,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
     awayTeam: simulatedAwayTeam,
     homeCoachingPresetIds: homePresetIds,
     awayCoachingPresetIds: awayPresetIds,
+    homeQuarterCoachingPresetIds: homeQuarterPresetIds,
+    awayQuarterCoachingPresetIds: awayQuarterPresetIds,
     preferredWinnerTeamId: winnerTeamId,
     nowMs,
   });
@@ -1238,6 +1261,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
     homeSecondHalfPresetId: homePresetIds[1],
     awayFirstHalfPresetId: awayPresetIds[0],
     awaySecondHalfPresetId: awayPresetIds[1],
+    homeQuarterPresetIds,
+    awayQuarterPresetIds,
     gameplan: liveTimeline.gameplan,
   };
   return {
@@ -1657,11 +1682,40 @@ function safeCoachingSnapshot(snapshot) {
   };
 }
 
-function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot, awaySnapshot, awaySecondHalfSnapshot }) {
+function presetIdsFromQuarterSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return [];
+  const offense = safeCoachingSnapshot(snapshot.offensePresetSnapshot || snapshot.offenseSnapshot || snapshot.offense);
+  const defense = safeCoachingSnapshot(snapshot.defensePresetSnapshot || snapshot.defenseSnapshot || snapshot.defense);
+  const direct = safeCoachingSnapshot(snapshot.presetSnapshot || snapshot);
+  return [
+    offense && offense.presetId,
+    defense && defense.presetId,
+    !offense && !defense && direct && direct.presetId,
+  ].filter(Boolean).map(normalizeNbaCoachingPresetId);
+}
+
+function quarterPresetIdsFromSnapshots(quarterSnapshots, firstHalfSnapshot, secondHalfSnapshot) {
+  if (Array.isArray(quarterSnapshots) && quarterSnapshots.length > 0) {
+    return [0, 1, 2, 3].map(index => {
+      const snapshot = quarterSnapshots[index] || null;
+      const ids = presetIdsFromQuarterSnapshot(snapshot);
+      if (ids.length > 0) return ids;
+      const fallback = index < 2 ? firstHalfSnapshot : secondHalfSnapshot || firstHalfSnapshot;
+      return [fallback && fallback.presetId].filter(Boolean).map(normalizeNbaCoachingPresetId);
+    });
+  }
+  void firstHalfSnapshot;
+  void secondHalfSnapshot;
+  return null;
+}
+
+function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot, awaySnapshot, awaySecondHalfSnapshot, homeQuarterSnapshots, awayQuarterSnapshots }) {
   const home = safeCoachingSnapshot(homeSnapshot);
   const homeSecondHalf = safeCoachingSnapshot(homeSecondHalfSnapshot) || home;
   const away = safeCoachingSnapshot(awaySnapshot);
   const awaySecondHalf = safeCoachingSnapshot(awaySecondHalfSnapshot) || away;
+  const homeQuarterCoachingPresetIds = quarterPresetIdsFromSnapshots(homeQuarterSnapshots, home, homeSecondHalf);
+  const awayQuarterCoachingPresetIds = quarterPresetIdsFromSnapshots(awayQuarterSnapshots, away, awaySecondHalf);
   return {
     ...game,
     ...(home ? {
@@ -1677,6 +1731,7 @@ function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot,
       homeSecondHalfDefensiveStyle: homeSecondHalf && homeSecondHalf.defense,
       homeSecondHalfCoachingPresetName: homeSecondHalf && homeSecondHalf.name,
       homeSecondHalfCoachingPresetId: homeSecondHalf && homeSecondHalf.presetId,
+      ...(homeQuarterCoachingPresetIds ? { homeQuarterCoachingPresetIds } : {}),
     } : {}),
     ...(away ? {
       awayCoachingStyle: away.offense,
@@ -1691,6 +1746,7 @@ function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot,
       awaySecondHalfDefensiveStyle: awaySecondHalf && awaySecondHalf.defense,
       awaySecondHalfCoachingPresetName: awaySecondHalf && awaySecondHalf.name,
       awaySecondHalfCoachingPresetId: awaySecondHalf && awaySecondHalf.presetId,
+      ...(awayQuarterCoachingPresetIds ? { awayQuarterCoachingPresetIds } : {}),
     } : {}),
   };
 }
@@ -2488,21 +2544,22 @@ async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamI
 }
 
 async function coachingPlanForTeam({ tx, scheduleRef, game, team }) {
-  if (!team || !team.id) return { firstHalf: null, secondHalf: null };
+  if (!team || !team.id) return { firstHalf: null, secondHalf: null, quarters: [] };
   const prepRef = scheduleRef.collection('preparation').doc(`${game.id}_${team.id}`);
   const prepSnap = await tx.get(prepRef);
   if (prepSnap.exists) {
     const prep = prepSnap.data() || {};
     const firstHalf = safeCoachingSnapshot(prep.firstHalfPresetSnapshot) || safeCoachingSnapshot(prep.presetSnapshot);
     const secondHalf = safeCoachingSnapshot(prep.secondHalfPresetSnapshot) || firstHalf;
-    return { firstHalf, secondHalf };
+    const quarters = Array.isArray(prep.quarterPresetSnapshots) ? prep.quarterPresetSnapshots : [];
+    return { firstHalf, secondHalf, quarters };
   }
   const presets = Array.isArray(team.coachingPresets) ? team.coachingPresets : [];
   const firstPreset = presets.find(item => item && item.id === team.defaultCoachingPresetId) || null;
   const secondPreset = presets.find(item => item && item.id === team.defaultSecondHalfCoachingPresetId) || firstPreset;
   const firstHalf = safeCoachingSnapshot(firstPreset);
   const secondHalf = safeCoachingSnapshot(secondPreset) || firstHalf;
-  return { firstHalf, secondHalf };
+  return { firstHalf, secondHalf, quarters: [] };
 }
 
 function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
@@ -2595,8 +2652,10 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
             game: { ...game, leagueSport: league.sport },
             homeSnapshot: homePlan.firstHalf,
             homeSecondHalfSnapshot: homePlan.secondHalf,
+            homeQuarterSnapshots: homePlan.quarters,
             awaySnapshot: awayPlan.firstHalf,
             awaySecondHalfSnapshot: awayPlan.secondHalf,
+            awayQuarterSnapshots: awayPlan.quarters,
           }),
           uid,
           nowMs,
@@ -2692,8 +2751,10 @@ function createSimulateScheduledGameHandler(deps) {
             game: { ...game, leagueSport: league.sport },
             homeSnapshot: homePlan.firstHalf,
             homeSecondHalfSnapshot: homePlan.secondHalf,
+            homeQuarterSnapshots: homePlan.quarters,
             awaySnapshot: awayPlan.firstHalf,
             awaySecondHalfSnapshot: awayPlan.secondHalf,
+            awayQuarterSnapshots: awayPlan.quarters,
           }),
           uid,
           nowMs,
@@ -2836,8 +2897,10 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
               game: { ...game, leagueSport: league.sport },
               homeSnapshot: homePlan.firstHalf,
               homeSecondHalfSnapshot: homePlan.secondHalf,
+              homeQuarterSnapshots: homePlan.quarters,
               awaySnapshot: awayPlan.firstHalf,
               awaySecondHalfSnapshot: awayPlan.secondHalf,
+              awayQuarterSnapshots: awayPlan.quarters,
             }),
             uid,
             nowMs,

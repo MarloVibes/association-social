@@ -1463,6 +1463,9 @@ describe('source safety regressions', () => {
     expect(matchup).toContain('prepChoiceGrid');
     expect(matchup).toContain('offenseColumn');
     expect(matchup).toContain('defenseColumn');
+    expect(matchup).toContain('quarterPlans');
+    expect(matchup).toContain('quarterPresetSnapshots');
+    expect(matchup).toContain('setQuarterPlanPreset');
     expect(matchup).not.toContain('halftime adjustment');
     expect(matchup).not.toContain('const NFL_GAME_PRESETS');
     expect(matchup).not.toContain('const MLB_GAME_PRESETS');

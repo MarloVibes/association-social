@@ -1967,6 +1967,74 @@ describe('matchup request state helpers', () => {
     });
   });
 
+  it('tracks quarter coaching impact for simulated NBA games', () => {
+    const game = gameWithCoachingSnapshots({
+      game: seedAvailableGame(),
+      homeSnapshot: { name: '5-Out', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'five_out' },
+      homeSecondHalfSnapshot: { name: 'Star Isolation', offense: 'isolation', defense: 'drop', presetId: 'star_isolation' },
+      awaySnapshot: { name: 'Motion Offense', offense: 'balanced', defense: 'drop', presetId: 'motion_offense' },
+      awaySecondHalfSnapshot: { name: 'Transition Pace', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'transition_pace' },
+      homeQuarterSnapshots: [
+        {
+          offensePresetSnapshot: { name: '5-Out', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'five_out' },
+          defensePresetSnapshot: { name: 'Protect Paint', offense: 'balanced', defense: 'protect_paint', presetId: 'protect_paint' },
+        },
+        {
+          offensePresetSnapshot: { name: 'Pick and Roll', offense: 'pick_and_roll', defense: 'drop', presetId: 'pick_and_roll' },
+          defensePresetSnapshot: { name: '3-2 Zone', offense: 'balanced', defense: 'zone', presetId: 'zone_32' },
+        },
+        {
+          offensePresetSnapshot: { name: 'Motion Offense', offense: 'balanced', defense: 'drop', presetId: 'motion_offense' },
+          defensePresetSnapshot: { name: 'Switch Everything', offense: 'balanced', defense: 'switch_heavy', presetId: 'switch_everything' },
+        },
+        {
+          offensePresetSnapshot: { name: 'Star Isolation', offense: 'isolation', defense: 'drop', presetId: 'star_isolation' },
+          defensePresetSnapshot: { name: 'Double Star', offense: 'balanced', defense: 'pressure', presetId: 'double_star' },
+        },
+      ],
+      awayQuarterSnapshots: [
+        {
+          offensePresetSnapshot: { name: 'Motion Offense', offense: 'balanced', defense: 'drop', presetId: 'motion_offense' },
+          defensePresetSnapshot: { name: '2-3 Zone', offense: 'balanced', defense: 'zone', presetId: 'zone_23' },
+        },
+        {
+          offensePresetSnapshot: { name: 'Post / Inside', offense: 'post_heavy', defense: 'protect_paint', presetId: 'post_inside' },
+          defensePresetSnapshot: { name: 'Protect Paint', offense: 'balanced', defense: 'protect_paint', presetId: 'protect_paint' },
+        },
+        {
+          offensePresetSnapshot: { name: 'Transition Pace', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'transition_pace' },
+          defensePresetSnapshot: { name: 'Half Court Press', offense: 'balanced', defense: 'pressure', presetId: 'half_court_press' },
+        },
+        {
+          offensePresetSnapshot: { name: '5-Out', offense: 'pace_and_space', defense: 'switch_heavy', presetId: 'five_out' },
+          defensePresetSnapshot: { name: 'Switch Everything', offense: 'balanced', defense: 'switch_heavy', presetId: 'switch_everything' },
+        },
+      ],
+    });
+
+    const result = simulateScheduledGame({
+      game,
+      uid: game.homeGmId,
+      nowMs: 5_000,
+      homeTeam: seedRoster('Home', 82),
+      awayTeam: seedRoster('Away', 82),
+    });
+
+    expect(result.coachingImpact.homeQuarterPresetIds).toEqual([
+      ['five_out', 'protect_paint'],
+      ['pick_and_roll', 'zone_32'],
+      ['motion_offense', 'switch_everything'],
+      ['star_isolation', 'double_star'],
+    ]);
+    expect(result.liveTimeline.gameplan.quarters[2]).toMatchObject({
+      period: 3,
+      homeOffenseId: 'motion_offense',
+      homeDefenseId: 'switch_everything',
+      awayOffenseId: 'transition_pace',
+      awayDefenseId: 'half_court_press',
+    });
+  });
+
   it('applies coaching fit boosts to simulated player grades only', () => {
     const blakeLikeFinisher = {
       player_id: 'blake-like',
