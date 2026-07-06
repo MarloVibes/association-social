@@ -2041,11 +2041,6 @@ export default function ChannelScreen() {
       </View>
 
       <View style={styles.chatHero}>
-        <View style={styles.chatHeroTop}>
-          <Text style={styles.chatHeroKicker}>GM Lounge</Text>
-          <Text style={styles.chatHeroTitle}>{channelLabel || 'League Chat'}</Text>
-          <Text style={styles.chatHeroMeta} numberOfLines={1}>{leagueName}</Text>
-        </View>
         <View style={styles.chatToolRail}>
           <Text style={styles.chatToolPill}>Reactions</Text>
           <Text style={styles.chatToolPill}>GIFs</Text>
@@ -2213,11 +2208,7 @@ const styles = StyleSheet.create({
   headerIcon: { minWidth: 40, maxWidth: 54, minHeight: 28, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, overflow: 'hidden', color: '#00ff87', borderWidth: 1, borderColor: 'rgba(0,255,135,0.35)', backgroundColor: 'rgba(0,255,135,0.09)', fontSize: 10, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
   headerSub: { color: '#888', fontSize: 11, textAlign: 'center' },
-  chatHero: { marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(78,161,255,0.42)', backgroundColor: 'rgba(5,14,24,0.94)', padding: 12, gap: 10 },
-  chatHeroTop: { gap: 2 },
-  chatHeroKicker: { color: '#4ea1ff', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  chatHeroTitle: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
-  chatHeroMeta: { color: '#8ea6c3', fontSize: 11, fontWeight: '700' },
+  chatHero: { marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(78,161,255,0.28)', backgroundColor: 'rgba(5,14,24,0.78)', paddingHorizontal: 10, paddingVertical: 8 },
   chatToolRail: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chatToolPill: { color: '#b7d6ff', fontSize: 10, fontWeight: '900', borderWidth: 1, borderColor: 'rgba(78,161,255,0.28)', backgroundColor: 'rgba(78,161,255,0.08)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
 

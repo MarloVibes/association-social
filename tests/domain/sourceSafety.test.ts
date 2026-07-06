@@ -320,6 +320,7 @@ describe('source safety regressions', () => {
     expect(channel).toContain('styles.chatHero');
     expect(channel).toContain('styles.chatSurface');
     expect(channel).toContain('styles.chatToolRail');
+    expect(channel).not.toContain('styles.chatHeroTitle');
     expect(channel).toContain('style={styles.chatFeed}');
     expect(channel).toContain("container: { flex: 1, backgroundColor: '#02070d' }");
     expect(channel).toContain("chatFeed: { flex: 1, backgroundColor: '#02070d' }");
