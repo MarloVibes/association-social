@@ -1,6 +1,25 @@
 import { COACHING_PRESETS, type CoachingPreset } from '@/domain/nba/coaching';
 
 export type FranchiseSport = 'nba' | 'madden' | 'mlb';
+export type CoachingPrepSlot = 'offense' | 'defense';
+
+export const NBA_OFFENSE_PRESET_IDS = [
+  'five_out',
+  'pick_and_roll',
+  'motion_offense',
+  'star_isolation',
+  'post_inside',
+  'transition_pace',
+];
+
+export const NBA_DEFENSE_PRESET_IDS = [
+  'zone_23',
+  'zone_32',
+  'switch_everything',
+  'double_star',
+  'half_court_press',
+  'protect_paint',
+];
 
 export function normalizeSport(value: unknown): FranchiseSport {
   const sport = String(value || 'nba').trim().toLowerCase();
@@ -120,4 +139,20 @@ export function defaultPresetsForSport(sportInput: unknown): CoachingPreset[] {
   if (sport === 'madden') return NFL_GAME_PRESETS;
   if (sport === 'mlb') return MLB_GAME_PRESETS;
   return COACHING_PRESETS;
+}
+
+export function isPresetAllowedForPrepSlot(sportInput: unknown, presetId: string, slot: CoachingPrepSlot): boolean {
+  const sport = normalizeSport(sportInput);
+  if (sport !== 'nba') return true;
+  const ids = slot === 'offense' ? NBA_OFFENSE_PRESET_IDS : NBA_DEFENSE_PRESET_IDS;
+  return ids.includes(presetId);
+}
+
+export function presetsForPrepSlot(sportInput: unknown, presets: CoachingPreset[], slot: CoachingPrepSlot): CoachingPreset[] {
+  const sport = normalizeSport(sportInput);
+  if (sport !== 'nba') return presets;
+  const ids = slot === 'offense' ? NBA_OFFENSE_PRESET_IDS : NBA_DEFENSE_PRESET_IDS;
+  return ids
+    .map(id => presets.find(preset => preset.id === id))
+    .filter((preset): preset is CoachingPreset => Boolean(preset));
 }

@@ -6,7 +6,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db, functions } from '@/constants/firebase';
 import { coachingPresetInfoText, validateCoachingPreset, type CoachingPreset } from '@/domain/nba/coaching';
-import { defaultPresetsForSport, normalizeSport, type FranchiseSport } from '@/domain/sports/coachingPresets';
+import {
+  defaultPresetsForSport,
+  isPresetAllowedForPrepSlot,
+  normalizeSport,
+  presetsForPrepSlot,
+  type FranchiseSport,
+} from '@/domain/sports/coachingPresets';
 
 type Team = {
   id: string;
@@ -85,22 +91,34 @@ export default function CoachingPresetsScreen() {
     [...defaultPresetsForSport(sport), ...(team?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
     return [...byId.values()];
   }, [sport, team?.coachingPresets]);
+  const offensePresets = useMemo(() => presetsForPrepSlot(sport, presets, 'offense'), [presets, sport]);
+  const defensePresets = useMemo(() => presetsForPrepSlot(sport, presets, 'defense'), [presets, sport]);
   const selectedPreset = useMemo(() => (
-    presets.find(preset => preset.id === firstHalfPresetId) || presets.find(preset => preset.id === team?.defaultCoachingPresetId) || presets[0]
-  ), [firstHalfPresetId, presets, team?.defaultCoachingPresetId]);
+    offensePresets.find(preset => preset.id === firstHalfPresetId)
+    || offensePresets.find(preset => preset.id === team?.defaultCoachingPresetId)
+    || offensePresets[0]
+    || presets[0]
+  ), [firstHalfPresetId, offensePresets, presets, team?.defaultCoachingPresetId]);
   const secondHalfPreset = useMemo(() => (
-    presets.find(preset => preset.id === secondHalfPresetId) || selectedPreset
-  ), [presets, secondHalfPresetId, selectedPreset]);
+    defensePresets.find(preset => preset.id === secondHalfPresetId)
+    || defensePresets[0]
+    || selectedPreset
+  ), [defensePresets, secondHalfPresetId, selectedPreset]);
 
   const defaultFirstHalfPresetId = team?.defaultCoachingPresetId;
   const defaultSecondHalfPresetId = team?.defaultSecondHalfCoachingPresetId;
 
   useEffect(() => {
     if (!team) return;
-    const first = defaultFirstHalfPresetId || 'balanced';
+    const first = defaultFirstHalfPresetId && isPresetAllowedForPrepSlot(sport, defaultFirstHalfPresetId, 'offense')
+      ? defaultFirstHalfPresetId
+      : offensePresets[0]?.id || defaultFirstHalfPresetId || 'balanced';
+    const second = defaultSecondHalfPresetId && isPresetAllowedForPrepSlot(sport, defaultSecondHalfPresetId, 'defense')
+      ? defaultSecondHalfPresetId
+      : defensePresets[0]?.id || first;
     setFirstHalfPresetId(first);
-    setSecondHalfPresetId(defaultSecondHalfPresetId || first);
-  }, [team, defaultFirstHalfPresetId, defaultSecondHalfPresetId]);
+    setSecondHalfPresetId(second);
+  }, [team, defaultFirstHalfPresetId, defaultSecondHalfPresetId, defensePresets, offensePresets, sport]);
 
   const savePreset = async (preset: CoachingPreset) => {
     if (!leagueId || !team) return;
@@ -204,7 +222,7 @@ export default function CoachingPresetsScreen() {
                   </View>
                   <Text style={styles.halfLabel}>{phaseLabels[0]}</Text>
                   <View style={styles.optionStrip}>
-                    {presets.map(preset => (
+                    {offensePresets.map(preset => (
                       <TouchableOpacity
                         key={`first-${preset.id}`}
                         onPress={() => setFirstHalfPresetId(preset.id)}
@@ -216,7 +234,7 @@ export default function CoachingPresetsScreen() {
                   </View>
                   <Text style={styles.halfLabel}>{phaseLabels[1]}</Text>
                   <View style={styles.optionStrip}>
-                    {presets.map(preset => (
+                    {defensePresets.map(preset => (
                       <TouchableOpacity
                         key={`second-${preset.id}`}
                         onPress={() => setSecondHalfPresetId(preset.id)}
@@ -233,6 +251,7 @@ export default function CoachingPresetsScreen() {
         )}
         renderItem={({ item }) => {
           const selected = team?.defaultCoachingPresetId === item.id;
+          const canUseAsDefault = isPresetAllowedForPrepSlot(sport, item.id, 'offense');
           return (
             <View style={[styles.card, selected && styles.cardSelected]}>
               <View style={styles.cardTop}>
@@ -250,11 +269,11 @@ export default function CoachingPresetsScreen() {
                   <Text style={styles.presetMeta}>{item.offense.replace(/_/g, ' ')} · {item.defense.replace(/_/g, ' ')}</Text>
                 </View>
                 <TouchableOpacity
-                  disabled={!team || savingId === item.id}
+                  disabled={!team || savingId === item.id || !canUseAsDefault}
                   onPress={() => savePreset(item)}
-                  style={[styles.selectButton, selected && styles.selectButtonActive]}
+                  style={[styles.selectButton, selected && styles.selectButtonActive, !canUseAsDefault && styles.selectButtonDisabled]}
                 >
-                  <Text style={[styles.selectText, selected && styles.selectTextActive]}>{selected ? 'Default' : 'Use'}</Text>
+                  <Text style={[styles.selectText, selected && styles.selectTextActive]}>{selected ? 'Default' : canUseAsDefault ? 'Use' : 'Defense'}</Text>
                 </TouchableOpacity>
               </View>
               {item.description ? <Text style={styles.presetDesc}>{item.description}</Text> : null}
@@ -338,6 +357,7 @@ const styles = StyleSheet.create({
   boostBox: { flexDirection: 'row', gap: 8, borderRadius: 8, borderWidth: 1, borderColor: '#1f3328', backgroundColor: '#0b1510', padding: 10, marginBottom: 12 },
   boostText: { flex: 1, color: '#8faaa0', fontSize: 11, lineHeight: 16, fontWeight: '700' },
   selectButton: { borderRadius: 8, borderWidth: 1, borderColor: '#333', paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#191919' },
+  selectButtonDisabled: { opacity: 0.55 },
   selectButtonActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },
   selectText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   selectTextActive: { color: '#06130c' },

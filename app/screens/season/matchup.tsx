@@ -10,7 +10,7 @@ import { buildCoachingSnapshot, type CoachingPreset } from '@/domain/nba/coachin
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, gameMatchesMyTeam, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
-import { defaultPresetsForSport } from '@/domain/sports/coachingPresets';
+import { defaultPresetsForSport, isPresetAllowedForPrepSlot, presetsForPrepSlot } from '@/domain/sports/coachingPresets';
 import { scorePeriodsForSport } from '@/domain/sports/gamePeriods';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 
@@ -284,13 +284,26 @@ export default function MatchupScreen() {
     [...defaultPresetsForSport(sport), ...(myTeam?.coachingPresets || [])].forEach(preset => byId.set(preset.id, preset));
     return [...byId.values()];
   }, [myTeam?.coachingPresets, sport]);
+  const offensePresets = useMemo(() => presetsForPrepSlot(sport, presets, 'offense'), [presets, sport]);
+  const defensePresets = useMemo(() => presetsForPrepSlot(sport, presets, 'defense'), [presets, sport]);
+  const prepPresets = useMemo(() => {
+    if (sport !== 'nba') return presets;
+    const byId = new Map<string, CoachingPreset>();
+    [...offensePresets, ...defensePresets].forEach(preset => byId.set(preset.id, preset));
+    return [...byId.values()];
+  }, [defensePresets, offensePresets, presets, sport]);
 
   useEffect(() => {
-    if (myTeam?.defaultCoachingPresetId) {
-      setFirstHalfPresetId(myTeam.defaultCoachingPresetId);
-      setSecondHalfPresetId(myTeam.defaultSecondHalfCoachingPresetId || myTeam.defaultCoachingPresetId);
-    }
-  }, [myTeam?.defaultCoachingPresetId, myTeam?.defaultSecondHalfCoachingPresetId]);
+    if (!myTeam) return;
+    const first = myTeam.defaultCoachingPresetId && isPresetAllowedForPrepSlot(sport, myTeam.defaultCoachingPresetId, 'offense')
+      ? myTeam.defaultCoachingPresetId
+      : offensePresets[0]?.id || myTeam.defaultCoachingPresetId || 'balanced';
+    const second = myTeam.defaultSecondHalfCoachingPresetId && isPresetAllowedForPrepSlot(sport, myTeam.defaultSecondHalfCoachingPresetId, 'defense')
+      ? myTeam.defaultSecondHalfCoachingPresetId
+      : defensePresets[0]?.id || first;
+    setFirstHalfPresetId(first);
+    setSecondHalfPresetId(second);
+  }, [defensePresets, myTeam, offensePresets, sport]);
 
   const call = async (name: string) => {
     if (!leagueId || !gameId) return;
@@ -361,8 +374,8 @@ export default function MatchupScreen() {
 
   const savePrivatePrep = async () => {
     if (!leagueId || !league || !game || !myTeam) return;
-    const firstHalfPreset = presets.find(item => item.id === firstHalfPresetId) || presets[0];
-    const secondHalfPreset = presets.find(item => item.id === secondHalfPresetId) || firstHalfPreset;
+    const firstHalfPreset = offensePresets.find(item => item.id === firstHalfPresetId) || presets.find(item => item.id === firstHalfPresetId) || presets[0];
+    const secondHalfPreset = defensePresets.find(item => item.id === secondHalfPresetId) || presets.find(item => item.id === secondHalfPresetId) || firstHalfPreset;
     setWorking(true);
     try {
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
@@ -374,7 +387,7 @@ export default function MatchupScreen() {
         secondHalfPresetSnapshot: buildCoachingSnapshot(secondHalfPreset, myTeam.id, game.id),
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      Alert.alert('Saved', sport === 'mlb' ? 'Your early-game and late-game prep has been saved.' : 'Your opening plan and adjustment plan have been saved.');
+      Alert.alert('Saved', sport === 'nba' ? 'Your offense and defense have been saved.' : sport === 'mlb' ? 'Your early-game and late-game prep has been saved.' : 'Your opening plan and adjustment plan have been saved.');
     } catch (error: any) {
       Alert.alert('Save failed', error.message || 'Please try again.');
     } finally {
@@ -414,7 +427,7 @@ export default function MatchupScreen() {
     <View style={styles.screen}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={myTeam ? presets : []}
+        data={myTeam ? prepPresets : []}
         keyExtractor={item => item.id}
         ListHeaderComponent={(
           <>
@@ -535,6 +548,8 @@ export default function MatchupScreen() {
         renderItem={({ item }) => {
           const firstSelected = item.id === firstHalfPresetId;
           const secondSelected = item.id === secondHalfPresetId;
+          const canSelectFirst = isPresetAllowedForPrepSlot(sport, item.id, 'offense');
+          const canSelectSecond = isPresetAllowedForPrepSlot(sport, item.id, 'defense');
           return (
             <View style={[styles.presetRow, (firstSelected || secondSelected) && styles.presetRowActive]}>
               <View style={{ flex: 1 }}>
@@ -542,18 +557,22 @@ export default function MatchupScreen() {
                 <Text style={styles.presetMeta}>{item.offense.replace(/_/g, ' ')} · {item.defense.replace(/_/g, ' ')}</Text>
               </View>
               <View style={styles.halfPicker}>
-                <Pressable
-                  onPress={() => setFirstHalfPresetId(item.id)}
-                  style={[styles.halfButton, firstSelected && styles.halfButtonActive]}
-                >
-                  <Text style={[styles.halfButtonText, firstSelected && styles.halfButtonTextActive]}>{firstPrepLabel}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setSecondHalfPresetId(item.id)}
-                  style={[styles.halfButton, secondSelected && styles.halfButtonActive]}
-                >
-                  <Text style={[styles.halfButtonText, secondSelected && styles.halfButtonTextActive]}>{secondPrepLabel}</Text>
-                </Pressable>
+                {canSelectFirst ? (
+                  <Pressable
+                    onPress={() => setFirstHalfPresetId(item.id)}
+                    style={[styles.halfButton, firstSelected && styles.halfButtonActive]}
+                  >
+                    <Text style={[styles.halfButtonText, firstSelected && styles.halfButtonTextActive]}>{firstPrepLabel}</Text>
+                  </Pressable>
+                ) : null}
+                {canSelectSecond ? (
+                  <Pressable
+                    onPress={() => setSecondHalfPresetId(item.id)}
+                    style={[styles.halfButton, secondSelected && styles.halfButtonActive]}
+                  >
+                    <Text style={[styles.halfButtonText, secondSelected && styles.halfButtonTextActive]}>{secondPrepLabel}</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           );

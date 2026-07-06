@@ -1451,7 +1451,9 @@ describe('source safety regressions', () => {
     const sportPresets = source('domain/sports/coachingPresets.ts');
 
     expect(channels).not.toContain("pathname: '/screens/season/coaching-presets', nbaOnly: true");
-    expect(coachingScreen).toContain("import { defaultPresetsForSport");
+    expect(coachingScreen).toContain('defaultPresetsForSport');
+    expect(coachingScreen).toContain('presetsForPrepSlot');
+    expect(coachingScreen).toContain('isPresetAllowedForPrepSlot');
     expect(coachingScreen).toContain('const sport = normalizeSport(leagueSport)');
     expect(coachingScreen).toContain('defaultPresetsForSport(sport)');
     expect(coachingScreen).not.toContain('Coaching presets are only available for NBA leagues.');
