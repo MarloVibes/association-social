@@ -2040,6 +2040,20 @@ export default function ChannelScreen() {
         <View style={{ width: 60 }} />
       </View>
 
+      <View style={styles.chatHero}>
+        <View style={styles.chatHeroTop}>
+          <Text style={styles.chatHeroKicker}>GM Lounge</Text>
+          <Text style={styles.chatHeroTitle}>{channelLabel || 'League Chat'}</Text>
+          <Text style={styles.chatHeroMeta} numberOfLines={1}>{leagueName}</Text>
+        </View>
+        <View style={styles.chatToolRail}>
+          <Text style={styles.chatToolPill}>Reactions</Text>
+          <Text style={styles.chatToolPill}>GIFs</Text>
+          <Text style={styles.chatToolPill}>Photos</Text>
+          <Text style={styles.chatToolPill}>Block / Report</Text>
+        </View>
+      </View>
+
       <FlatList
         ref={flatListRef}
         data={messages.filter((m: any) => !blockSet.has(m.uid))}
@@ -2048,7 +2062,10 @@ export default function ChannelScreen() {
         contentContainerStyle={styles.messageList}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No messages yet. Start the conversation!</Text>
+            <View style={styles.chatSurface}>
+              <Text style={styles.emptyTitle}>Open the room</Text>
+              <Text style={styles.emptyText}>No messages yet. Start the conversation with the league.</Text>
+            </View>
           </View>
         }
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -2188,23 +2205,32 @@ const styles = StyleSheet.create({
   threeBottom: { position: 'absolute', alignSelf: 'center', bottom: -120, width: 340, height: 340, borderRadius: 170, borderWidth: 2, borderColor: '#efe2c4', opacity: 0.22 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.86)', borderBottomWidth: 1, borderBottomColor: 'rgba(78,161,255,0.18)' },
   backText: { color: '#F5A623', fontSize: 15, fontWeight: '600', width: 60 },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' },
   headerIcon: { minWidth: 40, maxWidth: 54, minHeight: 28, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, overflow: 'hidden', color: '#00ff87', borderWidth: 1, borderColor: 'rgba(0,255,135,0.35)', backgroundColor: 'rgba(0,255,135,0.09)', fontSize: 10, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
   headerSub: { color: '#888', fontSize: 11, textAlign: 'center' },
+  chatHero: { marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(78,161,255,0.42)', backgroundColor: 'rgba(5,14,24,0.94)', padding: 12, gap: 10 },
+  chatHeroTop: { gap: 2 },
+  chatHeroKicker: { color: '#4ea1ff', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  chatHeroTitle: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
+  chatHeroMeta: { color: '#8ea6c3', fontSize: 11, fontWeight: '700' },
+  chatToolRail: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chatToolPill: { color: '#b7d6ff', fontSize: 10, fontWeight: '900', borderWidth: 1, borderColor: 'rgba(78,161,255,0.28)', backgroundColor: 'rgba(78,161,255,0.08)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
 
   // Messages
-  messageList: { paddingHorizontal: 12, paddingVertical: 16, paddingBottom: 80, flexGrow: 1 },
+  messageList: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 86, flexGrow: 1 },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 14 },
+  chatSurface: { width: '100%', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(78,161,255,0.22)', backgroundColor: 'rgba(6,10,14,0.88)', padding: 18, alignItems: 'center' },
+  emptyTitle: { color: '#ffffff', fontSize: 17, fontWeight: '900', marginBottom: 6 },
+  emptyText: { color: '#7890aa', fontSize: 13, textAlign: 'center', lineHeight: 18 },
   msgRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-end' },
   msgRowMe: { flexDirection: 'row-reverse' },
   msgContent: { flex: 1, maxWidth: '78%' },
   msgContentMe: { alignItems: 'flex-end' },
   msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 4 },
-  msgSender: { color: '#F5A623', fontSize: 11, fontWeight: '700', marginBottom: 3, marginLeft: 4 },
+  msgSender: { color: '#7fbdff', fontSize: 11, fontWeight: '900', marginBottom: 4, marginLeft: 4 },
   msgReactChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4, marginLeft: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   msgReactChipMe: { alignSelf: 'flex-end', marginRight: 4 },
   msgReactChipMine: { borderColor: '#F5A623', backgroundColor: 'rgba(245,166,35,0.15)' },
@@ -2214,9 +2240,9 @@ const styles = StyleSheet.create({
   editBannerText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
   editBannerCancel: { color: '#ff6666', fontSize: 13, fontWeight: '700' },
   msgTeamBadge: { fontSize: 10, fontWeight: '800' },
-  bubble: { borderRadius: 18, padding: 10, borderWidth: 1 },
-  bubbleMe: { backgroundColor: '#1a1000', borderColor: '#F5A62355', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: 'rgba(30,30,30,0.92)', borderColor: 'rgba(255,255,255,0.1)', borderBottomLeftRadius: 4 },
+  bubble: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1 },
+  bubbleMe: { backgroundColor: '#0f261d', borderColor: 'rgba(0,255,135,0.42)', borderBottomRightRadius: 4 },
+  bubbleThem: { backgroundColor: 'rgba(8,16,26,0.96)', borderColor: 'rgba(78,161,255,0.26)', borderBottomLeftRadius: 4 },
   msgText: { color: '#ffffff', fontSize: 15, lineHeight: 20 },
   mentionText: { color: '#F5A623', fontWeight: '800' },
   mentionBox: { marginHorizontal: 12, marginBottom: 6, backgroundColor: '#15151a', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a33', overflow: 'hidden' },
@@ -2225,20 +2251,20 @@ const styles = StyleSheet.create({
   mentionAvatarText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
   mentionName: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
   mentionHandle: { color: '#888', fontSize: 12, marginTop: 1 },
-  msgTextMe: { color: '#fff3e0' },
+  msgTextMe: { color: '#eafff5' },
   msgTime: { color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 4, textAlign: 'right' },
-  msgTimeMe: { color: 'rgba(245,166,35,0.5)' },
+  msgTimeMe: { color: 'rgba(0,255,135,0.58)' },
   gifImage: { width: 200, height: 150, borderRadius: 10 },
   chatPhoto: { width: 200, height: 200, borderRadius: 10, marginTop: 4 },
 
   // Input
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 30 : 10, backgroundColor: 'rgba(0,0,0,0.85)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', gap: 8 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 30 : 10, backgroundColor: 'rgba(2,8,12,0.96)', borderTopWidth: 1, borderTopColor: 'rgba(78,161,255,0.20)', gap: 8 },
   inputAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   inputActionIcon: { fontSize: 20 },
-  gifBtnBox: { backgroundColor: '#1a1000', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#F5A623' },
-  gifBtnText: { color: '#F5A623', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(245,166,35,0.25)' },
-  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
+  gifBtnBox: { backgroundColor: 'rgba(78,161,255,0.10)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#4ea1ff' },
+  gifBtnText: { color: '#7fbdff', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.055)', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10, color: '#ffffff', fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(78,161,255,0.26)' },
+  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00ff87', alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },
   sendBtnText: { color: '#000', fontSize: 18, fontWeight: '800' },
 

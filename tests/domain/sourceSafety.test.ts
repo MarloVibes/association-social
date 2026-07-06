@@ -294,6 +294,40 @@ describe('source safety regressions', () => {
     expect(league).not.toContain('Season Hub');
   });
 
+  it('orders Command Center rooms around GM flow before player wires', () => {
+    const channels = source('app/screens/channels.tsx');
+    const roomOrder = [
+      "title: 'GM Lounge'",
+      "title: 'Trade Center'",
+      "title: 'League News'",
+      "title: 'Front Office'",
+      "title: 'Coaching Room'",
+      "title: 'Stats & Standings'",
+      "title: 'Player Wire'",
+    ];
+
+    for (let i = 0; i < roomOrder.length - 1; i += 1) {
+      expect(channels.indexOf(roomOrder[i])).toBeGreaterThan(-1);
+      expect(channels.indexOf(roomOrder[i])).toBeLessThan(channels.indexOf(roomOrder[i + 1]));
+    }
+
+    expect(channels).toContain("const [activeRoomTitle, setActiveRoomTitle] = useState('GM Lounge')");
+  });
+
+  it('keeps GM Lounge chat dark while preserving chat tools', () => {
+    const channel = source('app/screens/channel.tsx');
+
+    expect(channel).toContain('styles.chatHero');
+    expect(channel).toContain('styles.chatSurface');
+    expect(channel).toContain('styles.chatToolRail');
+    expect(channel).toContain('<Text style={styles.gifBtnText}>GIF</Text>');
+    expect(channel).toContain('onLongPress={() => onMessageLongPress(item)}');
+    expect(channel).toContain('blockAndReport(item.uid, senderName)');
+    expect(channel).toContain('MESSAGE_REACTIONS');
+    expect(channel).toContain('setShowGiphy(true)');
+    expect(channel).toContain('renderMentionDropdown');
+  });
+
   it('separates Team Player Stats from League Stats in Stats and Standings', () => {
     const channels = source('app/screens/channels.tsx');
     const standings = source('app/screens/season/standings.tsx');
