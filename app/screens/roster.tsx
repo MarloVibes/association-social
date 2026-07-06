@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
   createPlayerBannerTitle: { color: '#00ff87', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
   createPlayerBannerSub: { color: '#88bb99', fontSize: 11, marginTop: 2 },
   createPlayerBannerArrow: { color: '#00ff87', fontSize: 22, fontWeight: '300' },
-  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  listContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },
   playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#252525', gap: 12 },

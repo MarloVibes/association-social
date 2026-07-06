@@ -50,6 +50,7 @@ export type NbaPotentialLabel =
   | 'Near Peak';
 
 export type HiddenIdentityValues = {
+  position?: string;
   shooting?: number;
   playmaking?: number;
   defense?: number;
@@ -260,12 +261,38 @@ function addArchetype(archetypes: NbaArchetype[], archetype: NbaArchetype) {
   if (!archetypes.includes(archetype)) archetypes.push(archetype);
 }
 
+function normalizedPosition(input: HiddenIdentityValues): string {
+  return String(input.position || '').toUpperCase().trim();
+}
+
+function isBigPosition(input: HiddenIdentityValues): boolean {
+  const position = normalizedPosition(input);
+  if (/\b(C|PF)\b/.test(position) || position.includes('CENTER') || position.includes('POWER FORWARD')) return true;
+  if (position.includes('F-C') || position.includes('C-F') || position.includes('BIG')) return true;
+
+  const hasNoPosition = !position;
+  const rebounding = clampValue(Number(input.rebounding || 0));
+  const blocking = clampValue(Number(input.blocking || 0));
+  const postDefense = clampValue(Number(input.postDefense || 0));
+  return hasNoPosition && rebounding >= 76 && blocking >= 76 && postDefense >= 72;
+}
+
+function isWingPosition(input: HiddenIdentityValues): boolean {
+  const position = normalizedPosition(input);
+  if (!position) return true;
+  if (position.includes('PG') || position === 'G') return false;
+  return position.includes('SG') || position.includes('SF') || position === 'F' || position.includes('WING');
+}
+
 function playerArchetypes(input: HiddenIdentityValues): NbaArchetype[] {
   const archetypes: NbaArchetype[] = [];
+  const bigPosition = isBigPosition(input);
+  const wingPosition = isWingPosition(input);
   const shooting = Math.max(clampValue(Number(input.shooting || 0)), clampValue(Number(input.threePoint || 0)));
   const defense = clampValue(Number(input.defense || 0));
   const perimeterDefense = clampValue(Number(input.perimeterDefense || 0));
   const blocking = clampValue(Number(input.blocking || 0));
+  const steals = clampValue(Number(input.steals || 0));
   const playmaking = Math.max(clampValue(Number(input.playmaking || 0)), clampValue(Number(input.passing || 0)), clampValue(Number(input.ballHandle || 0)));
   const athleticism = Math.max(clampValue(Number(input.athleticism || 0)), clampValue(Number(input.dunking || 0)), clampValue(Number(input.speed || 0)));
   const rebounding = clampValue(Number(input.rebounding || 0));
@@ -277,12 +304,12 @@ function playerArchetypes(input: HiddenIdentityValues): NbaArchetype[] {
   const minutes = Math.max(0, Number(input.minutesPerGame || 0));
   const usage = Math.max(0, Number(input.usagePct || 0));
 
-  if (shooting >= 80 && perimeterDefense >= 78) addArchetype(archetypes, '3-and-D Wing');
-  if (perimeterDefense >= 84 || (defense >= 86 && blocking < 82)) addArchetype(archetypes, 'Perimeter Defender');
-  if (blocking >= 86 && defense >= 80) addArchetype(archetypes, 'Defensive Anchor');
-  if (blocking >= 82 || (defense >= 82 && rebounding >= 80)) addArchetype(archetypes, 'Rim Protector');
-  if (shooting >= 84 && rebounding >= 72 && blocking >= 65) addArchetype(archetypes, 'Stretch Big');
-  if (shooting >= 80 && rebounding >= 68) addArchetype(archetypes, 'Floor-Spacing Big');
+  if (wingPosition && usage < 28 && shooting >= 78 && (perimeterDefense >= 74 || defense >= 74 || steals >= 70)) addArchetype(archetypes, '3-and-D Wing');
+  if (perimeterDefense >= 84 || (!bigPosition && defense >= 84)) addArchetype(archetypes, 'Perimeter Defender');
+  if (bigPosition && blocking >= 86 && defense >= 80) addArchetype(archetypes, 'Defensive Anchor');
+  if (bigPosition && (blocking >= 82 || (defense >= 82 && rebounding >= 80))) addArchetype(archetypes, 'Rim Protector');
+  if (bigPosition && shooting >= 84 && rebounding >= 72 && blocking >= 65) addArchetype(archetypes, 'Stretch Big');
+  if (bigPosition && shooting >= 80 && rebounding >= 68) addArchetype(archetypes, 'Floor-Spacing Big');
   if ((playmaking >= 86 && assists >= 5.5) || (usage >= 28 && points >= 22 && playmaking >= 80)) addArchetype(archetypes, 'Primary Creator');
   if (athleticism >= 84) addArchetype(archetypes, 'Athletic Finisher');
   if (usage >= 28 && points >= 20) addArchetype(archetypes, 'Ball-Dominant Scorer');
@@ -293,10 +320,10 @@ function playerArchetypes(input: HiddenIdentityValues): NbaArchetype[] {
   if (shooting >= 78 && points >= 14 && usage < 24) addArchetype(archetypes, 'Off-Ball Scorer');
   if (basketballIq >= 82 && defense >= 70 && playmaking >= 68) addArchetype(archetypes, 'Versatile Connector');
   if (basketballIq >= 78 && defense >= 74 && minutes >= 22) addArchetype(archetypes, 'Glue Guy');
-  if (rebounding >= 78 && athleticism >= 72 && usage < 22) addArchetype(archetypes, 'Roll Big');
+  if (bigPosition && rebounding >= 78 && athleticism >= 72 && usage < 22) addArchetype(archetypes, 'Roll Big');
   if (minutes < 24 && points >= 8 && athleticism >= 72) addArchetype(archetypes, 'Bench Energizer');
   if (usage >= 24 && minutes < 28 && points >= 10) addArchetype(archetypes, 'Microwave Scorer');
-  if (postOffense >= 82 && shooting < 80) addArchetype(archetypes, 'Traditional Post Big');
+  if (bigPosition && postOffense >= 82 && shooting < 80) addArchetype(archetypes, 'Traditional Post Big');
   if (midRange >= 84 && shooting < 88) addArchetype(archetypes, 'Mid-Range Technician');
 
   if (archetypes.length === 0) {

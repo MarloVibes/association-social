@@ -175,6 +175,31 @@ describe('NBA player identity', () => {
     expect(identity.archetypes).toEqual(expect.arrayContaining(['3-and-D Wing', 'Perimeter Defender']));
   });
 
+  it('does not classify perimeter wings as floor-spacing bigs just because they rebound enough', () => {
+    const identity = classifyNbaPlayer({
+      position: 'SF',
+      shooting: 82,
+      threePoint: 84,
+      defense: 86,
+      perimeterDefense: 89,
+      blocking: 70,
+      rebounding: 70,
+      athleticism: 79,
+      basketballIq: 83,
+      seasonsPlayed: 8,
+      pointsPerGame: 14.4,
+      reboundsPerGame: 3.8,
+      assistsPerGame: 3.7,
+      minutesPerGame: 32.8,
+      winShares: 8,
+      usagePct: 17.3,
+    });
+
+    expect(identity.archetypes).toEqual(expect.arrayContaining(['3-and-D Wing', 'Perimeter Defender']));
+    expect(identity.archetypes).not.toContain('Floor-Spacing Big');
+    expect(identity.archetypes).not.toContain('Stretch Big');
+  });
+
   it('keeps current tier, prospect tag, potential, and development outlook separate', () => {
     const identity = buildVisibleIdentity({
       shooting: 78,

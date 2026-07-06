@@ -159,6 +159,7 @@ describe('source safety regressions', () => {
     expect(roster).not.toContain('ALL ARCHETYPES');
     expect(roster).not.toContain('First Name');
     expect(roster).not.toContain('Last Name');
+    expect(roster).toContain('listContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 }');
     expect(playerCard).toContain('compareMode');
     expect(playerCard).toContain("same_tier");
     expect(playerCard).toContain("same_archetype");

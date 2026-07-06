@@ -255,6 +255,7 @@ function visibleIdentityFor(model: AttributeModel, source: PublicStatLine): Visi
   const age = Number(source.age || 0);
   const tags = (source.scoutingTags || []).map(tag => String(tag).toLowerCase());
   const identity = buildVisibleIdentity({
+    position: source.position,
     shooting: average([model.midRange, model.threePoint, model.freeThrow, model.shotIq, model.shotConsistency]),
     playmaking: average([model.passing, model.passIq, model.passVision, model.ballHandle, model.offenseIq]),
     defense: average([model.perimeterDefense, model.postDefense, model.blocking, model.steals, model.defenseIq, model.helpDefense]),

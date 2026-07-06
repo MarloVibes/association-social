@@ -92,6 +92,24 @@ describe('rating seed baselines', () => {
     expect(tatum2026.visibleIdentity.primaryRole).toMatch(/Scoring Wing|Two-Way Wing|Shot Creator/);
   });
 
+  it('keeps current two-way wings from being labeled as spacing bigs', () => {
+    const mikal2026 = findProfile('Mikal Bridges', 'NYK', 2026);
+
+    expect(mikal2026.position).toBe('SF');
+    expect(mikal2026.visibleIdentity.archetypes).toContain('3-and-D Wing');
+    expect(mikal2026.visibleIdentity.archetypes).not.toContain('Floor-Spacing Big');
+    expect(mikal2026.visibleIdentity.archetypes).not.toContain('Stretch Big');
+    expect(mikal2026.visibleIdentity.archetypes).not.toContain('Roll Big');
+  });
+
+  it('keeps primary point guards from being labeled as 3-and-D wings', () => {
+    const luka2026 = findProfile('Luka Dončić', 'LAL', 2026);
+
+    expect(luka2026.position).toBe('PG');
+    expect(luka2026.visibleIdentity.archetypes).toContain('Primary Creator');
+    expect(luka2026.visibleIdentity.archetypes).not.toContain('3-and-D Wing');
+  });
+
   it('has a generated 2026 baseline for every current-pool NBA player', () => {
     const currentProfiles = profiles().filter(profile => profile.season === 2026);
     const covered = new Set(currentProfiles.map(profile => (

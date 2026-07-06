@@ -136575,7 +136575,7 @@ export const generatedRatingSeeds: BaselineSeed[] = [
       player_id: "luka-doncic-2026",
       full_name: "Luka Dončić",
       team: "LAL",
-      position: "SG",
+      position: "PG",
       age: 26,
       birthDate: "1999-02-28",
       games: 64,
