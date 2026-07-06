@@ -311,10 +311,10 @@ export default function ChannelsScreen() {
                 style={[styles.quickButton, (!item.action || (item.action.nbaOnly && !isNba)) && styles.quickButtonDisabled]}
               >
                 <Ionicons color="#00e58b" name={item.icon} size={16} />
-                <Text style={styles.quickText}>{item.label}</Text>
+                <Text style={styles.quickText} numberOfLines={1}>{item.label}</Text>
                 {item.badge ? (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{item.badge}</Text>
+                  <View style={styles.quickUnreadBadge}>
+                    <Text style={styles.quickUnreadBadgeText}>{item.badge}</Text>
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -403,9 +403,11 @@ const styles = StyleSheet.create({
   heroTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
   heroText: { color: '#9a9a9a', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 3 },
   quickRow: { flexDirection: 'row', gap: 8 },
-  quickButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b44', backgroundColor: '#08160f', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  quickButton: { flex: 1, minWidth: 0, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b44', backgroundColor: '#08160f', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 },
   quickButtonDisabled: { opacity: 0.35 },
-  quickText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  quickText: { color: '#00e58b', fontSize: 11, fontWeight: '900', flexShrink: 1 },
+  quickUnreadBadge: { position: 'absolute', top: -8, right: -7, minWidth: 19, height: 19, borderRadius: 10, paddingHorizontal: 5, backgroundColor: '#00e58b', borderWidth: 2, borderColor: '#08160f', alignItems: 'center', justifyContent: 'center' },
+  quickUnreadBadgeText: { color: '#06130c', fontSize: 9, fontWeight: '900' },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center' },
   unreadBadgeText: { color: '#06130c', fontSize: 10, fontWeight: '900' },
   commandDeck: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },

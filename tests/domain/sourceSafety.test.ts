@@ -340,6 +340,8 @@ describe('source safety regressions', () => {
     expect(channels).toContain('formatUnreadBadge');
     expect(channels).toContain('leagueChatUnreadBadge');
     expect(channels).toContain('styles.unreadBadge');
+    expect(channels).toContain('styles.quickUnreadBadge');
+    expect(channels).toContain('numberOfLines={1}>{item.label}</Text>');
     expect(channels).toContain("action.id === 'league-chat' && leagueChatUnreadBadge");
     expect(channel).toContain('channelReadKey(leagueId, channelId)');
     expect(channel).toContain('lastOpenedAt: serverTimestamp()');
