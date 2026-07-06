@@ -395,19 +395,38 @@ function addCoachingAdjustment(adjustments, key, value) {
   adjustments[key] = Math.max(-2, Math.min(2, (adjustments[key] || 0) + value));
 }
 
+const NBA_COACHING_PRESET_ALIASES = {
+  pace_and_space: 'five_out',
+  seven_seconds: 'five_out',
+  small_ball_switch: 'five_out',
+  zone_trap: 'zone_23',
+  grit_and_grind: 'zone_23',
+  twin_towers: 'zone_23',
+  blitz_pressure: 'half_court_press',
+  triangle_control: 'motion_offense',
+  midrange_clinic: 'motion_offense',
+  lob_city: 'pick_and_roll',
+  bully_ball: 'pick_and_roll',
+};
+
+function normalizeNbaCoachingPresetId(presetId) {
+  const id = String(presetId || 'balanced').trim().toLowerCase();
+  return NBA_COACHING_PRESET_ALIASES[id] || id;
+}
+
 function coachingGradeAdjustmentsForPlayer(presetId, player) {
-  const id = String(presetId || 'balanced');
+  const id = normalizeNbaCoachingPresetId(presetId);
   const text = coachingIdentityText(player);
   const adjustments = {};
   if (id === 'balanced') return adjustments;
 
-  if (id === 'pace_and_space' || id === 'seven_seconds') {
+  if (id === 'five_out') {
     const fits = detailedPlayerSkill(player, 'threePoint', ['shooting']) >= 75
       || detailedPlayerSkill(player, 'speed', ['athleticism']) >= 78
       || playerSkill(player, 'playmaking') >= 78;
     if (fits) {
       addCoachingAdjustment(adjustments, 'threePoint', 1);
-      addCoachingAdjustment(adjustments, 'speed', id === 'seven_seconds' ? 2 : 1);
+      addCoachingAdjustment(adjustments, 'speed', 1);
       addCoachingAdjustment(adjustments, 'playmaking', 1);
       addCoachingAdjustment(adjustments, 'stamina', 1);
     } else {
@@ -416,7 +435,7 @@ function coachingGradeAdjustmentsForPlayer(presetId, player) {
     }
   }
 
-  if (id === 'grit_and_grind') {
+  if (id === 'zone_23') {
     const fits = playerSkill(player, 'defense') >= 74
       || playerSkill(player, 'rebounding') >= 76
       || detailedPlayerSkill(player, 'strength', ['athleticism']) >= 76
@@ -432,7 +451,7 @@ function coachingGradeAdjustmentsForPlayer(presetId, player) {
     }
   }
 
-  if (id === 'blitz_pressure' || id === 'zone_trap') {
+  if (id === 'zone_32' || id === 'half_court_press') {
     const fits = detailedPlayerSkill(player, 'steals', ['defense']) >= 74
       || detailedPlayerSkill(player, 'speed', ['athleticism']) >= 76
       || detailedPlayerSkill(player, 'perimeterDefense', ['defense']) >= 76
@@ -441,14 +460,14 @@ function coachingGradeAdjustmentsForPlayer(presetId, player) {
       addCoachingAdjustment(adjustments, 'steals', 2);
       addCoachingAdjustment(adjustments, 'perimeterDefense', 1);
       addCoachingAdjustment(adjustments, 'speed', 1);
-      addCoachingAdjustment(adjustments, 'defenseIq', id === 'zone_trap' ? 2 : 1);
+      addCoachingAdjustment(adjustments, 'defenseIq', id === 'zone_32' ? 2 : 1);
     } else {
       addCoachingAdjustment(adjustments, 'defenseIq', -1);
       addCoachingAdjustment(adjustments, 'stamina', -1);
     }
   }
 
-  if (id === 'triangle_control') {
+  if (id === 'motion_offense') {
     const fits = playerSkill(player, 'basketballIq') >= 76
       || detailedPlayerSkill(player, 'passing', ['playmaking']) >= 76
       || detailedPlayerSkill(player, 'postOffense', ['shooting']) >= 76
@@ -463,7 +482,7 @@ function coachingGradeAdjustmentsForPlayer(presetId, player) {
     }
   }
 
-  if (id === 'lob_city') {
+  if (id === 'pick_and_roll') {
     const fits = detailedPlayerSkill(player, 'dunking', ['athleticism']) >= 78
       || detailedPlayerSkill(player, 'athleticism') >= 80
       || (coachingIsBig(player) && detailedPlayerSkill(player, 'closeShot', ['shooting']) >= 75);
@@ -592,19 +611,15 @@ function applyCoachingPlanToPlayerForSimulation(player, presetIds) {
 
 function coachingPresetIdForSide(game, side) {
   const explicit = side === 'home' ? game && game.homeCoachingPresetId : game && game.awayCoachingPresetId;
-  if (explicit) return explicit;
+  if (explicit) return normalizeNbaCoachingPresetId(explicit);
   const name = String(side === 'home' ? game && game.homeCoachingPresetName : game && game.awayCoachingPresetName || '').toLowerCase();
-  if (name.includes('lob')) return 'lob_city';
-  if (name.includes('grit')) return 'grit_and_grind';
-  if (name.includes('blitz')) return 'blitz_pressure';
-  if (name.includes('seven')) return 'seven_seconds';
-  if (name.includes('triangle')) return 'triangle_control';
-  if (name.includes('midrange')) return 'midrange_clinic';
-  if (name.includes('bully')) return 'bully_ball';
-  if (name.includes('zone')) return 'zone_trap';
-  if (name.includes('small')) return 'small_ball_switch';
-  if (name.includes('tower')) return 'twin_towers';
-  if (name.includes('pace')) return 'pace_and_space';
+  if (name.includes('5-out') || name.includes('five') || name.includes('pace') || name.includes('seven') || name.includes('small')) return 'five_out';
+  if (name.includes('2-3') || name.includes('23') || name.includes('grit') || name.includes('tower')) return 'zone_23';
+  if (name.includes('3-2') || name.includes('32')) return 'zone_32';
+  if (name.includes('pick') || name.includes('roll') || name.includes('lob') || name.includes('bully')) return 'pick_and_roll';
+  if (name.includes('motion') || name.includes('triangle') || name.includes('midrange')) return 'motion_offense';
+  if (name.includes('press') || name.includes('blitz')) return 'half_court_press';
+  if (name.includes('zone')) return 'zone_23';
   return 'balanced';
 }
 
@@ -616,7 +631,7 @@ function coachingPlanPresetIdsForSide(game, side) {
     ? game && (game.homeSecondHalfCoachingPresetId || game.homeCoachingPresetId)
     : game && (game.awaySecondHalfCoachingPresetId || game.awayCoachingPresetId);
   const fallback = coachingPresetIdForSide(game, side);
-  return [firstHalf || fallback, secondHalf || firstHalf || fallback].filter(Boolean);
+  return [firstHalf || fallback, secondHalf || firstHalf || fallback].filter(Boolean).map(normalizeNbaCoachingPresetId);
 }
 
 function applyCoachingToTeamForSimulation(team, presetIds) {
@@ -1118,6 +1133,7 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
     homeSecondHalfPresetId: homePresetIds[1],
     awayFirstHalfPresetId: awayPresetIds[0],
     awaySecondHalfPresetId: awayPresetIds[1],
+    gameplan: liveTimeline.gameplan,
   };
   return {
     homeScore,
@@ -1284,18 +1300,24 @@ function writeLiveGameReadyNotifications({ tx, db, FieldValue, leagueId, leagueN
 }
 
 function coachingPresetLabel(value) {
-  const key = String(value || '').trim();
+  const key = normalizeNbaCoachingPresetId(value);
   const labels = {
-    pace_and_space: 'Pace and Space',
-    seven_seconds: 'Seven Seconds',
-    grit_and_grind: 'Grit and Grind',
+    five_out: '5-Out',
+    zone_23: '2-3 Zone',
+    zone_32: '3-2 Zone',
+    pick_and_roll: 'Pick and Roll',
+    motion_offense: 'Motion Offense',
+    half_court_press: 'Half Court Press',
+    pace_and_space: '5-Out',
+    seven_seconds: '5-Out',
+    grit_and_grind: '2-3 Zone',
     post_heavy: 'Post Heavy',
-    triangle_control: 'Triangle Control',
-    zone_trap: 'Zone Trap',
-    small_ball_switch: 'Small Ball Switch',
-    lob_city: 'Lob City',
-    twin_towers: 'Twin Towers',
-    bully_ball: 'Bully Ball',
+    triangle_control: 'Motion Offense',
+    zone_trap: '2-3 Zone',
+    small_ball_switch: '5-Out',
+    lob_city: 'Pick and Roll',
+    twin_towers: '2-3 Zone',
+    bully_ball: 'Pick and Roll',
   };
   if (labels[key]) return labels[key];
   return key

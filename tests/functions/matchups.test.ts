@@ -199,7 +199,10 @@ describe('matchup request state helpers', () => {
   });
 
   it('permits immediate simulation by either participating GM', () => {
-    const game = seedAvailableGame();
+    const game = seedAvailableGame({
+      homeCoachingPresetId: 'five_out',
+      awayCoachingPresetId: 'zone_23',
+    });
     const result = simulateScheduledGame({
       game,
       uid: game.homeGmId,
@@ -215,6 +218,8 @@ describe('matchup request state helpers', () => {
     });
     expect(result.homeScore).not.toBe(result.awayScore);
     expect([game.homeTeamId, game.awayTeamId]).toContain(result.winnerTeamId);
+    expect(result.coachingImpact.gameplan.homePresetId).toBe('five_out');
+    expect(result.coachingImpact.gameplan.homeSummary).toContain('corners');
   });
 
   it('simulates NFL franchise games with football scoring and football box scores', () => {
@@ -1019,7 +1024,7 @@ describe('matchup request state helpers', () => {
       headline: 'MIA 104, CHI 102',
       summary: expect.stringContaining('LeBron James powered the win'),
       turningPoint: expect.stringContaining('third quarter'),
-      coachingImpact: expect.stringContaining('Pace and Space'),
+      coachingImpact: expect.stringContaining('5-Out'),
     });
     expect(recap.coachingImpact).not.toContain('pace_and_space');
     expect(recap.topPerformers).toEqual(['LeBron James', 'Derrick Rose', 'Shane Battier']);
@@ -1955,10 +1960,10 @@ describe('matchup request state helpers', () => {
     });
 
     expect(result.coachingImpact).toMatchObject({
-      homeFirstHalfPresetId: 'lob_city',
-      homeSecondHalfPresetId: 'grit_and_grind',
-      awayFirstHalfPresetId: 'pace_and_space',
-      awaySecondHalfPresetId: 'twin_towers',
+      homeFirstHalfPresetId: 'pick_and_roll',
+      homeSecondHalfPresetId: 'zone_23',
+      awayFirstHalfPresetId: 'five_out',
+      awaySecondHalfPresetId: 'zone_23',
     });
   });
 

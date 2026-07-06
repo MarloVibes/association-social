@@ -172,6 +172,84 @@ describe('possession timeline engine', () => {
     expect(totalsFromPossessionEvents(timeline).homeScore).toBe(timeline.homeScore);
   });
 
+  it('applies soft gameplan counters to the live possession engine', () => {
+    const countered = buildPossessionTimeline({
+      gameId: 'gameplan-countered',
+      seed: 'gameplan-counter-seed',
+      homeTeamId: 'PACE',
+      awayTeamId: 'DROP',
+      homeTeam: team('PACE', 80),
+      awayTeam: team('DROP', 80),
+      homeCoachingPresetIds: ['five_out'],
+      awayCoachingPresetIds: ['zone_23'],
+      nowMs: 10_000,
+    });
+    const neutral = buildPossessionTimeline({
+      gameId: 'gameplan-neutral',
+      seed: 'gameplan-counter-seed',
+      homeTeamId: 'PACE',
+      awayTeamId: 'DROP',
+      homeTeam: team('PACE', 80),
+      awayTeam: team('DROP', 80),
+      homeCoachingPresetIds: ['balanced'],
+      awayCoachingPresetIds: ['balanced'],
+      nowMs: 10_000,
+    });
+
+    expect(countered.gameplan.homeAdvantage).toBeGreaterThan(countered.gameplan.awayAdvantage);
+    expect(countered.gameplan.homePresetName).toBe('5-Out');
+    expect(countered.gameplan.awayPresetName).toBe('2-3 Zone');
+    expect(countered.gameplan.homeSummary).toContain('corners');
+    expect(countered.homeScore - countered.awayScore).toBeGreaterThan(0);
+    expect(Math.abs(countered.homeScore - countered.awayScore)).toBeLessThanOrEqual(Math.abs(neutral.homeScore - neutral.awayScore));
+  });
+
+  it('turns mutual smart gameplans into tighter live games', () => {
+    const smart = buildPossessionTimeline({
+      gameId: 'gameplan-smart',
+      seed: 'mutual-smart-0',
+      homeTeamId: 'TRI',
+      awayTeamId: 'PRESS',
+      homeTeam: team('TRI', 82),
+      awayTeam: team('PRESS', 82),
+      homeCoachingPresetIds: ['motion_offense'],
+      awayCoachingPresetIds: ['half_court_press'],
+      nowMs: 10_000,
+    });
+    const loose = buildPossessionTimeline({
+      gameId: 'gameplan-loose',
+      seed: 'mutual-smart-0',
+      homeTeamId: 'TRI',
+      awayTeamId: 'PRESS',
+      homeTeam: team('TRI', 82),
+      awayTeam: team('PRESS', 82),
+      homeCoachingPresetIds: ['balanced'],
+      awayCoachingPresetIds: ['balanced'],
+      nowMs: 10_000,
+    });
+
+    expect(smart.gameplan.closeGamePressure).toBeGreaterThan(0);
+    expect(Math.abs(smart.homeScore - smart.awayScore)).toBeLessThanOrEqual(Math.abs(loose.homeScore - loose.awayScore));
+  });
+
+  it('keeps identical gameplans balanced with no counter edge', () => {
+    const mirrored = buildPossessionTimeline({
+      gameId: 'gameplan-mirrored',
+      seed: 'mirror-gameplan-0',
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeTeam: team('HOME', 80),
+      awayTeam: team('AWAY', 80),
+      homeCoachingPresetIds: ['pick_and_roll'],
+      awayCoachingPresetIds: ['pick_and_roll'],
+      nowMs: 10_000,
+    });
+
+    expect(mirrored.gameplan.homeAdvantage).toBe(0);
+    expect(mirrored.gameplan.awayAdvantage).toBe(0);
+    expect(mirrored.gameplan.closeGamePressure).toBe(0);
+  });
+
   it('uses category skill grades and tendencies for live shot profile', () => {
     const timeline = buildPossessionTimeline({
       gameId: 'game-engine-profile',

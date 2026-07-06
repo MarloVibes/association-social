@@ -85,6 +85,8 @@ export type SimTeamInput = {
 export type SimGameInput = {
   home: SimTeamInput;
   away: SimTeamInput;
+  homeCoachingPresetIds?: string[];
+  awayCoachingPresetIds?: string[];
 };
 
 export type PlayerBoxScore = {
@@ -136,6 +138,26 @@ export type SimulatedGame = {
   }>;
   winnerTeamId: string;
   story: string;
+  coachingImpact?: GameplanMatchup;
+};
+
+type GameplanPreset = {
+  label: string;
+  summary: string;
+  strongAgainst?: string[];
+  vulnerableTo?: string[];
+};
+
+type GameplanMatchup = {
+  homePresetId: string;
+  awayPresetId: string;
+  homePresetName: string;
+  awayPresetName: string;
+  homeAdvantage: number;
+  awayAdvantage: number;
+  homeSummary: string;
+  awaySummary: string;
+  closeGamePressure: number;
 };
 
 function hash(value: string): number {
@@ -149,6 +171,113 @@ function hash(value: string): number {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+const GAMEPLAN_PRESETS: Record<string, GameplanPreset> = {
+  balanced: {
+    label: 'Balanced',
+    summary: 'kept the matchup neutral and trusted roster talent',
+  },
+  five_out: {
+    label: '5-Out',
+    strongAgainst: ['zone_23'],
+    vulnerableTo: ['zone_32'],
+    summary: 'corners spacing pulled the 2-3 shell away from the rim',
+  },
+  zone_23: {
+    label: '2-3 Zone',
+    strongAgainst: ['motion_offense'],
+    vulnerableTo: ['five_out'],
+    summary: 'the 2-3 zone clogged cuts and protected the paint',
+  },
+  zone_32: {
+    label: '3-2 Zone',
+    strongAgainst: ['five_out'],
+    vulnerableTo: ['pick_and_roll'],
+    summary: 'the 3-2 zone crowded shooters and closed the corners',
+  },
+  pick_and_roll: {
+    label: 'Pick and Roll',
+    strongAgainst: ['zone_32'],
+    vulnerableTo: [],
+    summary: 'high screens split the 3-2 top line and created rim pressure',
+  },
+  motion_offense: {
+    label: 'Motion Offense',
+    strongAgainst: ['half_court_press'],
+    vulnerableTo: ['zone_23'],
+    summary: 'motion cuts and second actions passed through the half-court press',
+  },
+  half_court_press: {
+    label: 'Half Court Press',
+    strongAgainst: [],
+    vulnerableTo: ['motion_offense'],
+    summary: 'half-court pressure rushed ball handlers and tested passing angles',
+  },
+};
+
+const GAMEPLAN_ALIASES: Record<string, string> = {
+  pace_and_space: 'five_out',
+  seven_seconds: 'five_out',
+  small_ball_switch: 'five_out',
+  zone_trap: 'zone_23',
+  grit_and_grind: 'zone_23',
+  twin_towers: 'zone_23',
+  blitz_pressure: 'half_court_press',
+  triangle_control: 'motion_offense',
+  midrange_clinic: 'motion_offense',
+  lob_city: 'pick_and_roll',
+  bully_ball: 'pick_and_roll',
+};
+
+function primaryPresetId(presetIds?: string[]) {
+  const rawId = String(Array.isArray(presetIds) && presetIds[0] || 'balanced').toLowerCase();
+  const id = GAMEPLAN_ALIASES[rawId] || rawId;
+  return GAMEPLAN_PRESETS[id] ? id : 'balanced';
+}
+
+function planAdvantage(ownId: string, opponentId: string) {
+  if (ownId === opponentId) return 0;
+  const own = GAMEPLAN_PRESETS[ownId] || GAMEPLAN_PRESETS.balanced;
+  const opponent = GAMEPLAN_PRESETS[opponentId] || GAMEPLAN_PRESETS.balanced;
+  let advantage = 0;
+  if ((own.strongAgainst || []).includes(opponentId)) advantage += 2;
+  if ((opponent.vulnerableTo || []).includes(ownId)) advantage += 1;
+  if ((own.vulnerableTo || []).includes(opponentId)) advantage -= 1;
+  return advantage;
+}
+
+function buildGameplanMatchup(homePresetIds?: string[], awayPresetIds?: string[]): GameplanMatchup {
+  const homePresetId = primaryPresetId(homePresetIds);
+  const awayPresetId = primaryPresetId(awayPresetIds);
+  const homePreset = GAMEPLAN_PRESETS[homePresetId] || GAMEPLAN_PRESETS.balanced;
+  const awayPreset = GAMEPLAN_PRESETS[awayPresetId] || GAMEPLAN_PRESETS.balanced;
+  const homeAdvantage = planAdvantage(homePresetId, awayPresetId);
+  const awayAdvantage = planAdvantage(awayPresetId, homePresetId);
+  const bothMadeStrongChoices = Math.max(homeAdvantage, 0) > 0 && Math.max(awayAdvantage, 0) > 0;
+  return {
+    homePresetId,
+    awayPresetId,
+    homePresetName: homePreset.label,
+    awayPresetName: awayPreset.label,
+    homeAdvantage,
+    awayAdvantage,
+    closeGamePressure: bothMadeStrongChoices ? 22 : Math.max(homeAdvantage, awayAdvantage) >= 2 ? 8 : 0,
+    homeSummary: homeAdvantage > awayAdvantage ? homePreset.summary : homeAdvantage > 0 ? `${homePreset.summary}, but the opponent had answers` : homePreset.summary,
+    awaySummary: awayAdvantage > homeAdvantage ? awayPreset.summary : awayAdvantage > 0 ? `${awayPreset.summary}, but the opponent had answers` : awayPreset.summary,
+  };
+}
+
+function applyGameplanScorePressure(homePoints: number, awayPoints: number, gameplan: GameplanMatchup) {
+  let adjustedHome = homePoints + Math.max(0, gameplan.homeAdvantage) * 4;
+  let adjustedAway = awayPoints + Math.max(0, gameplan.awayAdvantage) * 4;
+  if (gameplan.closeGamePressure > 0) {
+    const margin = adjustedHome - adjustedAway;
+    const compression = Math.min(Math.abs(margin), Math.round(gameplan.closeGamePressure / 3));
+    if (margin > 5) adjustedAway += compression;
+    if (margin < -5) adjustedHome += compression;
+  }
+  return { homePoints: adjustedHome, awayPoints: adjustedAway };
 }
 
 function skill(player: SimPlayerInput, key: keyof SimPlayerInput, fallback = 60) {
@@ -647,8 +776,10 @@ export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
     throw new Error('Cannot simulate an NBA game without real players for both teams.');
   }
 
+  const coachingImpact = buildGameplanMatchup(input.homeCoachingPresetIds, input.awayCoachingPresetIds);
   let homePoints = teamTargetPoints(input.home, input.away, seed, 3);
   let awayPoints = teamTargetPoints(input.away, input.home, seed);
+  ({ homePoints, awayPoints } = applyGameplanScorePressure(homePoints, awayPoints, coachingImpact));
   if (homePoints === awayPoints) {
     homePoints += (hash(`${seed}:tie`) % 2) + 1;
   }
@@ -663,5 +794,6 @@ export function simulateGame(input: SimGameInput, seed: string): SimulatedGame {
     quarters: periodScores,
     winnerTeamId,
     story: buildGameStory({ home, away, quarters: periodScores, winnerTeamId }),
+    coachingImpact,
   };
 }

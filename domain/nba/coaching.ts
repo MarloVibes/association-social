@@ -74,116 +74,85 @@ export const COACHING_PRESETS: CoachingPreset[] = [
     counters: ['pressure'],
   },
   {
-    id: 'pace_and_space',
-    name: 'Pace and Space',
-    description: 'Opens the floor, speeds up possessions, and rewards shooting plus guard creation.',
-    boostSummary: 'Boosts 3PT, speed, playmaking, and stamina for shooters or quick creators. Poor fits can lose post offense and stamina.',
+    id: 'five_out',
+    name: '5-Out',
+    description: 'Spaces all five players around the arc to stretch zones, pull bigs away from the rim, and create drive-and-kick threes.',
+    boostSummary: 'Boosts 3PT, speed, playmaking, and stamina for shooters or quick creators. It is strongest into 2-3 looks, but 3-2 pressure can shrink the corners.',
     offense: 'pace_and_space',
     defense: 'switch_heavy',
     modifiers: { pace: 8, threePointRate: 10, rimPressure: 3, midrangeRate: -5, turnovers: 2, fouls: 1, rebounding: -2, fatigue: 6 },
-    counters: ['drop', 'protect_paint'],
+    counters: ['zone'],
   },
   {
-    id: 'grit_and_grind',
-    name: 'Grit and Grind',
-    description: 'Slows the game down and leans into defense, rebounding, contact, and half-court pressure.',
-    boostSummary: 'Boosts defense, defense IQ, rebounding, and strength for physical defenders. Weak defensive fits can lose defense and stamina.',
-    offense: 'post_heavy',
-    defense: 'protect_paint',
-    modifiers: { pace: -7, threePointRate: -4, rimPressure: 6, midrangeRate: 4, turnovers: -2, fouls: 3, rebounding: 8, fatigue: 2 },
-    counters: ['switch_heavy', 'zone'],
-  },
-  {
-    id: 'blitz_pressure',
-    name: 'Blitz Pressure',
-    description: 'Aggressive guards and wings attack ball handlers, force turnovers, and live with extra fouls.',
-    boostSummary: 'Boosts steals, perimeter defense, speed, and defense IQ for quick defenders. Bad fits can lose defense IQ and stamina.',
-    offense: 'pick_and_roll',
-    defense: 'pressure',
-    modifiers: { pace: 5, threePointRate: 2, rimPressure: 5, midrangeRate: -2, turnovers: 5, fouls: 6, rebounding: -3, fatigue: 7 },
-    counters: ['drop', 'zone'],
-  },
-  {
-    id: 'seven_seconds',
-    name: 'Seven Seconds',
-    description: 'A run-first attack built for quick decisions, early shots, and constant transition pressure.',
-    boostSummary: 'Boosts speed, 3PT, playmaking, and stamina for shooters or fast creators. Slow poor fits can lose post offense and stamina.',
-    offense: 'pace_and_space',
-    defense: 'switch_heavy',
-    modifiers: { pace: 10, threePointRate: 7, rimPressure: 5, midrangeRate: -4, turnovers: 4, fouls: 2, rebounding: -3, fatigue: 8 },
-    counters: ['drop', 'protect_paint'],
-  },
-  {
-    id: 'triangle_control',
-    name: 'Triangle Control',
-    description: 'A patient read-and-react offense for smart passers, post hubs, and midrange decision makers.',
-    boostSummary: 'Boosts basketball IQ, passing, midrange, and post offense for high-IQ players. Poor fits can lose ball handling.',
-    offense: 'balanced',
-    defense: 'drop',
-    modifiers: { pace: -3, threePointRate: -1, rimPressure: 2, midrangeRate: 7, turnovers: -5, fouls: -1, rebounding: 2, fatigue: -2 },
-    counters: ['pressure', 'zone'],
-  },
-  {
-    id: 'lob_city',
-    name: 'Lob City',
-    description: 'Pick-and-roll pressure built around vertical spacing, rim running, and highlight finishes.',
-    boostSummary: 'Boosts dunking, athleticism, close shot, and guard playmaking for explosive finishers. Poor fits can lose midrange and stamina.',
-    offense: 'pick_and_roll',
-    defense: 'drop',
-    modifiers: { pace: 6, threePointRate: 1, rimPressure: 10, midrangeRate: -5, turnovers: 2, fouls: 2, rebounding: 3, fatigue: 5 },
-    counters: ['drop', 'protect_paint'],
-  },
-  {
-    id: 'midrange_clinic',
-    name: 'Midrange Clinic',
-    description: 'Creates deliberate shot quality for scorers who live in pull-ups, elbows, and late-clock control.',
-    boostSummary: 'Boosts midrange, shot IQ, free throw, clutch, and shooting for polished scorers. Poor fits can lose 3PT rhythm.',
-    offense: 'isolation',
-    defense: 'drop',
-    modifiers: { pace: -4, threePointRate: -6, rimPressure: -1, midrangeRate: 10, turnovers: -3, fouls: -2, rebounding: 0, fatigue: -1 },
-    counters: ['switch_heavy', 'pressure'],
-  },
-  {
-    id: 'bully_ball',
-    name: 'Bully Ball',
-    description: 'A physical style that wins with strength, post touches, paint control, and punishing matchups.',
-    boostSummary: 'Boosts strength, post offense, post defense, rebounding, and defense for strong players. Poor fits can lose speed and stamina.',
-    offense: 'post_heavy',
-    defense: 'protect_paint',
-    modifiers: { pace: -6, threePointRate: -5, rimPressure: 8, midrangeRate: 2, turnovers: -2, fouls: 5, rebounding: 8, fatigue: 4 },
-    counters: ['switch_heavy', 'drop'],
-  },
-  {
-    id: 'zone_trap',
-    name: 'Zone Trap',
-    description: 'A disruptive zone look that baits passes, crowds lanes, and creates live-ball turnovers.',
-    boostSummary: 'Boosts steals, perimeter defense, speed, and defense IQ for alert defenders. Poor fits can lose defense IQ and stamina.',
+    id: 'zone_23',
+    name: '2-3 Zone',
+    description: 'Packs the paint, protects the rim, and dares slower ball movement to beat the shell with quick decisions.',
+    boostSummary: 'Boosts paint defense, help positioning, rebounding, and foul control. It checks Motion Offense, but 5-Out spacing can pull it apart.',
     offense: 'balanced',
     defense: 'zone',
-    modifiers: { pace: 3, threePointRate: 2, rimPressure: 1, midrangeRate: 1, turnovers: 8, fouls: 1, rebounding: 1, fatigue: 6 },
+    modifiers: { pace: -4, threePointRate: -3, rimPressure: -3, midrangeRate: 3, turnovers: 2, fouls: -1, rebounding: 6, fatigue: 1 },
     counters: ['protect_paint', 'drop'],
   },
   {
-    id: 'small_ball_switch',
-    name: 'Small Ball Switch',
-    description: 'A spacing-heavy lineup that switches, runs, and turns versatile wings into matchup problems.',
-    boostSummary: 'Boosts speed, perimeter defense, 3PT, and help defense for switchable players. Poor fits can lose rebounding and post defense.',
-    offense: 'pace_and_space',
-    defense: 'switch_heavy',
-    modifiers: { pace: 8, threePointRate: 8, rimPressure: 2, midrangeRate: -3, turnovers: 1, fouls: 3, rebounding: -5, fatigue: 7 },
-    counters: ['drop', 'zone'],
+    id: 'zone_32',
+    name: '3-2 Zone',
+    description: 'Extends three defenders across the perimeter to crowd shooters, close corners, and make 5-Out feel rushed.',
+    boostSummary: 'Boosts perimeter defense, closeouts, steals, and speed. It is strong into 5-Out, but Pick and Roll can split the top line.',
+    offense: 'balanced',
+    defense: 'zone',
+    modifiers: { pace: 1, threePointRate: -5, rimPressure: 1, midrangeRate: 2, turnovers: 6, fouls: 2, rebounding: -2, fatigue: 5 },
+    counters: ['switch_heavy'],
   },
   {
-    id: 'twin_towers',
-    name: 'Twin Towers',
-    description: 'A size-first setup that protects the paint, owns the glass, and lets bigs decide possessions.',
-    boostSummary: 'Boosts blocking, post defense, rebounding, and strength for true bigs. Poor fits can lose speed and 3PT spacing.',
-    offense: 'post_heavy',
-    defense: 'protect_paint',
-    modifiers: { pace: -8, threePointRate: -7, rimPressure: 6, midrangeRate: 1, turnovers: 1, fouls: 4, rebounding: 10, fatigue: 3 },
-    counters: ['drop', 'switch_heavy'],
+    id: 'pick_and_roll',
+    name: 'Pick and Roll',
+    description: 'Uses high screens, pocket passes, slips, and rim pressure to punish stretched perimeter defenses.',
+    boostSummary: 'Boosts playmaking, rim pressure, finishing, and guard-big chemistry. It answers 3-2 Zone when the ball handler reads the top line.',
+    offense: 'pick_and_roll',
+    defense: 'drop',
+    modifiers: { pace: 4, threePointRate: 2, rimPressure: 8, midrangeRate: -2, turnovers: 1, fouls: 2, rebounding: 2, fatigue: 3 },
+    counters: ['zone'],
+  },
+  {
+    id: 'motion_offense',
+    name: 'Motion Offense',
+    description: 'Keeps players cutting, screening, and relocating so half-court pressure has to guard second and third actions.',
+    boostSummary: 'Boosts basketball IQ, passing, midrange reads, and off-ball movement. It beats Half Court Press, but 2-3 Zone can clog the cuts.',
+    offense: 'balanced',
+    defense: 'drop',
+    modifiers: { pace: 2, threePointRate: 1, rimPressure: 3, midrangeRate: 5, turnovers: -5, fouls: -1, rebounding: 1, fatigue: -2 },
+    counters: ['pressure', 'zone'],
+  },
+  {
+    id: 'half_court_press',
+    name: 'Half Court Press',
+    description: 'Picks up early, shades ball handlers into traps, and tries to turn the middle of the floor into rushed decisions.',
+    boostSummary: 'Boosts pressure defense, steals, speed, and defensive IQ. It can speed teams up, but Motion Offense can pass through it.',
+    offense: 'balanced',
+    defense: 'pressure',
+    modifiers: { pace: 5, threePointRate: 1, rimPressure: 1, midrangeRate: -1, turnovers: 8, fouls: 4, rebounding: -2, fatigue: 7 },
+    counters: ['drop'],
   },
 ];
+
+const COACHING_PRESET_ALIASES: Record<string, string> = {
+  pace_and_space: 'five_out',
+  seven_seconds: 'five_out',
+  small_ball_switch: 'five_out',
+  zone_trap: 'zone_23',
+  grit_and_grind: 'zone_23',
+  twin_towers: 'zone_23',
+  blitz_pressure: 'half_court_press',
+  triangle_control: 'motion_offense',
+  midrange_clinic: 'motion_offense',
+  lob_city: 'pick_and_roll',
+  bully_ball: 'pick_and_roll',
+};
+
+function normalizeCoachingPresetId(presetId: string | null | undefined): string {
+  const key = String(presetId || 'balanced').trim().toLowerCase();
+  return COACHING_PRESET_ALIASES[key] || key;
+}
 
 export function coachingPresetInfoText(preset: Pick<CoachingPreset, 'name'> & Partial<Pick<CoachingPreset, 'description' | 'boostSummary'>>): string {
   const description = preset.description || `${preset.name} uses your saved offensive and defensive modifier settings.`;
@@ -264,16 +233,16 @@ function add(adjustments: CoachingGradeAdjustments, key: string, value: number) 
 }
 
 export function getCoachingGradeAdjustments(presetId: string | null | undefined, player: PlayerLike): CoachingGradeAdjustments {
-  const id = String(presetId || 'balanced');
+  const id = normalizeCoachingPresetId(presetId);
   const text = identityText(player);
   const adjustments: CoachingGradeAdjustments = {};
   if (id === 'balanced') return adjustments;
 
-  if (id === 'pace_and_space' || id === 'seven_seconds') {
+  if (id === 'five_out') {
     const fits = skill(player, 'threePoint') >= 75 || skill(player, 'speed') >= 78 || skill(player, 'playmaking') >= 78;
     if (fits) {
       add(adjustments, 'threePoint', 1);
-      add(adjustments, 'speed', id === 'seven_seconds' ? 2 : 1);
+      add(adjustments, 'speed', 1);
       add(adjustments, 'playmaking', 1);
       add(adjustments, 'stamina', 1);
     } else {
@@ -282,7 +251,7 @@ export function getCoachingGradeAdjustments(presetId: string | null | undefined,
     }
   }
 
-  if (id === 'grit_and_grind') {
+  if (id === 'zone_23') {
     const fits = skill(player, 'defense') >= 74 || skill(player, 'rebounding') >= 76 || skill(player, 'strength') >= 76 || text.includes('defen');
     if (fits) {
       add(adjustments, 'defense', 2);
@@ -295,20 +264,20 @@ export function getCoachingGradeAdjustments(presetId: string | null | undefined,
     }
   }
 
-  if (id === 'blitz_pressure' || id === 'zone_trap') {
+  if (id === 'zone_32' || id === 'half_court_press') {
     const fits = skill(player, 'steals') >= 74 || skill(player, 'speed') >= 76 || skill(player, 'perimeterDefense') >= 76 || text.includes('defen');
     if (fits) {
       add(adjustments, 'steals', 2);
       add(adjustments, 'perimeterDefense', 1);
       add(adjustments, 'speed', 1);
-      add(adjustments, 'defenseIq', id === 'zone_trap' ? 2 : 1);
+      add(adjustments, 'defenseIq', id === 'zone_32' ? 2 : 1);
     } else {
       add(adjustments, 'defenseIq', -1);
       add(adjustments, 'stamina', -1);
     }
   }
 
-  if (id === 'triangle_control') {
+  if (id === 'motion_offense') {
     const fits = skill(player, 'basketballIq') >= 76 || skill(player, 'passing') >= 76 || skill(player, 'postOffense') >= 76 || skill(player, 'midRange') >= 76;
     if (fits) {
       add(adjustments, 'basketballIq', 2);
@@ -320,7 +289,7 @@ export function getCoachingGradeAdjustments(presetId: string | null | undefined,
     }
   }
 
-  if (id === 'lob_city') {
+  if (id === 'pick_and_roll') {
     const fits = skill(player, 'dunking') >= 78 || skill(player, 'athleticism') >= 80 || (isBig(player) && skill(player, 'closeShot') >= 75);
     if (fits) {
       add(adjustments, 'dunking', 2);
@@ -402,7 +371,8 @@ export function applyCoachingGradeAdjustments<T extends PlayerLike>(player: T, p
 }
 
 export function getCoachingPreset(id: string): CoachingPreset {
-  const preset = COACHING_PRESETS.find(candidate => candidate.id === id) || COACHING_PRESETS[0];
+  const normalizedId = normalizeCoachingPresetId(id);
+  const preset = COACHING_PRESETS.find(candidate => candidate.id === normalizedId) || COACHING_PRESETS[0];
   return {
     ...preset,
     modifiers: { ...preset.modifiers },

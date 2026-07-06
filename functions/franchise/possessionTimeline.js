@@ -27,8 +27,10 @@ function buildPossessionTimeline(input) {
 
 function buildPossessionTimelineAttempt(input) {
   const rng = createRng(hashString(String(input.seed || input.gameId || 'game')));
-  const home = buildTeamContext(input.homeTeamId, input.homeTeam, 'home', input);
-  const away = buildTeamContext(input.awayTeamId, input.awayTeam, 'away', input);
+  const gameplan = buildGameplanMatchup(input.homeCoachingPresetIds, input.awayCoachingPresetIds);
+  const inputWithGameplan = { ...input, gameplan };
+  const home = buildTeamContext(input.homeTeamId, input.homeTeam, 'home', inputWithGameplan);
+  const away = buildTeamContext(input.awayTeamId, input.awayTeam, 'away', inputWithGameplan);
   const events = [];
   const periods = [];
   let homeScore = 0;
@@ -44,7 +46,7 @@ function buildPossessionTimelineAttempt(input) {
     while (clockSeconds > 0) {
       const possession = resolvePossession({
         rng,
-        input,
+        input: inputWithGameplan,
         period,
         clockSeconds,
         offense,
@@ -59,7 +61,7 @@ function buildPossessionTimelineAttempt(input) {
       periodHome += possession.homePoints;
       periodAway += possession.awayPoints;
       events.push(eventFromPossession({
-        input,
+        input: inputWithGameplan,
         period,
         clockSeconds,
         possession,
@@ -111,6 +113,7 @@ function buildPossessionTimelineAttempt(input) {
     periods,
     starterMatchups: buildStarterMatchups(home, away),
     benchPreview: buildBenchPreview(home, away, events),
+    gameplan,
     events,
   });
 }
@@ -123,6 +126,9 @@ function resolvePossession(ctx) {
   const defender = weightedPick(defenseTeam.rotation, player => player.defense + player.stealSkill * 0.35, ctx.rng);
   const winnerBoost = offenseTeam.teamId === ctx.input.preferredWinnerTeamId ? Number(ctx.input.winnerBias || 0) : 0;
   const defenseBoost = defenseTeam.teamId === ctx.input.preferredWinnerTeamId ? Number(ctx.input.winnerBias || 0) * 0.35 : 0;
+  const scoreMargin = ctx.offense === 'home' ? ctx.homeScore - ctx.awayScore : ctx.awayScore - ctx.homeScore;
+  const trailingBoost = scoreMargin < -5 ? offenseTeam.closeGamePressure * clamp(Math.abs(scoreMargin) / 8, 1, 3.2) : 0;
+  const leadingDrag = scoreMargin > 7 ? offenseTeam.closeGamePressure * clamp(scoreMargin / 14, 0.65, 1.9) : 0;
   const roll = ctx.rng();
   const clockUsed = 7 + Math.floor(ctx.rng() * 16);
   const actingTeamId = offenseTeam.teamId;
@@ -155,7 +161,7 @@ function resolvePossession(ctx) {
   const efficiencyLift = (shooter.sourceEfficiency - 72) / 410;
   const makeChance = clamp(
     0.53
-      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330
+      + ((shooter.scoring * 0.8 + shooter.iq * 0.2 + offenseTeam.offenseBoost + winnerBoost + shooter.nightMakeBoost + trailingBoost - leadingDrag) - (defender.defense * 0.65 + defenseTeam.defenseBoost + defenseBoost) - shotDifficulty) / 330
       + efficiencyLift,
     shotValue === 3 ? 0.28 : 0.36,
     shotValue === 3 ? 0.49 : 0.66,
@@ -298,8 +304,11 @@ function buildTeamContext(teamId, team, side, input) {
     abbreviation: team && (team.abbreviation || team.abbr || team.teamId) || teamId,
     rotation,
     starters: starters.map(starter => rotation.find(player => player.playerId === starter.playerId) || starter),
-    offenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'offense'),
-    defenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'defense'),
+    offenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'offense')
+      + (side === 'home' ? input.gameplan.homeOffenseBoost : input.gameplan.awayOffenseBoost),
+    defenseBoost: coachingBoost(side === 'home' ? input.homeCoachingPresetIds : input.awayCoachingPresetIds, 'defense')
+      + (side === 'home' ? input.gameplan.homeDefenseBoost : input.gameplan.awayDefenseBoost),
+    closeGamePressure: input.gameplan.closeGamePressure,
   };
 }
 
@@ -852,15 +861,129 @@ function scoreText(player, points, assister) {
   return `${shortName(player.name)} ${action}${assister ? `. Assist: ${shortName(assister.name)}.` : '.'}`;
 }
 
+const GAMEPLAN_PRESETS = {
+  balanced: {
+    label: 'Balanced',
+    offense: 'balanced',
+    defense: 'drop',
+    summary: 'kept the matchup neutral and trusted roster talent',
+  },
+  five_out: {
+    label: '5-Out',
+    offense: 'spacing',
+    defense: 'switch',
+    strongAgainst: ['zone_23'],
+    vulnerableTo: ['zone_32'],
+    summary: 'corners spacing pulled the 2-3 shell away from the rim',
+  },
+  zone_23: {
+    label: '2-3 Zone',
+    offense: 'balanced',
+    defense: 'zone',
+    strongAgainst: ['motion_offense'],
+    vulnerableTo: ['five_out'],
+    summary: 'the 2-3 zone clogged cuts and protected the paint',
+  },
+  zone_32: {
+    label: '3-2 Zone',
+    offense: 'balanced',
+    defense: 'zone',
+    strongAgainst: ['five_out'],
+    vulnerableTo: ['pick_and_roll'],
+    summary: 'the 3-2 zone crowded shooters and closed the corners',
+  },
+  pick_and_roll: {
+    label: 'Pick and Roll',
+    offense: 'rim',
+    defense: 'drop',
+    strongAgainst: ['zone_32'],
+    vulnerableTo: [],
+    summary: 'high screens split the 3-2 top line and created rim pressure',
+  },
+  motion_offense: {
+    label: 'Motion Offense',
+    offense: 'read',
+    defense: 'drop',
+    strongAgainst: ['half_court_press'],
+    vulnerableTo: ['zone_23'],
+    summary: 'motion cuts and second actions passed through the half-court press',
+  },
+  half_court_press: {
+    label: 'Half Court Press',
+    offense: 'pressure',
+    defense: 'pressure',
+    strongAgainst: [],
+    vulnerableTo: ['motion_offense'],
+    summary: 'half-court pressure rushed ball handlers and tested passing angles',
+  },
+};
+
+const GAMEPLAN_ALIASES = {
+  pace_and_space: 'five_out',
+  seven_seconds: 'five_out',
+  small_ball_switch: 'five_out',
+  zone_trap: 'zone_23',
+  grit_and_grind: 'zone_23',
+  twin_towers: 'zone_23',
+  blitz_pressure: 'half_court_press',
+  triangle_control: 'motion_offense',
+  midrange_clinic: 'motion_offense',
+  lob_city: 'pick_and_roll',
+  bully_ball: 'pick_and_roll',
+};
+
+function primaryPresetId(presetIds) {
+  const rawId = String((Array.isArray(presetIds) && presetIds[0]) || 'balanced').toLowerCase();
+  const id = GAMEPLAN_ALIASES[rawId] || rawId;
+  return GAMEPLAN_PRESETS[id] ? id : 'balanced';
+}
+
+function planAdvantage(ownId, opponentId) {
+  if (ownId === opponentId) return 0;
+  const own = GAMEPLAN_PRESETS[ownId] || GAMEPLAN_PRESETS.balanced;
+  const opponent = GAMEPLAN_PRESETS[opponentId] || GAMEPLAN_PRESETS.balanced;
+  let advantage = 0;
+  if ((own.strongAgainst || []).includes(opponentId)) advantage += 2;
+  if ((opponent.vulnerableTo || []).includes(ownId)) advantage += 1;
+  if ((own.vulnerableTo || []).includes(opponentId)) advantage -= 1;
+  return advantage;
+}
+
+function buildGameplanMatchup(homePresetIds, awayPresetIds) {
+  const homePresetId = primaryPresetId(homePresetIds);
+  const awayPresetId = primaryPresetId(awayPresetIds);
+  const homePreset = GAMEPLAN_PRESETS[homePresetId] || GAMEPLAN_PRESETS.balanced;
+  const awayPreset = GAMEPLAN_PRESETS[awayPresetId] || GAMEPLAN_PRESETS.balanced;
+  const homeAdvantage = planAdvantage(homePresetId, awayPresetId);
+  const awayAdvantage = planAdvantage(awayPresetId, homePresetId);
+  const bothMadeStrongChoices = Math.max(homeAdvantage, 0) > 0 && Math.max(awayAdvantage, 0) > 0;
+  const closeGamePressure = bothMadeStrongChoices ? 22 : Math.max(homeAdvantage, awayAdvantage) >= 2 ? 8 : 0;
+  return {
+    homePresetId,
+    awayPresetId,
+    homePresetName: homePreset.label,
+    awayPresetName: awayPreset.label,
+    homeAdvantage,
+    awayAdvantage,
+    homeOffenseBoost: Math.max(0, homeAdvantage) * 10,
+    awayOffenseBoost: Math.max(0, awayAdvantage) * 10,
+    homeDefenseBoost: Math.max(0, homeAdvantage) * 4,
+    awayDefenseBoost: Math.max(0, awayAdvantage) * 4,
+    closeGamePressure,
+    homeSummary: homeAdvantage > awayAdvantage ? homePreset.summary : homeAdvantage > 0 ? `${homePreset.summary}, but the opponent had answers` : homePreset.summary,
+    awaySummary: awayAdvantage > homeAdvantage ? awayPreset.summary : awayAdvantage > 0 ? `${awayPreset.summary}, but the opponent had answers` : awayPreset.summary,
+  };
+}
+
 function coachingBoost(presetIds, kind) {
   const ids = (presetIds || []).filter(Boolean).map(id => String(id));
   if (ids.length === 0) return 0;
   const values = ids.map((id) => {
     if (kind === 'offense') {
-      if (['seven_seconds', 'pace_and_space', 'lob_city', 'triangle_control'].includes(id)) return 3;
-      if (['grit_and_grind', 'twin_towers'].includes(id)) return 1;
+      if (['five_out', 'pick_and_roll', 'motion_offense'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
+      if (['zone_23'].includes(GAMEPLAN_ALIASES[id] || id)) return 1;
     }
-    if (['grit_and_grind', 'zone_trap', 'small_ball_switch', 'twin_towers', 'bully_ball'].includes(id)) return 3;
+    if (['zone_23', 'zone_32', 'half_court_press'].includes(GAMEPLAN_ALIASES[id] || id)) return 3;
     return 0;
   });
   return values.reduce((sum, value) => sum + value, 0) / values.length;

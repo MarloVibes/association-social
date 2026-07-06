@@ -11,10 +11,11 @@ import {
 
 describe('NBA coaching presets', () => {
   it('defines explicit offensive and defensive modifiers', () => {
-    const paceAndSpace = getCoachingPreset('pace_and_space');
+    const fiveOut = getCoachingPreset('five_out');
 
-    expect(paceAndSpace).toMatchObject({
-      id: 'pace_and_space',
+    expect(fiveOut).toMatchObject({
+      id: 'five_out',
+      name: '5-Out',
       offense: 'pace_and_space',
       defense: 'switch_heavy',
       modifiers: {
@@ -25,16 +26,18 @@ describe('NBA coaching presets', () => {
         fatigue: 6,
       },
     });
-    expect(COACHING_PRESETS.length).toBeGreaterThanOrEqual(12);
+    expect(getCoachingPreset('pace_and_space')).toMatchObject({
+      id: 'five_out',
+      name: '5-Out',
+    });
+    expect(COACHING_PRESETS.length).toBeGreaterThanOrEqual(6);
     expect(COACHING_PRESETS.map(preset => preset.id)).toEqual(expect.arrayContaining([
-      'seven_seconds',
-      'triangle_control',
-      'lob_city',
-      'midrange_clinic',
-      'bully_ball',
-      'zone_trap',
-      'small_ball_switch',
-      'twin_towers',
+      'five_out',
+      'zone_23',
+      'zone_32',
+      'pick_and_roll',
+      'motion_offense',
+      'half_court_press',
     ]));
     expect(COACHING_PRESETS.every(preset => validateCoachingPreset(preset).valid)).toBe(true);
   });

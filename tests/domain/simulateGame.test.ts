@@ -713,6 +713,25 @@ describe('NBA game simulation', () => {
     expect(result.story).not.toContain('_2011');
   });
 
+  it('applies soft gameplan counters without overriding roster talent', () => {
+    const countered = simulateGame({
+      ...fixture,
+      homeCoachingPresetIds: ['five_out'],
+      awayCoachingPresetIds: ['zone_23'],
+    }, 'domain-gameplan-counter');
+    const neutral = simulateGame({
+      ...fixture,
+      homeCoachingPresetIds: ['balanced'],
+      awayCoachingPresetIds: ['balanced'],
+    }, 'domain-gameplan-counter');
+
+    expect(countered.coachingImpact?.homeAdvantage).toBeGreaterThan(countered.coachingImpact?.awayAdvantage || 0);
+    expect(countered.coachingImpact?.homePresetName).toBe('5-Out');
+    expect(countered.coachingImpact?.awayPresetName).toBe('2-3 Zone');
+    expect(countered.coachingImpact?.homeSummary).toContain('corners');
+    expect(countered.home.points - countered.away.points).toBeGreaterThan(neutral.home.points - neutral.away.points);
+  });
+
   it('writes a specific postgame story instead of a generic rotation summary', () => {
     const result = simulateGame(fixture, 'story-detail-seed');
 
