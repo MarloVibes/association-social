@@ -982,6 +982,19 @@ describe('source safety regressions', () => {
     expect(tradeCenter).not.toContain('<PlaystyleBadge');
   });
 
+  it('presents the Trade Center My Team tab as an official front office board', () => {
+    const tradeCenter = source('app/screens/trade-channel.tsx');
+
+    expect(tradeCenter).toContain('Front Office Trade Board');
+    expect(tradeCenter).toContain('styles.boardSummaryStrip');
+    expect(tradeCenter).toContain('renderBoardSection');
+    expect(tradeCenter).toContain('styles.boardPlayerCard');
+    expect(tradeCenter).toContain('styles.addSectionButton');
+    expect(tradeCenter).toContain('Protected');
+    expect(tradeCenter).not.toContain('/* 3 Column Layout */');
+    expect(tradeCenter).not.toContain('styles.threeCol');
+  });
+
   it('keeps trade-room player pickers readable like roster filters', () => {
     const tradeRoom = source('app/screens/trade-room.tsx');
 

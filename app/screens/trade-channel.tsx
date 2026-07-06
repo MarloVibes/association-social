@@ -85,27 +85,52 @@ const badgeStyles = StyleSheet.create({
   badgeText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-function PlayerSlot({ player, onPress, empty, style, eraKey, sport, currentYear, leagueDate }: { player?: any; onPress?: () => void; empty?: boolean; style?: any; eraKey?: string; sport?: string; currentYear?: number | string | null; leagueDate?: string | Date | null }) {
-  if (empty) {
-    return (
-      <TouchableOpacity style={[styles.playerSlot, styles.playerSlotEmpty, style]} onPress={onPress}>
-        <Text style={styles.addItemText}>+ ADD PLAYER</Text>
-      </TouchableOpacity>
-    );
-  }
+function BoardPlayerCard({
+  player,
+  sport,
+  eraKey,
+  currentYear,
+  leagueDate,
+  accent,
+  status,
+  teamName,
+  onPress,
+}: {
+  player: any;
+  sport?: string;
+  eraKey?: string;
+  currentYear?: number | string | null;
+  leagueDate?: string | Date | null;
+  accent: string;
+  status: string;
+  teamName?: string;
+  onPress: () => void;
+}) {
+  const identity = tradeSlotIdentity(player, { eraKey, sport, currentYear, leagueDate });
+  const playerName = player?.full_name || player?.name || 'Player';
+  const playerMeta = [player?.position, player?.height || player?.height_text, teamName].filter(Boolean).join(' · ');
   const fallback = (
-    <View style={styles.playerSlotPhotoPlaceholder}>
-      <Text style={styles.playerSlotInitial}>{(player?.full_name || '?')[0]}</Text>
+    <View style={styles.boardPhotoFallback}>
+      <Text style={styles.boardPhotoInitial}>{playerName[0]}</Text>
     </View>
   );
   return (
-    <TouchableOpacity style={[styles.playerSlot, style]} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.playerSlotInner}>
-        <PlayerHeadshot player={player} sport={sport} imageStyle={styles.playerSlotPhoto} fallback={fallback} />
-        <View style={styles.playerSlotInfo}>
-          <Text style={styles.playerSlotPos}>{player?.position || '?'}</Text>
-          <Text style={styles.playerSlotName} numberOfLines={1}>{player?.full_name}</Text>
-          <TierBadge player={player} eraKey={eraKey} sport={sport} currentYear={currentYear} leagueDate={leagueDate} />
+    <TouchableOpacity style={styles.boardPlayerCard} onPress={onPress} activeOpacity={0.86}>
+      <View style={[styles.boardCardAccent, { backgroundColor: accent }]} />
+      <PlayerHeadshot player={player} sport={sport} imageStyle={styles.boardPhoto} fallback={fallback} />
+      <View style={styles.boardPlayerInfo}>
+        <View style={styles.boardPlayerTopRow}>
+          <Text style={styles.boardPlayerName} numberOfLines={1}>{playerName}</Text>
+          <View style={[styles.boardStatusPill, { borderColor: accent + 'aa', backgroundColor: accent + '18' }]}>
+            <Text style={[styles.boardStatusText, { color: accent }]} numberOfLines={1}>{status}</Text>
+          </View>
+        </View>
+        <Text style={styles.boardPlayerMeta} numberOfLines={1}>{playerMeta}</Text>
+        <View style={styles.boardPlayerBottomRow}>
+          <View style={[styles.boardTierBadge, { borderColor: identity.color + '88', backgroundColor: identity.color + '16' }]}>
+            <Text style={[styles.boardTierText, { color: identity.color }]} numberOfLines={1}>{identity.tier}</Text>
+          </View>
+          <Text style={styles.boardSalary} numberOfLines={1}>{formatFranchisePlayerMoney(player?.salary ?? player?.contract?.salary ?? player?.currentSalary ?? 0)}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -267,6 +292,18 @@ export default function TradeChannelScreen() {
 
   const tradeBlockPlayers = tradeBlock.map(pid => getPlayerById(pid)).filter(Boolean).sort(rosterComparator);
   const untouchablePlayers = untouchables.map(pid => getPlayerById(pid)).filter(Boolean).sort(rosterComparator);
+  const targetPlayers = (myTeam?.targetList || []).map((pid: string) => {
+    for (const team of allTeams) {
+      const player = (team.players || []).find((p: any) => (p.player_id || p.full_name) === pid);
+      if (player) {
+        return {
+          ...player,
+          teamName: displayScheduleTeamLabel(team.name || team.abbreviation, team.teamId || team.id || '', sport),
+        };
+      }
+    }
+    return null;
+  }).filter(Boolean).sort((a: any, b: any) => rosterComparator(a, b) || (a.teamName || '').localeCompare(b.teamName || ''));
   const allTradeBlockAcrossLeague = allTeams.flatMap((t: any) => {
     const tb = t.tradeBlock || [];
     return (t.players || []).filter((p: any) => tb.includes(p.player_id || p.full_name)).map((p: any) => ({
@@ -279,6 +316,57 @@ export default function TradeChannelScreen() {
   const claimedTradeTeams = allTeams
     .filter((t: any) => t.gmId && t.gmId !== user?.uid)
     .sort((a: any, b: any) => (a.name || a.abbreviation || '').localeCompare(b.name || b.abbreviation || ''));
+  const renderBoardSection = ({
+    title,
+    count,
+    players,
+    accent,
+    status,
+    emptyLabel,
+    onManage,
+  }: {
+    title: string;
+    count: number;
+    players: any[];
+    accent: string;
+    status: string;
+    emptyLabel: string;
+    onManage: () => void;
+  }) => (
+    <View style={styles.boardSection}>
+      <View style={styles.boardSectionHeader}>
+        <View>
+          <Text style={styles.boardSectionTitle}>{title}</Text>
+          <Text style={styles.boardSectionCount}>{count} player{count === 1 ? '' : 's'}</Text>
+        </View>
+        <TouchableOpacity style={[styles.addSectionButton, { borderColor: accent + 'aa', backgroundColor: accent + '14' }]} onPress={onManage}>
+          <Text style={[styles.addSectionButtonText, { color: accent }]}>Manage</Text>
+        </TouchableOpacity>
+      </View>
+      {players.length > 0 ? (
+        <View style={styles.boardPlayerStack}>
+          {players.map((player: any, index: number) => (
+            <BoardPlayerCard
+              key={(player?.player_id || player?.full_name || title) + '_' + index}
+              player={player}
+              sport={sport}
+              eraKey={leagueEra}
+              currentYear={leagueYear}
+              leagueDate={leagueDate}
+              accent={accent}
+              status={status}
+              teamName={player?.teamName}
+              onPress={onManage}
+            />
+          ))}
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.boardEmptyState} onPress={onManage}>
+          <Text style={styles.boardEmptyLabel}>{emptyLabel}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   if (loading) return <View style={styles.container}><ActivityIndicator size='large' color='#00ff87' style={{ marginTop: 100 }} /></View>;
 
@@ -346,53 +434,58 @@ export default function TradeChannelScreen() {
 
       {activeTab === 'block' ? (
         <ScrollView contentContainerStyle={[styles.blockContent, { paddingBottom: 90 }]}>
-          {/* 3 Column Layout */}
-          <View style={styles.threeCol}>
-            {/* Trading Block */}
-            <View style={styles.col}>
-              <Text style={styles.colTitle}>TRADING BLOCK</Text>
-              {[0,1,2,3,4,5].map(i => {
-                const p = tradeBlockPlayers[i];
-                return p
-                  ? <PlayerSlot key={i} player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} onPress={() => setRosterModal('block')} style={styles.blockSlot} />
-                  : <PlayerSlot key={i} empty onPress={() => setRosterModal('block')} />;
-              })}
+          <View style={styles.boardHero}>
+            <View>
+              <Text style={styles.boardEyebrow}>{myTeam?.abbreviation || sport.toUpperCase()} OPERATIONS</Text>
+              <Text style={styles.boardTitle}>Front Office Trade Board</Text>
             </View>
-            {/* Target List (players from other teams you're watching) */}
-            <View style={styles.col}>
-              <Text style={styles.colTitle}>TARGET LIST</Text>
-              {[0,1,2,3,4,5].map(i => {
-                const targetIds: string[] = myTeam?.targetList || [];
-                const pid = targetIds[i];
-                // Find player across all teams
-                let targetPlayer: any = null;
-                if (pid) {
-                  for (const t of allTeams) {
-                    const found = (t.players || []).find((p: any) => (p.player_id || p.full_name) === pid);
-                    if (found) {
-                      targetPlayer = found;
-                      break;
-                    }
-                  }
-                }
-                return targetPlayer ? (
-                  <PlayerSlot key={i} player={targetPlayer} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} onPress={() => setRosterModal('target')} />
-                ) : (
-                  <PlayerSlot key={i} empty onPress={() => setRosterModal('target')} />
-                );
-              })}
+            <Text style={styles.boardTeamLabel} numberOfLines={1}>{myTeam?.name || 'My Team'}</Text>
+          </View>
+          <View style={styles.boardSummaryStrip}>
+            <View style={styles.boardSummaryItem}>
+              <Text style={styles.boardSummaryValue}>{myRoster.length}</Text>
+              <Text style={styles.boardSummaryLabel}>Roster</Text>
             </View>
-            {/* Untouchables */}
-            <View style={styles.col}>
-              <Text style={styles.colTitle}>UNTOUCHABLES</Text>
-              {[0,1,2,3,4,5].map(i => {
-                const p = untouchablePlayers[i];
-                return p
-                  ? <PlayerSlot key={i} player={p} eraKey={leagueEra} sport={sport} currentYear={leagueYear} leagueDate={leagueDate} style={styles.untouchableSlot} onPress={() => setRosterModal('untouchable')} />
-                  : <PlayerSlot key={i} empty onPress={() => setRosterModal('untouchable')} />;
-              })}
+            <View style={styles.boardSummaryItem}>
+              <Text style={styles.boardSummaryValue}>{tradeBlockPlayers.length}</Text>
+              <Text style={styles.boardSummaryLabel}>Shopping</Text>
+            </View>
+            <View style={styles.boardSummaryItem}>
+              <Text style={styles.boardSummaryValue}>{targetPlayers.length}</Text>
+              <Text style={styles.boardSummaryLabel}>Targets</Text>
+            </View>
+            <View style={styles.boardSummaryItem}>
+              <Text style={styles.boardSummaryValue}>{untouchablePlayers.length}</Text>
+              <Text style={styles.boardSummaryLabel}>Protected</Text>
             </View>
           </View>
+          {renderBoardSection({
+            title: 'Shopping',
+            count: tradeBlockPlayers.length,
+            players: tradeBlockPlayers,
+            accent: '#2bd4ff',
+            status: 'Available',
+            emptyLabel: '+ Add player to block',
+            onManage: () => setRosterModal('block'),
+          })}
+          {renderBoardSection({
+            title: 'Targets',
+            count: targetPlayers.length,
+            players: targetPlayers,
+            accent: '#f5a623',
+            status: 'Target',
+            emptyLabel: '+ Add target',
+            onManage: () => setRosterModal('target'),
+          })}
+          {renderBoardSection({
+            title: 'Protected',
+            count: untouchablePlayers.length,
+            players: untouchablePlayers,
+            accent: '#ff4d5e',
+            status: 'Locked',
+            emptyLabel: '+ Add protected player',
+            onManage: () => setRosterModal('untouchable'),
+          })}
         </ScrollView>
       ) : activeTab === 'available' ? (
         <>
@@ -778,24 +871,39 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: '#00ff87' },
   tabText: { color: '#555', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   tabTextActive: { color: '#00ff87' },
-  blockContent: { padding: 12, paddingBottom: 100 },
-  threeCol: { flexDirection: 'row', gap: 8 },
-  col: { flex: 1, gap: 6 },
-  colTitle: { color: '#888', fontSize: 9, fontWeight: '800', letterSpacing: 1, textAlign: 'center', marginBottom: 4, textTransform: 'uppercase' },
-  playerSlot: { backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', overflow: 'hidden', marginBottom: 4, minHeight: 80 },
-  blockSlot: { minHeight: 80 },
-  playerSlotEmpty: { borderStyle: 'dashed', borderColor: '#333', alignItems: 'center', justifyContent: 'center', height: 80 },
-  addItemText: { color: '#333', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  playerSlotInner: { flexDirection: 'row', alignItems: 'center', padding: 6, gap: 6 },
-  playerSlotPhoto: { width: 44, height: 44, borderRadius: 4, backgroundColor: '#111' },
-  playerSlotPhotoPlaceholder: { width: 44, height: 44, borderRadius: 4, backgroundColor: '#1a1a2a', alignItems: 'center', justifyContent: 'center' },
-  playerSlotInitial: { color: '#8888ff', fontSize: 18, fontWeight: '800' },
-  playerSlotInfo: { flex: 1 },
-  playerSlotPos: { color: '#888', fontSize: 8, fontWeight: '700', letterSpacing: 1 },
-  playerSlotName: { color: '#fff', fontSize: 10, fontWeight: '700', marginBottom: 2 },
-
-  untouchableSlot: { borderColor: '#ff4444', backgroundColor: '#1a0a0a' },
-  targetSlot: { borderColor: '#4444ff', backgroundColor: '#0a0a1a' },
+  blockContent: { padding: 14, paddingBottom: 100, gap: 12 },
+  boardHero: { borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#141414', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  boardEyebrow: { color: '#777', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  boardTitle: { color: '#fff', fontSize: 20, fontWeight: '900', marginTop: 3 },
+  boardTeamLabel: { color: '#aaa', fontSize: 12, fontWeight: '800', maxWidth: 116, textAlign: 'right' },
+  boardSummaryStrip: { flexDirection: 'row', borderRadius: 8, borderWidth: 1, borderColor: '#222', backgroundColor: '#101010', overflow: 'hidden' },
+  boardSummaryItem: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRightWidth: 1, borderRightColor: '#1f1f1f' },
+  boardSummaryValue: { color: '#fff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  boardSummaryLabel: { color: '#777', fontSize: 9, fontWeight: '900', letterSpacing: 0.6, marginTop: 2, textTransform: 'uppercase' },
+  boardSection: { borderRadius: 8, borderWidth: 1, borderColor: '#242424', backgroundColor: '#111', padding: 12, gap: 10 },
+  boardSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  boardSectionTitle: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.4 },
+  boardSectionCount: { color: '#666', fontSize: 10, fontWeight: '800', marginTop: 2, textTransform: 'uppercase' },
+  boardPlayerStack: { gap: 8 },
+  boardPlayerCard: { minHeight: 74, borderRadius: 8, borderWidth: 1, borderColor: '#292929', backgroundColor: '#181818', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingRight: 10, gap: 10 },
+  boardCardAccent: { alignSelf: 'stretch', width: 4 },
+  boardPhoto: { width: 50, height: 50, borderRadius: 7, backgroundColor: '#0a0a0a' },
+  boardPhotoFallback: { width: 50, height: 50, borderRadius: 7, backgroundColor: '#1a1a2a', alignItems: 'center', justifyContent: 'center' },
+  boardPhotoInitial: { color: '#8888ff', fontSize: 18, fontWeight: '900' },
+  boardPlayerInfo: { flex: 1, minWidth: 0, gap: 3 },
+  boardPlayerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  boardPlayerName: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '900' },
+  boardStatusPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2, maxWidth: 82 },
+  boardStatusText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
+  boardPlayerMeta: { color: '#888', fontSize: 11, fontWeight: '800' },
+  boardPlayerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  boardTierBadge: { flex: 1, maxWidth: 160, borderRadius: 5, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
+  boardTierText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
+  boardSalary: { color: '#00ff87', fontSize: 11, fontWeight: '900' },
+  addSectionButton: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  addSectionButtonText: { fontSize: 11, fontWeight: '900' },
+  boardEmptyState: { minHeight: 52, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: '#303030', backgroundColor: '#151515', alignItems: 'center', justifyContent: 'center' },
+  boardEmptyLabel: { color: '#555', fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
   availableContent: { padding: 16, paddingBottom: 100 },
   proposeContent: { padding: 16, paddingBottom: 100 },
   blockTeamSection: { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#222', gap: 8 },
