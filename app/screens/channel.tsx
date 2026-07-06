@@ -2056,6 +2056,7 @@ export default function ChannelScreen() {
 
       <FlatList
         ref={flatListRef}
+        style={styles.chatFeed}
         data={messages.filter((m: any) => !blockSet.has(m.uid))}
         keyExtractor={item => item.id}
         renderItem={renderMessage}
@@ -2184,7 +2185,8 @@ export default function ChannelScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: '#02070d' },
+  chatFeed: { flex: 1, backgroundColor: '#02070d' },
 
   // Court background
   courtBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
