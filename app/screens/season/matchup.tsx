@@ -427,7 +427,7 @@ export default function MatchupScreen() {
     <View style={styles.screen}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={myTeam ? prepPresets : []}
+        data={myTeam && sport !== 'nba' ? prepPresets : []}
         keyExtractor={item => item.id}
         ListHeaderComponent={(
           <>
@@ -536,10 +536,54 @@ export default function MatchupScreen() {
                   </View>
                 )}
                 {myTeam && (
-                  <View style={styles.prepHeader}>
-                    <Text style={styles.sectionTitle}>Private Game Prep</Text>
-                    <Text style={styles.prepHelp}>{sport === 'nba' ? 'Pick one offense and one defense before tipoff.' : 'Pick an opening plan and a matchup adjustment.'}</Text>
-                  </View>
+                  <>
+                    <View style={styles.prepHeader}>
+                      <Text style={styles.sectionTitle}>Private Game Prep</Text>
+                      <Text style={styles.prepHelp}>{sport === 'nba' ? 'Pick one offense and one defense before tipoff.' : 'Pick an opening plan and a matchup adjustment.'}</Text>
+                    </View>
+                    {sport === 'nba' ? (
+                      <View style={styles.prepChoiceGrid}>
+                        <View style={styles.offenseColumn}>
+                          <Text style={styles.prepColumnTitle}>Offense</Text>
+                          {offensePresets.map(preset => {
+                            const selected = preset.id === firstHalfPresetId;
+                            return (
+                              <Pressable
+                                key={`offense-${preset.id}`}
+                                onPress={() => setFirstHalfPresetId(preset.id)}
+                                style={[styles.prepChoiceCard, selected && styles.prepChoiceCardActive]}
+                              >
+                                <View style={[styles.prepChoiceBadge, selected && styles.prepChoiceBadgeActive]}>
+                                  <Text style={[styles.prepChoiceBadgeText, selected && styles.prepChoiceBadgeTextActive]}>{firstPrepLabel}</Text>
+                                </View>
+                                <Text style={[styles.prepChoiceName, selected && styles.prepChoiceNameActive]} numberOfLines={2}>{preset.name}</Text>
+                                <Text style={styles.prepChoiceMeta} numberOfLines={1}>{preset.offense.replace(/_/g, ' ')}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        <View style={styles.defenseColumn}>
+                          <Text style={styles.prepColumnTitle}>Defense</Text>
+                          {defensePresets.map(preset => {
+                            const selected = preset.id === secondHalfPresetId;
+                            return (
+                              <Pressable
+                                key={`defense-${preset.id}`}
+                                onPress={() => setSecondHalfPresetId(preset.id)}
+                                style={[styles.prepChoiceCard, selected && styles.prepChoiceCardActive]}
+                              >
+                                <View style={[styles.prepChoiceBadge, selected && styles.prepChoiceBadgeActive]}>
+                                  <Text style={[styles.prepChoiceBadgeText, selected && styles.prepChoiceBadgeTextActive]}>{secondPrepLabel}</Text>
+                                </View>
+                                <Text style={[styles.prepChoiceName, selected && styles.prepChoiceNameActive]} numberOfLines={2}>{preset.name}</Text>
+                                <Text style={styles.prepChoiceMeta} numberOfLines={1}>{preset.defense.replace(/_/g, ' ')}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
                 )}
               </>
             )}
@@ -634,6 +678,19 @@ const styles = StyleSheet.create({
   prepHeader: { marginBottom: 10 },
   prepHelp: { color: '#777', fontSize: 11, fontWeight: '700', marginTop: 3 },
   sectionTitle: { color: '#888', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', marginBottom: 10 },
+  prepChoiceGrid: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  offenseColumn: { flex: 1, gap: 7 },
+  defenseColumn: { flex: 1, gap: 7 },
+  prepColumnTitle: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', marginBottom: 1 },
+  prepChoiceCard: { minHeight: 76, borderRadius: 8, borderWidth: 1, borderColor: '#242424', backgroundColor: '#101010', padding: 9, justifyContent: 'space-between' },
+  prepChoiceCardActive: { borderColor: '#00e58b', backgroundColor: '#082016' },
+  prepChoiceBadge: { alignSelf: 'flex-start', minWidth: 34, minHeight: 22, borderRadius: 6, borderWidth: 1, borderColor: '#2c2c2c', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: '#171717' },
+  prepChoiceBadgeActive: { borderColor: '#00e58b', backgroundColor: '#00e58b' },
+  prepChoiceBadgeText: { color: '#777', fontSize: 9, fontWeight: '900' },
+  prepChoiceBadgeTextActive: { color: '#06130c' },
+  prepChoiceName: { color: '#f4f4f4', fontSize: 12, fontWeight: '900', lineHeight: 15, marginTop: 7 },
+  prepChoiceNameActive: { color: '#00e58b' },
+  prepChoiceMeta: { color: '#777', fontSize: 9, fontWeight: '800', textTransform: 'capitalize', marginTop: 3 },
   presetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#111', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
   presetRowActive: { backgroundColor: '#0a1d14', borderColor: '#00e58b' },
   presetName: { color: '#fff', fontSize: 14, fontWeight: '900' },

@@ -1460,6 +1460,9 @@ describe('source safety regressions', () => {
     expect(matchup).toContain("from '@/domain/sports/coachingPresets'");
     expect(matchup).toContain('matchup adjustment');
     expect(matchup).toContain("['OFF', 'DEF']");
+    expect(matchup).toContain('prepChoiceGrid');
+    expect(matchup).toContain('offenseColumn');
+    expect(matchup).toContain('defenseColumn');
     expect(matchup).not.toContain('halftime adjustment');
     expect(matchup).not.toContain('const NFL_GAME_PRESETS');
     expect(matchup).not.toContain('const MLB_GAME_PRESETS');
