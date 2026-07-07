@@ -1,23 +1,23 @@
-# Franchise Mobile Draft Career Mode Design
+# Franchise Mobile League Career Mode Design
 
 ## Purpose
 
-Franchise Mobile Draft becomes the public main mode for the app while the current GM/franchise mode is finished as a private prototype and later hidden or gated. The new mode avoids reliance on real NBA, NFL, MLB, NCAA, school, team, player, league, logo, or draft branding by building an original basketball universe around user-created players.
+Franchise Mobile League becomes the public main mode for the app while the current GM/franchise mode is finished as a private prototype and later hidden or gated. The new mode avoids reliance on real NBA, NFL, MLB, NCAA, school, team, player, league, logo, or draft branding by building an original basketball universe around user-created players.
 
 The core promise is:
 
-> Create a player. Enter the Franchise Mobile Draft. Earn your spot. Build a career.
+> Create a player. Enter Franchise Mobile League. Earn your spot. Build a career.
 
 This mode should feel like a multiplayer sports career RPG. Users are not running real-world teams. They are building their own player, entering a shared draft showcase, getting drafted into a personal solo career universe, and earning more influence over their team as their player grows.
 
 ## Product Positioning
 
-Franchise Mobile Draft is the main user-facing mode for launch direction. GM/franchise mode remains valuable as a demo and technology base, but it should not be the public default while licensing risk exists.
+Franchise Mobile League is the main user-facing mode for launch direction. GM/franchise mode remains valuable as a demo and technology base, but it should not be the public default while licensing risk exists.
 
 Short-term positioning:
 
 - Finish GM mode enough to use as a private demo and investor pitch.
-- Build Franchise Mobile Draft as the public main mode.
+- Build Franchise Mobile League as the public main mode.
 - Hide or gate GM mode later through a dev flag, admin-only flag, private demo toggle, or inactive route.
 - Reuse stable GM systems where appropriate: simulation, seasons, awards, contracts, CPU decisions, chat/social, scheduling, progression, and roster logic.
 
@@ -77,15 +77,15 @@ Example: Floor General
 - Finishing: F
 - Rebounding: F-
 
-Playstyle skills should grow faster than off-identity skills, but users can still train weaknesses over time.
+Playstyle defines starting identity only. It does not make certain skills grow faster. Users can train any skill, and all skills use the same upgrade-point economy as GM mode. A Stretch Big starts with better shooting/rebounding/interior-defense grades than a Floor General, but passing, handle, defense, shooting, and other categories all improve through the same point rules once the career begins.
 
-## Franchise Mobile Draft Flow
+## Franchise Mobile League Flow
 
 The onboarding career path is:
 
 1. Create a player.
 2. Choose a permanent playstyle.
-3. Join the next Franchise Mobile Draft showcase.
+3. Join the next Franchise Mobile League showcase.
 4. Get randomly assigned to a tournament team.
 5. Play through the 64-team showcase tournament.
 6. Complete a five-question Draft Interview Quiz.
@@ -251,7 +251,7 @@ Bad drill results should not destroy draft stock. They should only miss bonus va
 
 ## Solo Career Universe
 
-After the Franchise Mobile Draft, each player enters their own personal solo pro universe.
+After the Franchise Mobile League draft event, each player enters their own personal solo pro universe.
 
 Important rule:
 
@@ -392,7 +392,8 @@ Use:
 
 - Original pro teams.
 - Original showcase teams.
-- Franchise Mobile Draft.
+- Franchise Mobile League.
+- Franchise Mobile Draft as the original in-universe draft event.
 - Original awards.
 - Original player universe.
 - Original league names.
@@ -403,7 +404,7 @@ Use:
 Future public main navigation should emphasize:
 
 - Create Player.
-- Franchise Mobile Draft.
+- Franchise Mobile League.
 - Career Locker.
 - My Career.
 - Training.
@@ -442,7 +443,7 @@ Function tests:
 UI/source tests:
 
 - GM mode can be hidden without deleting code.
-- Main mode routes point to Franchise Mobile Draft.
+- Main mode routes point to Franchise Mobile League.
 - Quiz/drill/draft screens render required state.
 - Player slot locks and unlocks display correctly.
 
@@ -455,7 +456,7 @@ Phase 1:
 - Career Locker.
 - Create Player.
 - Playstyle starter grades.
-- Franchise Mobile Draft entry.
+- Franchise Mobile League entry.
 - 64-team showcase generation with CPU fill.
 - Simmed tournament rounds.
 
