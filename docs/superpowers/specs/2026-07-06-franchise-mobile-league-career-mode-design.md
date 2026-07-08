@@ -192,11 +192,15 @@ Use "Franchise Mobile Draft" or another original league term. Do not use "NBA Dr
 
 ## Draft Interview Quiz
 
-After the showcase, users answer five randomly selected questions from a 20-question bank.
+After the showcase, users answer five randomly selected multiple-choice questions from a 20-question bank.
 
 Rules:
 
 - Questions are universal for all playstyles.
+- Every question must be multiple choice.
+- Each question should have four answer choices.
+- One answer should be clearly correct.
+- Wrong choices should be believable but not confusing or trick-based.
 - Questions cover Franchise Mobile rules, basketball basics, player roles, stats, and gameplan counters.
 - All answers should be discoverable through FAQ/help.
 - Correct answers provide a small draft stock boost and Basketball IQ XP.
