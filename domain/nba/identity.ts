@@ -15,6 +15,18 @@ export type NbaPlayerTier =
   | 'Specialist / Depth Piece'
   | 'Prospect';
 
+export function normalizeNbaTierLabel(label: unknown): NbaPlayerTier | null {
+  if (label === 'Legend') return 'Legend';
+  if (label === 'Superstar') return 'Superstar';
+  if (label === 'Star') return 'Star';
+  if (label === 'High-Impact Contributor') return 'High-Impact Contributor';
+  if (label === 'Valuable Rotation Player') return 'Valuable Rotation Player';
+  if (label === 'Specialist / Depth Piece' || label === 'Depth Piece' || label === 'ROLE PLAYER' || label === 'Role Player') return 'Specialist / Depth Piece';
+  if (label === 'STARTER' || label === 'Starter') return 'Valuable Rotation Player';
+  if (label === 'Prospect') return 'Prospect';
+  return null;
+}
+
 export type NbaArchetype =
   | '3-and-D Wing'
   | 'Perimeter Defender'

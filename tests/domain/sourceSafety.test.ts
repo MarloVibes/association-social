@@ -151,12 +151,13 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('Development Outlook');
     expect(playerCard).toContain('Potential Ceiling');
     expect(playerCard).toContain('!identity.tier || !Array.isArray(identity.archetypes)');
+    expect(playerCard).toContain('normalizeNbaTierLabel(identity.tier)');
     expect(playerCard).not.toContain("Potential: C - Contributor");
     expect(sharedRow).toContain('rowIdentity?.tier');
     expect(sharedRow).toContain('rowIdentity?.archetypes');
     expect(sharedRow).toContain('!rowIdentity.tier || !Array.isArray(rowIdentity.archetypes)');
-    expect(sharedRow).toContain('normalizeNbaTierFallback');
-    expect(sharedRow).toContain("label === 'ROLE PLAYER' || label === 'Role Player'");
+    expect(sharedRow).toContain('normalizeNbaTierLabel(rowIdentity.tier)');
+    expect(sharedRow).toContain('normalizeNbaTierLabel(archetype.label)');
     const roster = source('app/screens/roster.tsx');
     expect(roster).toContain('positionFilters.map');
     expect(roster).not.toContain('ALL TIERS');
@@ -171,6 +172,8 @@ describe('source safety regressions', () => {
     expect(tradeChannel).toContain('tradeTierFilter');
     expect(tradeChannel).toContain('tradeArchetypeFilter');
     expect(tradeChannel).toContain('matchesNbaClassificationFilter');
+    expect(tradeChannel).toContain('normalizeNbaTierLabel(identity.tier)');
+    expect(tradeChannel).toContain("'Specialist / Depth Piece'");
     const scoutingGrades = source('domain/nba/scoutingGrades.ts');
     expect(scoutingGrades).not.toContain('Starter Upside');
     expect(scoutingGrades).not.toContain('starter-level');

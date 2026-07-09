@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { db } from '@/constants/firebase';
 import type { VisibleNbaIdentity } from '@/domain/nba/identity';
-import { matchesNbaClassificationFilter } from '@/domain/nba/identity';
+import { matchesNbaClassificationFilter, normalizeNbaTierLabel } from '@/domain/nba/identity';
 import { resolveBaselineRatingProfile } from '@/domain/nba/baselineProfileResolver';
 import { playerProfileWithLeagueDateAge } from '@/domain/nba/ratingProfile';
 import { buildEvaluationLayers } from '@/domain/nba/evaluation';
@@ -149,7 +149,9 @@ function getVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | nul
   if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
   if (!identity.grades || typeof identity.grades !== 'object') return null;
   if (!identity.tier || !Array.isArray(identity.archetypes)) return null;
-  return identity as VisibleNbaIdentity;
+  const normalizedTier = normalizeNbaTierLabel(identity.tier);
+  if (!normalizedTier) return null;
+  return { ...identity, tier: normalizedTier } as VisibleNbaIdentity;
 }
 
 function firstStat(stats: any, keys: string[]) {

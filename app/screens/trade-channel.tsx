@@ -12,16 +12,18 @@ import { compareSportRosterPlayersByValue, matchesSportRosterPosition } from '@/
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
 import { isTradeRoomExpired } from '@/domain/tradeRoomExpiry';
-import { matchesNbaClassificationFilter, type NbaArchetype, type NbaPlayerTier, type VisibleNbaIdentity } from '@/domain/nba/identity';
+import { matchesNbaClassificationFilter, normalizeNbaTierLabel, type NbaArchetype, type NbaPlayerTier, type VisibleNbaIdentity } from '@/domain/nba/identity';
 
-const NBA_TRADE_TIER_FILTERS: Array<NbaPlayerTier | 'ALL'> = ['ALL', 'Legend', 'Superstar', 'Star', 'High-Impact Contributor', 'Valuable Rotation Player', 'Specialist / Depth Piece', 'Prospect'];
-const NBA_TRADE_ARCHETYPE_FILTERS: Array<NbaArchetype | 'ALL'> = ['ALL', '3-and-D Wing', 'Perimeter Defender', 'Stretch Big', 'Rim Protector', 'Defensive Anchor', 'Primary Creator', 'Floor General', 'Spot-Up Shooter', 'Catch-and-Shoot Specialist', 'Versatile Connector', 'Athletic Finisher', 'Roll Big', 'Microwave Scorer'];
+const NBA_TRADE_TIER_FILTERS: (NbaPlayerTier | 'ALL')[] = ['ALL', 'Legend', 'Superstar', 'Star', 'High-Impact Contributor', 'Valuable Rotation Player', 'Specialist / Depth Piece', 'Prospect'];
+const NBA_TRADE_ARCHETYPE_FILTERS: (NbaArchetype | 'ALL')[] = ['ALL', '3-and-D Wing', 'Perimeter Defender', 'Stretch Big', 'Rim Protector', 'Defensive Anchor', 'Primary Creator', 'Floor General', 'Spot-Up Shooter', 'Catch-and-Shoot Specialist', 'Versatile Connector', 'Athletic Finisher', 'Roll Big', 'Microwave Scorer'];
 
 function tradeVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | null {
   const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
   if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
   if (!identity.tier || !Array.isArray(identity.archetypes)) return null;
-  return identity as VisibleNbaIdentity;
+  const normalizedTier = normalizeNbaTierLabel(identity.tier);
+  if (!normalizedTier) return null;
+  return { ...identity, tier: normalizedTier } as VisibleNbaIdentity;
 }
 
 const TRADE_TIER_COLORS: Record<string, string> = {
@@ -51,39 +53,13 @@ function tradeSlotIdentity(player: any, {
   }
   const profile = selectRosterRatingProfile(player, {}, { era: eraKey, currentYear, leagueDate });
   const identity = tradeVisibleIdentity(player, profile);
-  const tier = identity?.tier || 'Depth Piece';
+  const tier = identity?.tier || 'Specialist / Depth Piece';
   return {
     tier,
     archetypes: identity?.archetypes || [],
     color: TRADE_TIER_COLORS[tier] || '#00ff87',
   };
 }
-
-function TierBadge({
-  player,
-  eraKey,
-  sport,
-  currentYear,
-  leagueDate,
-}: {
-  player: any;
-  eraKey?: string;
-  sport?: string;
-  currentYear?: number | string | null;
-  leagueDate?: string | Date | null;
-}) {
-  const identity = tradeSlotIdentity(player, { eraKey, sport, currentYear, leagueDate });
-  return (
-    <View style={[badgeStyles.badge, { borderColor: identity.color + '88', backgroundColor: identity.color + '16' }]}>
-      <Text style={[badgeStyles.badgeText, { color: identity.color }]} numberOfLines={2}>{identity.tier}</Text>
-    </View>
-  );
-}
-
-const badgeStyles = StyleSheet.create({
-  badge: { borderRadius: 4, borderWidth: 1, paddingHorizontal: 4, paddingVertical: 1, alignSelf: 'flex-start', marginTop: 2 },
-  badgeText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
-});
 
 function BoardPlayerCard({
   player,

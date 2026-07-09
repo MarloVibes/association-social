@@ -2,6 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlayerHeadshot from '@/components/PlayerHeadshot';
 import { getSportArchetypeForYear } from '@/constants/sportArchetype';
 import type { NbaGrade, VisibleNbaIdentity } from '@/domain/nba/identity';
+import { normalizeNbaTierLabel } from '@/domain/nba/identity';
 import { gradeRank } from '@/domain/nba/gradeScale';
 import { selectRosterRatingProfile } from '@/domain/nba/rosterProfile';
 import { buildScoutingGrades, gradeColors, type ScoutingGradeKey } from '@/domain/nba/scoutingGrades';
@@ -107,13 +108,9 @@ function visibleNbaIdentity(player: any, profile: any): VisibleNbaIdentity | nul
   if (!rowIdentity || typeof rowIdentity !== 'object' || rowIdentity.overall !== undefined) return null;
   if (!rowIdentity.grades || typeof rowIdentity.grades !== 'object') return null;
   if (!rowIdentity.tier || !Array.isArray(rowIdentity.archetypes)) return null;
-  return rowIdentity as VisibleNbaIdentity;
-}
-
-function normalizeNbaTierFallback(label: string) {
-  if (label === 'ROLE PLAYER' || label === 'Role Player') return 'Specialist / Depth Piece';
-  if (label === 'STARTER' || label === 'Starter') return 'Valuable Rotation Player';
-  return label;
+  const normalizedTier = normalizeNbaTierLabel(rowIdentity.tier);
+  if (!normalizedTier) return null;
+  return { ...rowIdentity, tier: normalizedTier } as VisibleNbaIdentity;
 }
 
 export default function FranchisePlayerRow({
@@ -156,7 +153,7 @@ export default function FranchisePlayerRow({
     sport,
   );
   const rowIdentity = isNbaSport ? visibleNbaIdentity(player, profile) : null;
-  const tierLabel = rowIdentity?.tier || (isNbaSport ? normalizeNbaTierFallback(archetype.label) : archetype.label);
+  const tierLabel = rowIdentity?.tier || (isNbaSport ? normalizeNbaTierLabel(archetype.label) || archetype.label : archetype.label);
   const archetypeLabel = rowIdentity?.archetypes?.length ? rowIdentity.archetypes.slice(0, 2).join(' / ') : '';
   const salaryText = salaryLabel || (showSalary ? `${formatFranchisePlayerMoney(salary ?? player?.salary ?? player?.contract?.salary ?? player?.currentSalary)} salary` : '');
   const metaText = meta || [player?.position, player?.jersey_number ? '#' + player.jersey_number : null, player?.age ? 'Age ' + player.age : null]
