@@ -264,7 +264,7 @@ The personal approach should influence stat tendencies and coach trust:
 
 ## Showcase Stock Formula
 
-Every user who completes a showcase receives a stock score. This score affects rankings, rewards, future league readiness, and eventual Franchise Mobile League draft/event placement once that larger mode is active.
+Every user who completes a showcase receives a stock score. This score affects rankings, rewards, future league readiness, and eventual Franchise Mobile League draft-pool placement once that larger online league mode is active.
 
 Recommended showcase stock weighting:
 
@@ -358,7 +358,7 @@ Bad drill results should not destroy showcase stock. They should only miss bonus
 
 ## Franchise Mobile League Coming Soon
 
-The full Franchise Mobile League is the future online GM/player ecosystem.
+The full Franchise Mobile League is the future online GM/player ecosystem. It still has a real league draft. Open Gym, showcases, training, quizzes, and drills all feed into that draft path.
 
 It should not launch as the first public mode because it needs enough users to feel real. Until then, it should appear as a coming-soon destination tied to player progress, showcase rankings, and Open Gym reputation.
 
@@ -368,7 +368,7 @@ Future Franchise Mobile League contains:
 - User-created players.
 - CPU GMs until enough human GM/user volume exists.
 - Online GM/player structure.
-- Drafts.
+- League drafts where eligible users sign up, get evaluated, and are selected by franchises.
 - Contracts.
 - Trades.
 - Role battles.
@@ -378,6 +378,35 @@ Future Franchise Mobile League contains:
 - Legacy progression.
 
 This keeps the dream visible without forcing a large online league before the player base is ready.
+
+## League Universe Scaling
+
+Franchise Mobile League should eventually work like a worldwide online sports league. Users from anywhere can create a player, build draft stock, enter league draft pools, and get placed onto original franchises with other real users.
+
+"Multiverse" in this design means many active league universes running in parallel, not private solo branches.
+
+Example:
+
+- League Universe 1 fills with its original set of franchises.
+- Once player demand grows, League Universe 2 opens with another set of franchises.
+- More universes can open over time to hold more players from around the world.
+- Each universe has its own franchises, draft class, standings, schedule, playoffs, awards, contracts, and history.
+- Users compete inside their assigned universe, but the app can still support global leaderboards, player reputation, showcase rankings, and cross-universe news.
+
+This lets the game grow without overcrowding one league. It also keeps each league feeling real: teams have actual rosters, users compete for minutes, stars matter, and every franchise has room to build an identity.
+
+League universe rules:
+
+- A league universe should open only when enough eligible users exist or when demand requires more teams.
+- CPU players can fill roster gaps at first, but the goal is user-filled teams.
+- CPU GMs can run franchises until human GM systems are ready or until trusted users are assigned GM control.
+- Draft order, contracts, roles, and team placement must stay universe-specific.
+- Player reputation can be global, but team history and championships belong to the league universe where they happened.
+- A user should not be drafted into multiple league universes with the same player at the same time.
+
+The long-term fantasy is:
+
+> Sign up. Get drafted. Earn minutes. Lead a real franchise full of real users.
 
 ## Future League Influence Progression
 
@@ -472,6 +501,7 @@ Later multiplayer expansions can include:
 - Full Franchise Mobile League.
 - Online GM/player leagues.
 - User-created players drafted into shared online teams.
+- Multiple league universes with enough franchises to hold growing worldwide player demand.
 - Friends entering the same showcase or Open Gym squad queues.
 - Seasonal world events.
 - Player rivalries.
@@ -539,6 +569,8 @@ Domain tests:
 - Showcase team fill with CPU prospects.
 - Tournament advancement.
 - Future draft placement.
+- League universe creation and capacity rules.
+- One-player-one-active-league-universe guard.
 - CPU role/minutes decisions.
 - CPU trade/waiver/contract decisions.
 
@@ -553,6 +585,7 @@ Function tests:
 - CPU fill.
 - Round simulation.
 - Draft result generation.
+- Assigning drafted users into the correct league universe and franchise.
 - Player-bound awards and progression.
 
 UI/source tests:
@@ -599,6 +632,7 @@ Phase 3:
 Phase 4:
 
 - Full online GM/player league once enough users exist.
+- Multiple league universes and franchise capacity scaling.
 - Contracts, trades, awards, playoffs, legacy, and deeper CPU GM logic.
 
 ## Open Decisions
@@ -614,6 +648,9 @@ The design intentionally leaves these for later:
 - Bot difficulty curve.
 - Whether Open Gym supports friend parties later.
 - Exact trigger for Franchise Mobile League unlock or launch.
+- How many franchises each league universe should have.
+- When a new league universe opens.
+- Whether users can transfer universes later.
 - Exact tap drill UI.
 - Paid slot pricing.
 - Whether GM mode is hidden by admin flag, dev flag, or release channel.
