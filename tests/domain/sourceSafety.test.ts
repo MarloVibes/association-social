@@ -150,9 +150,13 @@ describe('source safety regressions', () => {
     expect(playerCard).toContain('nbaIdentity.archetypes');
     expect(playerCard).toContain('Development Outlook');
     expect(playerCard).toContain('Potential Ceiling');
+    expect(playerCard).toContain('!identity.tier || !Array.isArray(identity.archetypes)');
     expect(playerCard).not.toContain("Potential: C - Contributor");
     expect(sharedRow).toContain('rowIdentity?.tier');
     expect(sharedRow).toContain('rowIdentity?.archetypes');
+    expect(sharedRow).toContain('!rowIdentity.tier || !Array.isArray(rowIdentity.archetypes)');
+    expect(sharedRow).toContain('normalizeNbaTierFallback');
+    expect(sharedRow).toContain("label === 'ROLE PLAYER' || label === 'Role Player'");
     const roster = source('app/screens/roster.tsx');
     expect(roster).toContain('positionFilters.map');
     expect(roster).not.toContain('ALL TIERS');

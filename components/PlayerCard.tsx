@@ -148,6 +148,7 @@ function getVisibleIdentity(player: any, profile: any): VisibleNbaIdentity | nul
   const identity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
   if (!identity || typeof identity !== 'object' || identity.overall !== undefined) return null;
   if (!identity.grades || typeof identity.grades !== 'object') return null;
+  if (!identity.tier || !Array.isArray(identity.archetypes)) return null;
   return identity as VisibleNbaIdentity;
 }
 

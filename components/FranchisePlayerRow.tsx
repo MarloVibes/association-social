@@ -106,7 +106,14 @@ function visibleNbaIdentity(player: any, profile: any): VisibleNbaIdentity | nul
   const rowIdentity = profile?.identity || player?.identity || profile?.visibleIdentity || player?.visibleIdentity;
   if (!rowIdentity || typeof rowIdentity !== 'object' || rowIdentity.overall !== undefined) return null;
   if (!rowIdentity.grades || typeof rowIdentity.grades !== 'object') return null;
+  if (!rowIdentity.tier || !Array.isArray(rowIdentity.archetypes)) return null;
   return rowIdentity as VisibleNbaIdentity;
+}
+
+function normalizeNbaTierFallback(label: string) {
+  if (label === 'ROLE PLAYER' || label === 'Role Player') return 'Specialist / Depth Piece';
+  if (label === 'STARTER' || label === 'Starter') return 'Valuable Rotation Player';
+  return label;
 }
 
 export default function FranchisePlayerRow({
@@ -149,7 +156,7 @@ export default function FranchisePlayerRow({
     sport,
   );
   const rowIdentity = isNbaSport ? visibleNbaIdentity(player, profile) : null;
-  const tierLabel = rowIdentity?.tier || archetype.label;
+  const tierLabel = rowIdentity?.tier || (isNbaSport ? normalizeNbaTierFallback(archetype.label) : archetype.label);
   const archetypeLabel = rowIdentity?.archetypes?.length ? rowIdentity.archetypes.slice(0, 2).join(' / ') : '';
   const salaryText = salaryLabel || (showSalary ? `${formatFranchisePlayerMoney(salary ?? player?.salary ?? player?.contract?.salary ?? player?.currentSalary)} salary` : '');
   const metaText = meta || [player?.position, player?.jersey_number ? '#' + player.jersey_number : null, player?.age ? 'Age ' + player.age : null]
