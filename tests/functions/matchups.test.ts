@@ -138,6 +138,20 @@ function undefinedPaths(value: unknown, path = 'value'): string[] {
   return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => undefinedPaths(item, `${path}.${key}`));
 }
 
+function directNestedArrayPaths(value: unknown, path = 'value'): string[] {
+  if (!value || typeof value !== 'object') return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => {
+      const itemPath = `${path}[${index}]`;
+      return [
+        ...(Array.isArray(item) ? [itemPath] : []),
+        ...directNestedArrayPaths(item, itemPath),
+      ];
+    });
+  }
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => directNestedArrayPaths(item, `${path}.${key}`));
+}
+
 describe('matchup request state helpers', () => {
   it('selects the next cancellable regular-season sim batch', () => {
     const batch = selectSimBatch({
@@ -2021,11 +2035,18 @@ describe('matchup request state helpers', () => {
     });
 
     expect(result.coachingImpact.homeQuarterPresetIds).toEqual([
-      ['five_out', 'protect_paint'],
-      ['pick_and_roll', 'zone_32'],
-      ['motion_offense', 'switch_everything'],
-      ['star_isolation', 'double_star'],
+      { quarter: 1, offensePresetId: 'five_out', defensePresetId: 'protect_paint' },
+      { quarter: 2, offensePresetId: 'pick_and_roll', defensePresetId: 'zone_32' },
+      { quarter: 3, offensePresetId: 'motion_offense', defensePresetId: 'switch_everything' },
+      { quarter: 4, offensePresetId: 'star_isolation', defensePresetId: 'double_star' },
     ]);
+    expect(result.homeQuarterCoachingPresetIds).toEqual([
+      { quarter: 1, offensePresetId: 'five_out', defensePresetId: 'protect_paint' },
+      { quarter: 2, offensePresetId: 'pick_and_roll', defensePresetId: 'zone_32' },
+      { quarter: 3, offensePresetId: 'motion_offense', defensePresetId: 'switch_everything' },
+      { quarter: 4, offensePresetId: 'star_isolation', defensePresetId: 'double_star' },
+    ]);
+    expect(directNestedArrayPaths(cleanFirestoreData(updatePayloadForCompetition('regular', [result])), 'scheduleUpdate')).toEqual([]);
     expect(result.liveTimeline.gameplan.quarters[2]).toMatchObject({
       period: 3,
       homeOffenseId: 'motion_offense',

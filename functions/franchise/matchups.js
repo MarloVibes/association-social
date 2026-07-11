@@ -743,7 +743,7 @@ function quarterCoachingPresetIdsForSide(game, side) {
   const quarterIds = side === 'home' ? game && game.homeQuarterCoachingPresetIds : game && game.awayQuarterCoachingPresetIds;
   if (Array.isArray(quarterIds) && quarterIds.length > 0) {
     return [0, 1, 2, 3].map(index => {
-      const ids = Array.isArray(quarterIds[index]) ? quarterIds[index] : [quarterIds[index]].filter(Boolean);
+      const ids = presetIdsFromStoredQuarterEntry(quarterIds[index]);
       return ids.filter(Boolean).map(normalizeNbaCoachingPresetId);
     });
   }
@@ -754,6 +754,30 @@ function quarterCoachingPresetIdsForSide(game, side) {
     [ids[1] || ids[0]].filter(Boolean),
     [ids[1] || ids[0]].filter(Boolean),
   ];
+}
+
+function presetIdsFromStoredQuarterEntry(entry) {
+  if (Array.isArray(entry)) return entry;
+  if (!entry || typeof entry !== 'object') return [entry].filter(Boolean);
+  return [
+    entry.offensePresetId || entry.presetId,
+    entry.defensePresetId,
+  ].filter(Boolean);
+}
+
+function serializeQuarterPresetIds(quarterPresetIds) {
+  if (!Array.isArray(quarterPresetIds) || quarterPresetIds.length === 0) return null;
+  const quarters = [0, 1, 2, 3].map((index) => {
+    const ids = presetIdsFromStoredQuarterEntry(quarterPresetIds[index])
+      .filter(Boolean)
+      .map(normalizeNbaCoachingPresetId);
+    return compactObject({
+      quarter: index + 1,
+      offensePresetId: ids[0],
+      defensePresetId: ids[1],
+    });
+  });
+  return quarters.some(quarter => quarter.offensePresetId || quarter.defensePresetId) ? quarters : null;
 }
 
 function applyCoachingToTeamForSimulation(team, presetIds) {
@@ -1197,8 +1221,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
       homeSecondHalfPresetId: homePresetIds[1],
       awayFirstHalfPresetId: awayPresetIds[0],
       awaySecondHalfPresetId: awayPresetIds[1],
-      homeQuarterPresetIds,
-      awayQuarterPresetIds,
+      homeQuarterPresetIds: serializeQuarterPresetIds(homeQuarterPresetIds),
+      awayQuarterPresetIds: serializeQuarterPresetIds(awayQuarterPresetIds),
     };
     return {
       ...result,
@@ -1261,8 +1285,8 @@ function simulateRosterGame({ game, homeTeam, awayTeam, nowMs, winnerTeamId }) {
     homeSecondHalfPresetId: homePresetIds[1],
     awayFirstHalfPresetId: awayPresetIds[0],
     awaySecondHalfPresetId: awayPresetIds[1],
-    homeQuarterPresetIds,
-    awayQuarterPresetIds,
+    homeQuarterPresetIds: serializeQuarterPresetIds(homeQuarterPresetIds),
+    awayQuarterPresetIds: serializeQuarterPresetIds(awayQuarterPresetIds),
     gameplan: liveTimeline.gameplan,
   };
   return {
@@ -1731,7 +1755,7 @@ function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot,
       homeSecondHalfDefensiveStyle: homeSecondHalf && homeSecondHalf.defense,
       homeSecondHalfCoachingPresetName: homeSecondHalf && homeSecondHalf.name,
       homeSecondHalfCoachingPresetId: homeSecondHalf && homeSecondHalf.presetId,
-      ...(homeQuarterCoachingPresetIds ? { homeQuarterCoachingPresetIds } : {}),
+      ...(homeQuarterCoachingPresetIds ? { homeQuarterCoachingPresetIds: serializeQuarterPresetIds(homeQuarterCoachingPresetIds) } : {}),
     } : {}),
     ...(away ? {
       awayCoachingStyle: away.offense,
@@ -1746,7 +1770,7 @@ function gameWithCoachingSnapshots({ game, homeSnapshot, homeSecondHalfSnapshot,
       awaySecondHalfDefensiveStyle: awaySecondHalf && awaySecondHalf.defense,
       awaySecondHalfCoachingPresetName: awaySecondHalf && awaySecondHalf.name,
       awaySecondHalfCoachingPresetId: awaySecondHalf && awaySecondHalf.presetId,
-      ...(awayQuarterCoachingPresetIds ? { awayQuarterCoachingPresetIds } : {}),
+      ...(awayQuarterCoachingPresetIds ? { awayQuarterCoachingPresetIds: serializeQuarterPresetIds(awayQuarterCoachingPresetIds) } : {}),
     } : {}),
   };
 }
