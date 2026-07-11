@@ -1,0 +1,220 @@
+# Franchise Mobile Current Task List
+
+Last updated: 2026-07-10
+
+This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
+
+## Ground Rules
+
+- Finish Franchise Mobile GM/franchise mode before building Franchise Player mode.
+- Franchise Player mode is parked until Franchise Mobile GM mode is finished and parked.
+- Deleted/parked Live Mode should not be rebuilt unless Marlano explicitly reopens that work.
+- Do not treat old docs as current truth without checking this file first.
+- Keep tasks in the order Marlano wants them handled.
+- Move completed work into "Completed Recently" with the commit/update when possible.
+
+## Active Order
+
+### 1. Stabilize Current Franchise Mobile GM Mode
+
+Status: Active
+
+- Keep the current app stable after every feature batch.
+- Run focused tests for touched systems.
+- Push GitHub and publish Expo updates after verified stable batches.
+- Do not start Franchise Player implementation during this lane.
+
+### 2. Player Identity, Tiers, Archetypes, And Cards
+
+Status: Active
+
+- Continue auditing NBA player identities across all eras, not only 2025-26.
+- Treat free agents, draft classes, and every era player equally.
+- Remove stale broad `Role Player` language from visible NBA player surfaces.
+- Fix wrong archetypes and tiers when screenshots or audits reveal them.
+- Known examples to protect against:
+  - Luka Doncic should not show as a 3-and-D wing.
+  - Mikal Bridges should not show as a floor-spacing big.
+  - Trade Center and player cards should not show old `Role Player` labels.
+- Keep tier, archetype, skill grades, potential, and development outlook separate.
+
+### 3. Trade Center Polish And Functionality
+
+Status: Active
+
+- Keep the official front-office board look.
+- Confirm player names stay inside cards.
+- Keep block feed grouped by team with multiple players visible together.
+- Confirm Offer and DM actions work from the block feed.
+- Confirm active trade rooms expire after 15 minutes.
+- Confirm chat appears only when another GM is present in the trade room.
+- Keep CPU trade logic difficult enough to feel realistic when CPU trading is allowed.
+
+### 4. Team Pages And League Operations Pages
+
+Status: Active
+
+- Revamp team/league pages to feel official while keeping the current color scheme.
+- Fix overflow issues such as names sitting outside cards.
+- Keep Schedule easily accessible under League Rosters on the dashboard/league page.
+- Make sure Command Center pages route correctly.
+
+### 5. Command Center Page Order
+
+Status: Active
+
+Current intended order:
+
+1. GM Lounge
+2. Trade Center
+3. League News
+4. Front Office
+5. Coaching Room
+6. Stats & Standings
+7. Player Wire
+
+Required checks:
+
+- Each section should have working routes.
+- No duplicate headers.
+- No white chat/feed surfaces in dark mode.
+- Counts and badges should not overflow.
+
+### 6. GM Lounge And League Chat
+
+Status: Active
+
+- Keep League Chat dark and polished.
+- Keep one clean header.
+- Preserve chat features:
+  - reactions
+  - GIFs
+  - photos
+  - block/report
+  - edit/delete
+  - mentions
+  - commissioner-only posting where applicable
+- Keep unread badge behavior:
+  - badge appears beside League Chat / GM Lounge entry
+  - count resets when the user enters the chat
+  - no push notification required
+  - badge must not spill outside its button/card
+
+### 7. Gameplay And Gameplan System
+
+Status: Active
+
+- Continue the basketball gameplan system as the current gameplay direction.
+- Pregame/quarter choices should feel like coaching, not random buttons.
+- Condense choice UI into side-by-side offense/defense selections.
+- Use basketball language.
+- Current gameplay idea:
+  - users choose offense and defense presets
+  - good counters create closer games and better outcomes
+  - same or neutral choices balance out
+  - box scores should reflect choices
+  - matchup recap should explain why the game played out that way
+- Keep FAQ updated with the gameplan/counter system.
+- Marlano still feels something is missing in gameplay during simulation, so continue ideating after the core system is stable.
+
+### 8. Stats And Standings
+
+Status: Active
+
+- Under Stats & Standings:
+  - Player Stats means team player stats.
+  - League Stats means all players in the league.
+- Confirm labels and routes match this meaning.
+- Confirm standings and player stat screens work after simulated games.
+
+### 9. Roster Limits, Two-Way Players, And Development League
+
+Status: Active
+
+- NBA roster limit should support 18 players total:
+  - 15 standard roster spots
+  - 3 two-way/minimum-style extra spots
+- The app should clearly explain when extra slots are two-way/minimum slots.
+- Development League belongs under Coaching Room, not the upgrade screen.
+- Development League behavior:
+  - one eligible minimum/two-way player at a time
+  - trains for one week
+  - raises one selected grade by two levels
+
+### 10. CPU Team Identity And Solo Support
+
+Status: Active
+
+- CPU teams need their own identity when no user is present.
+- Users should be able to play solo if they want.
+- Commissioner should be able to enable:
+  - sim vs CPU when user is not present
+  - trade with CPU when user is not present
+- CPU trade logic should account for:
+  - competing vs rebuilding
+  - team needs
+  - roster balance
+  - fair value
+  - not making trades too easy
+
+### 11. NFL And MLB Parity
+
+Status: Active but lower priority than current NBA GM-mode polish
+
+- Keep NFL and MLB franchise flows aligned with NBA where appropriate.
+- Remove lingering NBA-only language/functions from MLB/NFL surfaces.
+- Respect sport-specific rules and labels.
+- Continue auditing NFL/MLB players after NBA identity systems are stable.
+
+### 12. Firebase, Indexes, And Launch Infrastructure
+
+Status: Active as needed
+
+- Keep Firebase functions deployed when backend code changes.
+- Keep Expo updates published when app code changes.
+- Confirm Firestore indexes are versioned for current features.
+- Avoid deleting existing important indexes/overrides by accident.
+- Firebase emulator is blocked locally until Java is installed and available on PATH.
+
+## Parked
+
+### Broadcast / Rive / Live Mode Rebuild
+
+Status: Parked
+
+- Live Mode was deleted/parked.
+- Rive broadcast visuals are not active implementation work.
+- Do not rebuild this unless Marlano explicitly reopens it.
+
+### Franchise Player / Franchise Mobile League Career Mode
+
+Status: Parked until Franchise Mobile GM mode is finished
+
+- The concept is documented but not active.
+- Do not build it yet.
+- Future direction includes:
+  - created player
+  - online tournaments
+  - open gym
+  - original teams
+  - no NBA/NFL/MLB licensing dependency
+
+## Completed Recently
+
+- Deleted old Live Mode page and routes.
+- Added Schedule shortcut under League Rosters.
+- Reorganized Command Center.
+- Restyled GM Lounge dark chat and removed duplicate chat header.
+- Added League Chat unread badge and fixed badge overflow.
+- Revamped Trade Center board and grouped block feed by team.
+- Added quarter gameplan presets.
+- Added basketball gameplan counter logic.
+- Condensed NBA prep choices.
+- Added tier/archetype display and stale NBA tier-label normalization.
+- Pushed and published Expo update for stale NBA tier-label fixes.
+
+## Intake Log
+
+Add new tasks here first, then move them into the ordered sections above.
+
+- 2026-07-10: Created this real task list because chat-only tracking became unreliable.
