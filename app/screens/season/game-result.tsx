@@ -234,6 +234,7 @@ export default function GameResultScreen() {
   const [league, setLeague] = useState<any>(null);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [resultDetails, setResultDetails] = useState<ResultGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -248,6 +249,7 @@ export default function GameResultScreen() {
   useEffect(() => {
     if (!leagueId) return;
     let unsubscribeSchedule: (() => void) | undefined;
+    let unsubscribeResultDetails: (() => void) | undefined;
     const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (!snapshot.exists()) {
         setLoading(false);
@@ -257,6 +259,7 @@ export default function GameResultScreen() {
       setLeague(nextLeague);
       const scheduleId = nextLeague.scheduleId || String(nextLeague.currentYear || 2025);
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResultDetails) unsubscribeResultDetails();
       unsubscribeSchedule = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId), scheduleSnapshot => {
         setSchedule(scheduleSnapshot.exists() ? scheduleSnapshot.data() as ScheduleDoc : null);
         setLoading(false);
@@ -264,6 +267,14 @@ export default function GameResultScreen() {
         setSchedule(null);
         setLoading(false);
       });
+      if (gameId) {
+        unsubscribeResultDetails = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'gameResults', String(gameId)), resultSnapshot => {
+          const data = resultSnapshot.exists() ? resultSnapshot.data() as { game?: ResultGame } : null;
+          setResultDetails(data?.game || null);
+        }, () => setResultDetails(null));
+      } else {
+        setResultDetails(null);
+      }
     }, () => setLoading(false));
     const unsubscribeTeams = onSnapshot(collection(db, 'leagues', leagueId, 'teams'), snapshot => {
       setTeams(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as Team)));
@@ -271,9 +282,10 @@ export default function GameResultScreen() {
     return () => {
       unsubscribeLeague();
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResultDetails) unsubscribeResultDetails();
       unsubscribeTeams();
     };
-  }, [leagueId]);
+  }, [gameId, leagueId]);
 
   const isCupGame = competition === 'nbaCup';
   const isPlayoffGame = competition === 'playoffs';
@@ -287,7 +299,12 @@ export default function GameResultScreen() {
   const games = useMemo(() => (
     isCupGame ? schedule?.nbaCup?.games || [] : isPlayoffGame ? playoffGames : schedule?.games || []
   ), [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
-  const game = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
+  const scheduleGame = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
+  const game = useMemo(() => (
+    scheduleGame && resultDetails?.id === scheduleGame.id
+      ? { ...scheduleGame, ...resultDetails }
+      : scheduleGame
+  ), [resultDetails, scheduleGame]);
   const homeTeam = teams.find(team => game?.homeTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.homeTeamId)));
   const awayTeam = teams.find(team => game?.awayTeamId && teamScheduleKeys(team).has(normalizeScheduleKey(game.awayTeamId)));
   const sport = normalizeSport(league?.sport || game?.sport);

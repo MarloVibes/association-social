@@ -220,6 +220,7 @@ Status: Parked until Franchise Mobile GM mode is finished
 ## Intake Log
 
 - 2026-07-10: Investigating Sim Season trouble; `simScheduleBatch` Firebase logs showed memory-limit crashes while the app was requesting 35 games per batch.
+- 2026-07-10: Second Sim Season failure traced to the schedule document growing past Firestore's 1MB document limit as completed games accumulated box scores/game detail. Fix stores full result detail per game and keeps calendar rows lightweight.
 
 Add new tasks here first, then move them into the ordered sections above.
 

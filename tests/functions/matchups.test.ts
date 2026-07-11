@@ -1189,7 +1189,7 @@ describe('matchup request state helpers', () => {
       },
     }));
     const game = seedAvailableGame({
-      status: 'final',
+      status: 'preparing',
       homeScore: 110,
       awayScore: 104,
       liveTimeline: {
@@ -1221,7 +1221,58 @@ describe('matchup request state helpers', () => {
     });
     expect(writtenGame.liveTimeline.events).toBeUndefined();
     expect(writtenGame.liveTimeline.starterMatchups).toBeUndefined();
+    expect(writtenGame.boxScore).toBeUndefined();
     expect(JSON.stringify(payload).length).toBeLessThan(8_000);
+  });
+
+  it('keeps completed schedule games light enough for season-long simulation writes', () => {
+    const finalGames = Array.from({ length: 1230 }, (_, index) => seedAvailableGame({
+      id: `g${index + 1}`,
+      sequence: index + 1,
+      status: 'final',
+      homeScore: 100 + (index % 25),
+      awayScore: 90 + (index % 22),
+      winnerTeamId: index % 2 === 0 ? 'home' : 'away',
+      quarters: [
+        { quarter: 1, home: 25, away: 22 },
+        { quarter: 2, home: 24, away: 21 },
+        { quarter: 3, home: 26, away: 23 },
+        { quarter: 4, home: 25, away: 24 },
+      ],
+      boxScore: {
+        home: {
+          players: Array.from({ length: 10 }, (_, playerIndex) => ({
+            playerId: `h${index}-${playerIndex}`,
+            name: `Home Player ${playerIndex}`,
+            points: 10 + playerIndex,
+            rebounds: playerIndex,
+            assists: playerIndex % 5,
+          })),
+        },
+        away: {
+          players: Array.from({ length: 10 }, (_, playerIndex) => ({
+            playerId: `a${index}-${playerIndex}`,
+            name: `Away Player ${playerIndex}`,
+            points: 8 + playerIndex,
+            rebounds: playerIndex,
+            assists: playerIndex % 4,
+          })),
+        },
+      },
+      postgameStory: {
+        headline: 'Final',
+        summary: 'A completed regular season game.',
+        turningPoint: 'The third quarter swing decided it.',
+        topPerformers: ['Home Player 1', 'Away Player 1'],
+      },
+    }));
+
+    const payload = updatePayloadForCompetition('regular', finalGames);
+    const writtenGame = payload.games[0] as any;
+
+    expect(writtenGame.boxScore).toBeUndefined();
+    expect(writtenGame.resultDetailsStorage).toBe('gameResults');
+    expect(Buffer.byteLength(JSON.stringify(payload), 'utf8')).toBeLessThan(950_000);
   });
 
   it('uses grade-based player profiles without inflating average assists and rebounds', () => {
@@ -1531,7 +1582,18 @@ describe('matchup request state helpers', () => {
       }),
     }), { merge: true });
     const scheduleUpdate = tx.update.mock.calls.find(([ref]: any[]) => ref === scheduleRef)?.[1];
-    expect(scheduleUpdate.games[0].liveTimeline.events).toBeUndefined();
+    expect(scheduleUpdate.games[0].liveTimeline).toBeUndefined();
+    expect(scheduleUpdate.games[0].boxScore).toBeUndefined();
+    expect(scheduleUpdate.games[0].resultDetailsStorage).toBe('gameResults');
+    expect(tx.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      gameId: 'nba_3dhh2u',
+      game: expect.objectContaining({
+        id: 'nba_3dhh2u',
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({ players: expect.any(Array) }),
+        }),
+      }),
+    }), { merge: true });
   });
 
   it('surfaces unexpected simulate transaction failures with the original message', async () => {
@@ -2410,8 +2472,8 @@ describe('matchup request state helpers', () => {
     expect(gamesForCompetition(schedule, 'nbaCup')).toEqual([cupGame, finalCupGame]);
     expect(gamesForCompetition(schedule, 'regular')).toEqual([regularGame, cupGame]);
     expect(updatePayloadForCompetition('nbaCup', [updatedCupGame, finalCupGame], schedule)).toEqual({
-      'nbaCup.games': [updatedCupGame, finalCupGame],
-      games: [regularGame, updatedCupGame],
+      'nbaCup.games': [expect.objectContaining({ ...updatedCupGame, resultDetailsStorage: 'gameResults' }), finalCupGame],
+      games: [regularGame, expect.objectContaining({ ...updatedCupGame, resultDetailsStorage: 'gameResults' })],
     });
     expect(updatePayloadForCompetition('regular', [regularGame])).toEqual({ games: [regularGame] });
   });

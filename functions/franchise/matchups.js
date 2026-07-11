@@ -1533,11 +1533,65 @@ function compactLiveTimelineForSchedule(liveTimeline) {
 }
 
 function compactScheduleGameForWrite(game) {
-  if (!game || !game.liveTimeline) return game;
-  return {
-    ...game,
-    liveTimeline: compactLiveTimelineForSchedule(game.liveTimeline),
-  };
+  if (!game || typeof game !== 'object') return game;
+  if (game.status === 'final') {
+    return cleanFirestoreData({
+      id: game.id,
+      status: game.status,
+      sequence: game.sequence,
+      week: game.week,
+      homeTeamId: game.homeTeamId,
+      awayTeamId: game.awayTeamId,
+      homeGmId: game.homeGmId,
+      awayGmId: game.awayGmId,
+      sport: game.sport,
+      leagueSport: game.leagueSport,
+      competition: game.competition,
+      countsForRegularSeason: game.countsForRegularSeason,
+      groupId: game.groupId,
+      cupSequence: game.cupSequence,
+      stage: game.stage,
+      round: game.round,
+      roundLabel: game.roundLabel,
+      seriesId: game.seriesId,
+      playoffGame: game.playoffGame,
+      homeSeed: game.homeSeed,
+      awaySeed: game.awaySeed,
+      homeTeamName: game.homeTeamName,
+      awayTeamName: game.awayTeamName,
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      winnerTeamId: game.winnerTeamId,
+      loserTeamId: game.loserTeamId,
+      resultSource: game.resultSource,
+      completionMarkerId: game.completionMarkerId,
+      finalAtMs: game.finalAtMs,
+      quarters: game.quarters,
+      periods: game.periods,
+      innings: game.innings,
+      resultDetailsStorage: 'gameResults',
+    });
+  }
+  const {
+    boxScore,
+    postgameStory,
+    liveTimeline,
+    ...rest
+  } = game;
+  void boxScore;
+  return cleanFirestoreData({
+    ...rest,
+    ...(liveTimeline ? { liveTimeline: compactLiveTimelineForSchedule(liveTimeline) } : {}),
+    ...(postgameStory ? {
+      postgameStory: compactObject({
+        headline: postgameStory.headline,
+        summary: postgameStory.summary,
+        turningPoint: postgameStory.turningPoint,
+        coachingImpact: postgameStory.coachingImpact,
+      }),
+      resultDetailsStorage: 'gameResults',
+    } : {}),
+  });
 }
 
 function compactScheduleGamesForWrite(games) {
@@ -1560,9 +1614,29 @@ function persistLiveTimelineForGame({ tx, scheduleRef, game, nowMs }) {
   tx.set(scheduleRef.collection('liveTimelines').doc(String(game.id)), payload, { merge: true });
 }
 
+function gameResultPayloadForGame(game, nowMs) {
+  if (!game || !game.id || game.status !== 'final') return null;
+  return cleanFirestoreData({
+    gameId: game.id,
+    game,
+    updatedAtMs: nowMs,
+  });
+}
+
+function persistGameResultForGame({ tx, scheduleRef, game, nowMs }) {
+  const payload = gameResultPayloadForGame(game, nowMs);
+  if (!payload || !tx || typeof tx.set !== 'function' || !scheduleRef || typeof scheduleRef.collection !== 'function') return;
+  tx.set(scheduleRef.collection('gameResults').doc(String(game.id)), payload, { merge: true });
+}
+
 function deleteLiveTimelineForGame({ tx, scheduleRef, game }) {
   if (!game || !game.id || !tx || typeof tx.delete !== 'function' || !scheduleRef || typeof scheduleRef.collection !== 'function') return;
   tx.delete(scheduleRef.collection('liveTimelines').doc(String(game.id)));
+}
+
+function deleteGameResultForGame({ tx, scheduleRef, game }) {
+  if (!game || !game.id || !tx || typeof tx.delete !== 'function' || !scheduleRef || typeof scheduleRef.collection !== 'function') return;
+  tx.delete(scheduleRef.collection('gameResults').doc(String(game.id)));
 }
 
 function teamStateForFinalization(team) {
@@ -2387,6 +2461,7 @@ function createGameMutationHandler({ getFirestore, HttpsError, now, mutate }) {
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
       persistLiveTimelineForGame({ tx, scheduleRef, game: nextGame, nowMs });
+      persistGameResultForGame({ tx, scheduleRef, game: nextGame, nowMs });
       tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
       const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
@@ -2633,6 +2708,14 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       const gameIndex = games.findIndex(game => game.id === gameId);
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
+      let gameForMutation = game;
+      if (game && game.id && game.status === 'final' && scheduleRef.collection && tx.get) {
+        const resultSnap = await tx.get(scheduleRef.collection('gameResults').doc(String(game.id)));
+        const storedResult = resultSnap.exists && resultSnap.data ? resultSnap.data() : null;
+        if (storedResult && storedResult.game && typeof storedResult.game === 'object') {
+          gameForMutation = { ...game, ...storedResult.game };
+        }
+      }
       const [homeTeam, awayTeam] = await Promise.all([
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.homeTeamId, gmId: game.homeGmId }),
         teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: game.awayTeamId, gmId: game.awayGmId }),
@@ -2641,7 +2724,7 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       let nextGame;
       try {
         nextGame = mutate({
-          game, uid, nowMs, league,
+          game: gameForMutation, uid, nowMs, league,
         });
       } catch (error) {
         throw mapError(error, HttpsError);
@@ -2649,12 +2732,16 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       const nextGames = [...games];
       nextGames[gameIndex] = nextGame;
       persistLiveTimelineForGame({ tx, scheduleRef, game: nextGame, nowMs });
-      if (game.liveTimeline && !nextGame.liveTimeline) {
-        deleteLiveTimelineForGame({ tx, scheduleRef, game });
+      persistGameResultForGame({ tx, scheduleRef, game: nextGame, nowMs });
+      if (gameForMutation.liveTimeline && !nextGame.liveTimeline) {
+        deleteLiveTimelineForGame({ tx, scheduleRef, game: gameForMutation });
+      }
+      if (gameForMutation.status === 'final' && nextGame.status !== 'final') {
+        deleteGameResultForGame({ tx, scheduleRef, game: gameForMutation });
       }
       tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
-      const homePayload = teamResetPayload({ game, side: 'home', team: homeTeam });
-      const awayPayload = teamResetPayload({ game, side: 'away', team: awayTeam });
+      const homePayload = teamResetPayload({ game: gameForMutation, side: 'home', team: homeTeam });
+      const awayPayload = teamResetPayload({ game: gameForMutation, side: 'away', team: awayTeam });
       if (homeTeam && homeTeam.ref && homePayload) tx.update(homeTeam.ref, cleanFirestoreData(homePayload));
       if (awayTeam && awayTeam.ref && awayPayload) tx.update(awayTeam.ref, cleanFirestoreData(awayPayload));
       return nextGame;
@@ -2721,6 +2808,7 @@ function createReportGameScoreHandler({ getFirestore, HttpsError, now }) {
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
       persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
+      persistGameResultForGame({ tx, scheduleRef, game: result.game, nowMs });
       tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
       return result.game;
@@ -2816,6 +2904,7 @@ function createSimulateScheduledGameHandler(deps) {
       const nextGames = [...games];
       nextGames[gameIndex] = result.game;
       persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
+      persistGameResultForGame({ tx, scheduleRef, game: result.game, nowMs });
       tx.update(scheduleRef, cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)));
       persistTeamStates({ tx, homeTeam, awayTeam, result });
       writeLiveGameReadyNotifications({
@@ -2962,6 +3051,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
         }
         nextGames[gameIndex] = result.game;
         persistLiveTimelineForGame({ tx, scheduleRef, game: result.game, nowMs });
+        persistGameResultForGame({ tx, scheduleRef, game: result.game, nowMs });
         simmed.push(result.game.id);
         const homePayload = teamPersistencePayload({
           state: result.teamStates && result.teamStates[result.game.homeTeamId],
