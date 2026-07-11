@@ -108,6 +108,7 @@ Status: Active
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
 - Fix Sim Season reliability so large batch sims do not overload Firebase memory or stall mid-season.
+- Change Sim Season to process games one by one in week/sequence order if batch writes continue to fail.
 - Continue the basketball gameplan system as the current gameplay direction.
 - Pregame/quarter choices should feel like coaching, not random buttons.
 - Condense choice UI into side-by-side offense/defense selections.
@@ -221,6 +222,7 @@ Status: Parked until Franchise Mobile GM mode is finished
 
 - 2026-07-10: Investigating Sim Season trouble; `simScheduleBatch` Firebase logs showed memory-limit crashes while the app was requesting 35 games per batch.
 - 2026-07-10: Second Sim Season failure traced to the schedule document growing past Firestore's 1MB document limit as completed games accumulated box scores/game detail. Fix stores full result detail per game and keeps calendar rows lightweight.
+- 2026-07-11: User still saw `Season sim stopped INTERNAL` after refresh; switch season sim toward one-game-at-a-time week/sequence processing for maximum reliability.
 
 Add new tasks here first, then move them into the ordered sections above.
 

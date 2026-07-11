@@ -2368,7 +2368,7 @@ function updatePayloadForCompetition(competition, games, schedule) {
   return { games: compactGames };
 }
 
-const MAX_SIM_BATCH_SIZE = 12;
+const MAX_SIM_BATCH_SIZE = 1;
 
 function safeSimBatchSize(batchSize) {
   return Math.max(1, Math.min(MAX_SIM_BATCH_SIZE, Number(batchSize) || MAX_SIM_BATCH_SIZE));

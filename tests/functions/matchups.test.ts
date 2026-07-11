@@ -165,10 +165,10 @@ describe('matchup request state helpers', () => {
       ],
     });
 
-    expect(batch.map((game: any) => game.id)).toEqual(['g3', 'g1']);
+    expect(batch.map((game: any) => game.id)).toEqual(['g3']);
   });
 
-  it('caps oversized season sim batches to protect the batch function memory limit', () => {
+  it('caps oversized season sim batches to one game in week sequence order', () => {
     const batch = selectSimBatch({
       competition: 'regular',
       batchSize: 35,
@@ -178,21 +178,7 @@ describe('matchup request state helpers', () => {
       })),
     });
 
-    expect(batch).toHaveLength(12);
-    expect(batch.map((game: any) => game.id)).toEqual([
-      'g1',
-      'g2',
-      'g3',
-      'g4',
-      'g5',
-      'g6',
-      'g7',
-      'g8',
-      'g9',
-      'g10',
-      'g11',
-      'g12',
-    ]);
+    expect(batch.map((game: any) => game.id)).toEqual(['g1']);
   });
 
   it('selects only the current unfinished playoff round when simming one round', () => {

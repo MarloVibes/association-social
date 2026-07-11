@@ -379,12 +379,13 @@ export default function CalendarScreen() {
       const simBatch = httpsCallable(functions, 'simScheduleBatch');
       let action = 'start';
       const targetFinalGames = Math.ceil(allGames.length * targetRatio);
-      for (let step = 0; step < 160 && !cancelSeasonSimRef.current; step += 1) {
+      const maxSteps = Math.max(1, allGames.length + 10);
+      for (let step = 0; step < maxSteps && !cancelSeasonSimRef.current; step += 1) {
         const result: any = await simBatch({
           leagueId,
           action,
           competition: 'regular',
-          batchSize: 12,
+          batchSize: 1,
         });
         const control = result.data || {};
         if (Number(control.finalGames || 0) >= targetFinalGames) break;
