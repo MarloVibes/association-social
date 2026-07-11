@@ -107,7 +107,8 @@ Status: Active
 
 - Fix crash when opening League Schedule or pressing Sim Season.
   - Calendar should not run heavy phone-side schedule repair writes on open.
-  - Sim Season should process smaller week chunks instead of a full-season tight loop.
+  - Sim Season should run continuously after one tap, but still simulate only one game at a time in schedule order.
+  - Calendar should stay readable while simming so Marlano can follow the completed games down the schedule.
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
 - Fix Sim Season reliability so large batch sims do not overload Firebase memory or stall mid-season.

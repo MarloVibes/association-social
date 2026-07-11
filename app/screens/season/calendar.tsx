@@ -119,8 +119,10 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [advancingCup, setAdvancingCup] = useState(false);
   const [simmingSeason, setSimmingSeason] = useState(false);
+  const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
+  const scheduleListRef = useRef<SectionList<CalendarSectionRow, CalendarSection> | null>(null);
   const cancelSeasonSimRef = useRef(false);
 
   useEffect(() => {
@@ -262,6 +264,25 @@ export default function CalendarScreen() {
         };
       });
   }, [games, selectedViewMode]);
+  const nextUnfinishedGame = useMemo(() => allGames.find(game => game.status !== 'final') || null, [allGames]);
+
+  useEffect(() => {
+    if (!simmingSeason || selectedViewMode !== 'league' || !nextUnfinishedGame) return;
+    const sectionIndex = sections.findIndex(section => section.title === `Week ${nextUnfinishedGame.week || 1}`);
+    if (sectionIndex < 0) return;
+    requestAnimationFrame(() => {
+      try {
+        scheduleListRef.current?.scrollToLocation({
+          sectionIndex,
+          itemIndex: 0,
+          viewPosition: 0.18,
+          animated: true,
+        });
+      } catch {
+        // SectionList can briefly miss measurements while Firestore updates.
+      }
+    });
+  }, [nextUnfinishedGame, sections, selectedViewMode, simmingSeason]);
 
   const advanceCup = async () => {
     if (!leagueId || !schedule?.nbaCup || !isLeagueAdmin) return;
@@ -276,21 +297,16 @@ export default function CalendarScreen() {
     }
   };
 
-  const runSeasonSimWeeks = async (weekCount: number) => {
+  const runSeasonSimContinuously = async () => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
-    const unfinishedWeeks = [...new Set(
-      allGames
-        .filter(game => game.status !== 'final')
-        .map(game => Number(game.week || 1))
-        .filter(Number.isFinite),
-    )].sort((a, b) => a - b);
-    const selectedWeeks = new Set(unfinishedWeeks.slice(0, weekCount));
-    const maxSteps = allGames.filter(game => selectedWeeks.has(Number(game.week || 1)) && game.status !== 'final').length;
+    const maxSteps = allGames.filter(game => game.status !== 'final').length;
     if (maxSteps === 0) {
       Alert.alert('Season complete', 'Every scheduled game is already final.');
       return;
     }
     cancelSeasonSimRef.current = false;
+    setViewMode('league');
+    setSeasonSimProgress(null);
     setSimmingSeason(true);
     try {
       const simBatch = httpsCallable(functions, 'simScheduleBatch');
@@ -303,28 +319,26 @@ export default function CalendarScreen() {
           batchSize: 1,
         });
         const control = result.data || {};
+        setSeasonSimProgress({
+          finalGames: Number(control.finalGames || 0),
+          totalGames: Number(control.totalGames || allGames.length),
+          remainingGames: Number(control.remainingGames || 0),
+        });
         if (control.status === 'complete' || control.status === 'cancelled') break;
         action = 'step';
-        await wait(120);
+        await wait(650);
       }
     } catch (error: any) {
       Alert.alert('Season sim stopped', error.message || 'Please try again.');
     } finally {
       setSimmingSeason(false);
       cancelSeasonSimRef.current = false;
+      setSeasonSimProgress(null);
     }
   };
 
   const runSeasonSim = () => {
-    Alert.alert(
-      'Sim Season',
-      'Sim one game at a time by week so the schedule stays stable.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Next Week', onPress: () => runSeasonSimWeeks(1) },
-        { text: 'Next 4 Weeks', onPress: () => runSeasonSimWeeks(4) },
-      ],
-    );
+    runSeasonSimContinuously();
   };
 
   const cancelSeasonSim = async () => {
@@ -343,6 +357,7 @@ export default function CalendarScreen() {
   return (
     <View style={styles.screen}>
       <SectionList
+        ref={scheduleListRef}
         contentContainerStyle={styles.content}
         sections={sections}
         keyExtractor={item => item.id}
@@ -350,6 +365,7 @@ export default function CalendarScreen() {
         maxToRenderPerBatch={4}
         windowSize={5}
         removeClippedSubviews
+        onScrollToIndexFailed={() => undefined}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={(
           <>
@@ -428,30 +444,37 @@ export default function CalendarScreen() {
                   </View>
                 </View>
                 {isLeagueAdmin && selectedViewMode !== 'cup' ? (
-                  <View style={styles.simControl}>
-                    <TouchableOpacity
-                      disabled={simmingSeason || allGames.every(game => game.status === 'final')}
-                      style={[styles.simButton, (simmingSeason || allGames.every(game => game.status === 'final')) && styles.simButtonDisabled]}
-                      onPress={runSeasonSim}
-                    >
-                      {simmingSeason ? (
-                        <ActivityIndicator color="#06130c" />
-                      ) : (
-                        <>
-                          <Ionicons color="#06130c" name="play-forward" size={16} />
-                          <Text style={styles.simButtonText}>
-                            {allGames.every(game => game.status === 'final') ? 'Season Complete' : 'Sim Season'}
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    {simmingSeason ? (
-                      <TouchableOpacity style={styles.cancelSimButton} onPress={cancelSeasonSim}>
-                        <Ionicons color="#ff5a6f" name="stop-circle-outline" size={16} />
-                        <Text style={styles.cancelSimText}>Cancel</Text>
+                  <>
+                    <View style={styles.simControl}>
+                      <TouchableOpacity
+                        disabled={simmingSeason || allGames.every(game => game.status === 'final')}
+                        style={[styles.simButton, (simmingSeason || allGames.every(game => game.status === 'final')) && styles.simButtonDisabled]}
+                        onPress={runSeasonSim}
+                      >
+                        {simmingSeason ? (
+                          <ActivityIndicator color="#06130c" />
+                        ) : (
+                          <>
+                            <Ionicons color="#06130c" name="play-forward" size={16} />
+                            <Text style={styles.simButtonText}>
+                              {allGames.every(game => game.status === 'final') ? 'Season Complete' : 'Sim Season'}
+                            </Text>
+                          </>
+                        )}
                       </TouchableOpacity>
+                      {simmingSeason ? (
+                        <TouchableOpacity style={styles.cancelSimButton} onPress={cancelSeasonSim}>
+                          <Ionicons color="#ff5a6f" name="stop-circle-outline" size={16} />
+                          <Text style={styles.cancelSimText}>Cancel</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {simmingSeason && seasonSimProgress ? (
+                      <Text style={styles.simProgressText}>
+                        Simming game by game - {seasonSimProgress.finalGames}/{seasonSimProgress.totalGames} final - {seasonSimProgress.remainingGames} left
+                      </Text>
                     ) : null}
-                  </View>
+                  </>
                 ) : null}
                 {selectedViewMode === 'cup' && isLeagueAdmin ? (
                   <TouchableOpacity
@@ -628,6 +651,7 @@ const styles = StyleSheet.create({
   simButtonText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   cancelSimButton: { minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: '#ff5a6f66', paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: '#1d080c' },
   cancelSimText: { color: '#ff5a6f', fontSize: 12, fontWeight: '900' },
+  simProgressText: { color: '#8a8a8a', fontSize: 11, fontWeight: '800', marginTop: -2, marginBottom: 8, paddingHorizontal: 2 },
   weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 8, paddingHorizontal: 2 },
   weekTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },

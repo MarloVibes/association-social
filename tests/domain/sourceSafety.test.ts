@@ -473,14 +473,15 @@ describe('source safety regressions', () => {
     expect(calendar).not.toContain('updateDoc');
   });
 
-  it('limits commissioner season simulation to week-sized one-game steps', () => {
+  it('runs commissioner season simulation continuously in one-game steps', () => {
     const calendar = source('app/screens/season/calendar.tsx');
 
-    expect(calendar).toContain('runSeasonSimWeeks');
+    expect(calendar).toContain('runSeasonSimContinuously');
     expect(calendar).toContain("batchSize: 1");
-    expect(calendar).toContain("'Next Week'");
-    expect(calendar).toContain("'Next 4 Weeks'");
+    expect(calendar).toContain("setViewMode('league')");
+    expect(calendar).toContain('Simming game by game');
     expect(calendar).not.toContain('runSeasonSimToTarget');
+    expect(calendar).not.toContain('runSeasonSimWeeks');
     expect(calendar).not.toContain("'Full Season'");
   });
 
