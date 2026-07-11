@@ -2294,7 +2294,13 @@ function updatePayloadForCompetition(competition, games, schedule) {
   return { games: compactGames };
 }
 
-function selectSimBatch({ games, competition = 'regular', scope = 'all', batchSize = 20 }) {
+const MAX_SIM_BATCH_SIZE = 12;
+
+function safeSimBatchSize(batchSize) {
+  return Math.max(1, Math.min(MAX_SIM_BATCH_SIZE, Number(batchSize) || MAX_SIM_BATCH_SIZE));
+}
+
+function selectSimBatch({ games, competition = 'regular', scope = 'all', batchSize = MAX_SIM_BATCH_SIZE }) {
   const eligible = (games || [])
     .filter(game => game && ['scheduled', 'preparing'].includes(game.status))
     .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
@@ -2304,7 +2310,7 @@ function selectSimBatch({ games, competition = 'regular', scope = 'all', batchSi
       return firstRound ? eligible.filter(game => game.round === firstRound) : eligible;
     })()
     : eligible;
-  return scoped.slice(0, Math.max(1, Math.min(50, Number(batchSize) || 20)));
+  return scoped.slice(0, safeSimBatchSize(batchSize));
 }
 
 function mapError(error, HttpsError) {
@@ -2838,7 +2844,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
     const action = typeof data.action === 'string' ? data.action : 'step';
     const competition = scheduleCompetition(data);
     const scope = data.scope === 'round' ? 'round' : 'all';
-    const batchSize = Number(data.batchSize || 20);
+    const batchSize = safeSimBatchSize(data.batchSize);
     if (!leagueId) throw new HttpsError('invalid-argument', 'Provide leagueId.');
     const db = getFirestore();
     const leagueRef = db.collection('leagues').doc(leagueId);
@@ -2981,7 +2987,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
         status: remaining === 0 ? 'complete' : 'running',
         competition,
         scope,
-        batchSize: Math.max(1, Math.min(50, batchSize || 20)),
+        batchSize,
         lastBatchGameIds: simmed,
         updatedAtMs: now(),
         startedAtMs: action === 'start' || !existingControl.startedAtMs ? now() : existingControl.startedAtMs,
