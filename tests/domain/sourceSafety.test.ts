@@ -480,6 +480,10 @@ describe('source safety regressions', () => {
     expect(calendar).toContain("batchSize: 1");
     expect(calendar).toContain("setViewMode('league')");
     expect(calendar).toContain('Simming game by game');
+    expect(calendar).toContain('onScrollBeginDrag');
+    expect(calendar).toContain('simDockStop');
+    expect(calendar).toContain('autoFollowSeasonSim');
+    expect(calendar).toContain('await wait(220)');
     expect(calendar).not.toContain('runSeasonSimToTarget');
     expect(calendar).not.toContain('runSeasonSimWeeks');
     expect(calendar).not.toContain("'Full Season'");

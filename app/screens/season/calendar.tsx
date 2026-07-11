@@ -120,6 +120,7 @@ export default function CalendarScreen() {
   const [advancingCup, setAdvancingCup] = useState(false);
   const [simmingSeason, setSimmingSeason] = useState(false);
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
+  const [autoFollowSeasonSim, setAutoFollowSeasonSim] = useState(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
   const scheduleListRef = useRef<SectionList<CalendarSectionRow, CalendarSection> | null>(null);
@@ -267,7 +268,7 @@ export default function CalendarScreen() {
   const nextUnfinishedGame = useMemo(() => allGames.find(game => game.status !== 'final') || null, [allGames]);
 
   useEffect(() => {
-    if (!simmingSeason || selectedViewMode !== 'league' || !nextUnfinishedGame) return;
+    if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league' || !nextUnfinishedGame) return;
     const sectionIndex = sections.findIndex(section => section.title === `Week ${nextUnfinishedGame.week || 1}`);
     if (sectionIndex < 0) return;
     requestAnimationFrame(() => {
@@ -282,7 +283,7 @@ export default function CalendarScreen() {
         // SectionList can briefly miss measurements while Firestore updates.
       }
     });
-  }, [nextUnfinishedGame, sections, selectedViewMode, simmingSeason]);
+  }, [autoFollowSeasonSim, nextUnfinishedGame, sections, selectedViewMode, simmingSeason]);
 
   const advanceCup = async () => {
     if (!leagueId || !schedule?.nbaCup || !isLeagueAdmin) return;
@@ -306,6 +307,7 @@ export default function CalendarScreen() {
     }
     cancelSeasonSimRef.current = false;
     setViewMode('league');
+    setAutoFollowSeasonSim(true);
     setSeasonSimProgress(null);
     setSimmingSeason(true);
     try {
@@ -326,13 +328,14 @@ export default function CalendarScreen() {
         });
         if (control.status === 'complete' || control.status === 'cancelled') break;
         action = 'step';
-        await wait(650);
+        await wait(220);
       }
     } catch (error: any) {
       Alert.alert('Season sim stopped', error.message || 'Please try again.');
     } finally {
       setSimmingSeason(false);
       cancelSeasonSimRef.current = false;
+      setAutoFollowSeasonSim(false);
       setSeasonSimProgress(null);
     }
   };
@@ -365,6 +368,9 @@ export default function CalendarScreen() {
         maxToRenderPerBatch={4}
         windowSize={5}
         removeClippedSubviews
+        onScrollBeginDrag={() => {
+          if (simmingSeason) setAutoFollowSeasonSim(false);
+        }}
         onScrollToIndexFailed={() => undefined}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={(
@@ -462,12 +468,6 @@ export default function CalendarScreen() {
                           </>
                         )}
                       </TouchableOpacity>
-                      {simmingSeason ? (
-                        <TouchableOpacity style={styles.cancelSimButton} onPress={cancelSeasonSim}>
-                          <Ionicons color="#ff5a6f" name="stop-circle-outline" size={16} />
-                          <Text style={styles.cancelSimText}>Cancel</Text>
-                        </TouchableOpacity>
-                      ) : null}
                     </View>
                     {simmingSeason && seasonSimProgress ? (
                       <Text style={styles.simProgressText}>
@@ -611,6 +611,23 @@ export default function CalendarScreen() {
           </View>
         ) : null}
       />
+      {simmingSeason ? (
+        <View style={styles.simDock}>
+          <TouchableOpacity style={styles.simDockStop} onPress={cancelSeasonSim}>
+            <Ionicons color="#fff" name="stop-circle" size={17} />
+            <Text style={styles.simDockStopText}>Stop</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.simDockFollow, autoFollowSeasonSim && styles.simDockFollowActive]}
+            onPress={() => setAutoFollowSeasonSim(value => !value)}
+          >
+            <Ionicons color={autoFollowSeasonSim ? '#06130c' : '#00e58b'} name="navigate" size={15} />
+            <Text style={[styles.simDockFollowText, autoFollowSeasonSim && styles.simDockFollowTextActive]}>
+              {autoFollowSeasonSim ? 'Following' : 'Follow'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -618,7 +635,7 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#050505' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#050505' },
-  content: { padding: 18, paddingTop: 58, paddingBottom: 40 },
+  content: { padding: 18, paddingTop: 58, paddingBottom: 112 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
   iconButton: { width: 42, height: 42, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#151515' },
   headerCopy: { flex: 1 },
@@ -649,9 +666,14 @@ const styles = StyleSheet.create({
   simButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   simButtonDisabled: { opacity: 0.5 },
   simButtonText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
-  cancelSimButton: { minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: '#ff5a6f66', paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: '#1d080c' },
-  cancelSimText: { color: '#ff5a6f', fontSize: 12, fontWeight: '900' },
   simProgressText: { color: '#8a8a8a', fontSize: 11, fontWeight: '800', marginTop: -2, marginBottom: 8, paddingHorizontal: 2 },
+  simDock: { position: 'absolute', left: 18, right: 18, bottom: 18, borderRadius: 10, borderWidth: 1, borderColor: '#1f3328', backgroundColor: '#07120d', padding: 8, flexDirection: 'row', gap: 8 },
+  simDockStop: { flex: 1, minHeight: 40, borderRadius: 8, backgroundColor: '#e53950', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  simDockStopText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  simDockFollow: { flex: 1, minHeight: 40, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b66', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: '#07120d' },
+  simDockFollowActive: { backgroundColor: '#00e58b', borderColor: '#00e58b' },
+  simDockFollowText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
+  simDockFollowTextActive: { color: '#06130c' },
   weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 8, paddingHorizontal: 2 },
   weekTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },
