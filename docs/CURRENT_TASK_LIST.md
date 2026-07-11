@@ -138,6 +138,8 @@ Status: Active
   - League Stats means all players in the league.
 - Confirm labels and routes match this meaning.
 - Confirm standings and player stat screens work after simulated games.
+- Fix League Stats so it shows every player across the league, not only players from teams that already have simulated games.
+- Revamp League Stats into a combined stat table similar to NBA.com, with stat columns lined up in each row instead of showing only one category value.
 
 ### 9. Roster Limits, Two-Way Players, And Development League
 

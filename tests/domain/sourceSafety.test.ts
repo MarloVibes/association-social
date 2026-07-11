@@ -369,6 +369,13 @@ describe('source safety regressions', () => {
     expect(standings).toContain("activeContentMode === 'leaguePlayers'");
     expect(standings).toContain('teamScopedPlayerLeaders');
     expect(standings).toContain('leaguePlayerLeaders');
+    expect(standings).toContain('buildCombinedPlayerStatRows');
+    expect(standings).toContain('includeZeroGamePlayers: activeContentMode === \'leaguePlayers\'');
+    expect(standings).toContain('GP');
+    expect(standings).toContain('PTS');
+    expect(standings).toContain('REB');
+    expect(standings).toContain('AST');
+    expect(standings).toContain('playerStatValues');
   });
 
   it('keeps the stats screen mode synced when Command Center opens another stats card', () => {

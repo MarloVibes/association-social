@@ -27,6 +27,14 @@ type Team = {
 
 type StandingsViewMode = 'regular' | 'cup';
 type StandingsContentMode = 'standings' | 'teamPlayers' | 'leaguePlayers';
+type CombinedPlayerStatColumn = {
+  key: string;
+  label: string;
+  width: number;
+};
+type CombinedPlayerStatRow = SportPlayerLeaderboardRow & {
+  columns: (CombinedPlayerStatColumn & { value: string })[];
+};
 
 type ScheduleDoc = {
   games?: NbaScheduleGame[];
@@ -60,6 +68,176 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
 
 function teamName(team?: Team) {
   return team?.name || team?.abbreviation || 'Team';
+}
+
+function numberFrom(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function playerStats(player: Record<string, unknown>) {
+  return (player.seasonStats && typeof player.seasonStats === 'object'
+    ? player.seasonStats
+    : player.stats && typeof player.stats === 'object'
+      ? player.stats
+      : player) as Record<string, unknown>;
+}
+
+function playerKey(player: Record<string, unknown>, fallback: string) {
+  return String(player.player_id || player.id || player.bref_id || player.full_name || player.name || fallback);
+}
+
+function perGame(stats: Record<string, unknown>, totalKey: string, averageKeys: string[] = []) {
+  for (const key of averageKeys) {
+    const explicit = Number(stats[key]);
+    if (Number.isFinite(explicit)) return explicit;
+  }
+  const games = Math.max(0, numberFrom(stats.games || stats.gp || stats.gamesPlayed));
+  if (games <= 0) return 0;
+  return numberFrom(stats[totalKey]) / games;
+}
+
+function formatDecimal(value: number, decimals = 1) {
+  return value > 0 ? value.toFixed(decimals) : '0.0';
+}
+
+function combinedStatColumnsForSport(sport: 'nba' | 'madden' | 'mlb'): CombinedPlayerStatColumn[] {
+  if (sport === 'madden') {
+    return [
+      { key: 'gp', label: 'GP', width: 30 },
+      { key: 'passYds', label: 'PYD', width: 38 },
+      { key: 'passTd', label: 'PTD', width: 34 },
+      { key: 'rushYds', label: 'RYD', width: 38 },
+      { key: 'recYds', label: 'REC', width: 38 },
+      { key: 'sacks', label: 'SK', width: 30 },
+    ];
+  }
+  if (sport === 'mlb') {
+    return [
+      { key: 'gp', label: 'GP', width: 30 },
+      { key: 'avg', label: 'AVG', width: 38 },
+      { key: 'hr', label: 'HR', width: 30 },
+      { key: 'rbi', label: 'RBI', width: 34 },
+      { key: 'era', label: 'ERA', width: 38 },
+      { key: 'so', label: 'SO', width: 30 },
+    ];
+  }
+  return [
+    { key: 'gp', label: 'GP', width: 30 },
+    { key: 'pts', label: 'PTS', width: 34 },
+    { key: 'reb', label: 'REB', width: 34 },
+    { key: 'ast', label: 'AST', width: 34 },
+    { key: 'stl', label: 'STL', width: 30 },
+    { key: 'blk', label: 'BLK', width: 30 },
+  ];
+}
+
+function combinedValuesForSport(sport: 'nba' | 'madden' | 'mlb', stats: Record<string, unknown>) {
+  const games = Math.max(0, numberFrom(stats.games || stats.gp || stats.gamesPlayed));
+  if (sport === 'madden') {
+    return {
+      gp: String(games),
+      passYds: String(Math.round(numberFrom(stats.passingYards || stats.passYards))),
+      passTd: String(Math.round(numberFrom(stats.passingTouchdowns || stats.passTds))),
+      rushYds: String(Math.round(numberFrom(stats.rushingYards || stats.rushYards))),
+      recYds: String(Math.round(numberFrom(stats.receivingYards || stats.recYards))),
+      sacks: String(Math.round(numberFrom(stats.sacks))),
+    };
+  }
+  if (sport === 'mlb') {
+    const atBats = numberFrom(stats.atBats || stats.ab);
+    const avg = Number.isFinite(Number(stats.avg || stats.battingAverage))
+      ? Number(stats.avg || stats.battingAverage)
+      : atBats > 0
+        ? numberFrom(stats.hits) / atBats
+        : 0;
+    const innings = numberFrom(stats.inningsPitched || stats.ip);
+    const era = Number.isFinite(Number(stats.era))
+      ? Number(stats.era)
+      : innings > 0
+        ? (numberFrom(stats.earnedRuns) * 9) / innings
+        : 0;
+    return {
+      gp: String(games),
+      avg: avg > 0 ? avg.toFixed(3).replace(/^0/, '') : '.000',
+      hr: String(Math.round(numberFrom(stats.homeRuns || stats.hr))),
+      rbi: String(Math.round(numberFrom(stats.rbi))),
+      era: era > 0 ? era.toFixed(2) : '0.00',
+      so: String(Math.round(numberFrom(stats.strikeouts || stats.so))),
+    };
+  }
+  return {
+    gp: String(games),
+    pts: formatDecimal(perGame(stats, 'points', ['ppg', 'pointsPerGame'])),
+    reb: formatDecimal(perGame(stats, 'rebounds', ['rpg', 'reboundsPerGame'])),
+    ast: formatDecimal(perGame(stats, 'assists', ['apg', 'assistsPerGame'])),
+    stl: formatDecimal(perGame(stats, 'steals', ['spg', 'stealsPerGame'])),
+    blk: formatDecimal(perGame(stats, 'blocks', ['bpg', 'blocksPerGame'])),
+  };
+}
+
+function statSortValue(sport: 'nba' | 'madden' | 'mlb', stat: SportPlayerLeaderboardStat, stats: Record<string, unknown>) {
+  if (stat === 'ppg') return perGame(stats, 'points', ['ppg', 'pointsPerGame']);
+  if (stat === 'rpg') return perGame(stats, 'rebounds', ['rpg', 'reboundsPerGame']);
+  if (stat === 'apg') return perGame(stats, 'assists', ['apg', 'assistsPerGame']);
+  if (stat === 'spg') return perGame(stats, 'steals', ['spg', 'stealsPerGame']);
+  if (stat === 'bpg') return perGame(stats, 'blocks', ['bpg', 'blocksPerGame']);
+  if (stat === 'passYds') return numberFrom(stats.passingYards || stats.passYards);
+  if (stat === 'passTd') return numberFrom(stats.passingTouchdowns || stats.passTds);
+  if (stat === 'rushYds') return numberFrom(stats.rushingYards || stats.rushYards);
+  if (stat === 'recYds') return numberFrom(stats.receivingYards || stats.recYards);
+  if (stat === 'sacks') return numberFrom(stats.sacks);
+  if (stat === 'ints') return numberFrom(stats.interceptions || stats.ints);
+  if (stat === 'avg') return Number(combinedValuesForSport(sport, stats).avg || 0);
+  if (stat === 'hr') return numberFrom(stats.homeRuns || stats.hr);
+  if (stat === 'rbi') return numberFrom(stats.rbi);
+  if (stat === 'era') return -numberFrom(combinedValuesForSport(sport, stats).era);
+  if (stat === 'whip') return -numberFrom(stats.whip);
+  if (stat === 'so') return numberFrom(stats.strikeouts || stats.so);
+  return 0;
+}
+
+function buildCombinedPlayerStatRows({
+  sport,
+  teams,
+  sortStat,
+  includeZeroGamePlayers,
+}: {
+  sport: 'nba' | 'madden' | 'mlb';
+  teams: Team[];
+  sortStat: SportPlayerLeaderboardStat;
+  includeZeroGamePlayers: boolean;
+}): CombinedPlayerStatRow[] {
+  const columns = combinedStatColumnsForSport(sport);
+  const rows: CombinedPlayerStatRow[] = [];
+  teams.forEach((team, teamIndex) => {
+    (team.players || []).forEach((player: Record<string, unknown>, playerIndex: number) => {
+      const stats = playerStats(player);
+      const games = Math.max(0, numberFrom(stats.games || stats.gp || stats.gamesPlayed));
+      if (!includeZeroGamePlayers && games <= 0) return;
+      const values = combinedValuesForSport(sport, stats);
+      const value = statSortValue(sport, sortStat, stats);
+      rows.push({
+        playerId: playerKey(player, `${teamIndex}-${playerIndex}`),
+        name: String(player.full_name || player.name || 'Unknown Player'),
+        position: String(player.position || '?'),
+        teamId: String(team.id || team.teamId || team.abbreviation || ''),
+        teamName: teamName(team),
+        teamAbbreviation: String(team.abbreviation || team.teamId || team.id || 'TEAM').toUpperCase(),
+        games,
+        value,
+        valueText: value > 0 ? value.toFixed(1) : '0.0',
+        player,
+        columns: columns.map(column => ({ ...column, value: String(values[column.key as keyof typeof values] || '0') })),
+      });
+    });
+  });
+  return rows.sort((left, right) => (
+    right.value - left.value
+    || right.games - left.games
+    || left.teamAbbreviation.localeCompare(right.teamAbbreviation)
+    || left.name.localeCompare(right.name)
+  ));
 }
 
 export default function StandingsScreen() {
@@ -165,9 +343,17 @@ export default function StandingsScreen() {
       limit: 75,
     })
   ), [activePlayerStat, sport, teams]);
-  const activePlayerLeaders = activeContentMode === 'teamPlayers' ? teamScopedPlayerLeaders : leaguePlayerLeaders;
+  const combinedPlayerRows = useMemo(() => (
+    buildCombinedPlayerStatRows({
+      sport,
+      teams: activeContentMode === 'teamPlayers' && myTeam ? [myTeam] : teams,
+      sortStat: activePlayerStat,
+      includeZeroGamePlayers: activeContentMode === 'leaguePlayers',
+    })
+  ), [activeContentMode, activePlayerStat, myTeam, sport, teams]);
+  const combinedColumns = useMemo(() => combinedStatColumnsForSport(sport), [sport]);
   const visibleSections = activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers'
-    ? [{ id: `players-${activePlayerStat}`, title: `${activePlayerStat.toUpperCase()} Leaders`, data: activePlayerLeaders }]
+    ? [{ id: `players-${activePlayerStat}`, title: `${activePlayerStat.toUpperCase()} Leaders`, data: combinedPlayerRows }]
     : sections;
   const completedGames = useMemo(() => standingsGames.filter(game => game.status === 'final').length, [standingsGames]);
   const leagueDate = useMemo(() => leagueDateFromRecord(league || {}), [league]);
@@ -195,14 +381,14 @@ export default function StandingsScreen() {
               </View>
             </View>
             <View style={styles.summary}>
-              <Text style={styles.summaryText}>{activeContentMode === 'teamPlayers' ? `${teamName(myTeam)} player stats` : activeContentMode === 'leaguePlayers' ? 'League-wide player stat leaders' : selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
-              <Text style={styles.summaryMeta}>
-                {activeContentMode === 'teamPlayers'
-                  ? `Team roster sorted by ${activePlayerStat.toUpperCase()}`
+                <Text style={styles.summaryText}>{activeContentMode === 'teamPlayers' ? `${teamName(myTeam)} player stats` : activeContentMode === 'leaguePlayers' ? 'League-wide player stat leaders' : selectedViewMode === 'cup' ? 'NBA Cup standings' : 'Regular season standings'}</Text>
+                <Text style={styles.summaryMeta}>
+                  {activeContentMode === 'teamPlayers'
+                  ? `Team roster table sorted by ${activePlayerStat.toUpperCase()}`
                   : activeContentMode === 'leaguePlayers'
-                  ? `Sorted by ${activePlayerStat.toUpperCase()} · Tap any player for their card`
+                  ? `All league players sorted by ${activePlayerStat.toUpperCase()} · Tap any player for their card`
                   : `${completedGames} final games recorded · GB tracks the leader`}
-              </Text>
+                </Text>
             </View>
             <View style={styles.segment}>
               <TouchableOpacity
@@ -217,14 +403,14 @@ export default function StandingsScreen() {
                 onPress={() => setContentMode('teamPlayers')}
               >
                 <Text style={[styles.segmentText, activeContentMode === 'teamPlayers' && styles.segmentTextActive]}>Player Stats</Text>
-                <Text style={styles.segmentCount}>{teamScopedPlayerLeaders.length}</Text>
+                <Text style={styles.segmentCount}>{activeContentMode === 'teamPlayers' ? combinedPlayerRows.length : teamScopedPlayerLeaders.length}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.segmentButton, activeContentMode === 'leaguePlayers' && styles.segmentButtonActive]}
                 onPress={() => setContentMode('leaguePlayers')}
               >
                 <Text style={[styles.segmentText, activeContentMode === 'leaguePlayers' && styles.segmentTextActive]}>League Stats</Text>
-                <Text style={styles.segmentCount}>{leaguePlayerLeaders.length}</Text>
+                <Text style={styles.segmentCount}>{activeContentMode === 'leaguePlayers' ? combinedPlayerRows.length : leaguePlayerLeaders.length}</Text>
               </TouchableOpacity>
             </View>
             {activeContentMode === 'standings' ? (
@@ -271,9 +457,9 @@ export default function StandingsScreen() {
             ) : (
               <View style={styles.tableHeader}>
                 <Text style={[styles.headerCell, { flex: 1 }]}>Player</Text>
-                <Text style={styles.headerCell}>Team</Text>
-                <Text style={styles.headerCell}>GP</Text>
-                <Text style={styles.headerCell}>{activePlayerStat.toUpperCase()}</Text>
+                {combinedColumns.map(column => (
+                  <Text key={column.key} style={[styles.headerCell, { width: column.width }]}>{column.label}</Text>
+                ))}
               </View>
             )}
           </>
@@ -285,18 +471,21 @@ export default function StandingsScreen() {
         )}
         renderItem={({ item, index }) => (
           activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers' ? (
-            <TouchableOpacity style={styles.row} onPress={() => setSelectedPlayerRow(item as unknown as SportPlayerLeaderboardRow)} activeOpacity={0.78}>
+            <TouchableOpacity style={styles.playerStatRow} onPress={() => setSelectedPlayerRow(item as unknown as CombinedPlayerStatRow)} activeOpacity={0.78}>
               <Text style={styles.rank}>{index + 1}</Text>
-              <View style={styles.playerLeaderBadge}>
-                <Text style={styles.playerLeaderInitial}>{String((item as unknown as SportPlayerLeaderboardRow).name || '?')[0]}</Text>
+              <View style={styles.playerStatCopy}>
+                <Text style={styles.teamName} numberOfLines={1}>{(item as unknown as CombinedPlayerStatRow).name}</Text>
+                <Text style={styles.teamMeta} numberOfLines={1}>
+                  {(item as unknown as CombinedPlayerStatRow).teamAbbreviation} · {(item as unknown as CombinedPlayerStatRow).position}
+                </Text>
               </View>
-              <View style={styles.teamCopy}>
-                <Text style={styles.teamName} numberOfLines={1}>{(item as unknown as SportPlayerLeaderboardRow).name}</Text>
-                <Text style={styles.teamMeta}>{(item as unknown as SportPlayerLeaderboardRow).position} · {(item as unknown as SportPlayerLeaderboardRow).teamName}</Text>
+              <View style={styles.playerStatValues}>
+                {(item as unknown as CombinedPlayerStatRow).columns.map(column => (
+                  <Text key={column.key} style={[styles.playerStatValue, { width: column.width }]}>
+                    {column.value}
+                  </Text>
+                ))}
               </View>
-              <Text style={styles.value}>{(item as unknown as SportPlayerLeaderboardRow).teamAbbreviation}</Text>
-              <Text style={styles.value}>{(item as unknown as SportPlayerLeaderboardRow).games}</Text>
-              <Text style={[styles.value, styles.statValue]}>{(item as unknown as SportPlayerLeaderboardRow).valueText}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.row}>
@@ -360,11 +549,15 @@ const styles = StyleSheet.create({
   headerCell: { width: 42, color: '#777', fontSize: 10, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   groupHeader: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 8, marginBottom: 8, paddingHorizontal: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
+  playerStatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#202020', marginBottom: 8 },
   rank: { width: 22, color: '#777', fontSize: 12, fontWeight: '900', textAlign: 'center' },
   logoDisc: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
   logo: { width: 29, height: 29 },
   playerLeaderBadge: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a1d14', borderWidth: 1, borderColor: '#00e58b55' },
   playerLeaderInitial: { color: '#00e58b', fontSize: 15, fontWeight: '900' },
+  playerStatCopy: { flex: 1, minWidth: 86 },
+  playerStatValues: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
+  playerStatValue: { color: '#fff', fontSize: 11, fontWeight: '900', textAlign: 'center' },
   teamCopy: { flex: 1, minWidth: 0 },
   teamName: { color: '#fff', fontSize: 13, fontWeight: '900' },
   teamMeta: { color: '#777', fontSize: 10, fontWeight: '800', marginTop: 3 },
