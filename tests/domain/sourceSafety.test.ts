@@ -483,6 +483,9 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('onScrollBeginDrag');
     expect(calendar).toContain('simDockStop');
     expect(calendar).toContain('autoFollowSeasonSim');
+    expect(calendar).toContain('toggleSeasonSimFollow');
+    expect(calendar).toContain('scrollToNextUnfinishedGame');
+    expect(calendar).toContain('onScrollToIndexFailed');
     expect(calendar).toContain('await wait(220)');
     expect(calendar).not.toContain('runSeasonSimToTarget');
     expect(calendar).not.toContain('runSeasonSimWeeks');

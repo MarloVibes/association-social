@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
@@ -267,8 +267,8 @@ export default function CalendarScreen() {
   }, [games, selectedViewMode]);
   const nextUnfinishedGame = useMemo(() => allGames.find(game => game.status !== 'final') || null, [allGames]);
 
-  useEffect(() => {
-    if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league' || !nextUnfinishedGame) return;
+  const scrollToNextUnfinishedGame = useCallback((animated = true, attempt = 0) => {
+    if (!nextUnfinishedGame) return;
     const sectionIndex = sections.findIndex(section => section.title === `Week ${nextUnfinishedGame.week || 1}`);
     if (sectionIndex < 0) return;
     requestAnimationFrame(() => {
@@ -277,13 +277,30 @@ export default function CalendarScreen() {
           sectionIndex,
           itemIndex: 0,
           viewPosition: 0.18,
-          animated: true,
+          animated,
         });
       } catch {
-        // SectionList can briefly miss measurements while Firestore updates.
+        if (attempt < 2) {
+          setTimeout(() => scrollToNextUnfinishedGame(animated, attempt + 1), 180);
+        }
       }
     });
-  }, [autoFollowSeasonSim, nextUnfinishedGame, sections, selectedViewMode, simmingSeason]);
+  }, [nextUnfinishedGame, sections]);
+
+  useEffect(() => {
+    if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league') return;
+    scrollToNextUnfinishedGame(true);
+  }, [autoFollowSeasonSim, scrollToNextUnfinishedGame, selectedViewMode, simmingSeason]);
+
+  const toggleSeasonSimFollow = () => {
+    if (autoFollowSeasonSim) {
+      setAutoFollowSeasonSim(false);
+      return;
+    }
+    setViewMode('league');
+    setAutoFollowSeasonSim(true);
+    setTimeout(() => scrollToNextUnfinishedGame(true), 80);
+  };
 
   const advanceCup = async () => {
     if (!leagueId || !schedule?.nbaCup || !isLeagueAdmin) return;
@@ -371,7 +388,11 @@ export default function CalendarScreen() {
         onScrollBeginDrag={() => {
           if (simmingSeason) setAutoFollowSeasonSim(false);
         }}
-        onScrollToIndexFailed={() => undefined}
+        onScrollToIndexFailed={() => {
+          if (simmingSeason && autoFollowSeasonSim) {
+            setTimeout(() => scrollToNextUnfinishedGame(true), 220);
+          }
+        }}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={(
           <>
@@ -619,7 +640,7 @@ export default function CalendarScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.simDockFollow, autoFollowSeasonSim && styles.simDockFollowActive]}
-            onPress={() => setAutoFollowSeasonSim(value => !value)}
+            onPress={toggleSeasonSimFollow}
           >
             <Ionicons color={autoFollowSeasonSim ? '#06130c' : '#00e58b'} name="navigate" size={15} />
             <Text style={[styles.simDockFollowText, autoFollowSeasonSim && styles.simDockFollowTextActive]}>
