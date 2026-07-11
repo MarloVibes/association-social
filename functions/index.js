@@ -543,13 +543,17 @@ exports.startNextSeason = onCall(createStartNextSeasonHandler({
   HttpsError,
 }));
 
-exports.generateNbaSchedule = onCall(createGenerateScheduleHandler({
+const scheduleFunctionOptions = {
+  memory: '512MiB',
+};
+
+exports.generateNbaSchedule = onCall(scheduleFunctionOptions, createGenerateScheduleHandler({
   getFirestore,
   serverTimestamp: () => FieldValue.serverTimestamp(),
   HttpsError,
 }));
 
-exports.advanceNbaCup = onCall(createAdvanceNbaCupHandler({
+exports.advanceNbaCup = onCall(scheduleFunctionOptions, createAdvanceNbaCupHandler({
   getFirestore,
   HttpsError,
 }));
