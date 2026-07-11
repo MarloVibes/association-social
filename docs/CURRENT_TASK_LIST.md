@@ -28,6 +28,7 @@ Status: Active
 
 Status: Active
 
+- Fix roster player-card layout when cards overlap the position filter/sorting chips; cards should sit a little lower under the filters.
 - Continue auditing NBA player identities across all eras, not only 2025-26.
 - Treat free agents, draft classes, and every era player equally.
 - Remove stale broad `Role Player` language from visible NBA player surfaces.
@@ -218,3 +219,4 @@ Status: Parked until Franchise Mobile GM mode is finished
 Add new tasks here first, then move them into the ordered sections above.
 
 - 2026-07-10: Created this real task list because chat-only tracking became unreliable.
+- 2026-07-10: Add roster screen layout fix for player cards overlapping the position sorting categories and sitting too high.

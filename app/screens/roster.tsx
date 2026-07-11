@@ -669,7 +669,7 @@ export default function RosterScreen() {
       </View>
 
       {(activeTab === 'my_team' || activeTab === 'free_agents') && (
-        <>
+        <View style={styles.filterDock}>
           {activeTab === 'free_agents' ? (
             <>
               <TouchableOpacity
@@ -720,7 +720,7 @@ export default function RosterScreen() {
               ))}
             </View>
           </ScrollView>
-        </>
+        </View>
       )}
 
       <FlatList
@@ -862,7 +862,8 @@ const styles = StyleSheet.create({
   tabText: { color: '#666', fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: '#00ff87' },
   searchInput: { marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#ffffff', fontSize: 14, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 10 },
-  posFilterScroll: { marginBottom: 10 },
+  filterDock: { zIndex: 2, elevation: 2, backgroundColor: '#0a0a0a', paddingBottom: 6 },
+  posFilterScroll: { marginBottom: 12 },
   posFilterContent: { paddingHorizontal: 20 },
   posFilters: { flexDirection: 'row', gap: 8 },
   posBtn: { minWidth: 54, height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#141414', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
@@ -874,7 +875,7 @@ const styles = StyleSheet.create({
   createPlayerBannerTitle: { color: '#00ff87', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
   createPlayerBannerSub: { color: '#88bb99', fontSize: 11, marginTop: 2 },
   createPlayerBannerArrow: { color: '#00ff87', fontSize: 22, fontWeight: '300' },
-  listContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
+  listContent: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 100 },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 15 },
   playerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#252525', gap: 12 },
