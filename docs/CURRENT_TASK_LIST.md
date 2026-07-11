@@ -1,6 +1,6 @@
 # Franchise Mobile Current Task List
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
 
@@ -105,6 +105,9 @@ Status: Active
 
 Status: Active
 
+- Fix crash when opening League Schedule or pressing Sim Season.
+  - Calendar should not run heavy phone-side schedule repair writes on open.
+  - Sim Season should process smaller week chunks instead of a full-season tight loop.
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
 - Fix Sim Season reliability so large batch sims do not overload Firebase memory or stall mid-season.

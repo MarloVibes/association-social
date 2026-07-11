@@ -1,16 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { advanceNbaCupStage, buildNbaCupSchedule, decorateScheduleGames, integrateNbaCupGamesIntoRegularSchedule, supportsNbaCupSchedule, type NbaScheduleParticipant } from '@/domain/nba/scheduleSetup';
 import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, isLiveResultRevealed, liveScheduleScore, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
-import { isMissingCallable } from '@/utils/createNbaSchedule';
-import { previewNbaScheduleOwnershipRepair, repairNbaScheduleOwnershipLocally } from '@/utils/repairNbaScheduleOwnership';
 
 type CalendarViewMode = ScheduleViewMode | 'cup';
 type CalendarGame = NbaScheduleGame & {
@@ -110,6 +107,8 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
   return 'nba';
 }
 
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export default function CalendarScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -122,7 +121,6 @@ export default function CalendarScreen() {
   const [simmingSeason, setSimmingSeason] = useState(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
-  const repairAttemptedRef = useRef('');
   const cancelSeasonSimRef = useRef(false);
 
   useEffect(() => {
@@ -173,7 +171,6 @@ export default function CalendarScreen() {
   const sport = normalizeSport(league?.sport);
   const supportsCup = sport === 'nba';
   const myTeam = teams.find(team => team.gmId === uid);
-  const scheduleId = league?.scheduleId || String(league?.currentYear || 2025);
   const isLeagueAdmin = Boolean(
     uid
     && league
@@ -266,89 +263,6 @@ export default function CalendarScreen() {
       });
   }, [games, selectedViewMode]);
 
-  useEffect(() => {
-    if (!leagueId || !schedule || !scheduleId || !isLeagueAdmin || teams.length === 0) return;
-    const repair = previewNbaScheduleOwnershipRepair({ schedule, teams });
-    if (!repair.changed) return;
-    const repairKey = `${leagueId}:${scheduleId}:${repair.repairedGames}:${allGames.length}:${teams.map(team => `${team.id}:${team.gmId || ''}`).join('|')}`;
-    if (repairAttemptedRef.current === repairKey) return;
-    repairAttemptedRef.current = repairKey;
-    repairNbaScheduleOwnershipLocally({
-      leagueId,
-      scheduleId,
-      schedule,
-      teams,
-    }).catch(error => {
-      console.warn('Failed to repair NBA schedule ownership:', error);
-    });
-  }, [allGames.length, isLeagueAdmin, leagueId, schedule, scheduleId, teams]);
-
-  useEffect(() => {
-    if (!leagueId || !league || !schedule || !scheduleId || !isLeagueAdmin) return;
-    if (!supportsCup) return;
-    if (schedule.nbaCup?.enabled === false) return;
-    const regularCupGames = (schedule.games || []).filter(game => game.competition === 'nbaCup' && game.stage === 'group').length;
-    if (hasNbaCup && regularCupGames > 0) return;
-    const currentYear = Number(league.currentYear || scheduleId || 2025);
-    if (!supportsNbaCupSchedule({ era: league.era, currentYear })) return;
-    const participants = (schedule.participants || [])
-      .filter(team => team.scheduleTeamId)
-      .map(team => ({
-        scheduleTeamId: String(team.scheduleTeamId),
-        sourceTeamDocId: team.sourceTeamDocId || null,
-        gmId: team.gmId || null,
-        abbreviation: team.abbreviation || String(team.scheduleTeamId),
-        name: team.name || '',
-      }));
-    if (participants.length < 30) return;
-    const seed = `${leagueId}:${currentYear}:${schedule.gamesPerTeam || 82}`;
-    const rawCup = buildNbaCupSchedule({
-      scheduleTeamIds: participants.map(team => team.scheduleTeamId),
-      currentYear,
-      seed,
-    });
-    if (!rawCup) return;
-    const decoratedCup = schedule.nbaCup?.games?.length
-      ? schedule.nbaCup
-      : {
-        ...rawCup,
-        games: decorateScheduleGames(rawCup.games, participants),
-      };
-    const integrated = integrateNbaCupGamesIntoRegularSchedule(schedule.games || [], decoratedCup);
-    updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), {
-      games: integrated.games,
-      nbaCup: integrated.nbaCup,
-    }).catch(error => {
-      console.warn('Failed to add NBA Cup to existing schedule:', error);
-    });
-  }, [hasNbaCup, isLeagueAdmin, league, leagueId, schedule, scheduleId, supportsCup]);
-
-  const scheduleParticipants = useMemo<NbaScheduleParticipant[]>(() => (
-    (schedule?.participants || [])
-      .filter(team => team.scheduleTeamId)
-      .map(team => ({
-        scheduleTeamId: String(team.scheduleTeamId),
-        sourceTeamDocId: team.sourceTeamDocId || null,
-        gmId: team.gmId || null,
-        abbreviation: team.abbreviation || String(team.scheduleTeamId),
-        name: team.name || '',
-      }))
-  ), [schedule?.participants]);
-
-  const advanceCupLocally = async () => {
-    if (!leagueId || !league || !schedule?.nbaCup) throw new Error('NBA Cup is not ready.');
-    const seed = schedule.seed || `${leagueId}:${league.currentYear || 2025}:${schedule.gamesPerTeam || 82}`;
-    const nextCup = advanceNbaCupStage({
-      nbaCup: schedule.nbaCup as any,
-      participants: scheduleParticipants,
-      seed,
-    });
-    if (JSON.stringify(nextCup) === JSON.stringify(schedule.nbaCup)) {
-      throw new Error('Finish every game in the current Cup stage before advancing.');
-    }
-    await updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), { nbaCup: nextCup });
-  };
-
   const advanceCup = async () => {
     if (!leagueId || !schedule?.nbaCup || !isLeagueAdmin) return;
     setAdvancingCup(true);
@@ -356,30 +270,31 @@ export default function CalendarScreen() {
       const fn = httpsCallable(functions, 'advanceNbaCup');
       await fn({ leagueId });
     } catch (error: any) {
-      if (isMissingCallable(error)) {
-        try {
-          await advanceCupLocally();
-          return;
-        } catch (fallbackError: any) {
-          Alert.alert('Cup not advanced', fallbackError.message || 'Please try again.');
-          return;
-        }
-      }
       Alert.alert('Cup not advanced', error.message || 'Finish the current Cup stage first.');
     } finally {
       setAdvancingCup(false);
     }
   };
 
-  const runSeasonSimToTarget = async (targetRatio: number) => {
+  const runSeasonSimWeeks = async (weekCount: number) => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
+    const unfinishedWeeks = [...new Set(
+      allGames
+        .filter(game => game.status !== 'final')
+        .map(game => Number(game.week || 1))
+        .filter(Number.isFinite),
+    )].sort((a, b) => a - b);
+    const selectedWeeks = new Set(unfinishedWeeks.slice(0, weekCount));
+    const maxSteps = allGames.filter(game => selectedWeeks.has(Number(game.week || 1)) && game.status !== 'final').length;
+    if (maxSteps === 0) {
+      Alert.alert('Season complete', 'Every scheduled game is already final.');
+      return;
+    }
     cancelSeasonSimRef.current = false;
     setSimmingSeason(true);
     try {
       const simBatch = httpsCallable(functions, 'simScheduleBatch');
       let action = 'start';
-      const targetFinalGames = Math.ceil(allGames.length * targetRatio);
-      const maxSteps = Math.max(1, allGames.length + 10);
       for (let step = 0; step < maxSteps && !cancelSeasonSimRef.current; step += 1) {
         const result: any = await simBatch({
           leagueId,
@@ -388,9 +303,9 @@ export default function CalendarScreen() {
           batchSize: 1,
         });
         const control = result.data || {};
-        if (Number(control.finalGames || 0) >= targetFinalGames) break;
         if (control.status === 'complete' || control.status === 'cancelled') break;
         action = 'step';
+        await wait(120);
       }
     } catch (error: any) {
       Alert.alert('Season sim stopped', error.message || 'Please try again.');
@@ -403,13 +318,11 @@ export default function CalendarScreen() {
   const runSeasonSim = () => {
     Alert.alert(
       'Sim Season',
-      'Choose how far the commissioner sim should run.',
+      'Sim one game at a time by week so the schedule stays stable.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: '1/3 Season', onPress: () => runSeasonSimToTarget(1 / 3) },
-        { text: '1/2 Season', onPress: () => runSeasonSimToTarget(1 / 2) },
-        { text: '3/4 Season', onPress: () => runSeasonSimToTarget(3 / 4) },
-        { text: 'Full Season', style: 'destructive', onPress: () => runSeasonSimToTarget(1) },
+        { text: 'Next Week', onPress: () => runSeasonSimWeeks(1) },
+        { text: 'Next 4 Weeks', onPress: () => runSeasonSimWeeks(4) },
       ],
     );
   };
@@ -433,6 +346,10 @@ export default function CalendarScreen() {
         contentContainerStyle={styles.content}
         sections={sections}
         keyExtractor={item => item.id}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        removeClippedSubviews
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={(
           <>

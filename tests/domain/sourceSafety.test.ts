@@ -458,9 +458,30 @@ describe('source safety regressions', () => {
     const functionsIndex = source('functions/index.js');
 
     expect(calendar).toContain("httpsCallable(functions, 'advanceNbaCup')");
-    expect(calendar).toContain('advanceNbaCupStage');
+    expect(calendar).not.toContain('advanceCupLocally');
     expect(calendar).toContain('Advance NBA Cup');
     expect(functionsIndex).toContain('exports.advanceNbaCup');
+  });
+
+  it('keeps heavy schedule repair writes off the phone calendar screen', () => {
+    const calendar = source('app/screens/season/calendar.tsx');
+
+    expect(calendar).not.toContain('repairNbaScheduleOwnershipLocally');
+    expect(calendar).not.toContain('previewNbaScheduleOwnershipRepair');
+    expect(calendar).not.toContain('integrateNbaCupGamesIntoRegularSchedule');
+    expect(calendar).not.toContain('buildNbaCupSchedule');
+    expect(calendar).not.toContain('updateDoc');
+  });
+
+  it('limits commissioner season simulation to week-sized one-game steps', () => {
+    const calendar = source('app/screens/season/calendar.tsx');
+
+    expect(calendar).toContain('runSeasonSimWeeks');
+    expect(calendar).toContain("batchSize: 1");
+    expect(calendar).toContain("'Next Week'");
+    expect(calendar).toContain("'Next 4 Weeks'");
+    expect(calendar).not.toContain('runSeasonSimToTarget');
+    expect(calendar).not.toContain("'Full Season'");
   });
 
   it('loads scheduled team rosters before server-side NBA simulation', () => {
