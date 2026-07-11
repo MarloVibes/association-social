@@ -105,6 +105,7 @@ Status: Active
 
 Status: Active
 
+- Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
 - Continue the basketball gameplan system as the current gameplay direction.
 - Pregame/quarter choices should feel like coaching, not random buttons.
@@ -222,3 +223,4 @@ Add new tasks here first, then move them into the ordered sections above.
 - 2026-07-10: Created this real task list because chat-only tracking became unreliable.
 - 2026-07-10: Add roster screen layout fix for player cards overlapping the position sorting categories and sitting too high.
 - 2026-07-10: Fix game simulation failure caused by invalid nested array data in matchup/gameplan writes.
+- 2026-07-10: Correct NBA Cup schedule behavior so regular-season Cup games count in the regular schedule while the final stays separate.

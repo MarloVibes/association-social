@@ -123,6 +123,64 @@ export function buildNbaCupSchedule({
   };
 }
 
+function cupPairKey(game: Pick<NbaScheduleGame, 'homeTeamId' | 'awayTeamId'>) {
+  return [game.homeTeamId, game.awayTeamId].sort().join('__');
+}
+
+export function integrateNbaCupGamesIntoRegularSchedule(
+  games: NbaScheduleGame[],
+  nbaCup: NbaCupSchedule | null,
+): { games: NbaScheduleGame[]; nbaCup: NbaCupSchedule | null } {
+  if (!nbaCup || !Array.isArray(nbaCup.games) || nbaCup.games.length === 0) {
+    return { games, nbaCup };
+  }
+
+  const availableByPair = new Map<string, NbaScheduleGame[]>();
+  games.forEach((game) => {
+    const key = cupPairKey(game);
+    const current = availableByPair.get(key) || [];
+    current.push(game);
+    availableByPair.set(key, current);
+  });
+
+  const replacements = new Map<string, { scheduleGame: NbaScheduleGame; cupGame: NbaCupGame }>();
+  const nextCupGames = nbaCup.games.map((cupGame) => {
+    if (cupGame.stage !== 'group') return cupGame;
+    const candidates = availableByPair.get(cupPairKey(cupGame)) || [];
+    const regularGame = candidates.shift();
+    if (!regularGame) return cupGame;
+
+    const sharedId = cupGame.id;
+    const scheduleGame: NbaScheduleGame = {
+      ...regularGame,
+      id: sharedId,
+      competition: 'nbaCup',
+      stage: 'group',
+      groupId: cupGame.groupId,
+      cupSequence: cupGame.sequence,
+      homeTeamId: cupGame.homeTeamId,
+      awayTeamId: cupGame.awayTeamId,
+      homeGmId: cupGame.homeGmId ?? regularGame.homeGmId ?? null,
+      awayGmId: cupGame.awayGmId ?? regularGame.awayGmId ?? null,
+      countsForRegularSeason: true,
+    };
+    const mirroredCupGame: NbaCupGame = {
+      ...scheduleGame,
+      sequence: cupGame.sequence,
+      week: cupGame.week,
+      competition: 'nbaCup',
+      stage: 'group',
+    };
+    replacements.set(regularGame.id, { scheduleGame, cupGame: mirroredCupGame });
+    return mirroredCupGame;
+  });
+
+  return {
+    games: games.map(game => replacements.get(game.id)?.scheduleGame || game),
+    nbaCup: { ...nbaCup, games: nextCupGames },
+  };
+}
+
 export function buildNbaScheduleParticipants(
   teams: ClaimedTeam[],
   scheduleTeamIds: readonly string[] = NBA_TEAM_IDS,
@@ -374,7 +432,7 @@ export function buildNbaSchedulePayload({
   const participants = buildNbaScheduleParticipants(teams, scheduleTeamIds);
   const scheduleTeams = participants.map(team => team.scheduleTeamId);
   const seed = `${leagueId}:${currentYear || 2025}:${gamesPerTeam}`;
-  const games = decorateScheduleGames(
+  const baseGames = decorateScheduleGames(
     generateSchedule({ teams: scheduleTeams, gamesPerTeam, seed }),
     participants,
   );
@@ -384,13 +442,14 @@ export function buildNbaSchedulePayload({
   const nbaCup = rawNbaCup
     ? { ...rawNbaCup, games: decorateScheduleGames(rawNbaCup.games, participants) as NbaCupGame[] }
     : null;
+  const integratedSchedule = integrateNbaCupGamesIntoRegularSchedule(baseGames, nbaCup);
 
   return {
-    games,
+    games: integratedSchedule.games,
     gamesPerTeam,
     teamCount: scheduleTeams.length,
     participants,
-    nbaCup,
+    nbaCup: integratedSchedule.nbaCup,
     seed,
     locked: true,
   };

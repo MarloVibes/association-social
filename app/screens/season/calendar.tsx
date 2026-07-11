@@ -7,7 +7,7 @@ import { ActivityIndicator, Alert, SectionList, StyleSheet, Text, TouchableOpaci
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { advanceNbaCupStage, buildNbaCupSchedule, decorateScheduleGames, supportsNbaCupSchedule, type NbaScheduleParticipant } from '@/domain/nba/scheduleSetup';
+import { advanceNbaCupStage, buildNbaCupSchedule, decorateScheduleGames, integrateNbaCupGamesIntoRegularSchedule, supportsNbaCupSchedule, type NbaScheduleParticipant } from '@/domain/nba/scheduleSetup';
 import { displayScheduleAbbr, displayScheduleName, gameMatchesMyTeam, isLiveResultRevealed, liveScheduleScore, normalizeScheduleKey, teamScheduleKeys, visibleScheduleGames, type ScheduleViewMode } from '@/domain/nba/scheduleView';
 import { isMissingCallable } from '@/utils/createNbaSchedule';
 import { previewNbaScheduleOwnershipRepair, repairNbaScheduleOwnershipLocally } from '@/utils/repairNbaScheduleOwnership';
@@ -286,7 +286,9 @@ export default function CalendarScreen() {
   useEffect(() => {
     if (!leagueId || !league || !schedule || !scheduleId || !isLeagueAdmin) return;
     if (!supportsCup) return;
-    if (hasNbaCup || schedule.nbaCup?.enabled === false) return;
+    if (schedule.nbaCup?.enabled === false) return;
+    const regularCupGames = (schedule.games || []).filter(game => game.competition === 'nbaCup' && game.stage === 'group').length;
+    if (hasNbaCup && regularCupGames > 0) return;
     const currentYear = Number(league.currentYear || scheduleId || 2025);
     if (!supportsNbaCupSchedule({ era: league.era, currentYear })) return;
     const participants = (schedule.participants || [])
@@ -306,11 +308,16 @@ export default function CalendarScreen() {
       seed,
     });
     if (!rawCup) return;
-    updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), {
-      nbaCup: {
+    const decoratedCup = schedule.nbaCup?.games?.length
+      ? schedule.nbaCup
+      : {
         ...rawCup,
         games: decorateScheduleGames(rawCup.games, participants),
-      },
+      };
+    const integrated = integrateNbaCupGamesIntoRegularSchedule(schedule.games || [], decoratedCup);
+    updateDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId), {
+      games: integrated.games,
+      nbaCup: integrated.nbaCup,
     }).catch(error => {
       console.warn('Failed to add NBA Cup to existing schedule:', error);
     });

@@ -2268,9 +2268,28 @@ function updatePlayoffGames(schedule, games) {
   });
 }
 
+function updateRegularGamesWithCupResults(schedule, cupGames) {
+  const regularGames = schedule && Array.isArray(schedule.games) ? schedule.games : [];
+  if (regularGames.length === 0) return null;
+  const cupGameById = new Map((cupGames || []).map(game => [game.id, game]));
+  let changed = false;
+  const games = regularGames.map((game) => {
+    const cupGame = game && game.id ? cupGameById.get(game.id) : null;
+    if (!cupGame) return game;
+    changed = true;
+    return cupGame;
+  });
+  return changed ? compactScheduleGamesForWrite(games) : null;
+}
+
 function updatePayloadForCompetition(competition, games, schedule) {
   const compactGames = compactScheduleGamesForWrite(games);
-  if (competition === 'nbaCup') return { 'nbaCup.games': compactGames };
+  if (competition === 'nbaCup') {
+    const regularGames = updateRegularGamesWithCupResults(schedule, compactGames);
+    return regularGames
+      ? { 'nbaCup.games': compactGames, games: regularGames }
+      : { 'nbaCup.games': compactGames };
+  }
   if (competition === 'playoffs') return { playoffs: updatePlayoffGames(schedule, compactGames) };
   return { games: compactGames };
 }

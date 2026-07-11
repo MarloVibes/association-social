@@ -5,6 +5,10 @@ export type NbaScheduleGame = {
   week: number;
   sequence: number;
   stage?: 'regular' | 'playoffs' | string;
+  competition?: 'nbaCup' | 'playoffs' | string;
+  groupId?: string;
+  cupSequence?: number;
+  countsForRegularSeason?: boolean;
   homeTeamId: string;
   awayTeamId: string;
   homeGmId?: string | null;

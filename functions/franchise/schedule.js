@@ -94,6 +94,60 @@ function buildNbaCupSchedule({ scheduleTeamIds, currentYear, seed }) {
   };
 }
 
+function cupPairKey(game) {
+  return [game.homeTeamId, game.awayTeamId].sort().join('__');
+}
+
+function integrateNbaCupGamesIntoRegularSchedule(games, nbaCup) {
+  if (!nbaCup || !Array.isArray(nbaCup.games) || nbaCup.games.length === 0) {
+    return { games, nbaCup };
+  }
+  const availableByPair = new Map();
+  (games || []).forEach((game) => {
+    const key = cupPairKey(game);
+    const current = availableByPair.get(key) || [];
+    current.push(game);
+    availableByPair.set(key, current);
+  });
+  const replacements = new Map();
+  const nextCupGames = nbaCup.games.map((cupGame) => {
+    if (!cupGame || cupGame.stage !== 'group') return cupGame;
+    const candidates = availableByPair.get(cupPairKey(cupGame)) || [];
+    const regularGame = candidates.shift();
+    if (!regularGame) return cupGame;
+    const sharedId = cupGame.id;
+    const scheduleGame = {
+      ...regularGame,
+      id: sharedId,
+      competition: 'nbaCup',
+      stage: 'group',
+      groupId: cupGame.groupId,
+      cupSequence: cupGame.sequence,
+      homeTeamId: cupGame.homeTeamId,
+      awayTeamId: cupGame.awayTeamId,
+      homeGmId: cupGame.homeGmId || regularGame.homeGmId || null,
+      awayGmId: cupGame.awayGmId || regularGame.awayGmId || null,
+      countsForRegularSeason: true,
+    };
+    const mirroredCupGame = {
+      ...scheduleGame,
+      sequence: cupGame.sequence,
+      week: cupGame.week,
+      competition: 'nbaCup',
+      stage: 'group',
+    };
+    replacements.set(regularGame.id, { scheduleGame, cupGame: mirroredCupGame });
+    return mirroredCupGame;
+  });
+  return {
+    games: (games || []).map(game => {
+      const replacement = replacements.get(game.id);
+      return replacement ? replacement.scheduleGame : game;
+    }),
+    nbaCup: { ...nbaCup, games: nextCupGames },
+  };
+}
+
 function gameId(seed, sequence, awayTeamId, homeTeamId) {
   return `game_${hash(`${seed}:${sequence}:${awayTeamId}:${homeTeamId}`).toString(36)}`;
 }
@@ -622,10 +676,13 @@ function createGenerateScheduleHandler({ getFirestore, serverTimestamp, HttpsErr
       const nbaCup = rawNbaCup
         ? { ...rawNbaCup, games: decorateGamesWithParticipants(rawNbaCup.games, participants) }
         : null;
-      const games = decorateGamesWithParticipants(
+      const baseGames = decorateGamesWithParticipants(
         generateServerSchedule({ teams, gamesPerTeam, seed }),
         participants,
       );
+      const integratedSchedule = integrateNbaCupGamesIntoRegularSchedule(baseGames, nbaCup);
+      const games = integratedSchedule.games;
+      const integratedNbaCup = integratedSchedule.nbaCup;
       const batchId = String(league.currentYear || 2025);
       const scheduleRef = leagueRef.collection('schedules').doc(batchId);
       tx.set(scheduleRef, {
@@ -633,7 +690,7 @@ function createGenerateScheduleHandler({ getFirestore, serverTimestamp, HttpsErr
         gamesPerTeam,
         teamCount: teams.length,
         participants,
-        nbaCup,
+        nbaCup: integratedNbaCup,
         seed,
         locked: true,
         createdBy: uid,
@@ -703,5 +760,6 @@ module.exports = {
   createGenerateScheduleHandler,
   decorateGamesWithParticipants,
   generateServerSchedule,
+  integrateNbaCupGamesIntoRegularSchedule,
   supportsNbaCupSchedule,
 };

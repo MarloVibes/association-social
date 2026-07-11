@@ -8,6 +8,7 @@ const {
   buildNbaScheduleParticipants,
   decorateGamesWithParticipants,
   generateServerSchedule,
+  integrateNbaCupGamesIntoRegularSchedule,
   supportsNbaCupSchedule,
 } = require('../../functions/franchise/schedule.js');
 
@@ -111,6 +112,41 @@ describe('schedule callable helpers', () => {
     expect(cup.games[0]).toMatchObject({ competition: 'nbaCup', stage: 'group' });
     for (const team of teams) {
       expect(cup.games.filter((game: any) => game.homeTeamId === team || game.awayTeamId === team)).toHaveLength(4);
+    }
+  });
+
+  it('embeds NBA Cup group games inside the regular season schedule', () => {
+    const teams = Array.from({ length: 30 }, (_, index) => `T${index}`);
+    const participants = buildNbaScheduleParticipants([], teams);
+    const regularGames = decorateGamesWithParticipants(
+      generateServerSchedule({ teams, gamesPerTeam: 82, seed: 'server-cup-integrated' }),
+      participants,
+    );
+    const cup = {
+      ...buildNbaCupSchedule({
+        scheduleTeamIds: teams,
+        currentYear: 2025,
+        seed: 'server-cup-integrated',
+      }),
+      games: decorateGamesWithParticipants(buildNbaCupSchedule({
+        scheduleTeamIds: teams,
+        currentYear: 2025,
+        seed: 'server-cup-integrated',
+      }).games, participants),
+    };
+
+    const integrated = integrateNbaCupGamesIntoRegularSchedule(regularGames, cup);
+
+    expect(integrated.games.filter((game: any) => game.competition === 'nbaCup' && game.stage === 'group')).toHaveLength(60);
+    expect(new Set(integrated.nbaCup.games.map((game: any) => game.id))).toEqual(
+      new Set(integrated.games.filter((game: any) => game.competition === 'nbaCup').map((game: any) => game.id)),
+    );
+    for (const team of teams) {
+      expect(integrated.games.filter((game: any) => game.homeTeamId === team || game.awayTeamId === team)).toHaveLength(82);
+      expect(integrated.games.filter((game: any) => (
+        game.competition === 'nbaCup'
+        && (game.homeTeamId === team || game.awayTeamId === team)
+      ))).toHaveLength(4);
     }
   });
 

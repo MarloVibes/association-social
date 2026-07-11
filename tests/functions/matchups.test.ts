@@ -2368,19 +2368,24 @@ describe('matchup request state helpers', () => {
     }));
   });
 
-  it('selects and updates NBA Cup games separately from regular season games', () => {
+  it('selects NBA Cup games and mirrors regular-season Cup updates into the regular schedule', () => {
     const regularGame = seedAvailableGame({ id: 'regular-1' });
-    const cupGame = seedAvailableGame({ id: 'cup-1', competition: 'nbaCup', groupId: 'Group A' });
+    const cupGame = seedAvailableGame({ id: 'cup-1', competition: 'nbaCup', stage: 'group', groupId: 'Group A', countsForRegularSeason: true });
+    const finalCupGame = seedAvailableGame({ id: 'cup-final', competition: 'nbaCup', stage: 'final' });
+    const updatedCupGame = { ...cupGame, status: 'final', homeScore: 110, awayScore: 104 };
     const schedule = {
-      games: [regularGame],
-      nbaCup: { games: [cupGame] },
+      games: [regularGame, cupGame],
+      nbaCup: { games: [cupGame, finalCupGame] },
     };
 
     expect(scheduleCompetition({ competition: 'nbaCup' })).toBe('nbaCup');
     expect(scheduleCompetition({ competition: 'regular' })).toBe('regular');
-    expect(gamesForCompetition(schedule, 'nbaCup')).toEqual([cupGame]);
-    expect(gamesForCompetition(schedule, 'regular')).toEqual([regularGame]);
-    expect(updatePayloadForCompetition('nbaCup', [cupGame])).toEqual({ 'nbaCup.games': [cupGame] });
+    expect(gamesForCompetition(schedule, 'nbaCup')).toEqual([cupGame, finalCupGame]);
+    expect(gamesForCompetition(schedule, 'regular')).toEqual([regularGame, cupGame]);
+    expect(updatePayloadForCompetition('nbaCup', [updatedCupGame, finalCupGame], schedule)).toEqual({
+      'nbaCup.games': [updatedCupGame, finalCupGame],
+      games: [regularGame, updatedCupGame],
+    });
     expect(updatePayloadForCompetition('regular', [regularGame])).toEqual({ games: [regularGame] });
   });
 

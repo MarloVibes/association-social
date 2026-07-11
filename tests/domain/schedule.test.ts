@@ -73,10 +73,19 @@ describe('NBA schedule generation', () => {
     expect(supportsNbaCupSchedule({ era: 'jordan', currentYear: 1991 })).toBe(false);
     expect(currentPayload.nbaCup).toMatchObject({ enabled: true, name: 'NBA Cup', groupSize: 5 });
     expect(currentPayload.nbaCup?.games).toHaveLength(60);
+    expect(currentPayload.games.filter(game => game.competition === 'nbaCup' && game.stage === 'group')).toHaveLength(60);
+    expect(new Set(currentPayload.nbaCup?.games.map(game => game.id))).toEqual(
+      new Set(currentPayload.games.filter(game => game.competition === 'nbaCup').map(game => game.id)),
+    );
     const gmCupGame = currentPayload.nbaCup?.games.find(game => game.homeTeamId === NBA_TEAM_IDS[0] || game.awayTeamId === NBA_TEAM_IDS[0]);
     expect([gmCupGame?.homeGmId, gmCupGame?.awayGmId]).toContain('gm-0');
     expect(gmCupGame).toMatchObject({ competition: 'nbaCup', stage: 'group' });
     for (const team of currentPayload.participants) {
+      expect(currentPayload.games.filter(game => game.homeTeamId === team.scheduleTeamId || game.awayTeamId === team.scheduleTeamId)).toHaveLength(82);
+      expect(currentPayload.games.filter(game => (
+        game.competition === 'nbaCup'
+        && (game.homeTeamId === team.scheduleTeamId || game.awayTeamId === team.scheduleTeamId)
+      ))).toHaveLength(4);
       expect(currentPayload.nbaCup?.games.filter(game => game.homeTeamId === team.scheduleTeamId || game.awayTeamId === team.scheduleTeamId)).toHaveLength(4);
     }
     expect(jordanPayload.nbaCup).toBeNull();
