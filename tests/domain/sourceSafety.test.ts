@@ -155,8 +155,9 @@ describe('source safety regressions', () => {
     expect(playerCard).not.toContain("Potential: C - Contributor");
     expect(sharedRow).toContain('rowIdentity?.tier');
     expect(sharedRow).toContain('rowIdentity?.archetypes');
-    expect(sharedRow).toContain('!rowIdentity.tier || !Array.isArray(rowIdentity.archetypes)');
-    expect(sharedRow).toContain('normalizeNbaTierLabel(rowIdentity.tier)');
+    expect(sharedRow).toContain('validVisibleNbaIdentity');
+    expect(sharedRow).toContain('!value.tier || !Array.isArray(value.archetypes)');
+    expect(sharedRow).toContain('normalizeNbaTierLabel(value.tier)');
     expect(sharedRow).toContain('normalizeNbaTierLabel(archetype.label)');
     const roster = source('app/screens/roster.tsx');
     expect(roster).toContain('positionFilters.map');
@@ -929,6 +930,8 @@ describe('source safety regressions', () => {
     expect(roster).toContain('profilesByName={profilesByName}');
     expect(sharedRow).toContain('selectRosterRatingProfile(player, profilesByName, { era, currentYear, leagueDate })');
     expect(sharedRow).toContain('getSportArchetypeForYear');
+    expect(sharedRow).toContain('buildVisibleIdentity');
+    expect(sharedRow).toContain('buildFallbackVisibleNbaIdentity(player, profile)');
     expect(tradeChannel).toContain('selectRosterRatingProfile');
     expect(tradeChannel).toContain('tradeVisibleIdentity');
     expect(tradeChannel).toContain('tradeSlotIdentity');

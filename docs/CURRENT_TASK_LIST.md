@@ -38,6 +38,7 @@ Status: Active
   - Mikal Bridges should not show as a floor-spacing big.
   - Trade Center and player cards should not show old `Role Player` labels.
 - Keep tier, archetype, skill grades, potential, and development outlook separate.
+- Shared roster/trade player rows now prefer stored visible NBA identities and build a modern visible fallback instead of leaking old playstyle labels. Completed in current stabilization batch.
 
 ### 3. Trade Center Polish And Functionality
 
