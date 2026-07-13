@@ -124,6 +124,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 const CALENDAR_ROW_HEIGHT = 168;
 const CALENDAR_SECTION_HEADER_HEIGHT = 34;
+const CALENDAR_FOLLOW_VIEW_POSITION = 0.44;
 
 function nextSimTargetAfter(gameList: CalendarGame[], completedGameIds: string[] = [], anchorGameId?: string | null) {
   const games = [...gameList].sort((a, b) => a.sequence - b.sequence);
@@ -343,8 +344,8 @@ export default function CalendarScreen() {
         scheduleListRef.current?.scrollToLocation({
           sectionIndex,
           itemIndex: rowIndex,
-          viewPosition: 0.16,
-          viewOffset: 8,
+          viewPosition: CALENDAR_FOLLOW_VIEW_POSITION,
+          viewOffset: 0,
           animated,
         });
       } catch {
