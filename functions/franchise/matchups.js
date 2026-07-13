@@ -2401,13 +2401,14 @@ function hasStoredBoxScore(resultData) {
   );
 }
 
-async function selectResultRepairBatch({ tx, scheduleRef, games, batchSize = MAX_SIM_BATCH_SIZE }) {
+async function selectResultRepairBatch({ tx, scheduleRef, games, batchSize = MAX_SIM_BATCH_SIZE, targetGameId = '' }) {
   const candidates = (games || [])
     .filter(game => (
       game
       && game.status === 'final'
       && Number.isFinite(Number(game.homeScore))
       && Number.isFinite(Number(game.awayScore))
+      && (!targetGameId || String(game.id) === String(targetGameId))
     ))
     .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
   const repairBatch = [];
@@ -3060,6 +3061,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
     const competition = scheduleCompetition(data);
     const scope = data.scope === 'round' ? 'round' : 'all';
     const batchSize = safeSimBatchSize(data.batchSize);
+    const targetGameId = typeof data.gameId === 'string' ? data.gameId.trim() : '';
     if (!leagueId) throw new HttpsError('invalid-argument', 'Provide leagueId.');
     const db = getFirestore();
     const leagueRef = db.collection('leagues').doc(leagueId);
@@ -3097,8 +3099,8 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
 
       const games = gamesForCompetition(schedule, competition);
       const batch = selectSimBatch({ games, competition, scope, batchSize });
-      if (batch.length === 0) {
-        const repairBatch = await selectResultRepairBatch({ tx, scheduleRef, games, batchSize });
+      if (action === 'repairResults' || batch.length === 0) {
+        const repairBatch = await selectResultRepairBatch({ tx, scheduleRef, games, batchSize, targetGameId });
         if (repairBatch.length > 0) {
           const teamCache = new Map();
           const teamCacheKey = (game, side) => {
@@ -3155,7 +3157,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
             updatedAtMs: now(),
             finalGames: nextGames.filter(game => game.status === 'final').length,
             totalGames: nextGames.length,
-            remainingGames: 0,
+            remainingGames: nextGames.filter(game => ['scheduled', 'preparing'].includes(game.status)).length,
             cancelRequested: false,
           };
           tx.update(scheduleRef, {

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
@@ -240,6 +240,8 @@ export default function GameResultScreen() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [showFullBoxScore, setShowFullBoxScore] = useState(false);
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
+  const [repairingResultDetails, setRepairingResultDetails] = useState(false);
+  const repairAttemptedRef = useRef('');
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -347,6 +349,45 @@ export default function GameResultScreen() {
     ),
   );
   const resultVisible = isLiveResultRevealed(game, nowMs);
+  const hasCompleteBoxScore = Boolean(
+    game?.boxScore?.home?.players?.length
+    && game?.boxScore?.away?.players?.length,
+  );
+  const needsResultDetailsRepair = Boolean(
+    game?.status === 'final'
+    && resultVisible
+    && isLeagueAdmin
+    && !hasCompleteBoxScore
+  );
+
+  useEffect(() => {
+    if (!leagueId || !gameId || !needsResultDetailsRepair) return;
+    const repairKey = `${leagueId}:${competitionParam}:${gameId}`;
+    if (repairAttemptedRef.current === repairKey) return;
+    repairAttemptedRef.current = repairKey;
+    let cancelled = false;
+    const repair = async () => {
+      setRepairingResultDetails(true);
+      try {
+        const simScheduleBatch = httpsCallable(functions, 'simScheduleBatch');
+        await simScheduleBatch({
+          leagueId,
+          gameId,
+          competition: competitionParam,
+          action: 'repairResults',
+          batchSize: 1,
+        });
+      } catch (error) {
+        console.warn('Result detail repair failed:', error);
+      } finally {
+        if (!cancelled) setRepairingResultDetails(false);
+      }
+    };
+    repair();
+    return () => {
+      cancelled = true;
+    };
+  }, [competitionParam, gameId, isLeagueAdmin, leagueId, needsResultDetailsRepair]);
 
   const resetGame = () => {
     if (!leagueId || !gameId || !isLeagueAdmin || resetting) return;
@@ -506,7 +547,9 @@ export default function GameResultScreen() {
                   ))}
                 </TouchableOpacity>
               )) : (
-                <Text style={styles.emptySmall}>Box score details will appear after a simulated result is finalized.</Text>
+                <Text style={styles.emptySmall}>
+                  {repairingResultDetails ? 'Rebuilding player box score lines...' : 'Box score details will appear after a simulated result is finalized.'}
+                </Text>
               )}
             </View>
 
@@ -545,7 +588,9 @@ export default function GameResultScreen() {
                           </View>
                         </TouchableOpacity>
                       )) : (
-                        <Text style={styles.emptySmall}>No box score players stored for {group.label}.</Text>
+                        <Text style={styles.emptySmall}>
+                          {repairingResultDetails ? `Rebuilding player lines for ${group.label}...` : `No box score players stored for ${group.label}.`}
+                        </Text>
                       )}
                     </View>
                   ))}

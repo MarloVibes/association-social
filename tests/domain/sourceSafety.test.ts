@@ -572,6 +572,15 @@ describe('source safety regressions', () => {
     expect(result).toContain('Full Box Score');
   });
 
+  it('repairs finalized result details when box score player lines are missing', () => {
+    const result = source('app/screens/season/game-result.tsx');
+
+    expect(result).toContain('repairingResultDetails');
+    expect(result).toContain("httpsCallable(functions, 'simScheduleBatch')");
+    expect(result).toContain("action: 'repairResults'");
+    expect(result).toContain('hasCompleteBoxScore');
+  });
+
   it('uses shared roster value ordering and position filters across team and trade screens', () => {
     const roster = source('app/screens/roster.tsx');
     const teamRoster = source('app/screens/team-roster.tsx');
