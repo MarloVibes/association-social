@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
+import { getSportTeamName } from '@/constants/sportTeams';
 import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { isLiveResultRevealed } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, isLiveResultRevealed, scheduleKeyAliases } from '@/domain/nba/scheduleView';
 import { buildNbaCupGroupStandings, buildNbaStandings, type StandingsRow } from '@/domain/nba/standings';
 import {
   buildSportPlayerLeaderboard,
@@ -54,6 +55,88 @@ type ScheduleDoc = {
     name?: string;
   }[];
 };
+
+function poolKeyForLeague(league: any, sport: 'nba' | 'madden' | 'mlb') {
+  return sport === 'nba' ? String(league?.era || 'current') : sport;
+}
+
+function teamAliasSet(team?: Partial<Team> | null) {
+  return new Set([
+    team?.id,
+    team?.teamId,
+    team?.abbreviation,
+    (team as any)?.abbr,
+  ].flatMap(value => scheduleKeyAliases(value as string | null | undefined)));
+}
+
+function poolPlayerAliases(player: Record<string, unknown>) {
+  return scheduleKeyAliases(String(player.team || player.abbreviation || player.teamId || ''));
+}
+
+function poolPlayersForParticipant(poolPlayers: any[], participant: NonNullable<ScheduleDoc['participants']>[number]) {
+  const wanted = teamAliasSet({
+    id: participant.sourceTeamDocId || participant.scheduleTeamId,
+    teamId: participant.scheduleTeamId,
+    abbreviation: participant.abbreviation,
+  });
+  return poolPlayers.filter((player: Record<string, unknown>) => (
+    poolPlayerAliases(player).some(alias => wanted.has(alias))
+  ));
+}
+
+function participantName(participant: NonNullable<ScheduleDoc['participants']>[number], sport: 'nba' | 'madden' | 'mlb') {
+  if (participant.name) return participant.name;
+  const abbr = displayScheduleAbbr(participant.abbreviation || participant.scheduleTeamId);
+  if (sport !== 'nba') {
+    const sportName = getSportTeamName(sport, abbr);
+    if (sportName && sportName !== abbr) return sportName;
+  }
+  return abbr || 'CPU Team';
+}
+
+function mergeLeagueStatTeams({
+  teams,
+  participants,
+  poolPlayers,
+  sport,
+}: {
+  teams: Team[];
+  participants: NonNullable<ScheduleDoc['participants']>;
+  poolPlayers: any[];
+  sport: 'nba' | 'madden' | 'mlb';
+}) {
+  const merged = [...teams];
+  const replacements = new Map<string, Team>();
+  const teamEntries = merged.map((team, index) => ({ team, index, aliases: teamAliasSet(team) }));
+
+  participants.forEach((participant) => {
+    const participantAliases = teamAliasSet({
+      id: participant.sourceTeamDocId || participant.scheduleTeamId,
+      teamId: participant.scheduleTeamId,
+      abbreviation: participant.abbreviation,
+    });
+    const existing = teamEntries.find(entry => [...participantAliases].some(alias => entry.aliases.has(alias)));
+    const fallbackPlayers = poolPlayersForParticipant(poolPlayers, participant);
+
+    if (existing) {
+      if (!Array.isArray(existing.team.players) || existing.team.players.length === 0) {
+        replacements.set(String(existing.index), { ...existing.team, players: fallbackPlayers });
+      }
+      return;
+    }
+
+    merged.push({
+      id: participant.sourceTeamDocId || participant.scheduleTeamId || participant.abbreviation || `cpu-${merged.length}`,
+      teamId: participant.scheduleTeamId,
+      abbreviation: displayScheduleAbbr(participant.abbreviation || participant.scheduleTeamId),
+      name: participantName(participant, sport),
+      gmId: participant.gmId || undefined,
+      players: fallbackPlayers,
+    });
+  });
+
+  return merged.map((team, index) => replacements.get(String(index)) || team);
+}
 
 function gamesBehindText(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '-';
@@ -245,6 +328,7 @@ export default function StandingsScreen() {
   const router = useRouter();
   const [league, setLeague] = useState<any>(null);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [poolPlayers, setPoolPlayers] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<StandingsViewMode>('regular');
@@ -294,10 +378,38 @@ export default function StandingsScreen() {
     };
   }, [leagueId]);
 
+  useEffect(() => {
+    if (!league) {
+      setPoolPlayers([]);
+      return;
+    }
+    let cancelled = false;
+    const sportKey = normalizeSport(league.sport);
+    const poolKey = poolKeyForLeague(league, sportKey);
+    getDoc(doc(db, 'era_player_pools', poolKey))
+      .then(snapshot => {
+        if (cancelled) return;
+        const players = snapshot.exists() ? ((snapshot.data() as any).players || []) : [];
+        setPoolPlayers(Array.isArray(players) ? players : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPoolPlayers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [league]);
+
   const regularGames = useMemo(() => (
     (schedule?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
   ), [nowMs, schedule?.games]);
   const sport = normalizeSport(league?.sport);
+  const leagueStatTeams = useMemo(() => mergeLeagueStatTeams({
+    teams,
+    participants: schedule?.participants || [],
+    poolPlayers,
+    sport,
+  }), [poolPlayers, schedule?.participants, sport, teams]);
   const supportsCup = sport === 'nba';
   const playerStatTabs = useMemo(() => playerLeaderboardTabsForSport(sport), [sport]);
   const activePlayerStat = playerStatTabs.some(tab => tab.key === playerStat) ? playerStat : playerStatTabs[0].key;
@@ -338,19 +450,19 @@ export default function StandingsScreen() {
   const leaguePlayerLeaders = useMemo(() => (
     buildSportPlayerLeaderboard({
       sport,
-      teams,
+      teams: leagueStatTeams,
       stat: activePlayerStat,
       limit: 75,
     })
-  ), [activePlayerStat, sport, teams]);
+  ), [activePlayerStat, leagueStatTeams, sport]);
   const combinedPlayerRows = useMemo(() => (
     buildCombinedPlayerStatRows({
       sport,
-      teams: activeContentMode === 'teamPlayers' && myTeam ? [myTeam] : teams,
+      teams: activeContentMode === 'teamPlayers' && myTeam ? [myTeam] : leagueStatTeams,
       sortStat: activePlayerStat,
       includeZeroGamePlayers: activeContentMode === 'leaguePlayers',
     })
-  ), [activeContentMode, activePlayerStat, myTeam, sport, teams]);
+  ), [activeContentMode, activePlayerStat, leagueStatTeams, myTeam, sport]);
   const combinedColumns = useMemo(() => combinedStatColumnsForSport(sport), [sport]);
   const visibleSections = activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers'
     ? [{ id: `players-${activePlayerStat}`, title: `${activePlayerStat.toUpperCase()} Leaders`, data: combinedPlayerRows }]

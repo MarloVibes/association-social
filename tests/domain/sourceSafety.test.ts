@@ -369,6 +369,10 @@ describe('source safety regressions', () => {
     expect(standings).toContain("activeContentMode === 'leaguePlayers'");
     expect(standings).toContain('teamScopedPlayerLeaders');
     expect(standings).toContain('leaguePlayerLeaders');
+    expect(standings).toContain('leagueStatTeams');
+    expect(standings).toContain('setPoolPlayers');
+    expect(standings).toContain("doc(db, 'era_player_pools', poolKey)");
+    expect(standings).toContain('mergeLeagueStatTeams');
     expect(standings).toContain('buildCombinedPlayerStatRows');
     expect(standings).toContain('includeZeroGamePlayers: activeContentMode === \'leaguePlayers\'');
     expect(standings).toContain('GP');

@@ -1,6 +1,6 @@
 # Franchise Mobile Current Task List
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
 
@@ -139,6 +139,7 @@ Status: Active
 - Confirm labels and routes match this meaning.
 - Confirm standings and player stat screens work after simulated games.
 - Fix League Stats so it shows every player across the league, not only players from teams that already have simulated games.
+- Fix League Stats so vacant CPU-controlled teams use their trusted era/sport roster pool instead of disappearing from the player table.
 - Revamp League Stats into a combined stat table similar to NBA.com, with stat columns lined up in each row instead of showing only one category value.
 
 ### 9. Roster Limits, Two-Way Players, And Development League
