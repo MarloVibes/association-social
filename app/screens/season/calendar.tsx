@@ -478,7 +478,9 @@ export default function CalendarScreen() {
           totalGames: Number(control.totalGames || allGames.length),
           remainingGames: Number(control.remainingGames || 0),
         });
-        const lastBatchGameIds = Array.isArray(control.lastBatchGameIds) ? control.lastBatchGameIds.map(String) : [];
+        const lastBatchGameIds: string[] = Array.isArray(control.lastBatchGameIds)
+          ? control.lastBatchGameIds.map(String)
+          : [];
         lastBatchGameIds.forEach((gameId) => simmedSeasonGameIdsRef.current.add(String(gameId)));
         const nextTarget = nextSimTargetAfter(
           allGames,
