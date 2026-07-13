@@ -538,6 +538,9 @@ describe('source safety regressions', () => {
   it('shows simulated game stories and box scores on the matchup screen', () => {
     const matchup = source('app/screens/season/matchup.tsx');
 
+    expect(matchup).toContain('const [resultDetails, setResultDetails]');
+    expect(matchup).toContain("'gameResults', String(gameId)");
+    expect(matchup).toContain('resultDetails?.id === scheduleGame.id');
     expect(matchup).toContain('game.boxScore');
     expect(matchup).toContain('game.quarters');
     expect(matchup).toContain('game.story');

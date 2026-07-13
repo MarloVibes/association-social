@@ -185,12 +185,14 @@ export default function MatchupScreen() {
   const [firstHalfPresetId, setFirstHalfPresetId] = useState('balanced');
   const [secondHalfPresetId, setSecondHalfPresetId] = useState('balanced');
   const [quarterPlans, setQuarterPlans] = useState<QuarterPlan[]>([]);
+  const [resultDetails, setResultDetails] = useState<MatchupGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
     if (!leagueId) return;
     let unsubscribeSchedule: (() => void) | undefined;
+    let unsubscribeResultDetails: (() => void) | undefined;
     const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (!snapshot.exists()) {
         setLoading(false);
@@ -200,6 +202,7 @@ export default function MatchupScreen() {
       setLeague(nextLeague);
       const scheduleId = nextLeague.scheduleId || String(nextLeague.currentYear || 2025);
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResultDetails) unsubscribeResultDetails();
       unsubscribeSchedule = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId), scheduleSnapshot => {
         setSchedule(scheduleSnapshot.exists() ? scheduleSnapshot.data() as ScheduleDoc : null);
         setLoading(false);
@@ -208,6 +211,17 @@ export default function MatchupScreen() {
         setSchedule(null);
         setLoading(false);
       });
+      if (gameId) {
+        unsubscribeResultDetails = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'gameResults', String(gameId)), resultSnapshot => {
+          const data = resultSnapshot.exists() ? resultSnapshot.data() as { game?: MatchupGame } : null;
+          setResultDetails(data?.game || null);
+        }, error => {
+          console.warn('Game result details unavailable for matchup:', error);
+          setResultDetails(null);
+        });
+      } else {
+        setResultDetails(null);
+      }
     }, err => {
       console.warn('League matchup unavailable:', err);
       setLoading(false);
@@ -220,9 +234,10 @@ export default function MatchupScreen() {
     return () => {
       unsubscribeLeague();
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResultDetails) unsubscribeResultDetails();
       unsubscribeTeams();
     };
-  }, [leagueId]);
+  }, [gameId, leagueId]);
 
   const isCupGame = competition === 'nbaCup';
   const isPlayoffGame = competition === 'playoffs';
@@ -237,9 +252,17 @@ export default function MatchupScreen() {
     if (isPlayoffGame) return playoffGames;
     return schedule?.games || [];
   }, [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
-  const game = useMemo<MatchupGame | null>(
+  const scheduleGame = useMemo<MatchupGame | null>(
     () => scheduledGames.find(item => item.id === gameId) || null,
     [gameId, scheduledGames],
+  );
+  const game = useMemo<MatchupGame | null>(
+    () => (
+      scheduleGame && resultDetails?.id === scheduleGame.id
+        ? { ...scheduleGame, ...resultDetails }
+        : scheduleGame
+    ),
+    [resultDetails, scheduleGame],
   );
   const sport = normalizeSport(league?.sport || game?.sport);
   const myTeam = teams.find(team => (
