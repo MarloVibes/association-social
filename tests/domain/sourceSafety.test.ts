@@ -488,6 +488,9 @@ describe('source safety regressions', () => {
     const calendar = source('app/screens/season/calendar.tsx');
 
     expect(calendar).toContain('runSeasonSimContinuously');
+    expect(calendar).toContain("'Sim Season?'");
+    expect(calendar).toContain("'Start Sim'");
+    expect(calendar).toContain('remainingGames');
     expect(calendar).toContain("batchSize: 1");
     expect(calendar).toContain("setViewMode('league')");
     expect(calendar).toContain('Simming game by game');
@@ -496,6 +499,9 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('autoFollowSeasonSim');
     expect(calendar).toContain('toggleSeasonSimFollow');
     expect(calendar).toContain('scrollToNextUnfinishedGame');
+    expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
+    expect(calendar).toContain('const rowSize = simmingSeason ? 1 : 2');
+    expect(calendar).toContain('row.games.some(game => game.id === nextUnfinishedGame.id)');
     expect(calendar).toContain('onScrollToIndexFailed');
     expect(calendar).toContain('await wait(220)');
     expect(calendar).not.toContain('runSeasonSimToTarget');

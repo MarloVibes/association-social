@@ -100,6 +100,19 @@ function sectionRowId(prefix: string, value: string | number) {
   return `${prefix}-${String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
 
+function calendarGameRows(games: CalendarGame[], rowSize: number): CalendarSectionRow[] {
+  const safeRowSize = Math.max(1, rowSize);
+  const rows: CalendarSectionRow[] = [];
+  for (let index = 0; index < games.length; index += safeRowSize) {
+    const rowGames = games.slice(index, index + safeRowSize);
+    rows.push({
+      id: sectionRowId('games', rowGames.map(game => game.id || game.sequence).join('-')),
+      games: rowGames,
+    });
+  }
+  return rows;
+}
+
 function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
   const sport = String(value || 'nba').toLowerCase();
   if (sport === 'nfl' || sport === 'madden') return 'madden';
@@ -232,6 +245,7 @@ export default function CalendarScreen() {
     return visibleScheduleGames(allGames, selectedViewMode, myTeam, uid);
   }, [allGames, cupGames, myTeam, selectedViewMode, uid]);
   const sections = useMemo<CalendarSection[]>(() => {
+    const rowSize = simmingSeason ? 1 : 2;
     if (selectedViewMode === 'cup') {
       const byGroup = new Map<string, CalendarGame[]>();
       games.forEach((game) => {
@@ -245,11 +259,11 @@ export default function CalendarScreen() {
           return {
             title: group,
             gameRange: formatGameRange(sortedGames),
-            data: [{ id: sectionRowId('cup', group), games: sortedGames }],
+            data: calendarGameRows(sortedGames, rowSize),
           };
         });
     }
-    const byWeek = new Map<number, NbaScheduleGame[]>();
+    const byWeek = new Map<number, CalendarGame[]>();
     games.forEach((game) => {
       const week = Number(game.week || 1);
       byWeek.set(week, [...(byWeek.get(week) || []), game]);
@@ -261,21 +275,23 @@ export default function CalendarScreen() {
         return {
           title: `Week ${week}`,
           gameRange: formatGameRange(sortedGames),
-          data: [{ id: sectionRowId('week', week), games: sortedGames }],
+          data: calendarGameRows(sortedGames, rowSize),
         };
       });
-  }, [games, selectedViewMode]);
+  }, [games, selectedViewMode, simmingSeason]);
   const nextUnfinishedGame = useMemo(() => allGames.find(game => game.status !== 'final') || null, [allGames]);
 
   const scrollToNextUnfinishedGame = useCallback((animated = true, attempt = 0) => {
     if (!nextUnfinishedGame) return;
     const sectionIndex = sections.findIndex(section => section.title === `Week ${nextUnfinishedGame.week || 1}`);
     if (sectionIndex < 0) return;
+    const targetSection = sections[sectionIndex];
+    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === nextUnfinishedGame.id)));
     requestAnimationFrame(() => {
       try {
         scheduleListRef.current?.scrollToLocation({
           sectionIndex,
-          itemIndex: 0,
+          itemIndex: rowIndex,
           viewPosition: 0.18,
           animated,
         });
@@ -358,7 +374,20 @@ export default function CalendarScreen() {
   };
 
   const runSeasonSim = () => {
-    runSeasonSimContinuously();
+    if (simmingSeason) return;
+    const remainingGames = allGames.filter(game => game.status !== 'final').length;
+    if (remainingGames === 0) {
+      runSeasonSimContinuously();
+      return;
+    }
+    Alert.alert(
+      'Sim Season?',
+      `This will simulate ${remainingGames} remaining game${remainingGames === 1 ? '' : 's'} one at a time until the season is complete or you press Stop.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Start Sim', style: 'destructive', onPress: runSeasonSimContinuously },
+      ],
+    );
   };
 
   const cancelSeasonSim = async () => {
@@ -554,7 +583,7 @@ export default function CalendarScreen() {
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.calendarTile, mine && styles.myGame, !openable && styles.disabledGame]}
+                  style={[styles.calendarTile, sectionRow.games.length === 1 && styles.calendarTileSingle, mine && styles.myGame, !openable && styles.disabledGame]}
                   disabled={!openable}
                   onPress={() => {
                     router.push({
@@ -700,6 +729,7 @@ const styles = StyleSheet.create({
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 2 },
   calendarTile: { width: '48.7%', minHeight: 158, borderRadius: 8, borderWidth: 1, borderColor: '#202020', backgroundColor: '#111', padding: 10, justifyContent: 'space-between' },
+  calendarTileSingle: { width: '100%' },
   myGame: { borderColor: '#00e58b55', backgroundColor: '#0a1d14' },
   disabledGame: { opacity: 0.7 },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 },
