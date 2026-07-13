@@ -500,7 +500,8 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('toggleSeasonSimFollow');
     expect(calendar).toContain('scrollToNextUnfinishedGame');
     expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
-    expect(calendar).toContain('const rowSize = simmingSeason ? 1 : 2');
+    expect(calendar).toContain("const rowSize = selectedViewMode === 'league' ? 1 : 2");
+    expect(calendar).toContain('removeClippedSubviews={false}');
     expect(calendar).toContain('SIM_ELIGIBLE_STATUSES');
     expect(calendar).toContain('row.games.some(game => game.id === nextSimGame.id)');
     expect(calendar).toContain('onScrollToIndexFailed');

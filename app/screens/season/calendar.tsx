@@ -246,7 +246,7 @@ export default function CalendarScreen() {
     return visibleScheduleGames(allGames, selectedViewMode, myTeam, uid);
   }, [allGames, cupGames, myTeam, selectedViewMode, uid]);
   const sections = useMemo<CalendarSection[]>(() => {
-    const rowSize = simmingSeason ? 1 : 2;
+    const rowSize = selectedViewMode === 'league' ? 1 : 2;
     if (selectedViewMode === 'cup') {
       const byGroup = new Map<string, CalendarGame[]>();
       games.forEach((game) => {
@@ -279,7 +279,7 @@ export default function CalendarScreen() {
           data: calendarGameRows(sortedGames, rowSize),
         };
       });
-  }, [games, selectedViewMode, simmingSeason]);
+  }, [games, selectedViewMode]);
   const nextSimGame = useMemo(() => (
     allGames.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))) || null
   ), [allGames]);
@@ -416,7 +416,7 @@ export default function CalendarScreen() {
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         windowSize={5}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         onScrollBeginDrag={() => {
           if (simmingSeason) setAutoFollowSeasonSim(false);
         }}
