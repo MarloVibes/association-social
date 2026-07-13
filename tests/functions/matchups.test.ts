@@ -10,6 +10,7 @@ const {
   cleanFirestoreData,
   coachingGradeAdjustmentsForPlayer,
   createResetScheduledGameHandler,
+  createSimScheduleBatchHandler,
   canUserSimulateVsCpu,
   createSimulateScheduledGameHandler,
   expireMatchupRequest,
@@ -1580,6 +1581,248 @@ describe('matchup request state helpers', () => {
         }),
       }),
     }), { merge: true });
+  });
+
+  it('stores non-empty box scores for games completed by season batch simulation', async () => {
+    const game = seedAvailableGame({
+      id: 'batch-game-1',
+      sequence: 1,
+      week: 1,
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeGmId: null,
+      awayGmId: null,
+    });
+    const schedule = { games: [game] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const homeRef: any = { id: 'HOME' };
+    const awayRef: any = { id: 'AWAY' };
+    const gameResultRef: any = { id: 'batch-game-1-result' };
+    const liveTimelineRef: any = { id: 'batch-game-1-live' };
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'HOME' ? homeRef : awayRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === homeRef) return {
+          exists: true,
+          id: 'HOME',
+          data: () => ({
+            teamId: 'HOME',
+            abbreviation: 'HOM',
+            players: seedRoster('Home', 84).players,
+          }),
+        };
+        if (ref === awayRef) return {
+          exists: true,
+          id: 'AWAY',
+          data: () => ({
+            teamId: 'AWAY',
+            abbreviation: 'AWY',
+            players: seedRoster('Away', 78).players,
+          }),
+        };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => (name === 'leagues' ? { doc: vi.fn(() => leagueRef) } : { doc: vi.fn() })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 15_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const control = await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', action: 'start', competition: 'regular', batchSize: 1 },
+    });
+
+    expect(control).toMatchObject({ status: 'complete', lastBatchGameIds: ['batch-game-1'] });
+    const scheduleUpdate = tx.update.mock.calls.find(([ref]: any[]) => ref === scheduleRef)?.[1];
+    expect(scheduleUpdate.games[0]).toMatchObject({
+      id: 'batch-game-1',
+      status: 'final',
+      resultDetailsStorage: 'gameResults',
+    });
+    expect(scheduleUpdate.games[0].boxScore).toBeUndefined();
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite).toBeTruthy();
+    expect(gameResultWrite?.[1]).toMatchObject({
+      gameId: 'batch-game-1',
+      game: expect.objectContaining({
+        id: 'batch-game-1',
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+        }),
+      }),
+    });
+  });
+
+  it('repairs missing box score records for already-final season games', async () => {
+    const finalGame = {
+      ...seedAvailableGame({
+        id: 'final-missing-result',
+        sequence: 12,
+        week: 2,
+        homeTeamId: 'HOME',
+        awayTeamId: 'AWAY',
+        homeGmId: null,
+        awayGmId: null,
+      }),
+      status: 'final',
+      homeScore: 112,
+      awayScore: 104,
+      winnerTeamId: 'HOME',
+      loserTeamId: 'AWAY',
+      quarters: [
+        { quarter: 1, home: 30, away: 24 },
+        { quarter: 2, home: 27, away: 27 },
+        { quarter: 3, home: 28, away: 24 },
+        { quarter: 4, home: 27, away: 29 },
+      ],
+    };
+    const schedule = { games: [finalGame] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const homeRef: any = { id: 'HOME' };
+    const awayRef: any = { id: 'AWAY' };
+    const gameResultRef: any = { id: 'final-missing-result-detail' };
+    const liveTimelineRef: any = { id: 'final-missing-result-live' };
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'HOME' ? homeRef : awayRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === gameResultRef) return { exists: false, data: () => ({}) };
+        if (ref === homeRef) return {
+          exists: true,
+          id: 'HOME',
+          data: () => ({
+            teamId: 'HOME',
+            abbreviation: 'HOM',
+            players: seedRoster('Home', 84).players,
+          }),
+        };
+        if (ref === awayRef) return {
+          exists: true,
+          id: 'AWAY',
+          data: () => ({
+            teamId: 'AWAY',
+            abbreviation: 'AWY',
+            players: seedRoster('Away', 78).players,
+          }),
+        };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => (name === 'leagues' ? { doc: vi.fn(() => leagueRef) } : { doc: vi.fn() })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 20_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const control = await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', action: 'repairResults', competition: 'regular', batchSize: 1 },
+    });
+
+    expect(control).toMatchObject({
+      status: 'running',
+      repairedGameIds: ['final-missing-result'],
+      repairedGames: 1,
+    });
+    const scheduleUpdate = tx.update.mock.calls.find(([ref]: any[]) => ref === scheduleRef)?.[1];
+    expect(scheduleUpdate.games[0]).toMatchObject({
+      id: 'final-missing-result',
+      status: 'final',
+      resultDetailsStorage: 'gameResults',
+    });
+    expect(scheduleUpdate.games[0].boxScore).toBeUndefined();
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite).toBeTruthy();
+    expect(gameResultWrite?.[1]).toMatchObject({
+      gameId: 'final-missing-result',
+      game: expect.objectContaining({
+        id: 'final-missing-result',
+        homeScore: 112,
+        awayScore: 104,
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            points: 112,
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            points: 104,
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+        }),
+      }),
+    });
   });
 
   it('surfaces unexpected simulate transaction failures with the original message', async () => {

@@ -443,11 +443,8 @@ export default function CalendarScreen() {
 
   const runSeasonSimContinuously = async () => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
-    const maxSteps = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
-    if (maxSteps === 0) {
-      Alert.alert('Season complete', 'Every scheduled game is already final.');
-      return;
-    }
+    const remainingGames = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
+    const maxSteps = Math.max(remainingGames, allGames.length);
     cancelSeasonSimRef.current = false;
     pendingFollowGameIdRef.current = null;
     setViewMode('league');
@@ -490,7 +487,12 @@ export default function CalendarScreen() {
         );
         if (nextTarget?.week) setLeagueWeekPageStart(weekPageStartFor(Number(nextTarget.week)));
         setSeasonFollowTarget(nextTarget?.id || null, true);
-        if (control.status === 'complete' || control.status === 'cancelled') break;
+        if (control.status === 'complete' || control.status === 'cancelled') {
+          if (remainingGames === 0 && control.repairedGames) {
+            Alert.alert('Box scores repaired', 'Final games now have playable result details.');
+          }
+          break;
+        }
         action = 'step';
         await wait(220);
       }

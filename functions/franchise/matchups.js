@@ -2387,6 +2387,132 @@ function selectSimBatch({ games, competition = 'regular', scope = 'all', batchSi
   return scoped.slice(0, safeSimBatchSize(batchSize));
 }
 
+function hasStoredBoxScore(resultData) {
+  const game = resultData && resultData.game;
+  const boxScore = game && game.boxScore;
+  return Boolean(
+    boxScore
+    && boxScore.home
+    && boxScore.away
+    && Array.isArray(boxScore.home.players)
+    && boxScore.home.players.length > 0
+    && Array.isArray(boxScore.away.players)
+    && boxScore.away.players.length > 0,
+  );
+}
+
+async function selectResultRepairBatch({ tx, scheduleRef, games, batchSize = MAX_SIM_BATCH_SIZE }) {
+  const candidates = (games || [])
+    .filter(game => (
+      game
+      && game.status === 'final'
+      && Number.isFinite(Number(game.homeScore))
+      && Number.isFinite(Number(game.awayScore))
+    ))
+    .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
+  const repairBatch = [];
+  for (const game of candidates) {
+    const resultRef = scheduleRef.collection('gameResults').doc(String(game.id));
+    const resultSnap = await tx.get(resultRef);
+    if (!resultSnap.exists || !hasStoredBoxScore(resultSnap.data() || {})) {
+      repairBatch.push(game);
+      if (repairBatch.length >= safeSimBatchSize(batchSize)) break;
+    }
+  }
+  return repairBatch;
+}
+
+function finalGameQuartersForRepair({ game, homeScore, awayScore, seed }) {
+  const quarters = Array.isArray(game && game.quarters) ? game.quarters : [];
+  const totals = quarters.reduce((acc, period) => ({
+    home: acc.home + Number(period && period.home || 0),
+    away: acc.away + Number(period && period.away || 0),
+  }), { home: 0, away: 0 });
+  if (quarters.length > 0 && totals.home === homeScore && totals.away === awayScore) return quarters;
+  return quarterScores(homeScore, awayScore, seed);
+}
+
+function resultDetailsForFinalGame({ game, homeTeam, awayTeam, nowMs, leagueSport }) {
+  const sport = normalizeSport(game && (game.sport || game.leagueSport || leagueSport));
+  if (sport !== 'nba') return null;
+  assertSimulationRoster(homeTeam, game.homeTeamId);
+  assertSimulationRoster(awayTeam, game.awayTeamId);
+  const homeScore = Number(game.homeScore);
+  const awayScore = Number(game.awayScore);
+  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return null;
+  const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}:result-repair`;
+  const quarters = finalGameQuartersForRepair({ game, homeScore, awayScore, seed });
+  const boxScore = {
+    home: buildSimulationTeamBox({
+      team: homeTeam,
+      teamId: game.homeTeamId,
+      targetPoints: homeScore,
+      seed: `${seed}:home`,
+      pointMargin: homeScore - awayScore,
+    }),
+    away: buildSimulationTeamBox({
+      team: awayTeam,
+      teamId: game.awayTeamId,
+      targetPoints: awayScore,
+      seed: `${seed}:away`,
+      pointMargin: awayScore - homeScore,
+    }),
+  };
+  const liveTimeline = buildLiveTimeline({
+    gameId: game.id,
+    seed,
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeScore,
+    awayScore,
+    quarters,
+    homePlayers: timelinePlayers(boxScore.home),
+    awayPlayers: timelinePlayers(boxScore.away),
+  });
+  const winnerTeamId = homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
+  const coachingImpact = game.coachingImpact || null;
+  const story = game.story || gameStoryFromResult({
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeScore,
+    awayScore,
+    quarters,
+    boxScore,
+    winnerTeamId,
+  });
+  const repairedGame = {
+    ...game,
+    sport,
+    homeScore,
+    awayScore,
+    winnerTeamId: game.winnerTeamId || winnerTeamId,
+    loserTeamId: game.loserTeamId || (winnerTeamId === game.homeTeamId ? game.awayTeamId : game.homeTeamId),
+    quarters,
+    boxScore,
+    liveTimeline,
+    story,
+    postgameStory: game.postgameStory || postgameStoryFromResult({
+      homeTeamId: game.homeTeamId,
+      awayTeamId: game.awayTeamId,
+      homeScore,
+      awayScore,
+      quarters,
+      boxScore,
+      winnerTeamId,
+      coachingImpact,
+      summary: story,
+    }),
+    coachingImpact,
+    resultDetailsStorage: 'gameResults',
+  };
+  return gameWithLiveMode({
+    game: repairedGame,
+    nowMs,
+    seed,
+    homeTeam,
+  });
+}
+
 function mapError(error, HttpsError) {
   if (error instanceof MatchupError || error instanceof FinalizeGameError) {
     return new HttpsError(error.code, error.message, error.details);
@@ -2972,6 +3098,72 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
       const games = gamesForCompetition(schedule, competition);
       const batch = selectSimBatch({ games, competition, scope, batchSize });
       if (batch.length === 0) {
+        const repairBatch = await selectResultRepairBatch({ tx, scheduleRef, games, batchSize });
+        if (repairBatch.length > 0) {
+          const teamCache = new Map();
+          const teamCacheKey = (game, side) => {
+            const teamId = side === 'home' ? game.homeTeamId : game.awayTeamId;
+            const gmId = side === 'home' ? game.homeGmId : game.awayGmId;
+            return `${teamId}:${gmId || ''}`;
+          };
+          const getTeam = async (game, side) => {
+            const teamId = side === 'home' ? game.homeTeamId : game.awayTeamId;
+            const gmId = side === 'home' ? game.homeGmId : game.awayGmId;
+            const key = teamCacheKey(game, side);
+            if (teamCache.has(key)) return teamCache.get(key);
+            const team = await teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId, gmId });
+            teamCache.set(key, team);
+            return team;
+          };
+          const nextGames = [...games];
+          const repaired = [];
+          for (const game of repairBatch) {
+            const gameIndex = nextGames.findIndex(item => item.id === game.id);
+            if (gameIndex < 0) continue;
+            const [homeTeam, awayTeam] = await Promise.all([
+              getTeam(game, 'home'),
+              getTeam(game, 'away'),
+            ]);
+            const nowMs = now();
+            let repairedGame;
+            try {
+              repairedGame = resultDetailsForFinalGame({
+                game: { ...game, leagueSport: league.sport },
+                homeTeam,
+                awayTeam,
+                nowMs,
+                leagueSport: league.sport,
+              });
+            } catch (error) {
+              throw mapError(error, HttpsError);
+            }
+            if (!repairedGame) continue;
+            nextGames[gameIndex] = repairedGame;
+            persistLiveTimelineForGame({ tx, scheduleRef, game: repairedGame, nowMs });
+            persistGameResultForGame({ tx, scheduleRef, game: repairedGame, nowMs });
+            repaired.push(repairedGame.id);
+          }
+          const remainingRepairs = Math.max(0, repairBatch.length - repaired.length);
+          const control = {
+            status: repaired.length > 0 ? 'running' : 'complete',
+            competition,
+            scope,
+            batchSize,
+            repairedGameIds: repaired,
+            repairedGames: repaired.length,
+            remainingRepairs,
+            updatedAtMs: now(),
+            finalGames: nextGames.filter(game => game.status === 'final').length,
+            totalGames: nextGames.length,
+            remainingGames: 0,
+            cancelRequested: false,
+          };
+          tx.update(scheduleRef, {
+            ...cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)),
+            [controlKey]: control,
+          });
+          return control;
+        }
         const completeControl = {
           status: 'complete',
           competition,
