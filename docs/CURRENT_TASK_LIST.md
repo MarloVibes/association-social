@@ -1,6 +1,6 @@
 # Franchise Mobile Current Task List
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
 
@@ -116,9 +116,14 @@ Status: Active
   - League schedule rows should stay stable before and during sim so Follow does not cause scroll jumps.
   - Follow should move from the server-returned last simulated game id to the next scheduled/preparing game immediately, not wait only for Firestore snapshots.
   - Long full-season sims need list layout recovery so the visible calendar scroll follows hundreds of simulated games down the schedule.
-  - During full-season sim, the followed game should stay centered in the visible calendar area instead of pinned near the top.
-  - League schedule should be paged by week blocks so users do not manually scroll through all 1,230 games.
+  - During full-season sim, the followed game should stay centered in the visible calendar area instead of pinned near the top. Completed in `35ca341`.
+  - League schedule should be paged by week blocks so users do not manually scroll through all 1,230 games. Completed in `a16b483`.
   - One-game sim delay should be faster than the initial slow broadcast pace.
+- Season sim final games must have playable box-score result details:
+  - new one-game sims write full details to `gameResults`
+  - already-final games missing details can be repaired through the Sim Season flow
+  - schedule docs remain lightweight to avoid Firestore 1MB failures
+  - completed in `2f01080` and `0e6b5e9`
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
 - Fix Sim Season reliability so large batch sims do not overload Firebase memory or stall mid-season.
@@ -223,6 +228,8 @@ Status: Parked until Franchise Mobile GM mode is finished
 
 ## Completed Recently
 
+- 2026-07-13: Fixed Sim Season box-score detail storage and repair flow. Firebase Functions deployed, Expo update published.
+- 2026-07-13: Fixed season sim follow centering and added week paging for the 1,230-game league calendar.
 - Deleted old Live Mode page and routes.
 - Added Schedule shortcut under League Rosters.
 - Reorganized Command Center.
