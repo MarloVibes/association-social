@@ -499,11 +499,16 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('autoFollowSeasonSim');
     expect(calendar).toContain('toggleSeasonSimFollow');
     expect(calendar).toContain('scrollToNextUnfinishedGame');
+    expect(calendar).toContain('scrollToGameId');
+    expect(calendar).toContain('seasonSimFollowGameId');
+    expect(calendar).toContain('nextSimTargetAfter(');
+    expect(calendar).toContain('simmedSeasonGameIdsRef');
+    expect(calendar).toContain('control.lastBatchGameIds');
     expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
     expect(calendar).toContain("const rowSize = selectedViewMode === 'league' ? 1 : 2");
     expect(calendar).toContain('removeClippedSubviews={false}');
     expect(calendar).toContain('SIM_ELIGIBLE_STATUSES');
-    expect(calendar).toContain('row.games.some(game => game.id === nextSimGame.id)');
+    expect(calendar).toContain('row.games.some(game => game.id === gameId)');
     expect(calendar).toContain('onScrollToIndexFailed');
     expect(calendar).toContain('await wait(220)');
     expect(calendar).not.toContain('runSeasonSimToTarget');

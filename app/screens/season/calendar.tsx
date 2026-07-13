@@ -123,6 +123,18 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 
+function nextSimTargetAfter(gameList: CalendarGame[], completedGameIds: string[] = [], anchorGameId?: string | null) {
+  const games = [...gameList].sort((a, b) => a.sequence - b.sequence);
+  const completed = new Set(completedGameIds.map(String));
+  const lastCompletedId = anchorGameId || completedGameIds[completedGameIds.length - 1];
+  const lastCompletedIndex = lastCompletedId ? games.findIndex(game => game.id === lastCompletedId) : -1;
+  return games.find((game, index) => (
+    index > lastCompletedIndex
+    && SIM_ELIGIBLE_STATUSES.has(String(game.status))
+    && !completed.has(String(game.id))
+  )) || games.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status)) && !completed.has(String(game.id))) || null;
+}
+
 export default function CalendarScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const router = useRouter();
@@ -134,11 +146,14 @@ export default function CalendarScreen() {
   const [advancingCup, setAdvancingCup] = useState(false);
   const [simmingSeason, setSimmingSeason] = useState(false);
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
+  const [seasonSimFollowGameId, setSeasonSimFollowGameId] = useState<string | null>(null);
   const [autoFollowSeasonSim, setAutoFollowSeasonSim] = useState(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
   const scheduleListRef = useRef<SectionList<CalendarSectionRow, CalendarSection> | null>(null);
+  const sectionsRef = useRef<CalendarSection[]>([]);
   const cancelSeasonSimRef = useRef(false);
+  const simmedSeasonGameIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -284,12 +299,20 @@ export default function CalendarScreen() {
     allGames.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))) || null
   ), [allGames]);
 
-  const scrollToNextUnfinishedGame = useCallback((animated = true, attempt = 0) => {
-    if (!nextSimGame) return;
-    const sectionIndex = sections.findIndex(section => section.title === `Week ${nextSimGame.week || 1}`);
-    if (sectionIndex < 0) return;
-    const targetSection = sections[sectionIndex];
-    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === nextSimGame.id)));
+  useEffect(() => {
+    sectionsRef.current = sections;
+  }, [sections]);
+
+  const scrollToGameId = useCallback((gameId?: string | null, animated = true, attempt = 0) => {
+    if (!gameId) return;
+    const currentSections = sectionsRef.current;
+    const sectionIndex = currentSections.findIndex(section => section.data.some(row => row.games.some(game => game.id === gameId)));
+    if (sectionIndex < 0) {
+      if (attempt < 5) setTimeout(() => scrollToGameId(gameId, animated, attempt + 1), 120);
+      return;
+    }
+    const targetSection = currentSections[sectionIndex];
+    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === gameId)));
     requestAnimationFrame(() => {
       try {
         scheduleListRef.current?.scrollToLocation({
@@ -299,17 +322,38 @@ export default function CalendarScreen() {
           animated,
         });
       } catch {
-        if (attempt < 2) {
-          setTimeout(() => scrollToNextUnfinishedGame(animated, attempt + 1), 180);
+        if (attempt < 5) {
+          setTimeout(() => scrollToGameId(gameId, animated, attempt + 1), 180);
         }
       }
     });
-  }, [nextSimGame, sections]);
+  }, []);
+
+  const scrollToNextUnfinishedGame = useCallback((animated = true) => {
+    const targetId = seasonSimFollowGameId || nextSimGame?.id || null;
+    scrollToGameId(targetId, animated);
+  }, [nextSimGame?.id, scrollToGameId, seasonSimFollowGameId]);
 
   useEffect(() => {
     if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league') return;
-    scrollToNextUnfinishedGame(true);
-  }, [autoFollowSeasonSim, scrollToNextUnfinishedGame, selectedViewMode, simmingSeason]);
+    scrollToGameId(seasonSimFollowGameId || nextSimGame?.id || null, true);
+  }, [autoFollowSeasonSim, nextSimGame?.id, scrollToGameId, seasonSimFollowGameId, selectedViewMode, simmingSeason]);
+
+  useEffect(() => {
+    if (!simmingSeason || !autoFollowSeasonSim || !seasonSimFollowGameId) return;
+    scrollToGameId(seasonSimFollowGameId, true);
+  }, [autoFollowSeasonSim, scrollToGameId, seasonSimFollowGameId, simmingSeason]);
+
+  useEffect(() => {
+    if (!simmingSeason || seasonSimFollowGameId || !nextSimGame?.id) return;
+    setSeasonSimFollowGameId(nextSimGame.id);
+  }, [nextSimGame?.id, seasonSimFollowGameId, simmingSeason]);
+
+  const setSeasonFollowTarget = useCallback((gameId?: string | null, animated = true) => {
+    if (!gameId) return;
+    setSeasonSimFollowGameId(gameId);
+    if (autoFollowSeasonSim) scrollToGameId(gameId, animated);
+  }, [autoFollowSeasonSim, scrollToGameId]);
 
   const toggleSeasonSimFollow = () => {
     if (autoFollowSeasonSim) {
@@ -318,7 +362,7 @@ export default function CalendarScreen() {
     }
     setViewMode('league');
     setAutoFollowSeasonSim(true);
-    setTimeout(() => scrollToNextUnfinishedGame(true), 80);
+    setTimeout(() => scrollToNextUnfinishedGame(true), 120);
   };
 
   const advanceCup = async () => {
@@ -344,8 +388,17 @@ export default function CalendarScreen() {
     cancelSeasonSimRef.current = false;
     setViewMode('league');
     setAutoFollowSeasonSim(true);
+    simmedSeasonGameIdsRef.current = new Set(
+      allGames
+        .filter(game => !SIM_ELIGIBLE_STATUSES.has(String(game.status)))
+        .map(game => String(game.id)),
+    );
+    const completedGameIds = [...simmedSeasonGameIdsRef.current];
+    const firstTarget = nextSimTargetAfter(allGames, completedGameIds);
+    setSeasonSimFollowGameId(firstTarget?.id || null);
     setSeasonSimProgress(null);
     setSimmingSeason(true);
+    setTimeout(() => scrollToGameId(firstTarget?.id || null, true), 180);
     try {
       const simBatch = httpsCallable(functions, 'simScheduleBatch');
       let action = 'start';
@@ -362,6 +415,14 @@ export default function CalendarScreen() {
           totalGames: Number(control.totalGames || allGames.length),
           remainingGames: Number(control.remainingGames || 0),
         });
+        const lastBatchGameIds = Array.isArray(control.lastBatchGameIds) ? control.lastBatchGameIds.map(String) : [];
+        lastBatchGameIds.forEach((gameId) => simmedSeasonGameIdsRef.current.add(String(gameId)));
+        const nextTarget = nextSimTargetAfter(
+          allGames,
+          [...simmedSeasonGameIdsRef.current],
+          lastBatchGameIds[lastBatchGameIds.length - 1] || null,
+        );
+        setSeasonFollowTarget(nextTarget?.id || null, true);
         if (control.status === 'complete' || control.status === 'cancelled') break;
         action = 'step';
         await wait(220);
@@ -371,7 +432,9 @@ export default function CalendarScreen() {
     } finally {
       setSimmingSeason(false);
       cancelSeasonSimRef.current = false;
+      simmedSeasonGameIdsRef.current = new Set();
       setAutoFollowSeasonSim(false);
+      setSeasonSimFollowGameId(null);
       setSeasonSimProgress(null);
     }
   };

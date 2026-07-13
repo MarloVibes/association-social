@@ -114,6 +114,7 @@ Status: Active
   - During Sim Season, Follow should scroll to the next exact game row, not only the next week section.
   - Follow should use the same scheduled/preparing sequence that the backend sim uses, so it starts where sim progress actually begins.
   - League schedule rows should stay stable before and during sim so Follow does not cause scroll jumps.
+  - Follow should move from the server-returned last simulated game id to the next scheduled/preparing game immediately, not wait only for Firestore snapshots.
   - One-game sim delay should be faster than the initial slow broadcast pace.
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.
