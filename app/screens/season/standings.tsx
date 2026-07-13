@@ -97,19 +97,41 @@ function participantName(participant: NonNullable<ScheduleDoc['participants']>[n
 function mergeLeagueStatTeams({
   teams,
   participants,
+  games,
   poolPlayers,
   sport,
 }: {
   teams: Team[];
   participants: NonNullable<ScheduleDoc['participants']>;
+  games: NbaScheduleGame[];
   poolPlayers: any[];
   sport: 'nba' | 'madden' | 'mlb';
 }) {
   const merged = [...teams];
   const replacements = new Map<string, Team>();
   const teamEntries = merged.map((team, index) => ({ team, index, aliases: teamAliasSet(team) }));
+  const participantAliases = new Set(
+    participants.flatMap(participant => [...teamAliasSet({
+      id: participant.sourceTeamDocId || participant.scheduleTeamId,
+      teamId: participant.scheduleTeamId,
+      abbreviation: participant.abbreviation,
+    })]),
+  );
+  const participantRows = [...participants];
+  (games || []).forEach((game) => {
+    [game.homeTeamId, game.awayTeamId].forEach((teamId) => {
+      const aliases = scheduleKeyAliases(teamId);
+      if (aliases.length === 0 || aliases.some(alias => participantAliases.has(alias))) return;
+      aliases.forEach(alias => participantAliases.add(alias));
+      participantRows.push({
+        scheduleTeamId: teamId,
+        abbreviation: displayScheduleAbbr(teamId),
+        name: participantName({ scheduleTeamId: teamId, abbreviation: displayScheduleAbbr(teamId) }, sport),
+      });
+    });
+  });
 
-  participants.forEach((participant) => {
+  participantRows.forEach((participant) => {
     const participantAliases = teamAliasSet({
       id: participant.sourceTeamDocId || participant.scheduleTeamId,
       teamId: participant.scheduleTeamId,
@@ -407,9 +429,10 @@ export default function StandingsScreen() {
   const leagueStatTeams = useMemo(() => mergeLeagueStatTeams({
     teams,
     participants: schedule?.participants || [],
+    games: schedule?.games || [],
     poolPlayers,
     sport,
-  }), [poolPlayers, schedule?.participants, sport, teams]);
+  }), [poolPlayers, schedule?.games, schedule?.participants, sport, teams]);
   const supportsCup = sport === 'nba';
   const playerStatTabs = useMemo(() => playerLeaderboardTabsForSport(sport), [sport]);
   const activePlayerStat = playerStatTabs.some(tab => tab.key === playerStat) ? playerStat : playerStatTabs[0].key;

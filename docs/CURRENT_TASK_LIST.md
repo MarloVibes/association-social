@@ -153,6 +153,7 @@ Status: Active
 - Fix League Stats so it shows every player across the league, not only players from teams that already have simulated games.
 - Fix League Stats so vacant CPU-controlled teams use their trusted era/sport roster pool instead of disappearing from the player table.
 - Revamp League Stats into a combined stat table similar to NBA.com, with stat columns lined up in each row instead of showing only one category value.
+  - Schedule-derived CPU teams now backfill League Stats when `participants` is sparse. Completed in current stabilization batch.
 
 ### 9. Roster Limits, Two-Way Players, And Development League
 
@@ -230,6 +231,7 @@ Status: Parked until Franchise Mobile GM mode is finished
 
 - 2026-07-13: Fixed Sim Season box-score detail storage and repair flow. Firebase Functions deployed, Expo update published.
 - 2026-07-13: Fixed season sim follow centering and added week paging for the 1,230-game league calendar.
+- 2026-07-13: Fixed League Stats to include CPU/vacant schedule teams from the trusted player pool even when participant records are sparse.
 - Deleted old Live Mode page and routes.
 - Added Schedule shortcut under League Rosters.
 - Reorganized Command Center.
