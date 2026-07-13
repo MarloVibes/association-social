@@ -122,6 +122,8 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
+const CALENDAR_ROW_HEIGHT = 168;
+const CALENDAR_SECTION_HEADER_HEIGHT = 34;
 
 function nextSimTargetAfter(gameList: CalendarGame[], completedGameIds: string[] = [], anchorGameId?: string | null) {
   const games = [...gameList].sort((a, b) => a.sequence - b.sequence);
@@ -154,6 +156,7 @@ export default function CalendarScreen() {
   const sectionsRef = useRef<CalendarSection[]>([]);
   const cancelSeasonSimRef = useRef(false);
   const simmedSeasonGameIdsRef = useRef<Set<string>>(new Set());
+  const pendingFollowGameIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -303,8 +306,30 @@ export default function CalendarScreen() {
     sectionsRef.current = sections;
   }, [sections]);
 
+  const getCalendarItemLayout = useCallback((sectionData: CalendarSection[] | null, index: number) => {
+    const activeSections = sectionData || sectionsRef.current;
+    let offset = 0;
+    let cursor = 0;
+    for (const section of activeSections) {
+      if (cursor === index) {
+        return { length: CALENDAR_SECTION_HEADER_HEIGHT, offset, index };
+      }
+      offset += CALENDAR_SECTION_HEADER_HEIGHT;
+      cursor += 1;
+      for (let rowIndex = 0; rowIndex < section.data.length; rowIndex += 1) {
+        if (cursor === index) {
+          return { length: CALENDAR_ROW_HEIGHT, offset, index };
+        }
+        offset += CALENDAR_ROW_HEIGHT;
+        cursor += 1;
+      }
+    }
+    return { length: CALENDAR_ROW_HEIGHT, offset, index };
+  }, []);
+
   const scrollToGameId = useCallback((gameId?: string | null, animated = true, attempt = 0) => {
     if (!gameId) return;
+    pendingFollowGameIdRef.current = gameId;
     const currentSections = sectionsRef.current;
     const sectionIndex = currentSections.findIndex(section => section.data.some(row => row.games.some(game => game.id === gameId)));
     if (sectionIndex < 0) {
@@ -318,7 +343,8 @@ export default function CalendarScreen() {
         scheduleListRef.current?.scrollToLocation({
           sectionIndex,
           itemIndex: rowIndex,
-          viewPosition: 0.18,
+          viewPosition: 0.16,
+          viewOffset: 8,
           animated,
         });
       } catch {
@@ -351,6 +377,7 @@ export default function CalendarScreen() {
 
   const setSeasonFollowTarget = useCallback((gameId?: string | null, animated = true) => {
     if (!gameId) return;
+    pendingFollowGameIdRef.current = gameId;
     setSeasonSimFollowGameId(gameId);
     if (autoFollowSeasonSim) scrollToGameId(gameId, animated);
   }, [autoFollowSeasonSim, scrollToGameId]);
@@ -386,6 +413,7 @@ export default function CalendarScreen() {
       return;
     }
     cancelSeasonSimRef.current = false;
+    pendingFollowGameIdRef.current = null;
     setViewMode('league');
     setAutoFollowSeasonSim(true);
     simmedSeasonGameIdsRef.current = new Set(
@@ -396,6 +424,7 @@ export default function CalendarScreen() {
     const completedGameIds = [...simmedSeasonGameIdsRef.current];
     const firstTarget = nextSimTargetAfter(allGames, completedGameIds);
     setSeasonSimFollowGameId(firstTarget?.id || null);
+    pendingFollowGameIdRef.current = firstTarget?.id || null;
     setSeasonSimProgress(null);
     setSimmingSeason(true);
     setTimeout(() => scrollToGameId(firstTarget?.id || null, true), 180);
@@ -433,6 +462,7 @@ export default function CalendarScreen() {
       setSimmingSeason(false);
       cancelSeasonSimRef.current = false;
       simmedSeasonGameIdsRef.current = new Set();
+      pendingFollowGameIdRef.current = null;
       setAutoFollowSeasonSim(false);
       setSeasonSimFollowGameId(null);
       setSeasonSimProgress(null);
@@ -477,15 +507,23 @@ export default function CalendarScreen() {
         sections={sections}
         keyExtractor={item => item.id}
         initialNumToRender={4}
-        maxToRenderPerBatch={4}
-        windowSize={5}
+        maxToRenderPerBatch={simmingSeason ? 14 : 4}
+        windowSize={simmingSeason ? 15 : 5}
         removeClippedSubviews={false}
+        getItemLayout={getCalendarItemLayout}
         onScrollBeginDrag={() => {
           if (simmingSeason) setAutoFollowSeasonSim(false);
         }}
-        onScrollToIndexFailed={() => {
+        onScrollToIndexFailed={(info) => {
           if (simmingSeason && autoFollowSeasonSim) {
-            setTimeout(() => scrollToNextUnfinishedGame(true), 220);
+            setTimeout(() => {
+              const followId = pendingFollowGameIdRef.current || seasonSimFollowGameId || nextSimGame?.id || null;
+              if (followId) {
+                scrollToGameId(followId, true);
+              } else {
+                scrollToNextUnfinishedGame(true);
+              }
+            }, Math.max(220, Math.min(600, info.averageItemLength || 220)));
           }
         }}
         stickySectionHeadersEnabled={false}

@@ -503,6 +503,9 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('seasonSimFollowGameId');
     expect(calendar).toContain('nextSimTargetAfter(');
     expect(calendar).toContain('simmedSeasonGameIdsRef');
+    expect(calendar).toContain('getCalendarItemLayout');
+    expect(calendar).toContain('CALENDAR_ROW_HEIGHT');
+    expect(calendar).toContain('pendingFollowGameIdRef');
     expect(calendar).toContain('control.lastBatchGameIds');
     expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
     expect(calendar).toContain("const rowSize = selectedViewMode === 'league' ? 1 : 2");
