@@ -112,6 +112,7 @@ Status: Active
   - Auto-follow should pause when the user manually scrolls, with Stop always reachable.
   - Follow should reliably re-lock onto the next unfinished game after manual scrolling.
   - During Sim Season, Follow should scroll to the next exact game row, not only the next week section.
+  - Follow should use the same scheduled/preparing sequence that the backend sim uses, so it starts where sim progress actually begins.
   - One-game sim delay should be faster than the initial slow broadcast pace.
 - Correct NBA Cup schedule logic so Cup games that count toward the regular season live in regular schedule/results, with only the Cup Final treated as Cup-only.
 - Fix simulation failure when saving/running matchup with quarter gameplans: `INVALID_ARGUMENT: Property array contains an invalid nested entity`.

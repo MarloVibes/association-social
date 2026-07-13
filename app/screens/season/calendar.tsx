@@ -121,6 +121,7 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
 }
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 
 export default function CalendarScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -279,14 +280,16 @@ export default function CalendarScreen() {
         };
       });
   }, [games, selectedViewMode, simmingSeason]);
-  const nextUnfinishedGame = useMemo(() => allGames.find(game => game.status !== 'final') || null, [allGames]);
+  const nextSimGame = useMemo(() => (
+    allGames.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))) || null
+  ), [allGames]);
 
   const scrollToNextUnfinishedGame = useCallback((animated = true, attempt = 0) => {
-    if (!nextUnfinishedGame) return;
-    const sectionIndex = sections.findIndex(section => section.title === `Week ${nextUnfinishedGame.week || 1}`);
+    if (!nextSimGame) return;
+    const sectionIndex = sections.findIndex(section => section.title === `Week ${nextSimGame.week || 1}`);
     if (sectionIndex < 0) return;
     const targetSection = sections[sectionIndex];
-    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === nextUnfinishedGame.id)));
+    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === nextSimGame.id)));
     requestAnimationFrame(() => {
       try {
         scheduleListRef.current?.scrollToLocation({
@@ -301,7 +304,7 @@ export default function CalendarScreen() {
         }
       }
     });
-  }, [nextUnfinishedGame, sections]);
+  }, [nextSimGame, sections]);
 
   useEffect(() => {
     if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league') return;
@@ -333,7 +336,7 @@ export default function CalendarScreen() {
 
   const runSeasonSimContinuously = async () => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
-    const maxSteps = allGames.filter(game => game.status !== 'final').length;
+    const maxSteps = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
     if (maxSteps === 0) {
       Alert.alert('Season complete', 'Every scheduled game is already final.');
       return;
@@ -375,7 +378,7 @@ export default function CalendarScreen() {
 
   const runSeasonSim = () => {
     if (simmingSeason) return;
-    const remainingGames = allGames.filter(game => game.status !== 'final').length;
+    const remainingGames = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
     if (remainingGames === 0) {
       runSeasonSimContinuously();
       return;

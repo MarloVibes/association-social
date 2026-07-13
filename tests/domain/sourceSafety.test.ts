@@ -501,7 +501,8 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('scrollToNextUnfinishedGame');
     expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
     expect(calendar).toContain('const rowSize = simmingSeason ? 1 : 2');
-    expect(calendar).toContain('row.games.some(game => game.id === nextUnfinishedGame.id)');
+    expect(calendar).toContain('SIM_ELIGIBLE_STATUSES');
+    expect(calendar).toContain('row.games.some(game => game.id === nextSimGame.id)');
     expect(calendar).toContain('onScrollToIndexFailed');
     expect(calendar).toContain('await wait(220)');
     expect(calendar).not.toContain('runSeasonSimToTarget');
