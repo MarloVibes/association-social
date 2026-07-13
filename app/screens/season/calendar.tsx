@@ -64,6 +64,7 @@ type CalendarSectionRow = {
 type CalendarSection = {
   title: string;
   gameRange: string;
+  week?: number;
   data: CalendarSectionRow[];
 };
 
@@ -125,6 +126,12 @@ const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 const CALENDAR_ROW_HEIGHT = 168;
 const CALENDAR_SECTION_HEADER_HEIGHT = 34;
 const CALENDAR_FOLLOW_VIEW_POSITION = 0.44;
+const LEAGUE_WEEKS_PER_PAGE = 4;
+
+function weekPageStartFor(week: number) {
+  const safeWeek = Math.max(1, Number(week || 1));
+  return Math.floor((safeWeek - 1) / LEAGUE_WEEKS_PER_PAGE) * LEAGUE_WEEKS_PER_PAGE + 1;
+}
 
 function nextSimTargetAfter(gameList: CalendarGame[], completedGameIds: string[] = [], anchorGameId?: string | null) {
   const games = [...gameList].sort((a, b) => a.sequence - b.sequence);
@@ -151,10 +158,12 @@ export default function CalendarScreen() {
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
   const [seasonSimFollowGameId, setSeasonSimFollowGameId] = useState<string | null>(null);
   const [autoFollowSeasonSim, setAutoFollowSeasonSim] = useState(false);
+  const [leagueWeekPageStart, setLeagueWeekPageStart] = useState(1);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
   const scheduleListRef = useRef<SectionList<CalendarSectionRow, CalendarSection> | null>(null);
   const sectionsRef = useRef<CalendarSection[]>([]);
+  const allSectionsRef = useRef<CalendarSection[]>([]);
   const cancelSeasonSimRef = useRef(false);
   const simmedSeasonGameIdsRef = useRef<Set<string>>(new Set());
   const pendingFollowGameIdRef = useRef<string | null>(null);
@@ -294,18 +303,39 @@ export default function CalendarScreen() {
         const sortedGames = [...weekGames].sort((a, b) => a.sequence - b.sequence);
         return {
           title: `Week ${week}`,
+          week,
           gameRange: formatGameRange(sortedGames),
           data: calendarGameRows(sortedGames, rowSize),
         };
       });
   }, [games, selectedViewMode]);
+  const maxLeagueWeek = useMemo(() => (
+    Math.max(1, ...sections.map(section => Number(section.week || 0)).filter(Boolean))
+  ), [sections]);
+  const leagueWeekPageEnd = Math.min(maxLeagueWeek, leagueWeekPageStart + LEAGUE_WEEKS_PER_PAGE - 1);
+  const canPageLeagueBack = selectedViewMode === 'league' && leagueWeekPageStart > 1;
+  const canPageLeagueForward = selectedViewMode === 'league' && leagueWeekPageEnd < maxLeagueWeek;
+  const renderedSections = useMemo<CalendarSection[]>(() => {
+    if (selectedViewMode !== 'league') return sections;
+    return sections.filter((section) => {
+      const week = Number(section.week || 0);
+      return week >= leagueWeekPageStart && week <= leagueWeekPageEnd;
+    });
+  }, [leagueWeekPageEnd, leagueWeekPageStart, sections, selectedViewMode]);
   const nextSimGame = useMemo(() => (
     allGames.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))) || null
   ), [allGames]);
 
   useEffect(() => {
-    sectionsRef.current = sections;
-  }, [sections]);
+    sectionsRef.current = renderedSections;
+    allSectionsRef.current = sections;
+  }, [renderedSections, sections]);
+
+  useEffect(() => {
+    if (selectedViewMode !== 'league') return;
+    if (leagueWeekPageStart <= maxLeagueWeek) return;
+    setLeagueWeekPageStart(weekPageStartFor(maxLeagueWeek));
+  }, [leagueWeekPageStart, maxLeagueWeek, selectedViewMode]);
 
   const getCalendarItemLayout = useCallback((sectionData: CalendarSection[] | null, index: number) => {
     const activeSections = sectionData || sectionsRef.current;
@@ -334,6 +364,10 @@ export default function CalendarScreen() {
     const currentSections = sectionsRef.current;
     const sectionIndex = currentSections.findIndex(section => section.data.some(row => row.games.some(game => game.id === gameId)));
     if (sectionIndex < 0) {
+      const targetSection = allSectionsRef.current.find(section => section.data.some(row => row.games.some(game => game.id === gameId)));
+      if (targetSection?.week) {
+        setLeagueWeekPageStart(weekPageStartFor(targetSection.week));
+      }
       if (attempt < 5) setTimeout(() => scrollToGameId(gameId, animated, attempt + 1), 120);
       return;
     }
@@ -389,6 +423,7 @@ export default function CalendarScreen() {
       return;
     }
     setViewMode('league');
+    if (nextSimGame?.week) setLeagueWeekPageStart(weekPageStartFor(Number(nextSimGame.week)));
     setAutoFollowSeasonSim(true);
     setTimeout(() => scrollToNextUnfinishedGame(true), 120);
   };
@@ -426,6 +461,7 @@ export default function CalendarScreen() {
     const firstTarget = nextSimTargetAfter(allGames, completedGameIds);
     setSeasonSimFollowGameId(firstTarget?.id || null);
     pendingFollowGameIdRef.current = firstTarget?.id || null;
+    if (firstTarget?.week) setLeagueWeekPageStart(weekPageStartFor(Number(firstTarget.week)));
     setSeasonSimProgress(null);
     setSimmingSeason(true);
     setTimeout(() => scrollToGameId(firstTarget?.id || null, true), 180);
@@ -452,6 +488,7 @@ export default function CalendarScreen() {
           [...simmedSeasonGameIdsRef.current],
           lastBatchGameIds[lastBatchGameIds.length - 1] || null,
         );
+        if (nextTarget?.week) setLeagueWeekPageStart(weekPageStartFor(Number(nextTarget.week)));
         setSeasonFollowTarget(nextTarget?.id || null, true);
         if (control.status === 'complete' || control.status === 'cancelled') break;
         action = 'step';
@@ -505,7 +542,7 @@ export default function CalendarScreen() {
       <SectionList
         ref={scheduleListRef}
         contentContainerStyle={styles.content}
-        sections={sections}
+        sections={renderedSections}
         keyExtractor={item => item.id}
         initialNumToRender={4}
         maxToRenderPerBatch={simmingSeason ? 14 : 4}
@@ -604,6 +641,39 @@ export default function CalendarScreen() {
                     <Text style={styles.legendText}>My games</Text>
                   </View>
                 </View>
+                {selectedViewMode === 'league' ? (
+                  <View style={styles.weekPager}>
+                    <TouchableOpacity
+                      disabled={!canPageLeagueBack}
+                      style={[styles.weekPagerButton, !canPageLeagueBack && styles.weekPagerButtonDisabled]}
+                      onPress={() => setLeagueWeekPageStart(previous => Math.max(1, previous - LEAGUE_WEEKS_PER_PAGE))}
+                    >
+                      <Ionicons color={canPageLeagueBack ? '#00e58b' : '#555'} name="chevron-back" size={14} />
+                      <Text style={[styles.weekPagerButtonText, !canPageLeagueBack && styles.weekPagerButtonTextDisabled]}>Prev</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.weekPagerCenter}
+                      onPress={() => {
+                        const targetWeek = Number((seasonSimFollowGameId
+                          ? allGames.find(game => game.id === seasonSimFollowGameId)?.week
+                          : nextSimGame?.week) || nextSimGame?.week || leagueWeekPageStart || 1);
+                        setLeagueWeekPageStart(weekPageStartFor(targetWeek));
+                        setTimeout(() => scrollToNextUnfinishedGame(true), 80);
+                      }}
+                    >
+                      <Text style={styles.weekPagerLabel}>Weeks {leagueWeekPageStart}-{leagueWeekPageEnd}</Text>
+                      <Text style={styles.weekPagerMeta}>Current</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      disabled={!canPageLeagueForward}
+                      style={[styles.weekPagerButton, !canPageLeagueForward && styles.weekPagerButtonDisabled]}
+                      onPress={() => setLeagueWeekPageStart(previous => Math.min(weekPageStartFor(maxLeagueWeek), previous + LEAGUE_WEEKS_PER_PAGE))}
+                    >
+                      <Text style={[styles.weekPagerButtonText, !canPageLeagueForward && styles.weekPagerButtonTextDisabled]}>Next</Text>
+                      <Ionicons color={canPageLeagueForward ? '#00e58b' : '#555'} name="chevron-forward" size={14} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
                 {isLeagueAdmin && selectedViewMode !== 'cup' ? (
                   <>
                     <View style={styles.simControl}>
@@ -817,6 +887,14 @@ const styles = StyleSheet.create({
   legendAway: { backgroundColor: '#d8345f' },
   legendMine: { backgroundColor: '#00e58b' },
   legendText: { color: '#777', fontSize: 10, fontWeight: '800' },
+  weekPager: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 8 },
+  weekPagerButton: { minHeight: 40, minWidth: 76, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', backgroundColor: '#07120d', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 },
+  weekPagerButtonDisabled: { borderColor: '#252525', backgroundColor: '#101010' },
+  weekPagerButtonText: { color: '#00e58b', fontSize: 11, fontWeight: '900' },
+  weekPagerButtonTextDisabled: { color: '#555' },
+  weekPagerCenter: { flex: 1, minHeight: 40, borderRadius: 8, borderWidth: 1, borderColor: '#203529', backgroundColor: '#101410', alignItems: 'center', justifyContent: 'center' },
+  weekPagerLabel: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  weekPagerMeta: { color: '#777', fontSize: 9, fontWeight: '900', marginTop: 1, textTransform: 'uppercase' },
   simControl: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 6 },
   simButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: '#00e58b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   simButtonDisabled: { opacity: 0.5 },

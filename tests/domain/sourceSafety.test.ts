@@ -507,6 +507,10 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('CALENDAR_ROW_HEIGHT');
     expect(calendar).toContain('CALENDAR_FOLLOW_VIEW_POSITION');
     expect(calendar).toContain('viewPosition: CALENDAR_FOLLOW_VIEW_POSITION');
+    expect(calendar).toContain('LEAGUE_WEEKS_PER_PAGE');
+    expect(calendar).toContain('weekPageStartFor');
+    expect(calendar).toContain('renderedSections');
+    expect(calendar).toContain('Weeks {leagueWeekPageStart}-{leagueWeekPageEnd}');
     expect(calendar).toContain('pendingFollowGameIdRef');
     expect(calendar).toContain('control.lastBatchGameIds');
     expect(calendar).toContain('calendarGameRows(sortedGames, rowSize)');
