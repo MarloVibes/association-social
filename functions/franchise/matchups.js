@@ -2789,9 +2789,9 @@ async function teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamI
       participant,
     });
   }
-  if (!participant) return null;
   const poolPlayers = await eraPoolPlayersForLeague({ tx, db, league });
-  return teamFromParticipantFallback({ teamId, participant, poolPlayers });
+  const fallback = teamFromParticipantFallback({ teamId, participant, poolPlayers });
+  return fallback.players.length ? fallback : null;
 }
 
 async function coachingPlanForTeam({ tx, scheduleRef, game, team }) {

@@ -1693,6 +1693,116 @@ describe('matchup request state helpers', () => {
     });
   });
 
+  it('treats vacant scheduled teams as CPU teams using era pool rosters', async () => {
+    const game = seedAvailableGame({
+      id: 'cpu-pool-game',
+      sequence: 1,
+      week: 1,
+      homeTeamId: 'LAC',
+      awayTeamId: 'ATL',
+      homeGmId: null,
+      awayGmId: null,
+    });
+    const schedule = { games: [game] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const lacRef: any = { id: 'LAC' };
+    const atlRef: any = { id: 'ATL' };
+    const poolRef: any = { id: 'current' };
+    const gameResultRef: any = { id: 'cpu-pool-game-result' };
+    const liveTimelineRef: any = { id: 'cpu-pool-game-live' };
+    const poolPlayers = [
+      ...Array.from({ length: 8 }, (_, index) => ({
+        player_id: `lac-cpu-${index}`,
+        full_name: `Clippers CPU ${index + 1}`,
+        team: 'LAC',
+        position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+        minutes: index < 5 ? 30 : 18,
+        hidden: { shooting: 82, playmaking: 78, defense: 76, rebounding: index === 4 ? 88 : 68, basketballIq: 80 },
+      })),
+      ...Array.from({ length: 8 }, (_, index) => ({
+        player_id: `atl-cpu-${index}`,
+        full_name: `Hawks CPU ${index + 1}`,
+        team: 'ATL',
+        position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+        minutes: index < 5 ? 30 : 18,
+        hidden: { shooting: 78, playmaking: 76, defense: 74, rebounding: index === 4 ? 84 : 66, basketballIq: 78 },
+      })),
+    ];
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'LAC' ? lacRef : atlRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba', era: 'current' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === lacRef || ref === atlRef) return { exists: false, data: () => ({}) };
+        if (ref === poolRef) return { exists: true, data: () => ({ players: poolPlayers }) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === 'leagues') return { doc: vi.fn(() => leagueRef) };
+        if (name === 'era_player_pools') return { doc: vi.fn(() => poolRef) };
+        return { doc: vi.fn() };
+      }),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 16_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const control = await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', action: 'start', competition: 'regular', batchSize: 1 },
+    });
+
+    expect(control).toMatchObject({ status: 'complete', lastBatchGameIds: ['cpu-pool-game'] });
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite).toBeTruthy();
+    expect(gameResultWrite?.[1]).toMatchObject({
+      gameId: 'cpu-pool-game',
+      game: expect.objectContaining({
+        id: 'cpu-pool-game',
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('Clippers CPU'), points: expect.any(Number) }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('Hawks CPU'), points: expect.any(Number) }),
+            ]),
+          }),
+        }),
+      }),
+    });
+  });
+
   it('repairs missing box score records for already-final season games', async () => {
     const finalGame = {
       ...seedAvailableGame({
