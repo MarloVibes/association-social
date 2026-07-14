@@ -1698,8 +1698,8 @@ describe('matchup request state helpers', () => {
       id: 'cpu-pool-game',
       sequence: 1,
       week: 1,
-      homeTeamId: 'LAC',
-      awayTeamId: 'ATL',
+      homeTeamId: 'LAC_CURRENT',
+      awayTeamId: 'ATL_CURRENT',
       homeGmId: null,
       awayGmId: null,
     });
@@ -1736,7 +1736,7 @@ describe('matchup request state helpers', () => {
     });
     leagueRef.collection = vi.fn((name: string) => {
       if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
-      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'LAC' ? lacRef : atlRef)) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'LAC_CURRENT' ? lacRef : atlRef)) };
       return { doc: vi.fn() };
     });
     const tx = {

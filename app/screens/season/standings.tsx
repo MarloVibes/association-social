@@ -13,6 +13,7 @@ import { buildNbaCupGroupStandings, buildNbaStandings, type StandingsRow } from 
 import {
   buildSportPlayerLeaderboard,
   playerLeaderboardTabsForSport,
+  teamsFromBoxScoreGames,
   type SportPlayerLeaderboardRow,
   type SportPlayerLeaderboardStat,
 } from '@/domain/sports/playerLeaderboards';
@@ -352,6 +353,7 @@ export default function StandingsScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [poolPlayers, setPoolPlayers] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
+  const [resultGames, setResultGames] = useState<NbaScheduleGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<StandingsViewMode>('regular');
   const initialContentMode: StandingsContentMode = mode === 'teamPlayers' || mode === 'leaguePlayers' ? mode : 'standings';
@@ -373,6 +375,7 @@ export default function StandingsScreen() {
   useEffect(() => {
     if (!leagueId) return;
     let unsubscribeSchedule: (() => void) | undefined;
+    let unsubscribeResults: (() => void) | undefined;
     const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (!snapshot.exists()) {
         setLoading(false);
@@ -382,11 +385,24 @@ export default function StandingsScreen() {
       setLeague(nextLeague);
       const scheduleId = nextLeague.scheduleId || String(nextLeague.currentYear || 2025);
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResults) unsubscribeResults();
       unsubscribeSchedule = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId), scheduleSnapshot => {
-        setSchedule(scheduleSnapshot.exists() ? scheduleSnapshot.data() as ScheduleDoc : null);
+        const nextSchedule = scheduleSnapshot.exists() ? scheduleSnapshot.data() as ScheduleDoc : null;
+        setSchedule(nextSchedule);
+        if (unsubscribeResults) unsubscribeResults();
+        if (nextSchedule) {
+          unsubscribeResults = onSnapshot(collection(db, 'leagues', leagueId, 'schedules', scheduleId, 'gameResults'), resultSnapshot => {
+            setResultGames(resultSnapshot.docs
+              .map(item => item.data() as any)
+              .map(data => (data?.game && typeof data.game === 'object' ? data.game : data) as NbaScheduleGame));
+          }, () => setResultGames([]));
+        } else {
+          setResultGames([]);
+        }
         setLoading(false);
       }, () => {
         setSchedule(null);
+        setResultGames([]);
         setLoading(false);
       });
     }, () => setLoading(false));
@@ -396,6 +412,7 @@ export default function StandingsScreen() {
     return () => {
       unsubscribeLeague();
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeResults) unsubscribeResults();
       unsubscribeTeams();
     };
   }, [leagueId]);
@@ -440,6 +457,13 @@ export default function StandingsScreen() {
   const cupGames = useMemo(() => (
     supportsCup ? (schedule?.nbaCup?.games || []).filter(game => isLiveResultRevealed(game, nowMs)) : []
   ), [nowMs, schedule?.nbaCup?.games, supportsCup]);
+  const boxScoreStatTeams = useMemo(() => (
+    teamsFromBoxScoreGames({
+      sport,
+      games: resultGames.length > 0 ? resultGames : [...regularGames, ...cupGames],
+    }) as Team[]
+  ), [cupGames, regularGames, resultGames, sport]);
+  const playerStatTeams = boxScoreStatTeams.length > 0 ? boxScoreStatTeams : leagueStatTeams;
   const hasNbaCup = supportsCup && cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
   const selectedViewMode: StandingsViewMode = viewMode === 'cup' && hasNbaCup ? 'cup' : 'regular';
   const standingsGames = selectedViewMode === 'cup' ? cupGames : regularGames;
@@ -462,30 +486,36 @@ export default function StandingsScreen() {
     ? cupSections
     : [{ id: 'regular', title: 'League', data: standings }];
   const myTeam = useMemo(() => teams.find(team => team.gmId === auth.currentUser?.uid) || teams[0], [teams]);
+  const myStatTeams = useMemo(() => {
+    if (boxScoreStatTeams.length === 0) return myTeam ? [myTeam] : [];
+    const aliases = teamAliasSet(myTeam);
+    const matching = boxScoreStatTeams.filter(team => [...teamAliasSet(team)].some(alias => aliases.has(alias)));
+    return matching.length > 0 ? matching : myTeam ? [myTeam] : [];
+  }, [boxScoreStatTeams, myTeam]);
   const teamScopedPlayerLeaders = useMemo(() => (
     buildSportPlayerLeaderboard({
       sport,
-      teams: myTeam ? [myTeam] : [],
+      teams: myStatTeams,
       stat: activePlayerStat,
       limit: 75,
     })
-  ), [activePlayerStat, myTeam, sport]);
+  ), [activePlayerStat, myStatTeams, sport]);
   const leaguePlayerLeaders = useMemo(() => (
     buildSportPlayerLeaderboard({
       sport,
-      teams: leagueStatTeams,
+      teams: playerStatTeams,
       stat: activePlayerStat,
       limit: 75,
     })
-  ), [activePlayerStat, leagueStatTeams, sport]);
+  ), [activePlayerStat, playerStatTeams, sport]);
   const combinedPlayerRows = useMemo(() => (
     buildCombinedPlayerStatRows({
       sport,
-      teams: activeContentMode === 'teamPlayers' && myTeam ? [myTeam] : leagueStatTeams,
+      teams: activeContentMode === 'teamPlayers' ? myStatTeams : playerStatTeams,
       sortStat: activePlayerStat,
-      includeZeroGamePlayers: activeContentMode === 'leaguePlayers',
+      includeZeroGamePlayers: activeContentMode === 'leaguePlayers' && boxScoreStatTeams.length === 0,
     })
-  ), [activeContentMode, activePlayerStat, leagueStatTeams, myTeam, sport]);
+  ), [activeContentMode, activePlayerStat, boxScoreStatTeams.length, myStatTeams, playerStatTeams, sport]);
   const combinedColumns = useMemo(() => combinedStatColumnsForSport(sport), [sport]);
   const visibleSections = activeContentMode === 'teamPlayers' || activeContentMode === 'leaguePlayers'
     ? [{ id: `players-${activePlayerStat}`, title: `${activePlayerStat.toUpperCase()} Leaders`, data: combinedPlayerRows }]

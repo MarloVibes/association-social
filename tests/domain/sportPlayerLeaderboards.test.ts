@@ -1,7 +1,66 @@
 import { describe, expect, it } from 'vitest';
-import { buildSportPlayerLeaderboard, playerLeaderboardTabsForSport } from '@/domain/sports/playerLeaderboards';
+import { buildSportPlayerLeaderboard, playerLeaderboardTabsForSport, teamsFromBoxScoreGames } from '@/domain/sports/playerLeaderboards';
 
 describe('sport player leaderboards', () => {
+  it('builds basketball leaders from saved CPU game result box scores', () => {
+    const teams = teamsFromBoxScoreGames({
+      sport: 'nba',
+      games: [
+        {
+          id: 'game-1',
+          status: 'final',
+          homeTeamId: 'LAC_CURRENT',
+          awayTeamId: 'ATL_CURRENT',
+          boxScore: {
+            home: {
+              players: [
+                { player_id: 'lac-1', name: 'Clipper Guard', position: 'PG', points: 24, rebounds: 4, assists: 9, steals: 2, blocks: 0 },
+                { player_id: 'lac-2', name: 'Clipper Big', position: 'C', points: 12, rebounds: 13, assists: 2, steals: 0, blocks: 3 },
+              ],
+            },
+            away: {
+              players: [
+                { player_id: 'atl-1', name: 'Hawk Wing', position: 'SF', points: 18, rebounds: 6, assists: 3, steals: 1, blocks: 1 },
+              ],
+            },
+          },
+        },
+        {
+          id: 'game-2',
+          status: 'final',
+          homeTeamId: 'ATL_CURRENT',
+          awayTeamId: 'LAC_CURRENT',
+          boxScore: {
+            home: {
+              players: [
+                { player_id: 'atl-1', name: 'Hawk Wing', position: 'SF', points: 30, rebounds: 7, assists: 4, steals: 1, blocks: 0 },
+              ],
+            },
+            away: {
+              players: [
+                { player_id: 'lac-1', name: 'Clipper Guard', position: 'PG', points: 20, rebounds: 5, assists: 8, steals: 1, blocks: 1 },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(teams).toHaveLength(2);
+    expect(buildSportPlayerLeaderboard({ sport: 'nba', teams, stat: 'ppg' })[0]).toMatchObject({
+      name: 'Hawk Wing',
+      teamAbbreviation: 'ATL',
+      games: 2,
+      valueText: '24.0',
+    });
+    expect(buildSportPlayerLeaderboard({ sport: 'nba', teams, stat: 'apg' })[0]).toMatchObject({
+      name: 'Clipper Guard',
+      teamAbbreviation: 'LAC',
+      games: 2,
+      valueText: '8.5',
+    });
+  });
+
   it('builds football leaders from saved season stat totals', () => {
     const teams = [
       {

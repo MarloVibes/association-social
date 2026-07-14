@@ -37,12 +37,31 @@ export type SportPlayerLeaderboardTab = {
   label: string;
 };
 
-type LeaderboardTeam = {
+export type LeaderboardTeam = {
   id?: string;
   teamId?: string;
   name?: string;
   abbreviation?: string;
   players?: Record<string, unknown>[];
+};
+
+type BoxScoreSide = {
+  teamId?: string;
+  teamName?: string;
+  teamAbbreviation?: string;
+  abbreviation?: string;
+  players?: Record<string, unknown>[];
+};
+
+type BoxScoreGame = {
+  status?: string;
+  id?: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
+  boxScore?: {
+    home?: BoxScoreSide;
+    away?: BoxScoreSide;
+  };
 };
 
 type StatDefinition = {
@@ -179,6 +198,111 @@ function formatValue(value: number, stat: SportPlayerLeaderboardStat) {
   if (format === 'decimal2') return value.toFixed(2);
   if (format === 'decimal1') return value.toFixed(1);
   return String(Math.round(value));
+}
+
+function addNumber(target: Record<string, unknown>, key: string, value: unknown) {
+  const numeric = numberFrom(value);
+  if (numeric === null) return;
+  target[key] = numberFrom(target[key]) || 0;
+  target[key] = Number(target[key]) + numeric;
+}
+
+function boxScoreTeamId(game: BoxScoreGame, side: 'home' | 'away') {
+  const boxSide = game.boxScore?.[side];
+  return String(
+    boxSide?.teamId
+    || (side === 'home' ? game.homeTeamId : game.awayTeamId)
+    || boxSide?.teamAbbreviation
+    || boxSide?.abbreviation
+    || `${game.id || 'game'}-${side}`,
+  );
+}
+
+function boxScoreTeamName(teamId: string, boxSide: BoxScoreSide | undefined, sport: string | null | undefined) {
+  return displayScheduleTeamLabel(
+    boxSide?.teamName || boxSide?.teamAbbreviation || boxSide?.abbreviation || teamId,
+    teamId,
+    sport,
+  );
+}
+
+const BOX_SCORE_NON_STAT_KEYS = new Set([
+  'id',
+  'playerId',
+  'player_id',
+  'bref_id',
+  'name',
+  'full_name',
+  'position',
+  'team',
+  'teamId',
+  'teamName',
+  'teamAbbreviation',
+  'abbreviation',
+  'starter',
+]);
+
+export function teamsFromBoxScoreGames({
+  games = [],
+  sport = 'nba',
+}: {
+  games?: BoxScoreGame[];
+  sport?: string | null;
+} = {}): LeaderboardTeam[] {
+  const teams = new Map<string, LeaderboardTeam>();
+  const playerMaps = new Map<string, Map<string, Record<string, unknown>>>();
+
+  games.forEach((game) => {
+    if (game.status && game.status !== 'final') return;
+    (['home', 'away'] as const).forEach((side) => {
+      const boxSide = game.boxScore?.[side];
+      if (!Array.isArray(boxSide?.players) || boxSide.players.length === 0) return;
+      const teamId = boxScoreTeamId(game, side);
+      const abbreviation = displayScheduleAbbr(boxSide.teamAbbreviation || boxSide.abbreviation || teamId);
+      if (!teams.has(teamId)) {
+        teams.set(teamId, {
+          id: teamId,
+          teamId,
+          abbreviation,
+          name: boxScoreTeamName(teamId, boxSide, sport),
+          players: [],
+        });
+        playerMaps.set(teamId, new Map());
+      }
+      const team = teams.get(teamId);
+      const playerMap = playerMaps.get(teamId);
+      if (!team || !playerMap) return;
+
+      boxSide.players.forEach((line, lineIndex) => {
+        const key = playerKey(line, `${teamId}-${lineIndex}`);
+        const existing = playerMap.get(key);
+        const seasonStats = (existing?.seasonStats && typeof existing.seasonStats === 'object'
+          ? existing.seasonStats
+          : { games: 0 }) as Record<string, unknown>;
+        seasonStats.games = (numberFrom(seasonStats.games) || 0) + 1;
+
+        Object.entries(line).forEach(([statKey, value]) => {
+          if (BOX_SCORE_NON_STAT_KEYS.has(statKey)) return;
+          addNumber(seasonStats, statKey, value);
+        });
+
+        const player = {
+          ...(existing || {}),
+          ...line,
+          player_id: line.player_id || line.playerId || line.id || key,
+          full_name: line.full_name || line.name || existing?.full_name || 'Unknown Player',
+          position: line.position || existing?.position || '?',
+          team: abbreviation,
+          seasonStats,
+        };
+        playerMap.set(key, player);
+      });
+
+      team.players = Array.from(playerMap.values());
+    });
+  });
+
+  return Array.from(teams.values());
 }
 
 export function playerLeaderboardTabsForSport(sport?: string | null): SportPlayerLeaderboardTab[] {
