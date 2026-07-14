@@ -560,6 +560,8 @@ describe('source safety regressions', () => {
     expect(seasonLayout).toContain('game-result');
     expect(calendar).toContain("item.status === 'final' || (item.liveTimeline && !resultRevealed)");
     expect(calendar).toContain("? '/screens/season/game-result'");
+    expect(calendar).toContain("const cupGame = supportsCup && selectedViewMode === 'cup';");
+    expect(calendar).not.toContain("item.competition === 'nbaCup' ? 'nbaCup'");
     expect(hook).toContain("pathname: '/screens/season/game-result'");
     expect(notifications).toContain("pathname: '/screens/season/game-result'");
     expect(result).toContain('Final Score');
@@ -1571,7 +1573,9 @@ describe('source safety regressions', () => {
     expect(cpuTrade).not.toContain("const sport = league?.sport || 'nba'");
     expect(cpuTrade).not.toContain("(ld.sport && ld.sport !== 'nba') ? ld.sport : eraKey");
     expect(matchups).toContain("const sport = normalizeSport(league.sport || 'nba')");
-    expect(matchups).toContain("const poolKey = sport !== 'nba' ? sport : String(league.era || 'current')");
+    expect(matchups).toContain("const rawKeys = sport !== 'nba'");
+    expect(matchups).toContain("league.rosterEra");
+    expect(matchups).toContain("'current'");
     expect(matchups).not.toContain("const sport = String(league.sport || 'nba')");
     expect(salaryOverrides).toContain("const sport = normalizeSport(ld.sport)");
     expect(salaryOverrides).toContain("const poolKey = sport !== 'nba' ? sport : era");

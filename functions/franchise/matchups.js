@@ -834,6 +834,54 @@ function assertSimulationRoster(team, teamId) {
   }
 }
 
+function fallbackCpuSimulationTeam(team, teamId, sport = 'nba') {
+  const existingPlayers = Array.isArray(team && team.players) ? team.players : [];
+  if (existingPlayers.length >= 5) return team;
+  if (normalizeSport(sport) !== 'nba') return team;
+  const abbr = displayScheduleAbbr(teamId) || String(teamId || 'CPU').slice(0, 3).toUpperCase();
+  const generatedPlayers = [
+    { suffix: 'Lead Guard', position: 'PG', minutes: 32, shooting: 76, playmaking: 78, defense: 70, rebounding: 58 },
+    { suffix: 'Scoring Guard', position: 'SG', minutes: 30, shooting: 77, playmaking: 70, defense: 68, rebounding: 60 },
+    { suffix: 'Wing', position: 'SF', minutes: 30, shooting: 73, playmaking: 66, defense: 74, rebounding: 68 },
+    { suffix: 'Forward', position: 'PF', minutes: 28, shooting: 70, playmaking: 62, defense: 75, rebounding: 78 },
+    { suffix: 'Center', position: 'C', minutes: 28, shooting: 66, playmaking: 58, defense: 78, rebounding: 84 },
+    { suffix: 'Sixth Man', position: 'G', minutes: 22, shooting: 74, playmaking: 69, defense: 66, rebounding: 58 },
+    { suffix: 'Reserve Wing', position: 'F', minutes: 18, shooting: 70, playmaking: 62, defense: 72, rebounding: 66 },
+    { suffix: 'Reserve Big', position: 'C', minutes: 14, shooting: 64, playmaking: 55, defense: 74, rebounding: 79 },
+  ].map((profile, index) => ({
+    player_id: `${normalizeScheduleKey(abbr || teamId || 'cpu')}-cpu-${index + 1}`,
+    full_name: `${abbr} CPU ${index + 1}`,
+    position: profile.position,
+    minutes: profile.minutes,
+    hidden: {
+      shooting: profile.shooting,
+      playmaking: profile.playmaking,
+      defense: profile.defense,
+      rebounding: profile.rebounding,
+      basketballIq: 70,
+      athleticism: 70,
+    },
+  }));
+  const seen = new Set(existingPlayers.map(playerKey).filter(Boolean));
+  const players = [
+    ...existingPlayers,
+    ...generatedPlayers.filter((player) => {
+      const key = playerKey(player);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  ];
+  return {
+    ...(team || {}),
+    id: (team && team.id) || teamId,
+    teamId: (team && team.teamId) || teamId,
+    abbreviation: (team && team.abbreviation) || abbr,
+    name: (team && team.name) || `${abbr} CPU`,
+    players,
+  };
+}
+
 function normalizeSimulationMinutes(players) {
   const weights = players.map((player, index) => Math.max(1, Number(player.minutes || player.rotationMinutes || (index < 5 ? 32 : 18))));
   const total = weights.reduce((sum, value) => sum + value, 0) || 1;
@@ -1931,8 +1979,11 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam, ski
     throw new MatchupError('failed-precondition', 'This game cannot be simulated yet.');
   }
   if (!skipParticipantCheck) assertParticipant(game, uid);
-  const rosterSimulation = homeTeam || awayTeam
-    ? simulateRosterGame({ game, homeTeam, awayTeam, nowMs })
+  const sport = normalizeSport(game && (game.sport || game.leagueSport));
+  const simulationHomeTeam = fallbackCpuSimulationTeam(homeTeam, game.homeTeamId, sport);
+  const simulationAwayTeam = fallbackCpuSimulationTeam(awayTeam, game.awayTeamId, sport);
+  const rosterSimulation = simulationHomeTeam || simulationAwayTeam
+    ? simulateRosterGame({ game, homeTeam: simulationHomeTeam, awayTeam: simulationAwayTeam, nowMs })
     : null;
   const seed = `${game.id}:${game.homeTeamId}:${game.awayTeamId}:${nowMs}`;
   const { homeScore, awayScore } = rosterSimulation || simulatedScore(game, nowMs);
@@ -1944,8 +1995,8 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam, ski
     awayScore,
     source: 'simulation',
     teamStates: {
-      [game.homeTeamId]: teamStateForFinalization(homeTeam),
-      [game.awayTeamId]: teamStateForFinalization(awayTeam),
+      [game.homeTeamId]: teamStateForFinalization(simulationHomeTeam),
+      [game.awayTeamId]: teamStateForFinalization(simulationAwayTeam),
     },
   });
   const simulatedGame = {
@@ -1972,7 +2023,7 @@ function simulateScheduledGameResult({ game, uid, nowMs, homeTeam, awayTeam, ski
       game: simulatedGame,
       nowMs,
       seed,
-      homeTeam,
+      homeTeam: simulationHomeTeam,
     }),
   };
 }
@@ -1997,10 +2048,13 @@ function finalScoreGameResult({
   }
   if (!skipParticipantCheck) assertParticipant(game, uid);
   if (winnerTeamId && (homeScore == null || awayScore == null)) {
+    const sport = normalizeSport(game && (game.sport || game.leagueSport));
+    const simulationHomeTeam = fallbackCpuSimulationTeam(homeTeam, game.homeTeamId, sport);
+    const simulationAwayTeam = fallbackCpuSimulationTeam(awayTeam, game.awayTeamId, sport);
     const rosterSimulation = simulateRosterGame({
       game,
-      homeTeam,
-      awayTeam,
+      homeTeam: simulationHomeTeam,
+      awayTeam: simulationAwayTeam,
       nowMs,
       winnerTeamId,
     });
@@ -2013,8 +2067,8 @@ function finalScoreGameResult({
       awayScore: rosterSimulation.awayScore,
       source: 'manual_winner',
       teamStates: {
-        [game.homeTeamId]: teamStateForFinalization(homeTeam),
-        [game.awayTeamId]: teamStateForFinalization(awayTeam),
+        [game.homeTeamId]: teamStateForFinalization(simulationHomeTeam),
+        [game.awayTeamId]: teamStateForFinalization(simulationAwayTeam),
       },
     });
     const winnerGame = {
@@ -2037,7 +2091,7 @@ function finalScoreGameResult({
         game: winnerGame,
         nowMs,
         seed,
-        homeTeam,
+        homeTeam: simulationHomeTeam,
       }),
     };
   }
@@ -2694,11 +2748,31 @@ function teamFromParticipantFallback({ teamId, participant, poolPlayers = [] }) 
 async function eraPoolPlayersForLeague({ tx, db, league }) {
   if (!tx || !db || !league) return [];
   const sport = normalizeSport(league.sport || 'nba');
-  const poolKey = sport !== 'nba' ? sport : String(league.era || 'current');
-  const poolSnap = await tx.get(db.collection('era_player_pools').doc(poolKey));
-  if (!poolSnap.exists) return [];
-  const pool = poolSnap.data() || {};
-  return Array.isArray(pool.players) ? pool.players : [];
+  const rawKeys = sport !== 'nba'
+    ? [sport]
+    : [
+      league.era,
+      league.rosterEra,
+      league.eraKey,
+      league.rosterKey,
+      'current',
+    ];
+  const poolKeys = [];
+  rawKeys.forEach((value) => {
+    const key = String(value || '').trim();
+    if (!key || poolKeys.includes(key)) return;
+    poolKeys.push(key);
+    if (sport === 'nba' && /modern|current/i.test(key) && !poolKeys.includes('current')) {
+      poolKeys.push('current');
+    }
+  });
+  for (const poolKey of poolKeys) {
+    const poolSnap = await tx.get(db.collection('era_player_pools').doc(poolKey));
+    if (!poolSnap.exists) continue;
+    const pool = poolSnap.data() || {};
+    if (Array.isArray(pool.players) && pool.players.length > 0) return pool.players;
+  }
+  return [];
 }
 
 async function withFallbackRoster({ tx, db, league, team, teamId, participant }) {

@@ -735,7 +735,8 @@ export default function CalendarScreen() {
             {sectionRow.games.map((item) => {
               const home = teamPresentations.get(item.homeTeamId) || teamPresentations.get(normalizeScheduleKey(item.homeTeamId)) || { label: teamNames.get(item.homeTeamId) || displayScheduleName({ scheduleTeamId: item.homeTeamId }), abbr: displayScheduleAbbr(item.homeTeamId) };
               const away = teamPresentations.get(item.awayTeamId) || teamPresentations.get(normalizeScheduleKey(item.awayTeamId)) || { label: teamNames.get(item.awayTeamId) || displayScheduleName({ scheduleTeamId: item.awayTeamId }), abbr: displayScheduleAbbr(item.awayTeamId) };
-              const cupGame = supportsCup && (selectedViewMode === 'cup' || item.competition === 'nbaCup');
+              const cupGame = supportsCup && selectedViewMode === 'cup';
+              const cupBadge = supportsCup && item.competition === 'nbaCup';
               const competitionParam = item.competition === 'playoffs' ? 'playoffs' : cupGame ? 'nbaCup' : 'regular';
               const mine = Boolean(myTeam && (myTeamIds.has(normalizeScheduleKey(item.homeTeamId)) || myTeamIds.has(normalizeScheduleKey(item.awayTeamId)) || item.homeGmId === uid || item.awayGmId === uid));
               const openable = Boolean(mine || isLeagueAdmin);
@@ -809,7 +810,7 @@ export default function CalendarScreen() {
                     </View>
                   </View>
                   <View style={styles.tileFooter}>
-                    {cupGame ? (
+                    {cupBadge ? (
                       <Text style={styles.cupHint}>NBA Cup</Text>
                     ) : (
                       <Text style={styles.tileHint}>{openable ? 'Tap to manage' : 'League game'}</Text>

@@ -473,19 +473,23 @@ describe('matchup request state helpers', () => {
     })).toEqual({ allowed: false, reason: 'not_participant' });
   });
 
-  it('refuses to simulate when a team roster cannot be resolved', () => {
+  it('uses a CPU fallback when a team roster cannot be resolved', () => {
     const game = seedAvailableGame();
 
-    expect(() => simulateScheduledGame({
+    const result = simulateScheduledGame({
       game,
       uid: game.homeGmId,
       nowMs: 5_000,
       homeTeam: {},
       awayTeam: seedRoster('Away', 72),
-    })).toThrow(expect.objectContaining({
-      code: 'failed-precondition',
-      message: expect.stringContaining('roster'),
-    }));
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.boxScore.home.players).toHaveLength(8);
+    expect(result.boxScore.away.players).toHaveLength(8);
+    expect(result.boxScore.home.players[0].name).toContain('CPU');
+    expect(result.boxScore.home.points).toBe(result.homeScore);
+    expect(result.boxScore.away.points).toBe(result.awayScore);
   });
 
   it('stores live mode replay metadata for simulated games', () => {
@@ -595,20 +599,28 @@ describe('matchup request state helpers', () => {
     });
   });
 
-  it('does not invent fallback CPU box score players when era pool data is missing', () => {
+  it('generates fallback CPU box score players when roster data is missing', () => {
     const game = seedAvailableGame({
       homeTeamId: 'SAS_2011',
       awayTeamId: 'CHI',
       awayGmId: null,
     });
 
-    expect(() => simulateScheduledGame({
+    const result = simulateScheduledGame({
       game,
       uid: game.homeGmId,
       nowMs: 5_000,
       homeTeam: {},
-      awayTeam: seedRoster('Chicago', 77),
-    })).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+      awayTeam: undefined,
+    });
+
+    expect(result.status).toBe('final');
+    expect(result.boxScore.home.players).toHaveLength(8);
+    expect(result.boxScore.away.players).toHaveLength(8);
+    expect(result.boxScore.home.points).toBe(result.homeScore);
+    expect(result.boxScore.away.points).toBe(result.awayScore);
+    expect(result.boxScore.home.players[0].name).toContain('SAS');
+    expect(result.boxScore.away.players[0].name).toContain('CHI');
   });
 
   it('sanitizes stale big-man shooting values before simulation without hurting real stretch profiles', () => {
@@ -1803,6 +1815,116 @@ describe('matchup request state helpers', () => {
     });
   });
 
+  it('falls back to the current era pool for modern NBA leagues before generic CPU names', async () => {
+    const game = seedAvailableGame({
+      id: 'modern-pool-game',
+      sequence: 1,
+      week: 1,
+      homeTeamId: 'PHI_CURRENT',
+      awayTeamId: 'SAS_CURRENT',
+      homeGmId: null,
+      awayGmId: null,
+    });
+    const schedule = { games: [game] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const phiRef: any = { id: 'PHI_CURRENT' };
+    const sasRef: any = { id: 'SAS_CURRENT' };
+    const modernPoolRef: any = { id: 'modern' };
+    const currentPoolRef: any = { id: 'current' };
+    const gameResultRef: any = { id: 'modern-pool-game-result' };
+    const liveTimelineRef: any = { id: 'modern-pool-game-live' };
+    const poolPlayers = [
+      ...Array.from({ length: 8 }, (_, index) => ({
+        player_id: `phi-current-${index}`,
+        full_name: `Sixers Current ${index + 1}`,
+        team: 'PHI',
+        position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+        minutes: index < 5 ? 30 : 18,
+        hidden: { shooting: 82, playmaking: 78, defense: 76, rebounding: index === 4 ? 88 : 68, basketballIq: 80 },
+      })),
+      ...Array.from({ length: 8 }, (_, index) => ({
+        player_id: `sas-current-${index}`,
+        full_name: `Spurs Current ${index + 1}`,
+        team: 'SAS',
+        position: index === 0 ? 'PG' : index === 4 ? 'C' : 'G',
+        minutes: index < 5 ? 30 : 18,
+        hidden: { shooting: 76, playmaking: 74, defense: 76, rebounding: index === 4 ? 86 : 66, basketballIq: 78 },
+      })),
+    ];
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'PHI_CURRENT' ? phiRef : sasRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba', era: 'modern' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === phiRef || ref === sasRef) return { exists: false, data: () => ({}) };
+        if (ref === modernPoolRef) return { exists: false, data: () => ({}) };
+        if (ref === currentPoolRef) return { exists: true, data: () => ({ players: poolPlayers }) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === 'leagues') return { doc: vi.fn(() => leagueRef) };
+        if (name === 'era_player_pools') {
+          return { doc: vi.fn((id: string) => (id === 'modern' ? modernPoolRef : currentPoolRef)) };
+        }
+        return { doc: vi.fn() };
+      }),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 16_500,
+      HttpsError: TestHttpsError,
+    });
+
+    await handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', action: 'start', competition: 'regular', batchSize: 1 },
+    });
+
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite?.[1]).toMatchObject({
+      game: expect.objectContaining({
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('Sixers Current') }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('Spurs Current') }),
+            ]),
+          }),
+        }),
+      }),
+    });
+  });
+
   it('repairs missing box score records for already-final season games', async () => {
     const finalGame = {
       ...seedAvailableGame({
@@ -2277,6 +2399,32 @@ describe('matchup request state helpers', () => {
       summary: expect.stringContaining('points'),
       topPerformers: expect.any(Array),
     });
+  });
+
+  it('generates CPU box score players when a winner outcome has missing roster data', () => {
+    const game = seedAvailableGame({
+      homeTeamId: 'PHI_CURRENT',
+      awayTeamId: 'SAS_CURRENT',
+    });
+
+    const result = finalScoreGameResult({
+      game,
+      uid: game.homeGmId,
+      nowMs: 9_500,
+      winnerTeamId: game.homeTeamId,
+      homeTeam: undefined,
+      awayTeam: {},
+    });
+
+    expect(result.game).toMatchObject({
+      status: 'final',
+      winnerTeamId: game.homeTeamId,
+      resultSource: 'manual_winner',
+    });
+    expect(result.game.boxScore.home.players).toHaveLength(8);
+    expect(result.game.boxScore.away.players).toHaveLength(8);
+    expect(result.game.boxScore.home.points).toBe(result.game.homeScore);
+    expect(result.game.boxScore.away.points).toBe(result.game.awayScore);
   });
 
   it('respects winner-only outcomes for NFL and MLB generated results', () => {
