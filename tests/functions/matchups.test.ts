@@ -2953,6 +2953,7 @@ describe('matchup request state helpers', () => {
     const cupGame = seedAvailableGame({ id: 'cup-1', competition: 'nbaCup', stage: 'group', groupId: 'Group A', countsForRegularSeason: true });
     const finalCupGame = seedAvailableGame({ id: 'cup-final', competition: 'nbaCup', stage: 'final' });
     const updatedCupGame = { ...cupGame, status: 'final', homeScore: 110, awayScore: 104 };
+    const regularUpdatedCupGame = { ...cupGame, status: 'final', homeScore: 114, awayScore: 111 };
     const schedule = {
       games: [regularGame, cupGame],
       nbaCup: { games: [cupGame, finalCupGame] },
@@ -2965,6 +2966,10 @@ describe('matchup request state helpers', () => {
     expect(updatePayloadForCompetition('nbaCup', [updatedCupGame, finalCupGame], schedule)).toEqual({
       'nbaCup.games': [expect.objectContaining({ ...updatedCupGame, resultDetailsStorage: 'gameResults' }), finalCupGame],
       games: [regularGame, expect.objectContaining({ ...updatedCupGame, resultDetailsStorage: 'gameResults' })],
+    });
+    expect(updatePayloadForCompetition('regular', [regularGame, regularUpdatedCupGame], schedule)).toEqual({
+      games: [regularGame, expect.objectContaining({ ...regularUpdatedCupGame, resultDetailsStorage: 'gameResults' })],
+      'nbaCup.games': [expect.objectContaining({ ...regularUpdatedCupGame, resultDetailsStorage: 'gameResults' }), finalCupGame],
     });
     expect(updatePayloadForCompetition('regular', [regularGame])).toEqual({ games: [regularGame] });
   });

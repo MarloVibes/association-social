@@ -2356,6 +2356,20 @@ function updateRegularGamesWithCupResults(schedule, cupGames) {
   return changed ? compactScheduleGamesForWrite(games) : null;
 }
 
+function updateCupGamesWithRegularResults(schedule, regularGames) {
+  const cupGames = schedule && schedule.nbaCup && Array.isArray(schedule.nbaCup.games) ? schedule.nbaCup.games : [];
+  if (cupGames.length === 0) return null;
+  const regularGameById = new Map((regularGames || []).map(game => [game.id, game]));
+  let changed = false;
+  const games = cupGames.map((game) => {
+    const regularGame = game && game.id ? regularGameById.get(game.id) : null;
+    if (!regularGame || regularGame.competition !== 'nbaCup') return game;
+    changed = true;
+    return regularGame;
+  });
+  return changed ? compactScheduleGamesForWrite(games) : null;
+}
+
 function updatePayloadForCompetition(competition, games, schedule) {
   const compactGames = compactScheduleGamesForWrite(games);
   if (competition === 'nbaCup') {
@@ -2365,7 +2379,8 @@ function updatePayloadForCompetition(competition, games, schedule) {
       : { 'nbaCup.games': compactGames };
   }
   if (competition === 'playoffs') return { playoffs: updatePlayoffGames(schedule, compactGames) };
-  return { games: compactGames };
+  const cupGames = updateCupGamesWithRegularResults(schedule, compactGames);
+  return cupGames ? { games: compactGames, 'nbaCup.games': cupGames } : { games: compactGames };
 }
 
 const MAX_SIM_BATCH_SIZE = 1;

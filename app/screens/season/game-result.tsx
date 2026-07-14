@@ -301,7 +301,25 @@ export default function GameResultScreen() {
   const games = useMemo(() => (
     isCupGame ? schedule?.nbaCup?.games || [] : isPlayoffGame ? playoffGames : schedule?.games || []
   ), [isCupGame, isPlayoffGame, playoffGames, schedule?.games, schedule?.nbaCup?.games]);
-  const scheduleGame = useMemo(() => games.find(item => item.id === gameId) || null, [gameId, games]);
+  const cupRegularFallbackGame = useMemo(() => {
+    if (!isCupGame || !schedule?.games?.length || !gameId) return null;
+    const selectedGame = games.find(item => item.id === gameId) || null;
+    const regularCopy = schedule.games.find(item => item.id === gameId) || null;
+    if (
+      regularCopy?.status === 'final'
+      && (
+        selectedGame?.status !== 'final'
+        || typeof selectedGame?.homeScore !== 'number'
+        || typeof selectedGame?.awayScore !== 'number'
+      )
+    ) {
+      return { ...selectedGame, ...regularCopy };
+    }
+    return null;
+  }, [gameId, games, isCupGame, schedule?.games]);
+  const scheduleGame = useMemo(() => (
+    cupRegularFallbackGame || games.find(item => item.id === gameId) || null
+  ), [cupRegularFallbackGame, gameId, games]);
   const game = useMemo(() => (
     scheduleGame && resultDetails?.id === scheduleGame.id
       ? { ...scheduleGame, ...resultDetails }
@@ -362,7 +380,8 @@ export default function GameResultScreen() {
 
   useEffect(() => {
     if (!leagueId || !gameId || !needsResultDetailsRepair) return;
-    const repairKey = `${leagueId}:${competitionParam}:${gameId}`;
+    const repairCompetition = cupRegularFallbackGame ? 'regular' : competitionParam;
+    const repairKey = `${leagueId}:${repairCompetition}:${gameId}`;
     if (repairAttemptedRef.current === repairKey) return;
     repairAttemptedRef.current = repairKey;
     let cancelled = false;
@@ -373,7 +392,7 @@ export default function GameResultScreen() {
         await simScheduleBatch({
           leagueId,
           gameId,
-          competition: competitionParam,
+          competition: repairCompetition,
           action: 'repairResults',
           batchSize: 1,
         });
@@ -387,7 +406,7 @@ export default function GameResultScreen() {
     return () => {
       cancelled = true;
     };
-  }, [competitionParam, gameId, isLeagueAdmin, leagueId, needsResultDetailsRepair]);
+  }, [competitionParam, cupRegularFallbackGame, gameId, isLeagueAdmin, leagueId, needsResultDetailsRepair]);
 
   const resetGame = () => {
     if (!leagueId || !gameId || !isLeagueAdmin || resetting) return;

@@ -354,6 +354,7 @@ export default function StandingsScreen() {
   const [poolPlayers, setPoolPlayers] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [resultGames, setResultGames] = useState<NbaScheduleGame[]>([]);
+  const [directResultGames, setDirectResultGames] = useState<NbaScheduleGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<StandingsViewMode>('regular');
   const initialContentMode: StandingsContentMode = mode === 'teamPlayers' || mode === 'leaguePlayers' ? mode : 'standings';
@@ -398,11 +399,13 @@ export default function StandingsScreen() {
           }, () => setResultGames([]));
         } else {
           setResultGames([]);
+          setDirectResultGames([]);
         }
         setLoading(false);
       }, () => {
         setSchedule(null);
         setResultGames([]);
+        setDirectResultGames([]);
         setLoading(false);
       });
     }, () => setLoading(false));
@@ -416,6 +419,46 @@ export default function StandingsScreen() {
       unsubscribeTeams();
     };
   }, [leagueId]);
+
+  useEffect(() => {
+    if (!leagueId || !league || !schedule) {
+      setDirectResultGames([]);
+      return;
+    }
+    let cancelled = false;
+    const scheduleId = league.scheduleId || String(league.currentYear || 2025);
+    const finalGamesById = new Map<string, NbaScheduleGame>();
+    [...(schedule.games || []), ...(schedule.nbaCup?.games || [])].forEach((game) => {
+      if (
+        game?.id
+        && game.status === 'final'
+      ) {
+        finalGamesById.set(String(game.id), game);
+      }
+    });
+    const finalGames = Array.from(finalGamesById.values());
+    if (finalGames.length === 0) {
+      setDirectResultGames([]);
+      return;
+    }
+    Promise.all(finalGames.map(async (game) => {
+      try {
+        const snapshot = await getDoc(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'gameResults', String(game.id)));
+        if (!snapshot.exists()) return null;
+        const data = snapshot.data() as any;
+        const resultGame = data?.game && typeof data.game === 'object' ? data.game : data;
+        return resultGame as NbaScheduleGame;
+      } catch {
+        return null;
+      }
+    })).then((games) => {
+      if (cancelled) return;
+      setDirectResultGames(games.filter(Boolean) as NbaScheduleGame[]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [league, leagueId, schedule]);
 
   useEffect(() => {
     if (!league) {
@@ -460,9 +503,9 @@ export default function StandingsScreen() {
   const boxScoreStatTeams = useMemo(() => (
     teamsFromBoxScoreGames({
       sport,
-      games: resultGames.length > 0 ? resultGames : [...regularGames, ...cupGames],
+      games: directResultGames.length > 0 ? directResultGames : resultGames.length > 0 ? resultGames : [...regularGames, ...cupGames],
     }) as Team[]
-  ), [cupGames, regularGames, resultGames, sport]);
+  ), [cupGames, directResultGames, regularGames, resultGames, sport]);
   const playerStatTeams = boxScoreStatTeams.length > 0 ? boxScoreStatTeams : leagueStatTeams;
   const hasNbaCup = supportsCup && cupGames.length > 0 && schedule?.nbaCup?.enabled !== false;
   const selectedViewMode: StandingsViewMode = viewMode === 'cup' && hasNbaCup ? 'cup' : 'regular';
