@@ -2209,6 +2209,158 @@ describe('matchup request state helpers', () => {
     });
   });
 
+  it('repairs missing final result details before continuing a season sim batch', async () => {
+    const finalGame = {
+      ...seedAvailableGame({
+        id: 'old-final-missing-box',
+        sequence: 4,
+        week: 1,
+        homeTeamId: 'HOME',
+        awayTeamId: 'AWAY',
+        homeGmId: null,
+        awayGmId: null,
+      }),
+      status: 'final',
+      homeScore: 101,
+      awayScore: 88,
+      winnerTeamId: 'HOME',
+      loserTeamId: 'AWAY',
+      quarters: [
+        { quarter: 1, home: 29, away: 23 },
+        { quarter: 2, home: 22, away: 15 },
+        { quarter: 3, home: 26, away: 23 },
+        { quarter: 4, home: 24, away: 27 },
+      ],
+    };
+    const nextScheduled = seedAvailableGame({
+      id: 'next-scheduled-game',
+      sequence: 5,
+      week: 1,
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeGmId: null,
+      awayGmId: null,
+    });
+    const schedule = { games: [finalGame, nextScheduled] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const homeRef: any = { id: 'HOME' };
+    const awayRef: any = { id: 'AWAY' };
+    const gameResultRef: any = { id: 'old-final-missing-box-detail' };
+    const liveTimelineRef: any = { id: 'old-final-missing-box-live' };
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'HOME' ? homeRef : awayRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === gameResultRef) return {
+          exists: true,
+          data: () => ({
+            game: {
+              ...finalGame,
+              boxScore: { home: { players: [] }, away: { players: [] } },
+            },
+          }),
+        };
+        if (ref === homeRef) return {
+          exists: true,
+          id: 'HOME',
+          data: () => ({
+            teamId: 'HOME',
+            abbreviation: 'HOM',
+            players: seedRoster('Home', 84).players,
+          }),
+        };
+        if (ref === awayRef) return {
+          exists: true,
+          id: 'AWAY',
+          data: () => ({
+            teamId: 'AWAY',
+            abbreviation: 'AWY',
+            players: seedRoster('Away', 78).players,
+          }),
+        };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => (name === 'leagues' ? { doc: vi.fn(() => leagueRef) } : { doc: vi.fn() })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 40_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const control = await handler({
+      auth: { uid: 'commissioner' },
+      data: {
+        leagueId: 'league-1',
+        action: 'step',
+        competition: 'regular',
+        batchSize: 1,
+      },
+    });
+
+    expect(control).toMatchObject({
+      status: 'running',
+      repairedGameIds: ['old-final-missing-box'],
+      repairedGames: 1,
+    });
+    expect(control.lastBatchGameIds).toBeUndefined();
+    const scheduleUpdate = tx.update.mock.calls.find(([ref]: any[]) => ref === scheduleRef)?.[1];
+    expect(scheduleUpdate.games[0]).toMatchObject({
+      id: 'old-final-missing-box',
+      status: 'final',
+      resultDetailsStorage: 'gameResults',
+    });
+    expect(scheduleUpdate.games[1]).toMatchObject({
+      id: 'next-scheduled-game',
+      status: 'scheduled',
+    });
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite?.[1]).toMatchObject({
+      gameId: 'old-final-missing-box',
+      game: expect.objectContaining({
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.any(String), points: expect.any(Number) }),
+            ]),
+          }),
+        }),
+      }),
+    });
+  });
+
   it('repairs final result box scores with CPU fallback players when roster docs are missing', async () => {
     const finalGame = {
       ...seedAvailableGame({

@@ -3190,8 +3190,13 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
 
       const games = gamesForCompetition(schedule, competition);
       const batch = selectSimBatch({ games, competition, scope, batchSize });
-      if (action === 'repairResults' || batch.length === 0) {
-        const repairBatch = await selectResultRepairBatch({ tx, scheduleRef, games, batchSize, targetGameId });
+      const shouldSweepResultRepairs = action === 'repairResults'
+        || action === 'start'
+        || !existingControl.resultRepairSweepComplete;
+      const repairBatch = shouldSweepResultRepairs
+        ? await selectResultRepairBatch({ tx, scheduleRef, games, batchSize, targetGameId })
+        : [];
+      if (action === 'repairResults' || repairBatch.length > 0 || batch.length === 0) {
         if (repairBatch.length > 0) {
           const teamCache = new Map();
           const teamCacheKey = (game, side) => {
@@ -3250,6 +3255,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
             totalGames: nextGames.length,
             remainingGames: nextGames.filter(game => ['scheduled', 'preparing'].includes(game.status)).length,
             cancelRequested: false,
+            resultRepairSweepComplete: false,
           };
           tx.update(scheduleRef, {
             ...cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)),
@@ -3264,6 +3270,7 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
           completedAtMs: now(),
           finalGames: games.filter(game => game.status === 'final').length,
           totalGames: games.length,
+          resultRepairSweepComplete: true,
         };
         tx.update(scheduleRef, { [controlKey]: completeControl });
         return completeControl;
@@ -3371,6 +3378,9 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
         totalGames: nextGames.length,
         remainingGames: remaining,
         cancelRequested: false,
+        resultRepairSweepComplete: shouldSweepResultRepairs && repairBatch.length === 0
+          ? true
+          : Boolean(existingControl.resultRepairSweepComplete),
       };
       tx.update(scheduleRef, {
         ...cleanFirestoreData(updatePayloadForCompetition(competition, nextGames, schedule)),
