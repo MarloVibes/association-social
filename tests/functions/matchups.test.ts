@@ -2209,6 +2209,117 @@ describe('matchup request state helpers', () => {
     });
   });
 
+  it('repairs final result box scores with CPU fallback players when roster docs are missing', async () => {
+    const finalGame = {
+      ...seedAvailableGame({
+        id: 'final-missing-cpu-roster',
+        sequence: 9,
+        week: 1,
+        homeTeamId: 'PHI_CURRENT',
+        awayTeamId: 'SAS_CURRENT',
+        homeGmId: null,
+        awayGmId: null,
+      }),
+      status: 'final',
+      homeScore: 108,
+      awayScore: 103,
+      winnerTeamId: 'PHI_CURRENT',
+      loserTeamId: 'SAS_CURRENT',
+    };
+    const schedule = { games: [finalGame] };
+    const leagueRef: any = { id: 'league-1' };
+    const scheduleRef: any = { id: '2025' };
+    const phiRef: any = { id: 'PHI_CURRENT' };
+    const sasRef: any = { id: 'SAS_CURRENT' };
+    const currentPoolRef: any = { id: 'current' };
+    const gameResultRef: any = { id: 'final-missing-cpu-roster-detail' };
+    const liveTimelineRef: any = { id: 'final-missing-cpu-roster-live' };
+    scheduleRef.collection = vi.fn((name: string) => {
+      if (name === 'gameResults') return { doc: vi.fn(() => gameResultRef) };
+      if (name === 'liveTimelines') return { doc: vi.fn(() => liveTimelineRef) };
+      return { doc: vi.fn() };
+    });
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      if (name === 'teams') return { doc: vi.fn((id: string) => (id === 'PHI_CURRENT' ? phiRef : sasRef)) };
+      return { doc: vi.fn() };
+    });
+    const tx = {
+      get: vi.fn(async (ref: any) => {
+        if (ref === leagueRef) return {
+          exists: true,
+          data: () => ({ commissionerId: 'commissioner', scheduleId: '2025', sport: 'nba', era: 'modern' }),
+        };
+        if (ref === scheduleRef) return { exists: true, data: () => schedule };
+        if (ref === gameResultRef) return {
+          exists: true,
+          data: () => ({ game: { ...finalGame, boxScore: { home: { players: [] }, away: { players: [] } } } }),
+        };
+        if (ref === phiRef || ref === sasRef) return { exists: false, data: () => ({}) };
+        if (ref === currentPoolRef) return { exists: false, data: () => ({}) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === 'leagues') return { doc: vi.fn(() => leagueRef) };
+        if (name === 'era_player_pools') return { doc: vi.fn(() => currentPoolRef) };
+        return { doc: vi.fn() };
+      }),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createSimScheduleBatchHandler({
+      getFirestore: () => db,
+      now: () => 35_000,
+      HttpsError: TestHttpsError,
+    });
+
+    const control = await handler({
+      auth: { uid: 'commissioner' },
+      data: {
+        leagueId: 'league-1',
+        action: 'repairResults',
+        competition: 'regular',
+        gameId: 'final-missing-cpu-roster',
+        batchSize: 1,
+      },
+    });
+
+    expect(control).toMatchObject({
+      repairedGameIds: ['final-missing-cpu-roster'],
+      repairedGames: 1,
+    });
+    const gameResultWrite = tx.set.mock.calls.find(([ref]: any[]) => ref === gameResultRef);
+    expect(gameResultWrite?.[1]).toMatchObject({
+      game: expect.objectContaining({
+        boxScore: expect.objectContaining({
+          home: expect.objectContaining({
+            points: 108,
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('PHI CPU') }),
+            ]),
+          }),
+          away: expect.objectContaining({
+            points: 103,
+            players: expect.arrayContaining([
+              expect.objectContaining({ name: expect.stringContaining('SAS CPU') }),
+            ]),
+          }),
+        }),
+      }),
+    });
+  });
+
   it('surfaces unexpected simulate transaction failures with the original message', async () => {
     class TestHttpsError extends Error {
       code: string;

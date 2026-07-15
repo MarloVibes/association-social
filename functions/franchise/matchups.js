@@ -2505,8 +2505,10 @@ function finalGameQuartersForRepair({ game, homeScore, awayScore, seed }) {
 function resultDetailsForFinalGame({ game, homeTeam, awayTeam, nowMs, leagueSport }) {
   const sport = normalizeSport(game && (game.sport || game.leagueSport || leagueSport));
   if (sport !== 'nba') return null;
-  assertSimulationRoster(homeTeam, game.homeTeamId);
-  assertSimulationRoster(awayTeam, game.awayTeamId);
+  const simulationHomeTeam = fallbackCpuSimulationTeam(homeTeam, game.homeTeamId, sport);
+  const simulationAwayTeam = fallbackCpuSimulationTeam(awayTeam, game.awayTeamId, sport);
+  assertSimulationRoster(simulationHomeTeam, game.homeTeamId);
+  assertSimulationRoster(simulationAwayTeam, game.awayTeamId);
   const homeScore = Number(game.homeScore);
   const awayScore = Number(game.awayScore);
   if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return null;
@@ -2514,14 +2516,14 @@ function resultDetailsForFinalGame({ game, homeTeam, awayTeam, nowMs, leagueSpor
   const quarters = finalGameQuartersForRepair({ game, homeScore, awayScore, seed });
   const boxScore = {
     home: buildSimulationTeamBox({
-      team: homeTeam,
+      team: simulationHomeTeam,
       teamId: game.homeTeamId,
       targetPoints: homeScore,
       seed: `${seed}:home`,
       pointMargin: homeScore - awayScore,
     }),
     away: buildSimulationTeamBox({
-      team: awayTeam,
+      team: simulationAwayTeam,
       teamId: game.awayTeamId,
       targetPoints: awayScore,
       seed: `${seed}:away`,
@@ -2579,7 +2581,7 @@ function resultDetailsForFinalGame({ game, homeTeam, awayTeam, nowMs, leagueSpor
     game: repairedGame,
     nowMs,
     seed,
-    homeTeam,
+    homeTeam: simulationHomeTeam,
   });
 }
 
