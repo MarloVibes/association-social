@@ -1664,6 +1664,7 @@ function persistLiveTimelineForGame({ tx, scheduleRef, game, nowMs }) {
 
 function gameResultPayloadForGame(game, nowMs) {
   if (!game || !game.id || game.status !== 'final') return null;
+  assertCompleteResultPackage(game);
   return cleanFirestoreData({
     gameId: game.id,
     game,
@@ -2106,7 +2107,7 @@ function finalScoreGameResult({
   ) {
     throw new MatchupError('invalid-argument', 'Enter valid non-tied final scores.');
   }
-  return finalizeGame({
+  const result = finalizeGame({
     game,
     uid,
     nowMs,
@@ -2118,6 +2119,17 @@ function finalScoreGameResult({
       [game.awayTeamId]: teamStateForFinalization(awayTeam),
     },
   });
+  const detailedGame = resultDetailsForFinalGame({
+    game: { ...result.game, leagueSport: game && game.leagueSport },
+    homeTeam,
+    awayTeam,
+    nowMs,
+    leagueSport: game && game.leagueSport,
+  });
+  return {
+    ...result,
+    game: detailedGame || result.game,
+  };
 }
 
 function finalScoreGame(args) {
@@ -2468,6 +2480,18 @@ function hasStoredBoxScore(resultData) {
     && Array.isArray(boxScore.away.players)
     && boxScore.away.players.length > 0,
   );
+}
+
+function assertCompleteResultPackage(game) {
+  if (!game || game.status !== 'final') return;
+  const sport = normalizeSport(game && (game.sport || game.leagueSport));
+  if (sport !== 'nba') return;
+  if (!hasStoredBoxScore({ game })) {
+    throw new MatchupError(
+      'internal',
+      `Completed game ${game.id || ''} is missing player box scores and cannot be saved as a final result.`,
+    );
+  }
 }
 
 async function selectResultRepairBatch({ tx, scheduleRef, games, batchSize = MAX_SIM_BATCH_SIZE, targetGameId = '' }) {
@@ -3412,6 +3436,7 @@ module.exports = {
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
+  assertCompleteResultPackage,
   canonicalizeTeamForSimulation,
   cleanFirestoreData,
   coachingGradeAdjustmentsForPlayer,

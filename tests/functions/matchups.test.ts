@@ -6,6 +6,7 @@ const {
   acceptMatchupRequest,
   applyCoachingGradeAdjustmentsForSimulation,
   applyCoachingToTeamForSimulation,
+  assertCompleteResultPackage,
   canonicalizeTeamForSimulation,
   cleanFirestoreData,
   coachingGradeAdjustmentsForPlayer,
@@ -559,6 +560,35 @@ describe('matchup request state helpers', () => {
       turningPoint: expect.any(String),
       topPerformers: expect.any(Array),
     });
+  });
+
+  it('rejects completed NBA result packages that do not include both player box scores', () => {
+    expect(() => assertCompleteResultPackage({
+      id: 'broken-final',
+      status: 'final',
+      sport: 'nba',
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeScore: 100,
+      awayScore: 91,
+    })).toThrow(expect.objectContaining({
+      code: 'internal',
+      message: expect.stringContaining('missing player box scores'),
+    }));
+
+    expect(() => assertCompleteResultPackage({
+      id: 'complete-final',
+      status: 'final',
+      sport: 'nba',
+      homeTeamId: 'HOME',
+      awayTeamId: 'AWAY',
+      homeScore: 100,
+      awayScore: 91,
+      boxScore: {
+        home: { players: [{ name: 'Home Player', points: 20 }] },
+        away: { players: [{ name: 'Away Player', points: 18 }] },
+      },
+    })).not.toThrow();
   });
 
   it('permits immediate CPU matchup simulation with live mode replay metadata', () => {
@@ -2613,6 +2643,40 @@ describe('matchup request state helpers', () => {
     expect(() => finalScoreGame({ game, uid: game.homeGmId, nowMs: 9_000, homeScore: 100, awayScore: 100 })).toThrow(
       expect.objectContaining({ code: 'invalid-argument' }),
     );
+  });
+
+  it('turns reported exact NBA final scores into full stored result packages', () => {
+    const game = seedAvailableGame();
+    const result = finalScoreGameResult({
+      game,
+      uid: game.homeGmId,
+      nowMs: 9_000,
+      homeScore: 104,
+      awayScore: 101,
+      homeTeam: seedRoster('Home', 82),
+      awayTeam: seedRoster('Away', 76),
+    });
+
+    expect(result.game).toMatchObject({
+      status: 'final',
+      homeScore: 104,
+      awayScore: 101,
+      winnerTeamId: game.homeTeamId,
+      resultSource: 'manual',
+      resultDetailsStorage: 'gameResults',
+    });
+    expect(result.game.boxScore.home.players.length).toBeGreaterThanOrEqual(5);
+    expect(result.game.boxScore.away.players.length).toBeGreaterThanOrEqual(5);
+    expect(result.game.boxScore.home.points).toBe(104);
+    expect(result.game.boxScore.away.points).toBe(101);
+    expect(result.game.boxScore.home.players.reduce((sum: number, player: any) => sum + Number(player.points || 0), 0)).toBe(104);
+    expect(result.game.boxScore.away.players.reduce((sum: number, player: any) => sum + Number(player.points || 0), 0)).toBe(101);
+    expect(result.game.liveTimeline.events.length).toBeGreaterThan(0);
+    expect(result.game.postgameStory).toMatchObject({
+      headline: expect.any(String),
+      summary: expect.any(String),
+      topPerformers: expect.any(Array),
+    });
   });
 
   it('returns persistent team condition after reported final scores', () => {
