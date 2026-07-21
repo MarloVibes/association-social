@@ -642,6 +642,7 @@ describe('source safety regressions', () => {
     const matchup = source('app/screens/season/matchup.tsx');
     const calendar = source('app/screens/season/calendar.tsx');
     const result = source('app/screens/season/game-result.tsx');
+    const standings = source('app/screens/season/standings.tsx');
 
     expect(rootLayout).toContain('screens/season');
     expect(rootLayout).not.toContain('screens/season/live-mode');
@@ -664,8 +665,9 @@ describe('source safety regressions', () => {
     expect(matchup).not.toContain('homePlayers: [{ playerId:');
     expect(matchup).not.toContain('buildLiveTimeline');
     expect(calendar).toContain('const resultRevealed = isLiveResultRevealed(item, nowMs);');
-    expect(result).toContain('!resultVisible');
-    expect(result).toContain('The final score unlocks when the live simulation reaches the final buzzer.');
+    expect(result).toContain("const finalResultAvailable = game?.status === 'final' || resultVisible;");
+    expect(result).toContain('!finalResultAvailable');
+    expect(standings).toContain("game.status === 'final'");
   });
 
   it('lets commissioners reset finalized games from the result screen', () => {

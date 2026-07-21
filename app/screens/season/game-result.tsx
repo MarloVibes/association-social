@@ -396,13 +396,13 @@ export default function GameResultScreen() {
     ),
   );
   const resultVisible = isLiveResultRevealed(game, nowMs);
+  const finalResultAvailable = game?.status === 'final' || resultVisible;
   const hasCompleteBoxScore = Boolean(
     game?.boxScore?.home?.players?.length
     && game?.boxScore?.away?.players?.length,
   );
   const needsResultDetailsRepair = Boolean(
     game?.status === 'final'
-    && resultVisible
     && isLeagueAdmin
     && !hasCompleteBoxScore
   );
@@ -477,13 +477,13 @@ export default function GameResultScreen() {
           </TouchableOpacity>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>{isCupGame ? 'NBA Cup' : isPlayoffGame ? 'Playoffs' : league?.name || 'League'}</Text>
-            <Text style={styles.title}>{resultVisible ? 'Final Score' : 'Simulation'}</Text>
+            <Text style={styles.title}>{finalResultAvailable ? 'Final Score' : 'Simulation'}</Text>
           </View>
         </View>
 
         {!game ? (
           <Text style={styles.empty}>This result is not available yet.</Text>
-        ) : !resultVisible ? (
+        ) : !finalResultAvailable ? (
           <>
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Simulation in progress</Text>

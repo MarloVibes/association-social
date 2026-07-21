@@ -8,7 +8,7 @@ import SportTeamLogo from '@/components/SportTeamLogo';
 import { getSportTeamName } from '@/constants/sportTeams';
 import { auth, db } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
-import { displayScheduleAbbr, isLiveResultRevealed, scheduleKeyAliases } from '@/domain/nba/scheduleView';
+import { displayScheduleAbbr, scheduleKeyAliases } from '@/domain/nba/scheduleView';
 import { buildNbaCupGroupStandings, buildNbaStandings, type StandingsRow } from '@/domain/nba/standings';
 import {
   buildSportPlayerLeaderboard,
@@ -361,17 +361,11 @@ export default function StandingsScreen() {
   const [contentMode, setContentMode] = useState<StandingsContentMode>(initialContentMode);
   const [playerStat, setPlayerStat] = useState<SportPlayerLeaderboardStat>('ppg');
   const [selectedPlayerRow, setSelectedPlayerRow] = useState<SportPlayerLeaderboardRow | null>(null);
-  const [nowMs, setNowMs] = useState(Date.now());
 
   useEffect(() => {
     setContentMode(initialContentMode);
     setSelectedPlayerRow(null);
   }, [initialContentMode]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -483,8 +477,8 @@ export default function StandingsScreen() {
   }, [league]);
 
   const regularGames = useMemo(() => (
-    (schedule?.games || []).filter(game => isLiveResultRevealed(game, nowMs))
-  ), [nowMs, schedule?.games]);
+    (schedule?.games || []).filter(game => game.status === 'final')
+  ), [schedule?.games]);
   const sport = normalizeSport(league?.sport);
   const leagueStatTeams = useMemo(() => mergeLeagueStatTeams({
     teams,
@@ -498,8 +492,8 @@ export default function StandingsScreen() {
   const activePlayerStat = playerStatTabs.some(tab => tab.key === playerStat) ? playerStat : playerStatTabs[0].key;
   const activeContentMode: StandingsContentMode = contentMode;
   const cupGames = useMemo(() => (
-    supportsCup ? (schedule?.nbaCup?.games || []).filter(game => isLiveResultRevealed(game, nowMs)) : []
-  ), [nowMs, schedule?.nbaCup?.games, supportsCup]);
+    supportsCup ? (schedule?.nbaCup?.games || []).filter(game => game.status === 'final') : []
+  ), [schedule?.nbaCup?.games, supportsCup]);
   const boxScoreStatTeams = useMemo(() => (
     teamsFromBoxScoreGames({
       sport,
