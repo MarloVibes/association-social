@@ -68,6 +68,7 @@ const {
 const {
   createAcceptMatchupHandler,
   createExpireMatchupRequestHandler,
+  createGetGameResultDetailsHandler,
   createReportGameScoreHandler,
   createRequestMatchupHandler,
   createResetScheduledGameHandler,
@@ -578,6 +579,12 @@ exports.simulateScheduledGame = onCall(matchupFunctionOptions, createSimulateSch
 }));
 
 exports.simScheduleBatch = onCall(matchupFunctionOptions, createSimScheduleBatchHandler({
+  getFirestore,
+  now: () => Date.now(),
+  HttpsError,
+}));
+
+exports.getGameResultDetails = onCall(matchupFunctionOptions, createGetGameResultDetailsHandler({
   getFirestore,
   now: () => Date.now(),
   HttpsError,

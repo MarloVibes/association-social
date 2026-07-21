@@ -242,6 +242,10 @@ export default function GameResultScreen() {
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<{ player: any; teamId: string } | null>(null);
   const [repairingResultDetails, setRepairingResultDetails] = useState(false);
   const repairAttemptedRef = useRef('');
+  const backendDetailAttemptedRef = useRef('');
+  const isCupGame = competition === 'nbaCup';
+  const isPlayoffGame = competition === 'playoffs';
+  const competitionParam = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -252,6 +256,26 @@ export default function GameResultScreen() {
     if (!leagueId) return;
     let unsubscribeSchedule: (() => void) | undefined;
     let unsubscribeResultDetails: (() => void) | undefined;
+    let cancelled = false;
+    const loadResultDetailsFromBackend = async (scheduleId: string) => {
+      if (!gameId) return;
+      const key = `${leagueId}:${scheduleId}:${competitionParam}:${gameId}`;
+      if (backendDetailAttemptedRef.current === key) return;
+      backendDetailAttemptedRef.current = key;
+      setRepairingResultDetails(true);
+      try {
+        const getGameResultDetails = httpsCallable(functions, 'getGameResultDetails');
+        const response = await getGameResultDetails({ leagueId, gameId, competition: competitionParam });
+        const fetchedGame = (response.data as any)?.game;
+        if (!cancelled && fetchedGame?.id === gameId) {
+          setResultDetails(fetchedGame as ResultGame);
+        }
+      } catch (error) {
+        console.warn('Result detail fetch failed:', error);
+      } finally {
+        if (!cancelled) setRepairingResultDetails(false);
+      }
+    };
     const unsubscribeLeague = onSnapshot(doc(db, 'leagues', leagueId), snapshot => {
       if (!snapshot.exists()) {
         setLoading(false);
@@ -272,8 +296,15 @@ export default function GameResultScreen() {
       if (gameId) {
         unsubscribeResultDetails = onSnapshot(doc(db, 'leagues', leagueId, 'schedules', scheduleId, 'gameResults', String(gameId)), resultSnapshot => {
           const data = resultSnapshot.exists() ? resultSnapshot.data() as { game?: ResultGame } : null;
-          setResultDetails(data?.game || null);
-        }, () => setResultDetails(null));
+          const nextResult = data?.game || null;
+          setResultDetails(nextResult);
+          if (!nextResult?.boxScore?.home?.players?.length || !nextResult?.boxScore?.away?.players?.length) {
+            loadResultDetailsFromBackend(scheduleId);
+          }
+        }, () => {
+          setResultDetails(null);
+          loadResultDetailsFromBackend(scheduleId);
+        });
       } else {
         setResultDetails(null);
       }
@@ -282,16 +313,14 @@ export default function GameResultScreen() {
       setTeams(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as Team)));
     });
     return () => {
+      cancelled = true;
       unsubscribeLeague();
       if (unsubscribeSchedule) unsubscribeSchedule();
       if (unsubscribeResultDetails) unsubscribeResultDetails();
       unsubscribeTeams();
     };
-  }, [gameId, leagueId]);
+  }, [competitionParam, gameId, leagueId]);
 
-  const isCupGame = competition === 'nbaCup';
-  const isPlayoffGame = competition === 'playoffs';
-  const competitionParam = isCupGame ? 'nbaCup' : isPlayoffGame ? 'playoffs' : 'regular';
   const uid = auth.currentUser?.uid;
   const playoffGames = useMemo(() => (
     schedule?.playoffs?.rounds?.flatMap(round => (

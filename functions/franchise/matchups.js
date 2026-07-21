@@ -3415,6 +3415,120 @@ function createSimScheduleBatchHandler({ getFirestore, HttpsError, now }) {
   };
 }
 
+function canReadLeagueResult(uid, league) {
+  return Boolean(
+    isCommissioner(uid, league)
+    || (
+      uid
+      && league
+      && Array.isArray(league.members)
+      && league.members.includes(uid)
+    )
+  );
+}
+
+function findScheduledGameById(schedule, gameId, competition = 'regular') {
+  const regularGames = Array.isArray(schedule && schedule.games) ? schedule.games : [];
+  const cupGames = Array.isArray(schedule && schedule.nbaCup && schedule.nbaCup.games) ? schedule.nbaCup.games : [];
+  const playoffGames = Array.isArray(schedule && schedule.playoffs && schedule.playoffs.rounds)
+    ? schedule.playoffs.rounds.flatMap(round => (
+      (round && Array.isArray(round.series) ? round.series : [])
+        .flatMap(series => (series && Array.isArray(series.games) ? series.games : []))
+    ))
+    : [];
+  const wanted = String(gameId || '');
+  const pools = competition === 'nbaCup'
+    ? [cupGames, regularGames, playoffGames]
+    : competition === 'playoffs'
+      ? [playoffGames, regularGames, cupGames]
+      : [regularGames, cupGames, playoffGames];
+  for (const games of pools) {
+    const found = games.find(game => String(game && game.id || '') === wanted);
+    if (found) return found;
+  }
+  return null;
+}
+
+function createGetGameResultDetailsHandler({ getFirestore, HttpsError, now }) {
+  return async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+    const data = request.data || {};
+    const leagueId = typeof data.leagueId === 'string' ? data.leagueId.trim() : '';
+    const gameId = typeof data.gameId === 'string' ? data.gameId.trim() : '';
+    const competition = scheduleCompetition(data);
+    if (!leagueId || !gameId) throw new HttpsError('invalid-argument', 'Provide leagueId and gameId.');
+    const db = getFirestore();
+    const leagueRef = db.collection('leagues').doc(leagueId);
+    return db.runTransaction(async (tx) => {
+      const leagueSnap = await tx.get(leagueRef);
+      if (!leagueSnap.exists) throw new HttpsError('not-found', 'League not found.');
+      const league = leagueSnap.data() || {};
+      if (!canReadLeagueResult(uid, league)) {
+        throw new HttpsError('permission-denied', 'You must be in this league to view game results.');
+      }
+      const scheduleId = league.scheduleId || String(league.currentYear || 2025);
+      const scheduleRef = leagueRef.collection('schedules').doc(scheduleId);
+      const scheduleSnap = await tx.get(scheduleRef);
+      if (!scheduleSnap.exists) throw new HttpsError('not-found', 'Schedule not found.');
+      const schedule = scheduleSnap.data() || {};
+      const scheduledGame = findScheduledGameById(schedule, gameId, competition);
+      if (!scheduledGame) throw new HttpsError('not-found', 'Game not found.');
+
+      const resultRef = scheduleRef.collection('gameResults').doc(String(gameId));
+      const resultSnap = await tx.get(resultRef);
+      const storedResult = resultSnap.exists && resultSnap.data ? resultSnap.data() : null;
+      if (hasStoredBoxScore(storedResult)) {
+        return {
+          game: storedResult.game,
+          repaired: false,
+        };
+      }
+
+      if (
+        scheduledGame.status !== 'final'
+        || !Number.isFinite(Number(scheduledGame.homeScore))
+        || !Number.isFinite(Number(scheduledGame.awayScore))
+      ) {
+        return {
+          game: storedResult && storedResult.game ? storedResult.game : scheduledGame,
+          repaired: false,
+        };
+      }
+
+      const [homeTeam, awayTeam] = await Promise.all([
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: scheduledGame.homeTeamId, gmId: scheduledGame.homeGmId }),
+        teamForScheduledGame({ tx, db, leagueRef, league, schedule, teamId: scheduledGame.awayTeamId, gmId: scheduledGame.awayGmId }),
+      ]);
+      const nowMs = now();
+      let repairedGame;
+      try {
+        repairedGame = resultDetailsForFinalGame({
+          game: { ...scheduledGame, leagueSport: league.sport },
+          homeTeam,
+          awayTeam,
+          nowMs,
+          leagueSport: league.sport,
+        });
+      } catch (error) {
+        throw mapError(error, HttpsError);
+      }
+      if (!repairedGame) {
+        return {
+          game: storedResult && storedResult.game ? storedResult.game : scheduledGame,
+          repaired: false,
+        };
+      }
+      persistLiveTimelineForGame({ tx, scheduleRef, game: repairedGame, nowMs });
+      persistGameResultForGame({ tx, scheduleRef, game: repairedGame, nowMs });
+      return {
+        game: repairedGame,
+        repaired: true,
+      };
+    });
+  };
+}
+
 function createExpireMatchupRequestHandler(deps) {
   return createGameMutationHandler({
     ...deps,
@@ -3443,6 +3557,7 @@ module.exports = {
   createAcceptMatchupHandler,
   canUserSimulateVsCpu,
   createExpireMatchupRequestHandler,
+  createGetGameResultDetailsHandler,
   createReportGameScoreHandler,
   createRequestMatchupHandler,
   createResetScheduledGameHandler,
