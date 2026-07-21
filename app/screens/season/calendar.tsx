@@ -127,6 +127,8 @@ const CALENDAR_ROW_HEIGHT = 168;
 const CALENDAR_SECTION_HEADER_HEIGHT = 34;
 const CALENDAR_FOLLOW_VIEW_POSITION = 0.44;
 const LEAGUE_WEEKS_PER_PAGE = 4;
+const SEASON_SIM_BATCH_SIZE = 15;
+const SEASON_SIM_STEP_DELAY_MS = 25;
 
 function weekPageStartFor(week: number) {
   const safeWeek = Math.max(1, Number(week || 1));
@@ -444,7 +446,7 @@ export default function CalendarScreen() {
   const runSeasonSimContinuously = async () => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
     const remainingGames = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
-    const maxSteps = Math.max(remainingGames, allGames.length);
+    const maxSteps = Math.max(Math.ceil(Math.max(remainingGames, allGames.length) / SEASON_SIM_BATCH_SIZE) + 8, 12);
     cancelSeasonSimRef.current = false;
     pendingFollowGameIdRef.current = null;
     setViewMode('league');
@@ -470,7 +472,7 @@ export default function CalendarScreen() {
           leagueId,
           action,
           competition: 'regular',
-          batchSize: 1,
+          batchSize: SEASON_SIM_BATCH_SIZE,
         });
         const control = result.data || {};
         setSeasonSimProgress({
@@ -496,7 +498,7 @@ export default function CalendarScreen() {
           break;
         }
         action = 'step';
-        await wait(220);
+        if (SEASON_SIM_STEP_DELAY_MS > 0) await wait(SEASON_SIM_STEP_DELAY_MS);
       }
     } catch (error: any) {
       Alert.alert('Season sim stopped', error.message || 'Please try again.');
@@ -520,7 +522,7 @@ export default function CalendarScreen() {
     }
     Alert.alert(
       'Sim Season?',
-      `This will simulate ${remainingGames} remaining game${remainingGames === 1 ? '' : 's'} one at a time until the season is complete or you press Stop.`,
+      `This will fast-sim ${remainingGames} remaining game${remainingGames === 1 ? '' : 's'} in small batches until the season is complete or you press Stop.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Start Sim', style: 'destructive', onPress: runSeasonSimContinuously },
@@ -700,7 +702,7 @@ export default function CalendarScreen() {
                     </View>
                     {simmingSeason && seasonSimProgress ? (
                       <Text style={styles.simProgressText}>
-                        Simming game by game - {seasonSimProgress.finalGames}/{seasonSimProgress.totalGames} final - {seasonSimProgress.remainingGames} left
+                        Fast-simming season - {seasonSimProgress.finalGames}/{seasonSimProgress.totalGames} final - {seasonSimProgress.remainingGames} left
                       </Text>
                     ) : null}
                   </>

@@ -485,16 +485,16 @@ describe('source safety regressions', () => {
     expect(calendar).not.toContain('updateDoc');
   });
 
-  it('runs commissioner season simulation continuously in one-game steps', () => {
+  it('runs commissioner season simulation continuously in fast batches', () => {
     const calendar = source('app/screens/season/calendar.tsx');
 
     expect(calendar).toContain('runSeasonSimContinuously');
     expect(calendar).toContain("'Sim Season?'");
     expect(calendar).toContain("'Start Sim'");
     expect(calendar).toContain('remainingGames');
-    expect(calendar).toContain("batchSize: 1");
+    expect(calendar).toContain('SEASON_SIM_BATCH_SIZE');
     expect(calendar).toContain("setViewMode('league')");
-    expect(calendar).toContain('Simming game by game');
+    expect(calendar).toContain('Fast-simming season');
     expect(calendar).toContain('onScrollBeginDrag');
     expect(calendar).toContain('simDockStop');
     expect(calendar).toContain('autoFollowSeasonSim');
@@ -520,7 +520,7 @@ describe('source safety regressions', () => {
     expect(calendar).toContain('SIM_ELIGIBLE_STATUSES');
     expect(calendar).toContain('row.games.some(game => game.id === gameId)');
     expect(calendar).toContain('onScrollToIndexFailed');
-    expect(calendar).toContain('await wait(220)');
+    expect(calendar).toContain('SEASON_SIM_STEP_DELAY_MS');
     expect(calendar).not.toContain('runSeasonSimToTarget');
     expect(calendar).not.toContain('runSeasonSimWeeks');
     expect(calendar).not.toContain("'Full Season'");
