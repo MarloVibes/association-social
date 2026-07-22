@@ -4,9 +4,11 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import BroadcastGameCast from '@/components/BroadcastGameCast';
 import PlayerCard, { leagueDateFromRecord } from '@/components/PlayerCard';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
+import { buildBroadcastActorsForLineup } from '@/domain/nba/broadcastActors';
 import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
@@ -18,6 +20,8 @@ type Team = {
   name?: string;
   abbreviation?: string;
   gmId?: string;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
   players?: any[];
 };
 
@@ -370,6 +374,47 @@ export default function GameResultScreen() {
     home: [...(game?.boxScore?.home?.players || [])].sort((a, b) => Number(b.starter) - Number(a.starter) || Number(b.minutes || 0) - Number(a.minutes || 0) || sportPlayerScore(b, sport) - sportPlayerScore(a, sport)),
   }), [game?.boxScore, sport]);
   const displayedPeriods = useMemo(() => scorePeriodsForSport(sport, game), [game, sport]);
+  const broadcastActors = useMemo(() => {
+    if (sport !== 'nba') return [];
+    const homePlayers = fullBoxScore.home.length
+      ? fullBoxScore.home.slice(0, 5)
+      : (homeTeam?.players || []).slice(0, 5);
+    const awayPlayers = fullBoxScore.away.length
+      ? fullBoxScore.away.slice(0, 5)
+      : (awayTeam?.players || []).slice(0, 5);
+    return buildBroadcastActorsForLineup({
+      homeTeam: {
+        teamId: homeTeam?.teamId || game?.homeTeamId || homeAbbr,
+        abbreviation: homeAbbr,
+        primaryColor: homeTeam?.primaryColor,
+        secondaryColor: homeTeam?.secondaryColor,
+      },
+      awayTeam: {
+        teamId: awayTeam?.teamId || game?.awayTeamId || awayAbbr,
+        abbreviation: awayAbbr,
+        primaryColor: awayTeam?.primaryColor,
+        secondaryColor: awayTeam?.secondaryColor,
+      },
+      homePlayers,
+      awayPlayers,
+    });
+  }, [
+    awayAbbr,
+    awayTeam?.players,
+    awayTeam?.primaryColor,
+    awayTeam?.secondaryColor,
+    awayTeam?.teamId,
+    fullBoxScore.away,
+    fullBoxScore.home,
+    game?.awayTeamId,
+    game?.homeTeamId,
+    homeAbbr,
+    homeTeam?.players,
+    homeTeam?.primaryColor,
+    homeTeam?.secondaryColor,
+    homeTeam?.teamId,
+    sport,
+  ]);
   const resultStory = useMemo(() => {
     if (!game || typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') return displayScheduleEventText(game?.story);
     if (game.postgameStory?.summary) return displayScheduleEventText(game.postgameStory.summary);
@@ -512,6 +557,17 @@ export default function GameResultScreen() {
                 <Text style={styles.teamScore}>{stat(game.homeScore)}</Text>
               </View>
             </View>
+            {sport === 'nba' ? (
+              <BroadcastGameCast
+                awayAbbr={awayAbbr}
+                homeAbbr={homeAbbr}
+                awayScore={game.awayScore}
+                homeScore={game.homeScore}
+                era={league?.currentYear}
+                actors={broadcastActors}
+                topPerformers={topPerformers}
+              />
+            ) : null}
             {isLeagueAdmin && game.status === 'final' ? (
               <TouchableOpacity
                 disabled={resetting}

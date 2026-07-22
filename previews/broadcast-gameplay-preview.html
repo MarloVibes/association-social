@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Franchise Mobile Broadcast Gameplay Preview</title>
+  <style>
+    :root {
+      --bg: #050607;
+      --panel: #0c1012;
+      --panel-2: #101719;
+      --line: rgba(255,255,255,.16);
+      --green: #00e58b;
+      --gold: #f4c542;
+      --blue: #238cff;
+      --red: #ff4e67;
+      --home: #f5c542;
+      --away: #245cff;
+      --text: #f7f7f7;
+      --muted: #87908b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(0,229,139,.14), transparent 28%),
+        radial-gradient(circle at 90% 35%, rgba(35,140,255,.13), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .phone {
+      width: min(430px, 100vw);
+      min-height: 100vh;
+      background: #030405;
+      border-left: 1px solid #1c1c1c;
+      border-right: 1px solid #1c1c1c;
+      position: relative;
+      overflow: hidden;
+    }
+    .top {
+      padding: 22px 18px 12px;
+      border-bottom: 1px solid #171717;
+      background: linear-gradient(180deg, #090909, #050505);
+    }
+    .eyebrow {
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .title {
+      margin-top: 2px;
+      font-size: 29px;
+      line-height: 1;
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+    .scoreboard {
+      margin: 14px 14px 10px;
+      border: 1px solid rgba(0,229,139,.32);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #101811, #07100b);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 92px 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+    .team { display: grid; gap: 5px; }
+    .team.right { text-align: right; }
+    .logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 950;
+      color: #080808;
+      box-shadow: 0 0 0 3px rgba(255,255,255,.08);
+    }
+    .right .logo { margin-left: auto; }
+    .homeLogo { background: var(--home); }
+    .awayLogo { background: var(--away); color: #fff; }
+    .teamName { font-size: 13px; font-weight: 950; }
+    .score { font-size: 31px; line-height: 1; font-weight: 950; color: var(--green); }
+    .gameClock { text-align: center; }
+    .period { font-size: 12px; font-weight: 950; color: #fff; }
+    .clock { margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 850; }
+    .live {
+      margin: 7px auto 0;
+      width: max-content;
+      border-radius: 999px;
+      background: rgba(0,229,139,.14);
+      color: var(--green);
+      border: 1px solid rgba(0,229,139,.32);
+      padding: 4px 9px;
+      font-size: 9px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .arena {
+      margin: 0 14px;
+      border: 1px solid rgba(0,229,139,.35);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #091016;
+      position: relative;
+      height: 500px;
+    }
+    .crowd {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 138px;
+      background:
+        linear-gradient(180deg, rgba(6,12,24,.98), rgba(16,26,37,.92)),
+        repeating-linear-gradient(90deg, transparent 0 14px, rgba(255,255,255,.06) 14px 17px);
+      border-bottom: 5px solid #222933;
+      overflow: hidden;
+    }
+    .seats {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 18px;
+      display: grid;
+      grid-template-columns: repeat(13, 1fr);
+      gap: 6px;
+      opacity: .9;
+    }
+    .seat {
+      height: 19px;
+      border-radius: 6px 6px 3px 3px;
+      background: linear-gradient(180deg, #23c9b7, #087b79);
+      animation: crowdPulse 1.8s ease-in-out infinite alternate;
+    }
+    .seat:nth-child(3n) { animation-delay: .35s; filter: brightness(1.18); }
+    .seat:nth-child(4n) { animation-delay: .75s; filter: brightness(.82); }
+    .jumbotron {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 150px;
+      border-radius: 9px;
+      border: 3px solid rgba(244,197,66,.82);
+      background: #111827;
+      text-align: center;
+      padding: 12px 10px 9px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.35);
+    }
+    .jumboLabel { color: #9ca5a0; font-size: 9px; font-weight: 950; letter-spacing: .14em; }
+    .jumboMain { margin-top: 2px; font-size: 22px; font-weight: 950; }
+    .jumboSub { color: #d2d7d4; font-size: 10px; font-weight: 850; }
+    .court {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 390px;
+      transform-origin: bottom center;
+      background:
+        linear-gradient(90deg,
+          #d78b3a 0 7%, #c37832 7% 14%, #e1a155 14% 21%, #c77c36 21% 28%,
+          #e1a155 28% 36%, #cf843d 36% 44%, #e9ae61 44% 50%,
+          #cf843d 50% 58%, #e1a155 58% 66%, #c77c36 66% 74%,
+          #e1a155 74% 83%, #c37832 83% 91%, #d78b3a 91% 100%);
+      clip-path: polygon(4% 4%, 96% 4%, 100% 100%, 0% 100%);
+    }
+    .court::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 44px, rgba(100,55,21,.16) 44px 47px),
+        radial-gradient(circle at 50% 55%, rgba(255,255,255,.12), transparent 24%);
+      pointer-events: none;
+    }
+    .line {
+      position: absolute;
+      border: 4px solid rgba(255,255,255,.9);
+      pointer-events: none;
+    }
+    .half { left: 50%; top: 8%; bottom: 0; width: 0; border-left: 4px solid rgba(255,255,255,.9); }
+    .center {
+      left: calc(50% - 44px);
+      top: 140px;
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 950;
+      font-size: 22px;
+      background: rgba(80,40,90,.48);
+    }
+    .paint {
+      width: 110px;
+      height: 122px;
+      bottom: 38px;
+      background: rgba(91,30,52,.34);
+    }
+    .paint.left { left: 34px; }
+    .paint.right { right: 34px; }
+    .arc {
+      width: 170px;
+      height: 164px;
+      bottom: 30px;
+      border-radius: 50% 50% 0 0;
+      border-bottom: 0;
+    }
+    .arc.left { left: -28px; transform: rotate(8deg); }
+    .arc.right { right: -28px; transform: rotate(-8deg); }
+    .rim {
+      position: absolute;
+      bottom: 151px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 5px solid #ff7f31;
+      box-shadow: 0 0 0 3px rgba(255,255,255,.35);
+      z-index: 8;
+    }
+    .rim.left { left: 71px; }
+    .rim.right { right: 71px; }
+    .backboard {
+      position: absolute;
+      bottom: 170px;
+      width: 46px;
+      height: 7px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.85);
+      z-index: 7;
+    }
+    .backboard.left { left: 60px; }
+    .backboard.right { right: 60px; }
+    .spotlight {
+      position: absolute;
+      top: 58px;
+      width: 96px;
+      height: 310px;
+      background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.02));
+      clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+      mix-blend-mode: screen;
+      opacity: .45;
+      pointer-events: none;
+    }
+    .spotlight.one { left: 10px; }
+    .spotlight.two { left: calc(50% - 48px); opacity: .56; }
+    .spotlight.three { right: 10px; }
+    .actor {
+      position: absolute;
+      width: 24px;
+      height: 38px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      transition: left .58s cubic-bezier(.2,.85,.28,1), top .58s cubic-bezier(.2,.85,.28,1), transform .2s ease;
+    }
+    .actor::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 0;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--skin, #8f5b38);
+      border: 2px solid rgba(0,0,0,.65);
+    }
+    .actor::after {
+      content: attr(data-num);
+      position: absolute;
+      left: 1px;
+      top: 14px;
+      width: 23px;
+      height: 22px;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 10px;
+      font-weight: 950;
+      background: var(--jersey);
+      border: 2px solid rgba(255,255,255,.78);
+      box-shadow: 0 8px 8px rgba(0,0,0,.35);
+    }
+    .actor.pop { animation: pop .48s ease; }
+    .actor.fall { animation: fall .9s ease forwards; }
+    .actor.shake { animation: shake .48s ease; }
+    .ball {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background:
+        radial-gradient(circle at 35% 30%, #ffb347, #e87520 62%, #7c3512);
+      border: 2px solid rgba(90,38,13,.7);
+      z-index: 40;
+      transition: left .48s cubic-bezier(.16,.92,.24,1), top .48s cubic-bezier(.16,.92,.24,1), transform .48s ease;
+      box-shadow: 0 5px 8px rgba(0,0,0,.42);
+    }
+    .ball.shoot { animation: shotArc .72s ease; }
+    .ball.dunk { animation: dunkPop .45s ease; }
+    .plus {
+      position: absolute;
+      z-index: 60;
+      color: #fff;
+      font-size: 28px;
+      font-weight: 950;
+      text-shadow: 0 4px 14px rgba(0,0,0,.8);
+      opacity: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .plus.show { animation: scorePop 1s ease; }
+    .feed {
+      margin: 12px 14px;
+      border: 1px solid #232323;
+      border-radius: 11px;
+      background: #101010;
+      padding: 13px;
+    }
+    .feedLabel {
+      color: var(--green);
+      font-size: 10px;
+      font-weight: 950;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .feedText {
+      margin-top: 4px;
+      font-size: 18px;
+      line-height: 1.16;
+      font-weight: 950;
+    }
+    .chips {
+      margin-top: 11px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .chip {
+      border: 1px solid #262626;
+      border-radius: 9px;
+      background: #0d0d0d;
+      padding: 9px;
+      min-height: 54px;
+    }
+    .chip span {
+      display: block;
+      color: #777;
+      font-size: 9px;
+      font-weight: 950;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .chip strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 950;
+    }
+    .momentum {
+      margin: 10px 14px 0;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: linear-gradient(90deg, var(--away) 0 48%, #222 48% 52%, var(--home) 52% 100%);
+      border: 1px solid rgba(255,255,255,.08);
+      position: relative;
+    }
+    .momentum::after {
+      content: "";
+      position: absolute;
+      top: -4px;
+      left: var(--marker, 55%);
+      width: 4px;
+      height: 16px;
+      background: #fff;
+      border-radius: 99px;
+      box-shadow: 0 0 10px #fff;
+      transition: left .5s ease;
+    }
+    @keyframes crowdPulse {
+      from { transform: translateY(0); }
+      to { transform: translateY(-3px); }
+    }
+    @keyframes pop {
+      50% { transform: translate(-50%, -64%) scale(1.08); }
+    }
+    @keyframes fall {
+      45% { transform: translate(-50%, -40%) rotate(-30deg); }
+      100% { transform: translate(-50%, -24%) rotate(-74deg); }
+    }
+    @keyframes shake {
+      20% { transform: translate(-60%, -50%); }
+      40% { transform: translate(-42%, -50%); }
+      60% { transform: translate(-57%, -50%); }
+      80% { transform: translate(-45%, -50%); }
+    }
+    @keyframes shotArc {
+      50% { transform: translate(-50%, -150%) scale(.9); }
+    }
+    @keyframes dunkPop {
+      50% { transform: translate(-50%, -95%) scale(1.2); }
+    }
+    @keyframes scorePop {
+      0% { opacity: 0; transform: translate(-50%, -20%) scale(.7); }
+      20% { opacity: 1; transform: translate(-50%, -70%) scale(1.1); }
+      100% { opacity: 0; transform: translate(-50%, -125%) scale(.9); }
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <header class="top">
+      <div class="eyebrow">NBA League</div>
+      <div class="title">Broadcast GameCast</div>
+    </header>
+
+    <section class="scoreboard">
+      <div class="team">
+        <div class="logo awayLogo">NYK</div>
+        <div class="teamName">NYK</div>
+        <div class="score" id="awayScore">41</div>
+      </div>
+      <div class="gameClock">
+        <div class="period" id="period">Q2</div>
+        <div class="clock" id="clock">7:18</div>
+        <div class="live">Live</div>
+      </div>
+      <div class="team right">
+        <div class="logo homeLogo">LAL</div>
+        <div class="teamName">LAL</div>
+        <div class="score" id="homeScore">43</div>
+      </div>
+    </section>
+
+    <div class="momentum" id="momentum"></div>
+
+    <section class="arena">
+      <div class="crowd">
+        <div class="seats" id="seats"></div>
+        <div class="jumbotron">
+          <div class="jumboLabel">Jumbotron</div>
+          <div class="jumboMain" id="jumboMain">Live</div>
+          <div class="jumboSub" id="jumboSub">NYK at LAL</div>
+        </div>
+      </div>
+      <div class="spotlight one"></div>
+      <div class="spotlight two"></div>
+      <div class="spotlight three"></div>
+      <div class="court">
+        <div class="line half"></div>
+        <div class="line center">LAL</div>
+        <div class="line paint left"></div>
+        <div class="line paint right"></div>
+        <div class="line arc left"></div>
+        <div class="line arc right"></div>
+        <div class="backboard left"></div>
+        <div class="backboard right"></div>
+        <div class="rim left"></div>
+        <div class="rim right"></div>
+      </div>
+      <div class="actor away" data-id="a1" data-num="11" style="--jersey:#154ea6;--skin:#7a4a2e"></div>
+      <div class="actor away" data-id="a2" data-num="3" style="--jersey:#154ea6;--skin:#c78c5e"></div>
+      <div class="actor away" data-id="a3" data-num="23" style="--jersey:#154ea6;--skin:#5c3625"></div>
+      <div class="actor away" data-id="a4" data-num="30" style="--jersey:#154ea6;--skin:#b6754a"></div>
+      <div class="actor away" data-id="a5" data-num="55" style="--jersey:#154ea6;--skin:#6f432c"></div>
+      <div class="actor home" data-id="h1" data-num="1" style="--jersey:#7c42b8;--skin:#9b6139"></div>
+      <div class="actor home" data-id="h2" data-num="5" style="--jersey:#7c42b8;--skin:#c88f61"></div>
+      <div class="actor home" data-id="h3" data-num="12" style="--jersey:#7c42b8;--skin:#5a3424"></div>
+      <div class="actor home" data-id="h4" data-num="7" style="--jersey:#7c42b8;--skin:#a97049"></div>
+      <div class="actor home" data-id="h5" data-num="34" style="--jersey:#7c42b8;--skin:#7c4a30"></div>
+      <div class="ball" id="ball"></div>
+      <div class="plus" id="plus">+3</div>
+    </section>
+
+    <section class="feed">
+      <div class="feedLabel">Visual Play Event</div>
+      <div class="feedText" id="eventText">Brunson sizes up, steps back, and buries a deep three.</div>
+      <div class="chips">
+        <div class="chip"><span>Offense</span><strong id="offense">5-Out</strong></div>
+        <div class="chip"><span>Defense</span><strong id="defense">2-3 Zone</strong></div>
+        <div class="chip"><span>Spotlight</span><strong id="spotlight">Star Shotmaking</strong></div>
+        <div class="chip"><span>Result</span><strong id="result">NYK +3</strong></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const seats = document.getElementById('seats');
+    for (let i = 0; i < 52; i += 1) {
+      const seat = document.createElement('div');
+      seat.className = 'seat';
+      seats.appendChild(seat);
+    }
+
+    const actors = Object.fromEntries([...document.querySelectorAll('.actor')].map(actor => [actor.dataset.id, actor]));
+    const ball = document.getElementById('ball');
+    const plus = document.getElementById('plus');
+    const eventText = document.getElementById('eventText');
+    const offense = document.getElementById('offense');
+    const defense = document.getElementById('defense');
+    const spotlight = document.getElementById('spotlight');
+    const result = document.getElementById('result');
+    const jumboMain = document.getElementById('jumboMain');
+    const jumboSub = document.getElementById('jumboSub');
+    const awayScoreEl = document.getElementById('awayScore');
+    const homeScoreEl = document.getElementById('homeScore');
+    const periodEl = document.getElementById('period');
+    const clockEl = document.getElementById('clock');
+    const momentum = document.getElementById('momentum');
+
+    let awayScore = 41;
+    let homeScore = 43;
+    let playIndex = 0;
+    let seconds = 438;
+
+    const base = {
+      a1: [43, 63], a2: [31, 70], a3: [52, 72], a4: [22, 58], a5: [40, 80],
+      h1: [57, 63], h2: [69, 70], h3: [48, 58], h4: [78, 58], h5: [60, 80],
+    };
+
+    const plays = [
+      {
+        text: 'Brunson sizes up, steps back, and buries a deep three.',
+        off: '5-Out',
+        def: '2-3 Zone',
+        spot: 'Step-back 3',
+        res: 'NYK +3',
+        team: 'away',
+        points: 3,
+        marker: '48%',
+        jumbo: 'DEEP 3',
+        ball: [[43,63], [37,55], [31,47], [22,41]],
+        move: { a1: [[43,63], [38,58], [31,51]], h1: [[57,63], [51,60], [45,57]], a5: [[40,80], [49,77]] },
+        effect: ['a1', 'pop'],
+        plus: [22,41],
+      },
+      {
+        text: 'Reaves turns the corner, lobs it up, and Davis detonates at the rim.',
+        off: 'Pick and Roll',
+        def: 'Switch Everything',
+        spot: 'Poster finish',
+        res: 'LAL +2',
+        team: 'home',
+        points: 2,
+        marker: '59%',
+        jumbo: 'POSTER',
+        ball: [[57,64], [66,62], [76,59], [83,55]],
+        move: { h1: [[57,63], [66,61]], h5: [[60,80], [70,68], [82,56]], a5: [[40,80], [62,67], [80,57]] },
+        effect: ['a5', 'fall'],
+        ballClass: 'dunk',
+        plus: [83,55],
+      },
+      {
+        text: 'Anunoby rotates from the corner and erases the layup off the glass.',
+        off: 'Transition Pace',
+        def: 'Half Court Press',
+        spot: 'Chase-down block',
+        res: 'NYK stop',
+        team: 'away',
+        points: 0,
+        marker: '51%',
+        jumbo: 'BLOCK',
+        ball: [[65,70], [76,61], [87,54], [82,57]],
+        move: { h2: [[69,70], [80,61], [87,54]], a3: [[52,72], [67,62], [83,55]] },
+        effect: ['h2', 'shake'],
+        plus: [84,54],
+      },
+      {
+        text: 'LeBron rips the board, pushes the break, and hits the trailer for three.',
+        off: 'Transition Pace',
+        def: '3-2 Zone',
+        spot: 'Fast break spray',
+        res: 'LAL +3',
+        team: 'home',
+        points: 3,
+        marker: '63%',
+        jumbo: 'RUNOUT',
+        ball: [[25,60], [45,55], [66,58], [79,46]],
+        move: { h3: [[48,58], [62,56], [79,48]], h4: [[78,58], [70,50]], a2: [[31,70], [44,63], [61,59]] },
+        effect: ['h3', 'pop'],
+        plus: [79,46],
+      },
+      {
+        text: 'Randle catches deep, powers through contact, and scores inside.',
+        off: 'Post / Inside',
+        def: 'Protect Paint',
+        spot: 'Paint touch',
+        res: 'NYK +2',
+        team: 'away',
+        points: 2,
+        marker: '54%',
+        jumbo: 'AND ONE',
+        ball: [[39,76], [29,68], [17,57], [15,55]],
+        move: { a5: [[40,80], [29,68], [17,57]], h5: [[60,80], [41,70], [20,58]] },
+        effect: ['a5', 'pop'],
+        ballClass: 'dunk',
+        plus: [15,55],
+      },
+    ];
+
+    function place(id, x, y) {
+      actors[id].style.left = x + '%';
+      actors[id].style.top = y + '%';
+    }
+
+    function resetActors() {
+      Object.entries(base).forEach(([id, pos]) => {
+        place(id, pos[0], pos[1]);
+        actors[id].classList.remove('pop', 'fall', 'shake');
+      });
+    }
+
+    function setBall(x, y, cls) {
+      ball.className = 'ball';
+      ball.style.left = x + '%';
+      ball.style.top = y + '%';
+      if (cls) requestAnimationFrame(() => ball.classList.add(cls));
+    }
+
+    function showPlus(x, y, text) {
+      plus.textContent = text;
+      plus.style.left = x + '%';
+      plus.style.top = y + '%';
+      plus.classList.remove('show');
+      void plus.offsetWidth;
+      plus.classList.add('show');
+    }
+
+    function tickClock() {
+      seconds = Math.max(0, seconds - 18);
+      const minutes = Math.floor(seconds / 60);
+      const remain = String(seconds % 60).padStart(2, '0');
+      clockEl.textContent = `${minutes}:${remain}`;
+      if (seconds <= 0) {
+        periodEl.textContent = periodEl.textContent === 'Q2' ? 'HALF' : 'Q3';
+        seconds = 720;
+      }
+    }
+
+    function animatePlay(play) {
+      resetActors();
+      eventText.textContent = play.text;
+      offense.textContent = play.off;
+      defense.textContent = play.def;
+      spotlight.textContent = play.spot;
+      result.textContent = play.res;
+      jumboMain.textContent = play.jumbo;
+      jumboSub.textContent = play.off + ' vs ' + play.def;
+      momentum.style.setProperty('--marker', play.marker);
+
+      Object.entries(play.move || {}).forEach(([id, path]) => {
+        path.forEach((point, index) => {
+          setTimeout(() => place(id, point[0], point[1]), index * 330);
+        });
+      });
+
+      play.ball.forEach((point, index) => {
+        setTimeout(() => setBall(point[0], point[1], index === play.ball.length - 1 ? (play.ballClass || 'shoot') : ''), index * 300);
+      });
+
+      setTimeout(() => {
+        if (play.effect) {
+          actors[play.effect[0]].classList.remove('pop', 'fall', 'shake');
+          void actors[play.effect[0]].offsetWidth;
+          actors[play.effect[0]].classList.add(play.effect[1]);
+        }
+        if (play.points > 0) {
+          if (play.team === 'away') awayScore += play.points;
+          if (play.team === 'home') homeScore += play.points;
+          awayScoreEl.textContent = awayScore;
+          homeScoreEl.textContent = homeScore;
+          showPlus(play.plus[0], play.plus[1], '+' + play.points);
+        }
+        tickClock();
+      }, 1050);
+    }
+
+    resetActors();
+    setBall(43, 63);
+    animatePlay(plays[0]);
+    setInterval(() => {
+      playIndex = (playIndex + 1) % plays.length;
+      animatePlay(plays[playIndex]);
+    }, 3300);
+  </script>
+</body>
+</html>

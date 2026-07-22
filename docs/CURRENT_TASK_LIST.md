@@ -141,6 +141,7 @@ Status: Active
   - matchup recap should explain why the game played out that way
 - Keep FAQ updated with the gameplan/counter system.
 - Marlano still feels something is missing in gameplay during simulation, so continue ideating after the core system is stable.
+- Added a first-pass NBA Broadcast GameCast visual panel to final score pages, using team logos, jersey colors, animated players, ball movement, jumbotron, scoring popups, momentum, and top performer-driven highlight text. Pending simulator approval before expanding deeper into gameplay flow.
 
 ### 8. Stats And Standings
 
