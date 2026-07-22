@@ -110,12 +110,20 @@ function playerName(player: BroadcastPlayerSource) {
   return String(player.name || player.full_name || playerId(player)).trim();
 }
 
-function jerseyNumber(player: BroadcastPlayerSource) {
+function cleanJerseyNumber(value: unknown) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const digits = text.replace(/[^\d]/g, '').slice(0, 2);
+  if (digits === '00') return '00';
+  if (digits) return String(Number(digits));
+  return text.slice(0, 2).toUpperCase();
+}
+
+function jerseyNumber(player: BroadcastPlayerSource, slot: number) {
   const raw = player.jerseyNumber ?? player.jersey_number ?? player.number;
-  const text = String(raw ?? '').trim();
-  if (text) return text.replace(/[^\d]/g, '').slice(0, 2) || text.slice(0, 2).toUpperCase();
-  const fromId = playerId(player).match(/\d+$/)?.[0];
-  return fromId?.slice(-2) || '0';
+  const explicit = cleanJerseyNumber(raw);
+  if (explicit) return explicit;
+  return String((slot % DEFAULT_POSITIONS.length) + 1);
 }
 
 function bodyBuildFor(player: BroadcastPlayerSource, hash: number): BroadcastPlayerIdentity['bodyBuild'] {
@@ -150,7 +158,7 @@ export function buildBroadcastActor({
   side: 'home' | 'away';
   slot: number;
 }): BroadcastActor {
-  const number = jerseyNumber(player);
+  const number = jerseyNumber(player, slot);
   const teamId = String(team.teamId || team.id || team.abbreviation || side).trim();
   const colors = uniformColors(team);
   return {

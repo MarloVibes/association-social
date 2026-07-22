@@ -224,9 +224,20 @@ function playerKey(player: any) {
   return String(player?.player_id || player?.playerId || player?.id || player?.bref_id || player?.full_name || player?.name || '').trim();
 }
 
+function playerNameKey(player: any) {
+  return String(player?.full_name || player?.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ');
+}
+
 function playerForCard(player: BoxScorePlayer, team: Team | undefined) {
   const key = playerKey({ player_id: player.playerId, full_name: player.name });
-  const found = (team?.players || []).find(candidate => playerKey(candidate) === key);
+  const nameKey = playerNameKey(player);
+  const found = (team?.players || []).find(candidate => (
+    playerKey(candidate) === key
+    || (nameKey && playerNameKey(candidate) === nameKey)
+  ));
   return found || {
     ...player,
     player_id: player.playerId,

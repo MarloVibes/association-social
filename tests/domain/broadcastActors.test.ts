@@ -24,4 +24,35 @@ describe('broadcast actors', () => {
     expect(actor.uniform.number).toBe('30');
     expect(actor.label).toBe('30');
   });
+
+  it('uses unique lineup-slot numbers when jersey numbers are unavailable', () => {
+    const actors = buildBroadcastActorsForLineup({
+      awayTeam: { teamId: 'DEN', abbreviation: 'DEN' },
+      homeTeam: { teamId: 'UTA', abbreviation: 'UTA' },
+      awayPlayers: Array.from({ length: 5 }, (_, index) => ({
+        player_id: `den-player-${index}`,
+        full_name: `Denver Player ${index + 1}`,
+        position: ['PG', 'SG', 'SF', 'PF', 'C'][index],
+      })),
+      homePlayers: [],
+    });
+
+    expect(actors.slice(0, 5).map(actor => actor.label)).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('cleans accidental leading-zero jersey numbers', () => {
+    const [actor] = buildBroadcastActorsForLineup({
+      awayTeam: { teamId: 'DEN', abbreviation: 'DEN' },
+      homeTeam: { teamId: 'UTA', abbreviation: 'UTA' },
+      awayPlayers: [{
+        player_id: 'den-player-1',
+        full_name: 'Denver Player',
+        jersey_number: '01',
+        position: 'PG',
+      }],
+      homePlayers: [],
+    });
+
+    expect(actor.label).toBe('1');
+  });
 });
