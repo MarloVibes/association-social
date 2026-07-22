@@ -487,15 +487,18 @@ describe('source safety regressions', () => {
 
   it('runs commissioner season simulation continuously in fast batches', () => {
     const calendar = source('app/screens/season/calendar.tsx');
+    const rootLayout = source('app/_layout.tsx');
+    const progress = source('components/SeasonSimProgress.tsx');
 
     expect(calendar).toContain('runSeasonSimContinuously');
     expect(calendar).toContain("'Sim Season?'");
     expect(calendar).toContain("'Start Sim'");
     expect(calendar).toContain('remainingGames');
-    expect(calendar).toContain('SEASON_SIM_BATCH_SIZE');
+    expect(calendar).toContain('useSeasonSimProgress');
+    expect(calendar).toContain('startSeasonSim({');
+    expect(calendar).toContain('isSimmingLeague(leagueId)');
     expect(calendar).toContain("setViewMode('league')");
     expect(calendar).toContain('Fast-simming season');
-    expect(calendar).toContain('simDockStop');
     expect(calendar).toContain('getCalendarItemLayout');
     expect(calendar).toContain('CALENDAR_ROW_HEIGHT');
     expect(calendar).toContain('LEAGUE_WEEKS_PER_PAGE');
@@ -506,7 +509,12 @@ describe('source safety regressions', () => {
     expect(calendar).toContain("const rowSize = selectedViewMode === 'league' ? 1 : 2");
     expect(calendar).toContain('removeClippedSubviews={false}');
     expect(calendar).toContain('SIM_ELIGIBLE_STATUSES');
-    expect(calendar).toContain('SEASON_SIM_STEP_DELAY_MS');
+    expect(rootLayout).toContain('SeasonSimProgressProvider');
+    expect(progress).toContain('SEASON_SIM_BATCH_SIZE');
+    expect(progress).toContain('SEASON_SIM_STEP_DELAY_MS');
+    expect(progress).toContain("httpsCallable(functions, 'simScheduleBatch')");
+    expect(progress).toContain('progress.finalGames / progress.totalGames');
+    expect(progress).toContain('stopButton');
     expect(calendar).not.toContain('onScrollBeginDrag');
     expect(calendar).not.toContain('autoFollowSeasonSim');
     expect(calendar).not.toContain('toggleSeasonSimFollow');
@@ -520,6 +528,7 @@ describe('source safety regressions', () => {
     expect(calendar).not.toContain('control.lastBatchGameIds');
     expect(calendar).not.toContain('onScrollToIndexFailed');
     expect(calendar).not.toContain('simDockFollow');
+    expect(calendar).not.toContain('simDockStop');
     expect(calendar).not.toContain('runSeasonSimToTarget');
     expect(calendar).not.toContain('runSeasonSimWeeks');
     expect(calendar).not.toContain("'Full Season'");

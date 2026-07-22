@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSeasonSimProgress } from '@/components/SeasonSimProgress';
 import SportTeamLogo from '@/components/SportTeamLogo';
 import { auth, db, functions } from '@/constants/firebase';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
@@ -121,13 +122,10 @@ function normalizeSport(value: unknown): 'nba' | 'madden' | 'mlb' {
   return 'nba';
 }
 
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 const CALENDAR_ROW_HEIGHT = 168;
 const CALENDAR_SECTION_HEADER_HEIGHT = 34;
 const LEAGUE_WEEKS_PER_PAGE = 4;
-const SEASON_SIM_BATCH_SIZE = 15;
-const SEASON_SIM_STEP_DELAY_MS = 25;
 
 function weekPageStartFor(week: number) {
   const safeWeek = Math.max(1, Number(week || 1));
@@ -143,12 +141,10 @@ export default function CalendarScreen() {
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [advancingCup, setAdvancingCup] = useState(false);
-  const [simmingSeason, setSimmingSeason] = useState(false);
-  const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
   const [leagueWeekPageStart, setLeagueWeekPageStart] = useState(1);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
-  const cancelSeasonSimRef = useRef(false);
+  const { progress: seasonSimProgress, startSeasonSim, isSimmingLeague } = useSeasonSimProgress();
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -307,6 +303,7 @@ export default function CalendarScreen() {
   const nextSimGame = useMemo(() => (
     allGames.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))) || null
   ), [allGames]);
+  const simmingSeason = isSimmingLeague(leagueId);
 
   useEffect(() => {
     if (selectedViewMode !== 'league') return;
@@ -348,46 +345,16 @@ export default function CalendarScreen() {
     }
   };
 
-  const runSeasonSimContinuously = async () => {
+  const runSeasonSimContinuously = () => {
     if (!leagueId || !isLeagueAdmin || simmingSeason) return;
     const remainingGames = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
-    const maxSteps = Math.max(Math.ceil(Math.max(remainingGames, allGames.length) / SEASON_SIM_BATCH_SIZE) + 8, 12);
-    cancelSeasonSimRef.current = false;
     setViewMode('league');
-    setSeasonSimProgress(null);
-    setSimmingSeason(true);
-    try {
-      const simBatch = httpsCallable(functions, 'simScheduleBatch');
-      let action = 'start';
-      for (let step = 0; step < maxSteps && !cancelSeasonSimRef.current; step += 1) {
-        const result: any = await simBatch({
-          leagueId,
-          action,
-          competition: 'regular',
-          batchSize: SEASON_SIM_BATCH_SIZE,
-        });
-        const control = result.data || {};
-        setSeasonSimProgress({
-          finalGames: Number(control.finalGames || 0),
-          totalGames: Number(control.totalGames || allGames.length),
-          remainingGames: Number(control.remainingGames || 0),
-        });
-        if (control.status === 'complete' || control.status === 'cancelled') {
-          if (remainingGames === 0 && control.repairedGames) {
-            Alert.alert('Box scores repaired', 'Final games now have playable result details.');
-          }
-          break;
-        }
-        action = 'step';
-        if (SEASON_SIM_STEP_DELAY_MS > 0) await wait(SEASON_SIM_STEP_DELAY_MS);
-      }
-    } catch (error: any) {
-      Alert.alert('Season sim stopped', error.message || 'Please try again.');
-    } finally {
-      setSimmingSeason(false);
-      cancelSeasonSimRef.current = false;
-      setSeasonSimProgress(null);
-    }
+    void startSeasonSim({
+      leagueId,
+      leagueName: league?.name || 'League',
+      totalGames: allGames.length,
+      remainingGames,
+    });
   };
 
   const runSeasonSim = () => {
@@ -407,17 +374,6 @@ export default function CalendarScreen() {
     );
   };
 
-  const cancelSeasonSim = async () => {
-    if (!leagueId) return;
-    cancelSeasonSimRef.current = true;
-    try {
-      const simBatch = httpsCallable(functions, 'simScheduleBatch');
-      await simBatch({ leagueId, action: 'cancel', competition: 'regular' });
-    } catch (error: any) {
-      Alert.alert('Cancel not sent', error.message || 'Please try again.');
-    }
-  };
-
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#00e58b" size="large" /></View>;
 
   return (
@@ -427,8 +383,8 @@ export default function CalendarScreen() {
         sections={renderedSections}
         keyExtractor={item => item.id}
         initialNumToRender={4}
-        maxToRenderPerBatch={simmingSeason ? 14 : 4}
-        windowSize={simmingSeason ? 15 : 5}
+        maxToRenderPerBatch={4}
+        windowSize={5}
         removeClippedSubviews={false}
         getItemLayout={getCalendarItemLayout}
         stickySectionHeadersEnabled={false}
@@ -701,14 +657,6 @@ export default function CalendarScreen() {
           </View>
         ) : null}
       />
-      {simmingSeason ? (
-        <View style={styles.simDock}>
-          <TouchableOpacity style={styles.simDockStop} onPress={cancelSeasonSim}>
-            <Ionicons color="#fff" name="stop-circle" size={17} />
-            <Text style={styles.simDockStopText}>Stop</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -756,9 +704,6 @@ const styles = StyleSheet.create({
   simButtonDisabled: { opacity: 0.5 },
   simButtonText: { color: '#06130c', fontSize: 12, fontWeight: '900' },
   simProgressText: { color: '#8a8a8a', fontSize: 11, fontWeight: '800', marginTop: -2, marginBottom: 8, paddingHorizontal: 2 },
-  simDock: { position: 'absolute', left: 18, right: 18, bottom: 18, borderRadius: 10, borderWidth: 1, borderColor: '#1f3328', backgroundColor: '#07120d', padding: 8, flexDirection: 'row', gap: 8 },
-  simDockStop: { flex: 1, minHeight: 40, borderRadius: 8, backgroundColor: '#e53950', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  simDockStopText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 8, paddingHorizontal: 2 },
   weekTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },
