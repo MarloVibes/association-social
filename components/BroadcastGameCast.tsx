@@ -10,13 +10,24 @@ type BroadcastGameCastProps = {
   homeScore?: number;
   era?: string | number;
   actors: BroadcastActor[];
-  topPerformers?: { name?: string; position?: string; points?: number; rebounds?: number; assists?: number; blocks?: number; steals?: number }[];
+  topPerformers?: {
+    name?: string;
+    sideAbbr?: string;
+    position?: string;
+    points?: number;
+    rebounds?: number;
+    assists?: number;
+    blocks?: number;
+    steals?: number;
+    threePointersMade?: number;
+    fieldGoalsMade?: number;
+  }[];
 };
 
 type Highlight = {
   label: string;
   description: string;
-  points: 2 | 3;
+  popupText: string;
   scorerSide: 'home' | 'away';
   ballPath: [number, number, number, number];
   scoringSpot: 'rim' | 'arc' | 'paint';
@@ -39,7 +50,7 @@ const EVENT_LIBRARY: Highlight[] = [
   {
     label: 'Step-back three',
     description: 'The guard creates separation and lets it fly from deep.',
-    points: 3,
+    popupText: '+3',
     scorerSide: 'away',
     ballPath: [44, 62, 39, 52],
     scoringSpot: 'arc',
@@ -47,7 +58,7 @@ const EVENT_LIBRARY: Highlight[] = [
   {
     label: 'Poster finish',
     description: 'A hard rim attack shakes the building.',
-    points: 2,
+    popupText: '+2',
     scorerSide: 'home',
     ballPath: [51, 69, 52, 77],
     scoringSpot: 'rim',
@@ -55,7 +66,7 @@ const EVENT_LIBRARY: Highlight[] = [
   {
     label: 'Chase-down block',
     description: 'The weak-side defender erases a clean look at the glass.',
-    points: 2,
+    popupText: 'BLOCK',
     scorerSide: 'away',
     ballPath: [58, 54, 50, 27],
     scoringSpot: 'rim',
@@ -63,7 +74,7 @@ const EVENT_LIBRARY: Highlight[] = [
   {
     label: 'Transition trailer',
     description: 'The break pulls help inside and the trailer spots up.',
-    points: 3,
+    popupText: '+3',
     scorerSide: 'home',
     ballPath: [46, 48, 62, 60],
     scoringSpot: 'arc',
@@ -71,7 +82,7 @@ const EVENT_LIBRARY: Highlight[] = [
   {
     label: 'Inside touch',
     description: 'The big seals deep and finishes through contact.',
-    points: 2,
+    popupText: '+2',
     scorerSide: 'home',
     ballPath: [49, 61, 53, 76],
     scoringSpot: 'paint',
@@ -86,12 +97,86 @@ function playerInitial(name: string | undefined) {
   return String(name || 'P').trim().slice(0, 1).toUpperCase() || 'P';
 }
 
-function performerLabel(highlight: Highlight, performers: BroadcastGameCastProps['topPerformers']) {
-  const candidates = (performers || []).filter(player => Number(player.points || 0) > 0);
-  const player = candidates[highlight.points === 3 ? 0 : 1] || candidates[0] || performers?.[0];
-  if (!player?.name) return highlight.label;
-  if (highlight.label === 'Chase-down block') return `${player.name} changes the shot`;
-  return `${player.name}: ${highlight.label}`;
+function playerSide(player: NonNullable<BroadcastGameCastProps['topPerformers']>[number] | undefined, homeAbbr: string): 'home' | 'away' {
+  return String(player?.sideAbbr || '').toUpperCase() === String(homeAbbr || '').toUpperCase() ? 'home' : 'away';
+}
+
+function namedHighlight(
+  player: NonNullable<BroadcastGameCastProps['topPerformers']>[number] | undefined,
+  fallback: Highlight,
+  homeAbbr: string,
+  overrides: Partial<Highlight>,
+): Highlight {
+  return {
+    ...fallback,
+    ...overrides,
+    label: player?.name ? `${player.name}: ${overrides.label || fallback.label}` : overrides.label || fallback.label,
+    scorerSide: playerSide(player, homeAbbr),
+  };
+}
+
+function buildHighlights(performers: BroadcastGameCastProps['topPerformers'], homeAbbr: string): Highlight[] {
+  const players = performers || [];
+  if (!players.length) return EVENT_LIBRARY;
+
+  const scorer = [...players].sort((a, b) => Number(b.points || 0) - Number(a.points || 0))[0];
+  const shooter = players.find(player => Number(player.threePointersMade || 0) >= 2) || scorer;
+  const passer = players.find(player => Number(player.assists || 0) >= 6);
+  const rebounder = players.find(player => Number(player.rebounds || 0) >= 8);
+  const blocker = players.find(player => Number(player.blocks || 0) >= 1);
+  const thief = players.find(player => Number(player.steals || 0) >= 1);
+  const highlights: Highlight[] = [];
+
+  if (shooter) {
+    highlights.push(namedHighlight(shooter, EVENT_LIBRARY[0], homeAbbr, {
+      label: 'step-back three',
+      description: `${shooter.name} turns the box score into a visual deep-ball moment.`,
+      popupText: '+3',
+      scoringSpot: 'arc',
+    }));
+  }
+  if (scorer && Number(scorer.points || 0) >= 16) {
+    highlights.push(namedHighlight(scorer, EVENT_LIBRARY[1], homeAbbr, {
+      label: 'poster finish',
+      description: `${scorer.name} attacks the rim and the arena reacts.`,
+      popupText: '+2',
+      scoringSpot: 'rim',
+    }));
+  }
+  if (passer) {
+    highlights.push(namedHighlight(passer, EVENT_LIBRARY[3], homeAbbr, {
+      label: 'corner setup',
+      description: `${passer.name} bends the defense and finds the open shooter.`,
+      popupText: 'DIME',
+      scoringSpot: 'arc',
+    }));
+  }
+  if (blocker) {
+    highlights.push(namedHighlight(blocker, EVENT_LIBRARY[2], homeAbbr, {
+      label: 'chase-down block',
+      description: `${blocker.name} rotates over and wipes away the attempt.`,
+      popupText: 'BLOCK',
+      scoringSpot: 'rim',
+    }));
+  }
+  if (rebounder) {
+    highlights.push(namedHighlight(rebounder, EVENT_LIBRARY[4], homeAbbr, {
+      label: 'put-back work',
+      description: `${rebounder.name} controls the glass and creates a second chance.`,
+      popupText: 'REB',
+      scoringSpot: 'paint',
+    }));
+  }
+  if (thief) {
+    highlights.push(namedHighlight(thief, EVENT_LIBRARY[3], homeAbbr, {
+      label: 'steal and runout',
+      description: `${thief.name} jumps the passing lane and turns defense into pace.`,
+      popupText: 'STEAL',
+      scoringSpot: 'arc',
+    }));
+  }
+
+  return highlights.length ? highlights.slice(0, 6) : EVENT_LIBRARY;
 }
 
 export default function BroadcastGameCast({
@@ -106,7 +191,7 @@ export default function BroadcastGameCast({
   const [highlightIndex, setHighlightIndex] = useState(0);
   const phase = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
-  const highlights = useMemo(() => EVENT_LIBRARY, []);
+  const highlights = useMemo(() => buildHighlights(topPerformers, homeAbbr), [homeAbbr, topPerformers]);
   const highlight = highlights[highlightIndex % highlights.length];
   const awayTotal = score(awayScore);
   const homeTotal = score(homeScore);
@@ -243,14 +328,14 @@ export default function BroadcastGameCast({
               },
             ]}
           >
-            <Text style={styles.scorePopText}>+{highlight.points}</Text>
+            <Text style={styles.scorePopText}>{highlight.popupText}</Text>
           </Animated.View>
         </View>
       </View>
 
       <View style={styles.eventPanel}>
         <Text style={styles.eventLabel}>Visual Play Event</Text>
-        <Text style={styles.eventTitle}>{performerLabel(highlight, topPerformers)}</Text>
+        <Text style={styles.eventTitle}>{highlight.label}</Text>
         <Text style={styles.eventBody}>{highlight.description}</Text>
         <View style={styles.momentumTrack}>
           <View style={[styles.momentumMarker, { left: `${momentumLeft}%` }]} />
