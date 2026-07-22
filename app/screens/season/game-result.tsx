@@ -28,6 +28,9 @@ type Team = {
 type BoxScorePlayer = {
   playerId?: string;
   name?: string;
+  jerseyNumber?: string | number | null;
+  jersey_number?: string | number | null;
+  number?: string | number | null;
   position?: string;
   minutes?: number;
   points?: number;
@@ -232,6 +235,24 @@ function playerForCard(player: BoxScorePlayer, team: Team | undefined) {
   };
 }
 
+function playerForBroadcast(player: BoxScorePlayer, team: Team | undefined) {
+  const rosterPlayer = playerForCard(player, team);
+  return {
+    ...rosterPlayer,
+    playerId: player.playerId || rosterPlayer.player_id || rosterPlayer.id,
+    name: player.name || rosterPlayer.full_name || rosterPlayer.name,
+    full_name: rosterPlayer.full_name || player.name,
+    position: player.position || rosterPlayer.position,
+    jerseyNumber: player.jerseyNumber
+      ?? player.jersey_number
+      ?? player.number
+      ?? rosterPlayer.jerseyNumber
+      ?? rosterPlayer.jersey_number
+      ?? rosterPlayer.number
+      ?? null,
+  };
+}
+
 export default function GameResultScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
   const router = useRouter();
@@ -365,6 +386,7 @@ export default function GameResultScreen() {
   const homeAbbr = displayScheduleAbbr(homeTeam?.abbreviation || homeTeam?.teamId || game?.homeTeamId || '');
   const awayLabel = awayTeam ? displayScheduleName(awayTeam) : displayScheduleName({ scheduleTeamId: game?.awayTeamId || 'Away' });
   const homeLabel = homeTeam ? displayScheduleName(homeTeam) : displayScheduleName({ scheduleTeamId: game?.homeTeamId || 'Home' });
+  const currentYear = Number.isFinite(Number(league?.currentYear)) ? Number(league.currentYear) : undefined;
   const topPerformers = useMemo(() => [
     ...(game?.boxScore?.away?.players || []).map(player => ({ ...player, side: awayLabel, sideAbbr: awayAbbr })),
     ...(game?.boxScore?.home?.players || []).map(player => ({ ...player, side: homeLabel, sideAbbr: homeAbbr })),
@@ -377,10 +399,10 @@ export default function GameResultScreen() {
   const broadcastActors = useMemo(() => {
     if (sport !== 'nba') return [];
     const homePlayers = fullBoxScore.home.length
-      ? fullBoxScore.home.slice(0, 5)
+      ? fullBoxScore.home.slice(0, 5).map(player => playerForBroadcast(player, homeTeam))
       : (homeTeam?.players || []).slice(0, 5);
     const awayPlayers = fullBoxScore.away.length
-      ? fullBoxScore.away.slice(0, 5)
+      ? fullBoxScore.away.slice(0, 5).map(player => playerForBroadcast(player, awayTeam))
       : (awayTeam?.players || []).slice(0, 5);
     return buildBroadcastActorsForLineup({
       homeTeam: {
@@ -388,12 +410,14 @@ export default function GameResultScreen() {
         abbreviation: homeAbbr,
         primaryColor: homeTeam?.primaryColor,
         secondaryColor: homeTeam?.secondaryColor,
+        currentYear,
       },
       awayTeam: {
         teamId: awayTeam?.teamId || game?.awayTeamId || awayAbbr,
         abbreviation: awayAbbr,
         primaryColor: awayTeam?.primaryColor,
         secondaryColor: awayTeam?.secondaryColor,
+        currentYear,
       },
       homePlayers,
       awayPlayers,
@@ -404,6 +428,7 @@ export default function GameResultScreen() {
     awayTeam?.primaryColor,
     awayTeam?.secondaryColor,
     awayTeam?.teamId,
+    currentYear,
     fullBoxScore.away,
     fullBoxScore.home,
     game?.awayTeamId,

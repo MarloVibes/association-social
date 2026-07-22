@@ -1,9 +1,12 @@
+import { getTeamColors } from '@/constants/teamColors';
+
 export type BroadcastTeamUniformSource = {
   teamId?: string;
   id?: string;
   abbreviation?: string;
   primaryColor?: string | null;
   secondaryColor?: string | null;
+  currentYear?: number | null;
 };
 
 export type BroadcastPlayerSource = {
@@ -12,6 +15,7 @@ export type BroadcastPlayerSource = {
   id?: string;
   name?: string;
   full_name?: string;
+  team?: string | null;
   jerseyNumber?: string | number | null;
   jersey_number?: string | number | null;
   number?: string | number | null;
@@ -67,6 +71,37 @@ function cleanHex(value: unknown, fallback: string) {
   return /^#[0-9a-f]{6}$/i.test(raw) ? raw : fallback;
 }
 
+function relativeLuminance(hex: string) {
+  const value = cleanHex(hex, '#000000').slice(1);
+  const [r, g, b] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16) / 255);
+  const channel = (part: number) => (part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function readableNumberColor(primary: string, fallback?: string) {
+  const cleanedFallback = fallback && cleanHex(fallback, '');
+  if (cleanedFallback) {
+    const primaryLuminance = relativeLuminance(primary);
+    const fallbackLuminance = relativeLuminance(cleanedFallback);
+    const contrast = (Math.max(primaryLuminance, fallbackLuminance) + 0.05) / (Math.min(primaryLuminance, fallbackLuminance) + 0.05);
+    if (contrast >= 3) return cleanedFallback;
+  }
+  return relativeLuminance(primary) > 0.45 ? '#111111' : '#ffffff';
+}
+
+function uniformColors(team: BroadcastTeamUniformSource) {
+  const abbr = String(team.abbreviation || team.teamId || team.id || '').toUpperCase();
+  const year = Number.isFinite(Number(team.currentYear)) ? Number(team.currentYear) : undefined;
+  const [fallbackPrimary, fallbackSecondary, fallbackText] = getTeamColors(abbr, year);
+  const primary = cleanHex(team.primaryColor, fallbackPrimary || DEFAULT_PRIMARY);
+  const secondary = cleanHex(team.secondaryColor, fallbackSecondary || DEFAULT_SECONDARY);
+  return {
+    primary,
+    secondary,
+    numberColor: readableNumberColor(primary, fallbackText),
+  };
+}
+
 function playerId(player: BroadcastPlayerSource) {
   return String(player.playerId || player.player_id || player.id || player.full_name || player.name || 'player').trim();
 }
@@ -117,6 +152,7 @@ export function buildBroadcastActor({
 }): BroadcastActor {
   const number = jerseyNumber(player);
   const teamId = String(team.teamId || team.id || team.abbreviation || side).trim();
+  const colors = uniformColors(team);
   return {
     id: playerId(player),
     name: playerName(player),
@@ -128,10 +164,10 @@ export function buildBroadcastActor({
     uniform: {
       teamId,
       abbr: String(team.abbreviation || teamId).toUpperCase(),
-      primary: cleanHex(team.primaryColor, DEFAULT_PRIMARY),
-      secondary: cleanHex(team.secondaryColor, DEFAULT_SECONDARY),
+      primary: colors.primary,
+      secondary: colors.secondary,
       number,
-      numberColor: side === 'home' ? '#ffffff' : '#111111',
+      numberColor: colors.numberColor,
     },
   };
 }
