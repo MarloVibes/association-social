@@ -143,6 +143,7 @@ Status: Active
 - Marlano still feels something is missing in gameplay during simulation, so continue ideating after the core system is stable.
 - Added a first-pass NBA Broadcast GameCast visual panel to final score pages, using team logos, jersey colors, animated players, ball movement, jumbotron, scoring popups, momentum, and top performer-driven highlight text. Pending simulator approval before expanding deeper into gameplay flow.
 - Broadcast GameCast now chooses visual highlight types from the actual box score when available, including deep threes, poster finishes, assists, blocks, rebounds, and steals.
+- Calendar final scores should appear only once on schedule tiles, and matchup simulation should show normal Simulate for commissioner-accessible games with manual winner as an optional override.
 
 ### 8. Stats And Standings
 

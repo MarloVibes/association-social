@@ -610,11 +610,9 @@ export default function CalendarScreen() {
                       </View>
                       {liveScore ? (
                         <View style={styles.liveScoreStack}>
-                          <Text style={styles.tileScore}>{liveScore.label}</Text>
+                          <Text numberOfLines={1} adjustsFontSizeToFit style={styles.tileScore}>{liveScore.label}</Text>
                           <Text style={styles.liveScoreMeta}>{liveScore.periodLabel}</Text>
                         </View>
-                      ) : finalScore ? (
-                        <Text style={styles.tileScore}>{finalScore}</Text>
                       ) : null}
                     </View>
                     <View style={styles.tileTeam}>
@@ -723,10 +721,10 @@ const styles = StyleSheet.create({
   teamLogo: { width: 35, height: 35 },
   teamLabel: { color: '#fff', fontSize: 11, fontWeight: '900', maxWidth: '100%' },
   teamName: { color: '#777', fontSize: 8, fontWeight: '800', marginTop: 2, maxWidth: '100%' },
-  versusStack: { alignItems: 'center', gap: 6, width: 34 },
+  versusStack: { alignItems: 'center', gap: 6, width: 42 },
   versusPill: { width: 28, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#080808', borderWidth: 1, borderColor: '#2a2a2a' },
   versusText: { color: '#777', fontSize: 9, fontWeight: '900' },
-  tileScore: { color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  tileScore: { color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center', width: 42 },
   liveScoreStack: { alignItems: 'center', gap: 1 },
   liveScoreMeta: { color: '#00e58b', fontSize: 8, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   tileFooter: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 },

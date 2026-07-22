@@ -188,6 +188,7 @@ export default function MatchupScreen() {
   const [resultDetails, setResultDetails] = useState<MatchupGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [showManualWinner, setShowManualWinner] = useState(false);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -466,7 +467,7 @@ export default function MatchupScreen() {
 
   const canAccept = Boolean(myTeam && game?.status === 'requested' && game?.requestedByUid !== uid);
   const canRequest = Boolean(myTeam && game?.status === 'scheduled');
-  const canSimulate = Boolean(myTeam && game && ['scheduled', 'preparing'].includes(game.status));
+  const canSimulate = Boolean((myTeam || isLeagueAdmin) && game && ['scheduled', 'preparing'].includes(game.status));
   const canReportScore = Boolean((myTeam || isLeagueAdmin) && game && ['scheduled', 'preparing', 'simulating'].includes(game.status));
   const canReset = Boolean(isLeagueAdmin && game && game.status !== 'scheduled');
   const hasFinalScore = game?.status === 'final' && typeof game.homeScore === 'number' && typeof game.awayScore === 'number';
@@ -588,20 +589,34 @@ export default function MatchupScreen() {
                     </Text>
                   </Pressable>
                 )}
-                {canReportScore && game && (
-                  <View style={styles.winnerEntry}>
-                    <Text style={styles.winnerEntryTitle}>Choose Winner</Text>
-                    <Text style={styles.winnerEntryHelp}>The sim engine will create the final score and box score.</Text>
-                    <View style={styles.winnerButtonRow}>
-                      <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
-                        <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.awayTeamId)} Wins</Text>
-                      </Pressable>
-                      <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.homeTeamId)} style={styles.winnerButton}>
-                        <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.homeTeamId)} Wins</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
+                {canReportScore && game ? (
+                  <>
+                    <Pressable
+                      disabled={working}
+                      onPress={() => setShowManualWinner(value => !value)}
+                      style={styles.manualWinnerToggle}
+                    >
+                      <Ionicons color="#00e58b" name="options-outline" size={15} />
+                      <Text style={styles.manualWinnerToggleText}>
+                        {showManualWinner ? 'Hide Manual Winner' : 'Manual Winner Override'}
+                      </Text>
+                    </Pressable>
+                    {showManualWinner ? (
+                      <View style={styles.winnerEntry}>
+                        <Text style={styles.winnerEntryTitle}>Choose Winner</Text>
+                        <Text style={styles.winnerEntryHelp}>Use this only when you need to force a result. Normal Simulate will pick the winner and create the box score.</Text>
+                        <View style={styles.winnerButtonRow}>
+                          <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.awayTeamId)} style={styles.winnerButton}>
+                            <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.awayTeamId)} Wins</Text>
+                          </Pressable>
+                          <Pressable disabled={working} onPress={() => submitWinnerOutcome(game.homeTeamId)} style={styles.winnerButton}>
+                            <Text style={styles.winnerButtonText}>{displayScheduleAbbr(game.homeTeamId)} Wins</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
                 {myTeam && (
                   <>
                     <View style={styles.prepHeader}>
@@ -749,6 +764,8 @@ const styles = StyleSheet.create({
   actionTextAlt: { color: '#00e58b', fontSize: 13, fontWeight: '900' },
   resetButton: { minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: '#ff6b6b55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18, backgroundColor: '#1a0d0d' },
   resetText: { color: '#ff6b6b', fontSize: 12, fontWeight: '900' },
+  manualWinnerToggle: { minHeight: 40, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b55', backgroundColor: '#07120d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: -8, marginBottom: 14 },
+  manualWinnerToggleText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
   winnerEntry: { backgroundColor: '#101010', borderRadius: 8, borderWidth: 1, borderColor: '#202020', padding: 12, marginBottom: 18 },
   winnerEntryTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   winnerEntryHelp: { color: '#888', fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 4, marginBottom: 12 },
