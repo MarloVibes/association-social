@@ -3104,6 +3104,7 @@ function createSimulateScheduledGameHandler(deps) {
       const gameIndex = games.findIndex(game => game.id === gameId);
       if (gameIndex < 0) throw new HttpsError('not-found', 'Game not found.');
       const game = games[gameIndex];
+      const admin = isCommissioner(uid, league);
       const cpuGate = canUserSimulateVsCpu({ game, uid, league });
       if (!cpuGate.allowed) {
         throw new HttpsError(
@@ -3139,6 +3140,7 @@ function createSimulateScheduledGameHandler(deps) {
           nowMs,
           homeTeam,
           awayTeam,
+          skipParticipantCheck: admin,
         });
       } catch (error) {
         throw mapError(error, HttpsError);

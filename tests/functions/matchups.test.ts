@@ -1506,7 +1506,7 @@ describe('matchup request state helpers', () => {
     expect(team.players.map((player: any) => player.full_name)).toEqual(['Tim Duncan', 'Tony Parker']);
   });
 
-  it('tops up under-linked claimed schedule teams from the era player pool before simulation', async () => {
+  it('allows commissioners to simulate other teams and tops up under-linked claimed rosters', async () => {
     const game = seedAvailableGame({
       id: 'nba_3dhh2u',
       homeTeamId: 'CHA',
@@ -1612,7 +1612,7 @@ describe('matchup request state helpers', () => {
     });
 
     const result = await handler({
-      auth: { uid: 'gm-cha' },
+      auth: { uid: 'commissioner' },
       data: { leagueId: 'league-1', gameId: 'nba_3dhh2u', competition: 'regular' },
     });
 
