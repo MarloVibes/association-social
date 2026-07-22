@@ -125,7 +125,6 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SIM_ELIGIBLE_STATUSES = new Set(['scheduled', 'preparing']);
 const CALENDAR_ROW_HEIGHT = 168;
 const CALENDAR_SECTION_HEADER_HEIGHT = 34;
-const CALENDAR_FOLLOW_VIEW_POSITION = 0.44;
 const LEAGUE_WEEKS_PER_PAGE = 4;
 const SEASON_SIM_BATCH_SIZE = 15;
 const SEASON_SIM_STEP_DELAY_MS = 25;
@@ -133,18 +132,6 @@ const SEASON_SIM_STEP_DELAY_MS = 25;
 function weekPageStartFor(week: number) {
   const safeWeek = Math.max(1, Number(week || 1));
   return Math.floor((safeWeek - 1) / LEAGUE_WEEKS_PER_PAGE) * LEAGUE_WEEKS_PER_PAGE + 1;
-}
-
-function nextSimTargetAfter(gameList: CalendarGame[], completedGameIds: string[] = [], anchorGameId?: string | null) {
-  const games = [...gameList].sort((a, b) => a.sequence - b.sequence);
-  const completed = new Set(completedGameIds.map(String));
-  const lastCompletedId = anchorGameId || completedGameIds[completedGameIds.length - 1];
-  const lastCompletedIndex = lastCompletedId ? games.findIndex(game => game.id === lastCompletedId) : -1;
-  return games.find((game, index) => (
-    index > lastCompletedIndex
-    && SIM_ELIGIBLE_STATUSES.has(String(game.status))
-    && !completed.has(String(game.id))
-  )) || games.find(game => SIM_ELIGIBLE_STATUSES.has(String(game.status)) && !completed.has(String(game.id))) || null;
 }
 
 export default function CalendarScreen() {
@@ -158,17 +145,10 @@ export default function CalendarScreen() {
   const [advancingCup, setAdvancingCup] = useState(false);
   const [simmingSeason, setSimmingSeason] = useState(false);
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ finalGames: number; totalGames: number; remainingGames: number } | null>(null);
-  const [seasonSimFollowGameId, setSeasonSimFollowGameId] = useState<string | null>(null);
-  const [autoFollowSeasonSim, setAutoFollowSeasonSim] = useState(false);
   const [leagueWeekPageStart, setLeagueWeekPageStart] = useState(1);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('mine');
   const [nowMs, setNowMs] = useState(Date.now());
-  const scheduleListRef = useRef<SectionList<CalendarSectionRow, CalendarSection> | null>(null);
-  const sectionsRef = useRef<CalendarSection[]>([]);
-  const allSectionsRef = useRef<CalendarSection[]>([]);
   const cancelSeasonSimRef = useRef(false);
-  const simmedSeasonGameIdsRef = useRef<Set<string>>(new Set());
-  const pendingFollowGameIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -329,18 +309,13 @@ export default function CalendarScreen() {
   ), [allGames]);
 
   useEffect(() => {
-    sectionsRef.current = renderedSections;
-    allSectionsRef.current = sections;
-  }, [renderedSections, sections]);
-
-  useEffect(() => {
     if (selectedViewMode !== 'league') return;
     if (leagueWeekPageStart <= maxLeagueWeek) return;
     setLeagueWeekPageStart(weekPageStartFor(maxLeagueWeek));
   }, [leagueWeekPageStart, maxLeagueWeek, selectedViewMode]);
 
   const getCalendarItemLayout = useCallback((sectionData: CalendarSection[] | null, index: number) => {
-    const activeSections = sectionData || sectionsRef.current;
+    const activeSections = sectionData || renderedSections;
     let offset = 0;
     let cursor = 0;
     for (const section of activeSections) {
@@ -358,77 +333,7 @@ export default function CalendarScreen() {
       }
     }
     return { length: CALENDAR_ROW_HEIGHT, offset, index };
-  }, []);
-
-  const scrollToGameId = useCallback((gameId?: string | null, animated = true, attempt = 0) => {
-    if (!gameId) return;
-    pendingFollowGameIdRef.current = gameId;
-    const currentSections = sectionsRef.current;
-    const sectionIndex = currentSections.findIndex(section => section.data.some(row => row.games.some(game => game.id === gameId)));
-    if (sectionIndex < 0) {
-      const targetSection = allSectionsRef.current.find(section => section.data.some(row => row.games.some(game => game.id === gameId)));
-      if (targetSection?.week) {
-        setLeagueWeekPageStart(weekPageStartFor(targetSection.week));
-      }
-      if (attempt < 5) setTimeout(() => scrollToGameId(gameId, animated, attempt + 1), 120);
-      return;
-    }
-    const targetSection = currentSections[sectionIndex];
-    const rowIndex = Math.max(0, targetSection.data.findIndex(row => row.games.some(game => game.id === gameId)));
-    requestAnimationFrame(() => {
-      try {
-        scheduleListRef.current?.scrollToLocation({
-          sectionIndex,
-          itemIndex: rowIndex,
-          viewPosition: CALENDAR_FOLLOW_VIEW_POSITION,
-          viewOffset: 0,
-          animated,
-        });
-      } catch {
-        if (attempt < 5) {
-          setTimeout(() => scrollToGameId(gameId, animated, attempt + 1), 180);
-        }
-      }
-    });
-  }, []);
-
-  const scrollToNextUnfinishedGame = useCallback((animated = true) => {
-    const targetId = seasonSimFollowGameId || nextSimGame?.id || null;
-    scrollToGameId(targetId, animated);
-  }, [nextSimGame?.id, scrollToGameId, seasonSimFollowGameId]);
-
-  useEffect(() => {
-    if (!simmingSeason || !autoFollowSeasonSim || selectedViewMode !== 'league') return;
-    scrollToGameId(seasonSimFollowGameId || nextSimGame?.id || null, true);
-  }, [autoFollowSeasonSim, nextSimGame?.id, scrollToGameId, seasonSimFollowGameId, selectedViewMode, simmingSeason]);
-
-  useEffect(() => {
-    if (!simmingSeason || !autoFollowSeasonSim || !seasonSimFollowGameId) return;
-    scrollToGameId(seasonSimFollowGameId, true);
-  }, [autoFollowSeasonSim, scrollToGameId, seasonSimFollowGameId, simmingSeason]);
-
-  useEffect(() => {
-    if (!simmingSeason || seasonSimFollowGameId || !nextSimGame?.id) return;
-    setSeasonSimFollowGameId(nextSimGame.id);
-  }, [nextSimGame?.id, seasonSimFollowGameId, simmingSeason]);
-
-  const setSeasonFollowTarget = useCallback((gameId?: string | null, animated = true) => {
-    if (!gameId) return;
-    pendingFollowGameIdRef.current = gameId;
-    setSeasonSimFollowGameId(gameId);
-    if (autoFollowSeasonSim) scrollToGameId(gameId, animated);
-  }, [autoFollowSeasonSim, scrollToGameId]);
-
-  const toggleSeasonSimFollow = () => {
-    if (autoFollowSeasonSim) {
-      setAutoFollowSeasonSim(false);
-      return;
-    }
-    setViewMode('league');
-    if (nextSimGame?.week) setLeagueWeekPageStart(weekPageStartFor(Number(nextSimGame.week)));
-    setAutoFollowSeasonSim(true);
-    setTimeout(() => scrollToNextUnfinishedGame(true), 120);
-  };
+  }, [renderedSections]);
 
   const advanceCup = async () => {
     if (!leagueId || !schedule?.nbaCup || !isLeagueAdmin) return;
@@ -448,22 +353,9 @@ export default function CalendarScreen() {
     const remainingGames = allGames.filter(game => SIM_ELIGIBLE_STATUSES.has(String(game.status))).length;
     const maxSteps = Math.max(Math.ceil(Math.max(remainingGames, allGames.length) / SEASON_SIM_BATCH_SIZE) + 8, 12);
     cancelSeasonSimRef.current = false;
-    pendingFollowGameIdRef.current = null;
     setViewMode('league');
-    setAutoFollowSeasonSim(true);
-    simmedSeasonGameIdsRef.current = new Set(
-      allGames
-        .filter(game => !SIM_ELIGIBLE_STATUSES.has(String(game.status)))
-        .map(game => String(game.id)),
-    );
-    const completedGameIds = [...simmedSeasonGameIdsRef.current];
-    const firstTarget = nextSimTargetAfter(allGames, completedGameIds);
-    setSeasonSimFollowGameId(firstTarget?.id || null);
-    pendingFollowGameIdRef.current = firstTarget?.id || null;
-    if (firstTarget?.week) setLeagueWeekPageStart(weekPageStartFor(Number(firstTarget.week)));
     setSeasonSimProgress(null);
     setSimmingSeason(true);
-    setTimeout(() => scrollToGameId(firstTarget?.id || null, true), 180);
     try {
       const simBatch = httpsCallable(functions, 'simScheduleBatch');
       let action = 'start';
@@ -480,17 +372,6 @@ export default function CalendarScreen() {
           totalGames: Number(control.totalGames || allGames.length),
           remainingGames: Number(control.remainingGames || 0),
         });
-        const lastBatchGameIds: string[] = Array.isArray(control.lastBatchGameIds)
-          ? control.lastBatchGameIds.map(String)
-          : [];
-        lastBatchGameIds.forEach((gameId) => simmedSeasonGameIdsRef.current.add(String(gameId)));
-        const nextTarget = nextSimTargetAfter(
-          allGames,
-          [...simmedSeasonGameIdsRef.current],
-          lastBatchGameIds[lastBatchGameIds.length - 1] || null,
-        );
-        if (nextTarget?.week) setLeagueWeekPageStart(weekPageStartFor(Number(nextTarget.week)));
-        setSeasonFollowTarget(nextTarget?.id || null, true);
         if (control.status === 'complete' || control.status === 'cancelled') {
           if (remainingGames === 0 && control.repairedGames) {
             Alert.alert('Box scores repaired', 'Final games now have playable result details.');
@@ -505,10 +386,6 @@ export default function CalendarScreen() {
     } finally {
       setSimmingSeason(false);
       cancelSeasonSimRef.current = false;
-      simmedSeasonGameIdsRef.current = new Set();
-      pendingFollowGameIdRef.current = null;
-      setAutoFollowSeasonSim(false);
-      setSeasonSimFollowGameId(null);
       setSeasonSimProgress(null);
     }
   };
@@ -546,7 +423,6 @@ export default function CalendarScreen() {
   return (
     <View style={styles.screen}>
       <SectionList
-        ref={scheduleListRef}
         contentContainerStyle={styles.content}
         sections={renderedSections}
         keyExtractor={item => item.id}
@@ -555,21 +431,6 @@ export default function CalendarScreen() {
         windowSize={simmingSeason ? 15 : 5}
         removeClippedSubviews={false}
         getItemLayout={getCalendarItemLayout}
-        onScrollBeginDrag={() => {
-          if (simmingSeason) setAutoFollowSeasonSim(false);
-        }}
-        onScrollToIndexFailed={(info) => {
-          if (simmingSeason && autoFollowSeasonSim) {
-            setTimeout(() => {
-              const followId = pendingFollowGameIdRef.current || seasonSimFollowGameId || nextSimGame?.id || null;
-              if (followId) {
-                scrollToGameId(followId, true);
-              } else {
-                scrollToNextUnfinishedGame(true);
-              }
-            }, Math.max(220, Math.min(600, info.averageItemLength || 220)));
-          }
-        }}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={(
           <>
@@ -660,11 +521,8 @@ export default function CalendarScreen() {
                     <TouchableOpacity
                       style={styles.weekPagerCenter}
                       onPress={() => {
-                        const targetWeek = Number((seasonSimFollowGameId
-                          ? allGames.find(game => game.id === seasonSimFollowGameId)?.week
-                          : nextSimGame?.week) || nextSimGame?.week || leagueWeekPageStart || 1);
+                        const targetWeek = Number(nextSimGame?.week || leagueWeekPageStart || 1);
                         setLeagueWeekPageStart(weekPageStartFor(targetWeek));
-                        setTimeout(() => scrollToNextUnfinishedGame(true), 80);
                       }}
                     >
                       <Text style={styles.weekPagerLabel}>Weeks {leagueWeekPageStart}-{leagueWeekPageEnd}</Text>
@@ -849,15 +707,6 @@ export default function CalendarScreen() {
             <Ionicons color="#fff" name="stop-circle" size={17} />
             <Text style={styles.simDockStopText}>Stop</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.simDockFollow, autoFollowSeasonSim && styles.simDockFollowActive]}
-            onPress={toggleSeasonSimFollow}
-          >
-            <Ionicons color={autoFollowSeasonSim ? '#06130c' : '#00e58b'} name="navigate" size={15} />
-            <Text style={[styles.simDockFollowText, autoFollowSeasonSim && styles.simDockFollowTextActive]}>
-              {autoFollowSeasonSim ? 'Following' : 'Follow'}
-            </Text>
-          </TouchableOpacity>
         </View>
       ) : null}
     </View>
@@ -910,10 +759,6 @@ const styles = StyleSheet.create({
   simDock: { position: 'absolute', left: 18, right: 18, bottom: 18, borderRadius: 10, borderWidth: 1, borderColor: '#1f3328', backgroundColor: '#07120d', padding: 8, flexDirection: 'row', gap: 8 },
   simDockStop: { flex: 1, minHeight: 40, borderRadius: 8, backgroundColor: '#e53950', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   simDockStopText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  simDockFollow: { flex: 1, minHeight: 40, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b66', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: '#07120d' },
-  simDockFollowActive: { backgroundColor: '#00e58b', borderColor: '#00e58b' },
-  simDockFollowText: { color: '#00e58b', fontSize: 12, fontWeight: '900' },
-  simDockFollowTextActive: { color: '#06130c' },
   weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 8, paddingHorizontal: 2 },
   weekTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
   weekRange: { color: '#777', fontSize: 11, fontWeight: '800' },
