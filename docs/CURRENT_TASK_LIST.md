@@ -208,6 +208,27 @@ Status: Active as needed
 - Avoid deleting existing important indexes/overrides by accident.
 - Firebase emulator is blocked locally until Java is installed and available on PATH.
 
+### 13. Pitch Security, Demo Access, And IP Protection
+
+Status: Active as needed before investor / publisher demos
+
+- Prepare Franchise Mobile for private pitching to 2K / Take-Two or other partners.
+- Protect the app idea, code, data, player rating logic, simulation formulas, and private roadmap before sharing demos.
+- Create a pitch-safe demo flow that lets outsiders experience the app without exposing production data, source code, admin tools, Firebase internals, or private docs.
+- Use a separate demo Firebase project or demo environment where possible.
+- Seed demo leagues with scrubbed / sample data only.
+- Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
+- Remove or hide commissioner/admin controls from demo accounts unless specifically needed for the pitch.
+- Add a security review checklist covering Firestore rules, Storage rules, Functions permissions, API keys, service accounts, repo access, env files, and logging.
+- Prepare legal/IP action items for attorney review:
+  - founder ownership / assignment cleanup
+  - NDA template for smaller private demos
+  - copyright registration consideration for code/art/content
+  - trademark search / filing consideration for the app name
+  - patent / provisional patent discussion if unique gameplay or sim mechanics may qualify
+  - trade-secret handling for algorithms, rating formulas, and roadmap docs
+- Keep a pitch package that shares product value and demo access without sharing implementation details.
+
 ## Parked
 
 ### Broadcast / Rive / Live Mode Rebuild
