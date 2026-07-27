@@ -11,6 +11,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePresence } from '@/hooks/usePresence';
 import { addLeagueMemberIfSpace } from '@/utils/leagueMembership';
 import { buildDashboardHomeModel } from '@/domain/dashboard/home';
+import { isPitchDemoViewer, pitchAccessLabel } from '@/utils/pitchAccess';
 
 const SPORT_LABELS: Record<string, string> = {
   nba: 'NBA Franchise',
@@ -159,6 +160,8 @@ export default function DashboardScreen() {
     pendingInviteCount: pendingInvites,
   });
   const onlinePreviewFriends = onlineFriends.slice(0, 5);
+  const pitchViewer = isPitchDemoViewer(profile);
+  const pitchLabel = pitchAccessLabel(profile);
 
 
   const handleAcceptInvite = async (invite: any) => {
@@ -261,34 +264,43 @@ export default function DashboardScreen() {
             </View>
           </LinearGradient>
 
-          <View style={styles.quickGrid}>
-            {homeModel.quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.label}
-                style={styles.quickAction}
-                onPress={() => router.push(action.route)}
-              >
-                <Text style={styles.quickActionText}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {pitchViewer ? (
+            <View style={styles.pitchNotice}>
+              <Text style={styles.pitchNoticeLabel}>{pitchLabel}</Text>
+              <Text style={styles.pitchNoticeText}>This account can explore approved demo leagues without creating, deleting, or exposing private app controls.</Text>
+            </View>
+          ) : (
+            <View style={styles.quickGrid}>
+              {homeModel.quickActions.map((action) => (
+                <TouchableOpacity
+                  key={action.label}
+                  style={styles.quickAction}
+                  onPress={() => router.push(action.route)}
+                >
+                  <Text style={styles.quickActionText}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
-          <View style={styles.modeGrid}>
-            {homeModel.modeCards.map((mode) => (
-              <TouchableOpacity
-                key={mode.sport}
-                activeOpacity={0.86}
-                style={[styles.modeCard, { borderColor: mode.accent }]}
-                onPress={() => router.push({ pathname: '/screens/create-league', params: { sport: mode.sport } })}
-              >
-                <Text style={[styles.modeIcon, { color: mode.accent }]}>{SPORT_EMOJI[mode.sport]}</Text>
-                <View style={styles.modeTextWrap}>
-                  <Text style={styles.modeTitle}>{mode.title}</Text>
-                  <Text style={styles.modeDesc} numberOfLines={2}>{mode.description}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {!pitchViewer ? (
+            <View style={styles.modeGrid}>
+              {homeModel.modeCards.map((mode) => (
+                <TouchableOpacity
+                  key={mode.sport}
+                  activeOpacity={0.86}
+                  style={[styles.modeCard, { borderColor: mode.accent }]}
+                  onPress={() => router.push({ pathname: '/screens/create-league', params: { sport: mode.sport } })}
+                >
+                  <Text style={[styles.modeIcon, { color: mode.accent }]}>{SPORT_EMOJI[mode.sport]}</Text>
+                  <View style={styles.modeTextWrap}>
+                    <Text style={styles.modeTitle}>{mode.title}</Text>
+                    <Text style={styles.modeDesc} numberOfLines={2}>{mode.description}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           {profile?.gamerTag ? (
             <View style={styles.gmCard}>
@@ -394,9 +406,11 @@ export default function DashboardScreen() {
                   <Text style={styles.leagueChevron}>›</Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity style={styles.joinAnotherBtn} onPress={() => router.push('/screens/join-league')}>
-                <Text style={styles.joinAnotherText}>+ Join Another League</Text>
-              </TouchableOpacity>
+              {!pitchViewer ? (
+                <TouchableOpacity style={styles.joinAnotherBtn} onPress={() => router.push('/screens/join-league')}>
+                  <Text style={styles.joinAnotherText}>+ Join Another League</Text>
+                </TouchableOpacity>
+              ) : null}
             </>
           )}
 
@@ -492,6 +506,9 @@ const styles = StyleSheet.create({
   quickGrid: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   quickAction: { flex: 1, backgroundColor: '#151515', borderRadius: 12, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderWidth: 1, borderColor: '#2c2c2c' },
   quickActionText: { color: '#ffffff', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  pitchNotice: { backgroundColor: '#0a1625', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#4ea1ff88' },
+  pitchNoticeLabel: { color: '#4ea1ff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 },
+  pitchNoticeText: { color: '#b8c7d8', fontSize: 12, fontWeight: '700', lineHeight: 18 },
   modeGrid: { gap: 10, marginBottom: 14 },
   modeCard: { backgroundColor: '#101010', borderRadius: 14, borderWidth: 1, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   modeIcon: { fontSize: 26 },

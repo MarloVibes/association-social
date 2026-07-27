@@ -11,6 +11,7 @@ import { defaultScheduleGamesPerTeam, getSportRules } from '@/domain/sports/rule
 import GlobalNav from '@/components/GlobalNav';
 import { suppressDeletedLeagueAlert } from '@/utils/deletedLeagueAlert';
 import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
+import { canUsePitchSensitiveControls } from '@/utils/pitchAccess';
 
 const PRIVACY_OPTIONS = [
   { value: 'public', label: 'Public', desc: 'Anyone can find and join your league' },
@@ -52,6 +53,7 @@ export default function LeagueSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [league, setLeague] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -87,6 +89,14 @@ export default function LeagueSettingsScreen() {
       }
       const data = snap.data() as any;
       setLeague({ id: snap.id, ...data });
+      if (user?.uid) {
+        try {
+          const profileSnap = await getDoc(doc(db, 'users', user.uid));
+          setProfile(profileSnap.exists() ? profileSnap.data() : null);
+        } catch {
+          setProfile(null);
+        }
+      }
       // Pending player count (only meaningful for commissioners but cheap to load)
       try {
         const ps = await getDocs(collection(db, 'leagues', leagueId, 'pending_players'));
@@ -123,13 +133,14 @@ export default function LeagueSettingsScreen() {
       setDraftTimerSeconds(String(data.offseason?.draftTimerSeconds || data.draftTimerSeconds || getSportRules(data.sport).defaultDraftTimerSeconds));
     } catch (e: any) { Alert.alert('Error', e.message); }
     setLoading(false);
-  }, [leagueId]);
+  }, [leagueId, user?.uid]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const isFounder = league?.commissionerId === user?.uid;
   const [pendingCount, setPendingCount] = useState(0);
   const isCommissioner = isFounder || (league?.coCommissioners || []).includes(user?.uid || '');
+  const pitchSensitiveControlsAllowed = canUsePitchSensitiveControls({ profile, league, uid: user?.uid });
   const sportRules = getSportRules(league?.sport);
   const teamLimit = sportRules.teamCount;
   const financeMode = sportRules.financeMode;
@@ -157,6 +168,25 @@ export default function LeagueSettingsScreen() {
         <View style={{ padding: 40, alignItems: 'center' }}>
           <Text style={styles.lockIcon}>🔒</Text>
           <Text style={styles.lockText}>Only commissioners can edit league settings.</Text>
+        </View>
+        <GlobalNav />
+      </View>
+    );
+  }
+
+  if (!pitchSensitiveControlsAllowed) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Settings</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.pitchLockedCard}>
+          <Text style={styles.pitchLockedTitle}>Pitch demo protected</Text>
+          <Text style={styles.pitchLockedText}>This build can show the league experience, but settings, deletion, schedule generation, and admin-level changes are locked for demo safety.</Text>
         </View>
         <GlobalNav />
       </View>
@@ -309,6 +339,10 @@ export default function LeagueSettingsScreen() {
   };
 
   const handleDelete = async () => {
+    if (!pitchSensitiveControlsAllowed) {
+      Alert.alert('Pitch demo protected', 'League deletion is blocked for pitch demo access.');
+      return;
+    }
     if (!isFounder) { Alert.alert('Founder only', 'Only the original commissioner can delete a league.'); return; }
     if (deleteConfirm.trim().toUpperCase() !== 'DELETE') {
       Alert.alert('Confirm deletion', 'Please type DELETE to confirm.');
@@ -705,4 +739,7 @@ const styles = StyleSheet.create({
   deleteBtnText: { color: '#ff4444', fontSize: 13, fontWeight: '800', letterSpacing: 2 },
   lockIcon: { fontSize: 48, marginBottom: 12 },
   lockText: { color: '#666', fontSize: 14, textAlign: 'center' },
+  pitchLockedCard: { margin: 20, marginTop: 40, borderRadius: 14, padding: 18, backgroundColor: '#07131f', borderWidth: 1, borderColor: '#4ea1ff66' },
+  pitchLockedTitle: { color: '#4ea1ff', fontSize: 18, fontWeight: '900', marginBottom: 8 },
+  pitchLockedText: { color: '#b8c7d8', fontSize: 13, fontWeight: '700', lineHeight: 19 },
 });

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -13,6 +13,7 @@ import { buildPostgameStory } from '@/domain/nba/gameStory';
 import type { NbaScheduleGame } from '@/domain/nba/schedule';
 import { displayScheduleAbbr, displayScheduleEventText, displayScheduleName, isLiveResultRevealed, normalizeScheduleKey, teamScheduleKeys } from '@/domain/nba/scheduleView';
 import { scorePeriodsForSport } from '@/domain/sports/gamePeriods';
+import { canUsePitchSensitiveControls } from '@/utils/pitchAccess';
 
 type Team = {
   id: string;
@@ -268,6 +269,7 @@ export default function GameResultScreen() {
   const { leagueId, gameId, competition } = useLocalSearchParams<{ leagueId: string; gameId: string; competition?: string }>();
   const router = useRouter();
   const [league, setLeague] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [resultDetails, setResultDetails] = useState<ResultGame | null>(null);
@@ -319,6 +321,13 @@ export default function GameResultScreen() {
       }
       const nextLeague = { id: snapshot.id, ...snapshot.data() } as any;
       setLeague(nextLeague);
+      if (auth.currentUser?.uid) {
+        getDoc(doc(db, 'users', auth.currentUser.uid)).then(profileSnapshot => {
+          if (!cancelled) setProfile(profileSnapshot.exists() ? profileSnapshot.data() : null);
+        }).catch(() => {
+          if (!cancelled) setProfile(null);
+        });
+      }
       const scheduleId = nextLeague.scheduleId || String(nextLeague.currentYear || 2025);
       if (unsubscribeSchedule) unsubscribeSchedule();
       if (unsubscribeResultDetails) unsubscribeResultDetails();
@@ -476,6 +485,7 @@ export default function GameResultScreen() {
       || (league.coCommissioners || []).includes(uid)
     ),
   );
+  const pitchSensitiveControlsAllowed = canUsePitchSensitiveControls({ profile, league, uid });
   const resultVisible = isLiveResultRevealed(game, nowMs);
   const finalResultAvailable = game?.status === 'final' || resultVisible;
   const hasCompleteBoxScore = Boolean(
@@ -520,6 +530,10 @@ export default function GameResultScreen() {
 
   const resetGame = () => {
     if (!leagueId || !gameId || !isLeagueAdmin || resetting) return;
+    if (!pitchSensitiveControlsAllowed) {
+      Alert.alert('Pitch demo protected', 'Game resets are blocked for pitch demo access.');
+      return;
+    }
     Alert.alert(
       'Reset Game',
       'Only commissioners can reset completed games. This will reopen the game and roll back its recorded result.',
@@ -604,7 +618,7 @@ export default function GameResultScreen() {
                 topPerformers={topPerformers}
               />
             ) : null}
-            {isLeagueAdmin && game.status === 'final' ? (
+            {isLeagueAdmin && pitchSensitiveControlsAllowed && game.status === 'final' ? (
               <TouchableOpacity
                 disabled={resetting}
                 onPress={resetGame}

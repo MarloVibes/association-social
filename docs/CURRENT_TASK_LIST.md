@@ -218,6 +218,10 @@ Status: Active as needed before investor / publisher demos
 - Use a separate demo Firebase project or demo environment where possible.
 - Seed demo leagues with scrubbed / sample data only.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
+- First-pass pitch demo guards are now implemented:
+  - `users/{uid}.pitchAccessRole = viewer` makes an account a protected pitch viewer.
+  - `leagues/{leagueId}.pitchDemoLocked = true` locks destructive/admin controls for that league.
+  - dashboard, league home, command center, league settings, salary tools, game reset UI, `deleteLeague`, and admin game reset now respect pitch protection.
 - Remove or hide commissioner/admin controls from demo accounts unless specifically needed for the pitch.
 - Add a security review checklist covering Firestore rules, Storage rules, Functions permissions, API keys, service accounts, repo access, env files, and logging.
 - Prepare legal/IP action items for attorney review:

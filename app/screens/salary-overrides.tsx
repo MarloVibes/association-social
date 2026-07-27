@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIn
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
+import { canUsePitchSensitiveControls } from '@/utils/pitchAccess';
 
 const MIN_SALARY = 500000; // Override floor (below NBA min to allow buyouts / partial salaries)
 
@@ -27,6 +28,7 @@ export default function SalaryOverridesScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isCommissioner, setIsCommissioner] = useState(false);
+  const [pitchAllowed, setPitchAllowed] = useState(true);
   const [overrides, setOverrides] = useState<any[]>([]);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -45,9 +47,19 @@ export default function SalaryOverridesScreen() {
       }
       const ld = leagueSnap.data() as any;
       const myUid = auth.currentUser?.uid;
+      let profile: any = null;
+      if (myUid) {
+        try {
+          const profileSnap = await getDoc(doc(db, 'users', myUid));
+          profile = profileSnap.exists() ? profileSnap.data() : null;
+        } catch {
+          profile = null;
+        }
+      }
       const commUids = [ld.commissionerId, ...(ld.coCommissioners || [])].filter(Boolean);
       const isComm = myUid ? commUids.includes(myUid) : false;
       setIsCommissioner(isComm);
+      setPitchAllowed(canUsePitchSensitiveControls({ profile, league: ld, uid: myUid }));
 
       // Load era player pool for search
       const era = ld.era || 'current';
@@ -136,11 +148,11 @@ export default function SalaryOverridesScreen() {
     return <View style={[styles.container, styles.center]}><ActivityIndicator color='#22c55e' /></View>;
   }
 
-  if (!isCommissioner) {
+  if (!isCommissioner || !pitchAllowed) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.lockedTitle}>Commissioners Only</Text>
-        <Text style={styles.lockedSub}>Only commissioners can manage salary overrides.</Text>
+        <Text style={styles.lockedTitle}>{pitchAllowed ? 'Commissioners Only' : 'Pitch Demo Protected'}</Text>
+        <Text style={styles.lockedSub}>{pitchAllowed ? 'Only commissioners can manage salary overrides.' : 'Salary override tools are hidden for pitch demo access.'}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
       </View>
     );

@@ -368,6 +368,20 @@ exports.deleteLeague = onCall(async (request) => {
   if (league.commissionerId !== uid) {
     throw new HttpsError('permission-denied', 'Only the original commissioner can delete this league.');
   }
+  const userSnap = await db.collection('users').doc(uid).get();
+  const userProfile = userSnap.exists ? userSnap.data() || {} : {};
+  const pitchRole = String(userProfile.pitchAccessRole || userProfile.demoAccessRole || '').toLowerCase();
+  const pitchViewer = pitchRole === 'viewer'
+    || pitchRole === 'pitch_viewer'
+    || pitchRole === 'demo_viewer'
+    || userProfile.isPitchDemoViewer === true
+    || userProfile.pitchDemoViewer === true;
+  const pitchLocked = league.pitchDemoLocked === true
+    || league.demoAccessLocked === true
+    || String(league.pitchMode || '').toLowerCase() === 'locked';
+  if (pitchViewer || pitchLocked) {
+    throw new HttpsError('permission-denied', 'League deletion is blocked for pitch demo access.');
+  }
 
   const memberIds = Array.isArray(league.members) ? league.members : [];
   await db.recursiveDelete(leagueRef);

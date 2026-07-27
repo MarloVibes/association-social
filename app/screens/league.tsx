@@ -15,6 +15,7 @@ import { isDeletedLeagueAlertSuppressed } from '@/utils/deletedLeagueAlert';
 import { playerJerseyDisplay } from '@/domain/sports/playerDisplay';
 import { compareSportRosterPlayersByValue } from '@/domain/sports/rosterValue';
 import { displayScheduleAbbr, displayScheduleTeamLabel } from '@/domain/nba/scheduleView';
+import { canUsePitchSensitiveControls, isPitchDemoLocked, isPitchDemoViewer } from '@/utils/pitchAccess';
 
 
 
@@ -69,12 +70,16 @@ function offseasonStartStageForSport(leagueSport: string) {
 export default function LeagueScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const [league, setLeague] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const user = auth.currentUser;
   const isCommissioner = league?.commissionerId === user?.uid || (league?.coCommissioners || []).includes(user?.uid || '');
+  const pitchViewer = isPitchDemoViewer(profile);
+  const pitchLocked = isPitchDemoLocked(league);
+  const pitchSensitiveControlsAllowed = canUsePitchSensitiveControls({ profile, league, uid: user?.uid });
   const currentYear = league?.currentYear || 2024;
   const leagueSport = league?.sport || 'nba';
   const rawTeamAbbr = myTeam?.abbreviation || myTeam?.teamId || '';
@@ -122,6 +127,15 @@ export default function LeagueScreen() {
       }
       const leagueData: any = { id: leagueSnap.id, ...leagueSnap.data() };
       setLeague(leagueData);
+
+      if (user?.uid) {
+        try {
+          const profileSnap = await getDoc(doc(db, 'users', user.uid));
+          setProfile(profileSnap.exists() ? profileSnap.data() : null);
+        } catch {
+          setProfile(null);
+        }
+      }
 
       const memberProfiles = await Promise.all(
         (leagueData.members || []).map(async (uid: string) => {
@@ -271,7 +285,7 @@ export default function LeagueScreen() {
           <Text style={[styles.stickyBack, { color: '#ffffff' }]}>←</Text>
         </TouchableOpacity>
         <Text style={[styles.stickyTitle, { color: '#ffffff' }]} numberOfLines={1}>{league.name}</Text>
-        {isCommissioner ? (
+        {isCommissioner && pitchSensitiveControlsAllowed ? (
           <TouchableOpacity onPress={() => router.push({ pathname: '/screens/league-settings', params: { leagueId } })} style={{ paddingHorizontal: 12 }}>
             <Text style={[styles.stickyBack, { color: '#ffffff' }]}>⚙️</Text>
           </TouchableOpacity>
@@ -295,7 +309,7 @@ export default function LeagueScreen() {
           <TouchableOpacity onPress={() => router.replace('/(tabs)/dashboard')}>
             <Text style={[styles.backText, { color: titleColor }]}>← Back</Text>
           </TouchableOpacity>
-          {isCommissioner && (
+          {isCommissioner && pitchSensitiveControlsAllowed && (
             <TouchableOpacity
               style={[styles.commBadge, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
               onPress={() => router.push({ pathname: '/screens/league-settings', params: { leagueId } })}
@@ -332,14 +346,22 @@ export default function LeagueScreen() {
             >
               <Text style={[styles.membersTabBtnText, { color: titleColor }]}>👥 Members ({members.length})</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.findGMsBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
-              onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
-            >
-              <Text style={[styles.findGMsBtnText, { color: titleColor }]}>🔍 Find GMs</Text>
-            </TouchableOpacity>
+            {pitchSensitiveControlsAllowed ? (
+              <TouchableOpacity
+                style={[styles.findGMsBtn, { backgroundColor: tintColor + '22', borderColor: teamTheme.borderColor + '88' }]}
+                onPress={() => router.push({ pathname: '/screens/invite-members', params: { leagueId, leagueName: league.name } })}
+              >
+                <Text style={[styles.findGMsBtnText, { color: titleColor }]}>🔍 Find GMs</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
+        {(pitchViewer || pitchLocked) ? (
+          <View style={styles.pitchNotice}>
+            <Text style={styles.pitchNoticeLabel}>Pitch Demo Access</Text>
+            <Text style={styles.pitchNoticeText}>This league is open for review, but invite, settings, deletion, and destructive commissioner controls are protected.</Text>
+          </View>
+        ) : null}
 
         <View style={[styles.leagueCommandShell, { borderColor: teamTheme.borderColor, backgroundColor: tintColor + '18' }]}>
           <View style={styles.leagueCommandHeader}>
@@ -444,7 +466,7 @@ export default function LeagueScreen() {
         </View>
 
         {/* Commissioner Controls */}
-        {isCommissioner && (
+        {isCommissioner && pitchSensitiveControlsAllowed && (
           <View style={styles.commSection}>
             <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Commissioner Controls</Text>
             <TouchableOpacity
@@ -508,6 +530,9 @@ const styles = StyleSheet.create({
   leagueNameLogo: { width: 40, height: 40 },
   leagueName: { fontSize: 28, fontWeight: '800', color: '#ffffff' },
   leagueMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  pitchNotice: { backgroundColor: '#07131f', borderRadius: 8, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#4ea1ff66' },
+  pitchNoticeLabel: { color: '#4ea1ff', fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
+  pitchNoticeText: { color: '#a9bdd0', fontSize: 12, fontWeight: '700', lineHeight: 17 },
   sportChip: { backgroundColor: '#1a1a1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
   sportChipText: { color: '#aaa', fontSize: 12, fontWeight: '700' },
   metaText: { color: '#666', fontSize: 13 },

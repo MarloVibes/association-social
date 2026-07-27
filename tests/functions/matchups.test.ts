@@ -3556,6 +3556,98 @@ describe('matchup request state helpers', () => {
     }));
   });
 
+  it('blocks commissioner game reset when the league is pitch demo locked', async () => {
+    const finalGame = seedAvailableGame({ status: 'final', homeScore: 101, awayScore: 99 });
+    const leagueRef = { collection: vi.fn() };
+    const userRef = {};
+    const scheduleRef = {};
+    const tx = {
+      get: vi.fn(async ref => {
+        if (ref === leagueRef) {
+          return { exists: true, data: () => ({ commissionerId: 'commissioner', scheduleId: '2026', pitchDemoLocked: true }) };
+        }
+        if (ref === userRef) return { exists: true, data: () => ({}) };
+        if (ref === scheduleRef) return { exists: true, data: () => ({ games: [finalGame] }) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+    };
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      return { doc: vi.fn() };
+    });
+    const db = {
+      collection: vi.fn((name: string) => ({
+        doc: vi.fn(() => (name === 'users' ? userRef : leagueRef)),
+      })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createResetScheduledGameHandler({
+      getFirestore: () => db,
+      now: () => 7_000,
+      HttpsError: TestHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', gameId: finalGame.id },
+    })).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks commissioner game reset for pitch viewer accounts', async () => {
+    const finalGame = seedAvailableGame({ status: 'final', homeScore: 101, awayScore: 99 });
+    const leagueRef = { collection: vi.fn() };
+    const userRef = {};
+    const scheduleRef = {};
+    const tx = {
+      get: vi.fn(async ref => {
+        if (ref === leagueRef) return { exists: true, data: () => ({ commissionerId: 'commissioner', scheduleId: '2026' }) };
+        if (ref === userRef) return { exists: true, data: () => ({ pitchAccessRole: 'viewer' }) };
+        if (ref === scheduleRef) return { exists: true, data: () => ({ games: [finalGame] }) };
+        return { exists: false, data: () => ({}) };
+      }),
+      update: vi.fn(),
+    };
+    leagueRef.collection = vi.fn((name: string) => {
+      if (name === 'schedules') return { doc: vi.fn(() => scheduleRef) };
+      return { doc: vi.fn() };
+    });
+    const db = {
+      collection: vi.fn((name: string) => ({
+        doc: vi.fn(() => (name === 'users' ? userRef : leagueRef)),
+      })),
+      runTransaction: vi.fn(async callback => callback(tx)),
+    };
+    class TestHttpsError extends Error {
+      code: string;
+
+      constructor(code: string, message: string) {
+        super(message);
+        this.code = code;
+      }
+    }
+    const handler = createResetScheduledGameHandler({
+      getFirestore: () => db,
+      now: () => 7_000,
+      HttpsError: TestHttpsError,
+    });
+
+    await expect(handler({
+      auth: { uid: 'commissioner' },
+      data: { leagueId: 'league-1', gameId: finalGame.id },
+    })).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
   it('selects NBA Cup games and mirrors regular-season Cup updates into the regular schedule', () => {
     const regularGame = seedAvailableGame({ id: 'regular-1' });
     const cupGame = seedAvailableGame({ id: 'cup-1', competition: 'nbaCup', stage: 'group', groupId: 'Group A', countsForRegularSeason: true });

@@ -49,6 +49,17 @@ Minimum acceptable setup if a separate Firebase project is not ready:
 - Confirm Firestore and Storage rules block non-members from reading private league data.
 - Never share Firebase Console, GitHub repo, or service-account access.
 
+## Current App Demo Access Flags
+
+The app now supports a first-pass pitch-safe access layer:
+
+- Set `users/{uid}.pitchAccessRole` to `viewer` to make a pitch viewer account.
+- Set `users/{uid}.pitchAccessRole` to `founder` for a labeled founder account.
+- Set `leagues/{leagueId}.pitchDemoLocked` to `true` to lock destructive/admin controls for that league.
+- Older aliases also work: `demoAccessRole`, `isPitchDemoViewer`, `pitchDemoViewer`, `demoAccessLocked`, and `pitchMode: locked`.
+
+Protected viewers can still explore approved leagues, rosters, stats, chats, schedules, and final scores. The app hides league creation/join shortcuts, commissioner settings, invite/find-GM controls, salary tools, reset buttons, and other private admin actions. Backend functions also reject league deletion and game reset attempts when pitch demo protection is active.
+
 ## Technical Security Checklist
 
 - Firestore rules: confirm users can only read/write league data they are allowed to access.

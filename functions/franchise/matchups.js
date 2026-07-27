@@ -2941,6 +2941,20 @@ function createAdminGameMutationHandler({ getFirestore, HttpsError, now, mutate 
       if (!isCommissioner(uid, league)) {
         throw new HttpsError('permission-denied', 'Only commissioners can reset games.');
       }
+      const userSnap = await tx.get(db.collection('users').doc(uid));
+      const userProfile = userSnap.exists ? userSnap.data() || {} : {};
+      const pitchRole = String(userProfile.pitchAccessRole || userProfile.demoAccessRole || '').toLowerCase();
+      const pitchViewer = pitchRole === 'viewer'
+        || pitchRole === 'pitch_viewer'
+        || pitchRole === 'demo_viewer'
+        || userProfile.isPitchDemoViewer === true
+        || userProfile.pitchDemoViewer === true;
+      const pitchLocked = league.pitchDemoLocked === true
+        || league.demoAccessLocked === true
+        || String(league.pitchMode || '').toLowerCase() === 'locked';
+      if (pitchViewer || pitchLocked) {
+        throw new HttpsError('permission-denied', 'Game reset is blocked for pitch demo access.');
+      }
       const scheduleId = league.scheduleId || String(league.currentYear || 2025);
       const scheduleRef = leagueRef.collection('schedules').doc(scheduleId);
       const scheduleSnap = await tx.get(scheduleRef);

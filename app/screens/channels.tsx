@@ -7,6 +7,7 @@ import { auth, db } from '@/constants/firebase';
 import GlobalNav from '@/components/GlobalNav';
 import SportBackground from '@/components/channel/SportBackground';
 import { channelReadKey, countUnreadChannelMessages, formatUnreadBadge } from '@/domain/channel/unread';
+import { canUsePitchSensitiveControls, isPitchDemoLocked, isPitchDemoViewer } from '@/utils/pitchAccess';
 
 type RoomAction = {
   label: string;
@@ -161,12 +162,16 @@ export default function ChannelsScreen() {
   const [resolvedSport, setResolvedSport] = useState(sport || '');
   const [resolvedCommissionerId, setResolvedCommissionerId] = useState(commissionerId || '');
   const [resolvedCoCommissioners, setResolvedCoCommissioners] = useState<string[]>(parseCoCommissioners(coCommissioners));
+  const [league, setLeague] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [activeRoomTitle, setActiveRoomTitle] = useState('GM Lounge');
   const [leagueChatMessages, setLeagueChatMessages] = useState<{ uid?: string | null; createdAtMs?: number | null }[]>([]);
   const [leagueChatLastOpenedAtMs, setLeagueChatLastOpenedAtMs] = useState<number | null>(null);
   const isCommOrCoComm = user?.uid === resolvedCommissionerId || resolvedCoCommissioners.includes(user?.uid || '');
+  const pitchSensitiveControlsAllowed = canUsePitchSensitiveControls({ profile, league, uid: user?.uid });
+  const pitchProtected = isPitchDemoViewer(profile) || isPitchDemoLocked(league);
   const isNba = resolvedSport === 'nba';
-  const rooms = useMemo(() => commandRooms(isCommOrCoComm), [isCommOrCoComm]);
+  const rooms = useMemo(() => commandRooms(isCommOrCoComm && pitchSensitiveControlsAllowed), [isCommOrCoComm, pitchSensitiveControlsAllowed]);
   const visibleRooms = useMemo(() => rooms
     .map(room => ({
       ...room,
@@ -186,6 +191,7 @@ export default function ChannelsScreen() {
     getDoc(doc(db, 'leagues', leagueId)).then(snapshot => {
       if (!active || !snapshot.exists()) return;
       const league = snapshot.data();
+      setLeague({ id: snapshot.id, ...league });
       setResolvedLeagueName(league.name || leagueName || '');
       setResolvedSport(league.sport || '');
       setResolvedCommissionerId(league.commissionerId || commissionerId || '');
@@ -196,6 +202,14 @@ export default function ChannelsScreen() {
 
     return () => { active = false; };
   }, [commissionerId, leagueId, leagueName]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, 'users', user.uid), snapshot => {
+      setProfile(snapshot.exists() ? snapshot.data() : null);
+    }, () => setProfile(null));
+    return () => unsub();
+  }, [user?.uid]);
 
   useEffect(() => {
     if (activeRoom && activeRoom.title !== activeRoomTitle && !visibleRooms.some(room => room.title === activeRoomTitle)) {
@@ -298,6 +312,11 @@ export default function ChannelsScreen() {
               <Text style={styles.heroText}>GM modules, player wire, trades, franchise tools, and season control live here.</Text>
             </View>
           </View>
+          {pitchProtected ? (
+            <View style={styles.pitchNotice}>
+              <Text style={styles.pitchNoticeText}>Pitch demo access: private admin tools are hidden while the league remains viewable.</Text>
+            </View>
+          ) : null}
           <View style={styles.quickRow}>
             {[
               { label: 'Trade', icon: 'swap-horizontal-outline' as const, action: rooms.flatMap(room => room.actions).find(item => item.kind === 'trade') },
@@ -402,6 +421,8 @@ const styles = StyleSheet.create({
   heroCopy: { flex: 1 },
   heroTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
   heroText: { color: '#9a9a9a', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 3 },
+  pitchNotice: { borderRadius: 8, borderWidth: 1, borderColor: '#4ea1ff66', backgroundColor: '#07131f', padding: 9 },
+  pitchNoticeText: { color: '#b8c7d8', fontSize: 11, fontWeight: '800', lineHeight: 16 },
   quickRow: { flexDirection: 'row', gap: 8 },
   quickButton: { flex: 1, minWidth: 0, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#00e58b44', backgroundColor: '#08160f', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 },
   quickButtonDisabled: { opacity: 0.35 },
