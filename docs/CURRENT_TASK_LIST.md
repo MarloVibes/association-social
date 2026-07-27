@@ -1,6 +1,6 @@
 # Franchise Mobile Current Task List
 
-Last updated: 2026-07-13
+Last updated: 2026-07-27
 
 This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
 
@@ -217,6 +217,7 @@ Status: Active as needed before investor / publisher demos
 - Create a pitch-safe demo flow that lets outsiders experience the app without exposing production data, source code, admin tools, Firebase internals, or private docs.
 - Use a separate demo Firebase project or demo environment where possible.
 - Seed demo leagues with scrubbed / sample data only.
+- Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
 - First-pass pitch demo guards are now implemented:
   - `users/{uid}.pitchAccessRole = viewer` makes an account a protected pitch viewer.
