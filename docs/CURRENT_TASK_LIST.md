@@ -224,6 +224,8 @@ Status: Active as needed before investor / publisher demos
   - dashboard, league home, command center, league settings, salary tools, game reset UI, `deleteLeague`, and admin game reset now respect pitch protection.
 - Remove or hide commissioner/admin controls from demo accounts unless specifically needed for the pitch.
 - Add a security review checklist covering Firestore rules, Storage rules, Functions permissions, API keys, service accounts, repo access, env files, and logging.
+- Use `npm run security:pitch` before sharing pitch builds; current expected warnings are console-only Firestore/Storage rules and local ignored `.env` / `service-account.json`.
+- Use `docs/FIREBASE_RULES_VERSIONING.md` before moving Firebase rules from console-only management into source control.
 - Prepare legal/IP action items for attorney review:
   - founder ownership / assignment cleanup
   - NDA template for smaller private demos

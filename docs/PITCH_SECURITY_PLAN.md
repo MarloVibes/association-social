@@ -62,6 +62,8 @@ Protected viewers can still explore approved leagues, rosters, stats, chats, sch
 
 ## Technical Security Checklist
 
+- Run `npm run security:pitch` before sharing any private pitch build or demo access.
+- Use `docs/FIREBASE_RULES_VERSIONING.md` to capture console rules safely before any rules deploy.
 - Firestore rules: confirm users can only read/write league data they are allowed to access.
 - Storage rules: confirm uploaded chat/photos/media are scoped to allowed users/leagues.
 - Callable Functions: confirm sensitive mutations require auth plus role checks.
@@ -118,10 +120,14 @@ Prepare these assets:
 
 ## Next Engineering Tasks
 
-1. Add a demo-mode flag that hides admin/debug/destructive controls for pitch viewers.
-2. Add demo account role detection.
-3. Create seed data for a strong demo league.
-4. Add a Firebase demo project or staging environment.
-5. Add a checklist test for Firestore/Storage permission assumptions.
-6. Add a pre-pitch security audit command/doc that checks `.env`, service-account files, rules, and obvious secret leaks.
-7. Create a private pitch build/update branch separate from normal development.
+1. Create seed data for a strong demo league.
+2. Add a Firebase demo project or staging environment.
+3. Export/version Firestore and Storage rules from Firebase Console so they can be reviewed before demos.
+4. Add a checklist test for Firestore/Storage permission assumptions.
+5. Create a private pitch build/update branch separate from normal development.
+
+Completed:
+
+- Added a demo-mode flag that hides admin/debug/destructive controls for pitch viewers.
+- Added demo account role detection.
+- Added `npm run security:pitch` to check `.env`, service-account files, versioned rules, indexes, and obvious sensitive TODO markers.
