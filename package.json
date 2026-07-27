@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:domain": "vitest run tests/domain",
     "test:functions": "vitest run tests/functions",
+    "test:security": "vitest run tests/security",
     "security:pitch": "node scripts/pre-pitch-security-audit.mjs",
     "demo:pitch:seed": "node scripts/seed-pitch-demo-league.mjs",
     "generate:function-baselines": "node scripts/generate-functions-baseline-profiles.mjs",

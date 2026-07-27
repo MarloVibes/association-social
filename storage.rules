@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isImageUnder(maxMB) {
+      return request.resource.size < maxMB * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+    function ownsPrefixed(fileName) {
+      return isSignedIn() && fileName.matches(request.auth.uid + '_.*');
+    }
+
+    // Files named "<uid>_<timestamp>" — owner writes, any signed-in user reads.
+    match /highlights/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if ownsPrefixed(fileName) && isImageUnder(15);
+    }
+    match /chat_photos/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if ownsPrefixed(fileName) && isImageUnder(15);
+    }
+    match /reset_proof/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if ownsPrefixed(fileName) && isImageUnder(15);
+    }
+
+    // profile_photos/<uid>.jpg
+    match /profile_photos/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && fileName == request.auth.uid + '.jpg'
+        && isImageUnder(10);
+    }
+
+    // custom_players/<leagueId>/<playerId>.jpg
+    match /custom_players/{leagueId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImageUnder(10);
+    }
+
+    // Anything else is denied by default.
+  }
+}

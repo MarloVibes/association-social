@@ -147,9 +147,7 @@ Prepare these assets:
 ## Next Engineering Tasks
 
 1. Add a Firebase demo project or staging environment.
-2. Export/version Firestore and Storage rules from Firebase Console so they can be reviewed before demos.
-3. Add a checklist test for Firestore/Storage permission assumptions.
-4. Create a private pitch build/update branch separate from normal development.
+2. Create a private pitch build/update branch separate from normal development.
 
 Completed:
 
@@ -157,3 +155,5 @@ Completed:
 - Added demo account role detection.
 - Added `npm run security:pitch` to check `.env`, service-account files, versioned rules, indexes, and obvious sensitive TODO markers.
 - Added `npm run demo:pitch:seed` to create a controlled CPU-filled pitch demo league.
+- Captured and versioned the published Firestore and Storage rules from Firebase Console.
+- Added `npm run test:security` to protect the versioned Firebase permission contract.

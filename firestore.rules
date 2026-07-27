@@ -1,0 +1,517 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===========================================================
+    // HELPER FUNCTIONS
+    // ===========================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function leagueDoc(leagueId) {
+      return get(/databases/$(database)/documents/leagues/$(leagueId)).data;
+    }
+
+    function isLeagueMember(leagueId) {
+      return isSignedIn() && request.auth.uid in leagueDoc(leagueId).members;
+    }
+
+    function isLeagueCommissioner(leagueId) {
+      return isSignedIn() && leagueDoc(leagueId).commissionerId == request.auth.uid;
+    }
+
+    function isLeagueAdmin(leagueId) {
+      return isSignedIn() && (
+        leagueDoc(leagueId).commissionerId == request.auth.uid ||
+        request.auth.uid in leagueDoc(leagueId).coCommissioners
+      );
+    }
+
+    function isDmParticipant(dmId) {
+      return isSignedIn() && request.auth.uid in dmId.split('_');
+    }
+
+    function canDmRecipient(recipientUid) {
+      let recipient = userDoc(recipientUid);
+      return recipient.dmEnabled != false || request.auth.uid in recipient.friends;
+    }
+
+    // ===========================================================
+    // COLLECTION GROUP QUERIES — trade_rooms
+    // ===========================================================
+    match /{path=**}/trade_rooms/{roomId} {
+      allow read: if isSignedIn() && (
+        resource == null
+        || resource.data.status == 'executed'
+        || resource.data.hostUid == request.auth.uid
+        || resource.data.guestUid == request.auth.uid
+      );
+    }
+    // ===========================================================
+    // USERS
+    // ===========================================================
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'notifications',
+          'friendRequestsReceived',
+          'leagueInvites',
+          'friends',
+          'leagues'
+        ])
+      );
+      allow delete: if isOwner(uid);
+
+      match /notifications/{notifId} {
+        allow read, update, delete: if isOwner(uid);
+        allow create: if isSignedIn();
+      }
+    }
+
+    // ===========================================================
+    // LEAGUES
+    // ===========================================================
+
+    match /leagues/{leagueId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.commissionerId == request.auth.uid
+        && request.auth.uid in request.resource.data.members;
+
+match /spins/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+    
+      allow update: if
+        // Founder: full control, including handing off the commissioner seat.
+        isLeagueCommissioner(leagueId)
+        // Admins (founder or co-commissioner): manage members + co-commissioners
+        // and release team slots — but the founder seat can never change here.
+        || (isLeagueAdmin(leagueId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'coCommissioners', 'takenTeams', 'updatedAt'])
+          && request.resource.data.commissionerId == resource.data.commissionerId)
+        // Self-join: allowed ONLY when the league is public, OR an admin has
+        // invited this exact user (a sent_invite doc exists for them). A private
+        // league with no invite can NEVER be self-joined. Add ONLY yourself.
+        || (isSignedIn()
+          && !(request.auth.uid in resource.data.members)
+          && request.auth.uid in request.resource.data.members
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.resource.data.commissionerId == resource.data.commissionerId
+          && (
+            resource.data.get('privacy', 'private') == 'public'
+            || exists(/databases/$(database)/documents/leagues/$(leagueId)/sent_invites/$(request.auth.uid))
+          ))
+        // Self-leave: remove ONLY yourself (and optionally release your team slot).
+        || (isSignedIn()
+          && request.auth.uid in resource.data.members
+          && !(request.auth.uid in request.resource.data.members)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'takenTeams'])
+          && request.resource.data.commissionerId == resource.data.commissionerId)
+        // Commissioner hand-off: founder transfers the seat to an existing member.
+        || (resource.data.commissionerId == request.auth.uid
+          && request.resource.data.commissionerId != request.auth.uid
+          && request.resource.data.commissionerId in resource.data.members)
+        // Any member may update team selection.
+        || (isLeagueMember(leagueId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['takenTeams']));
+
+      allow delete: if isLeagueCommissioner(leagueId);
+
+      match /teams/{teamId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create: if isLeagueMember(leagueId)
+          && (request.resource.data.gmId == request.auth.uid || isLeagueAdmin(leagueId));
+        allow update: if isLeagueMember(leagueId) && (
+          resource.data.gmId == request.auth.uid
+          || isLeagueAdmin(leagueId)
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players'])
+        );
+        allow delete: if isLeagueAdmin(leagueId)
+          || (isSignedIn() && resource.data.gmId == request.auth.uid);
+      }
+
+      match /free_agents/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueMember(leagueId);
+      }
+
+      match /salary_overrides/{playerId} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueAdmin(leagueId);
+      }
+
+      match /schedules/{scheduleId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create, update, delete: if isLeagueAdmin(leagueId);
+
+        match /preparation/{prepId} {
+          allow read, write: if isLeagueMember(leagueId);
+        }
+        
+
+        match /gameResults/{gameId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create, update, delete: if isLeagueAdmin(leagueId);
+        }
+
+        match /liveTimelines/{gameId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create, update, delete: if isLeagueAdmin(leagueId);
+        }
+      }
+
+      // Activity feed — league members can read AND create
+      match /activity/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create: if isLeagueMember(leagueId);
+        allow update, delete: if isLeagueAdmin(leagueId);
+      }
+
+      // Channels (chat-like) + their nested subcollections
+      match /channels/{channelId} {
+        allow read: if isLeagueMember(leagueId);
+        // Commissioner can edit channel docs (e.g., league-rules)
+        allow write: if isLeagueAdmin(leagueId);
+        match /messages/{msgId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId)
+            && request.resource.data.uid == request.auth.uid;
+          allow update: if isSignedIn() && (
+            (resource.data.uid == request.auth.uid
+             && request.time < resource.data.createdAt + duration.value(30, 'm'))
+            || (isLeagueMember(leagueId)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']))
+          );
+          allow delete: if isLeagueAdmin(leagueId)
+            || (isSignedIn() && resource.data.uid == request.auth.uid
+                && request.time < resource.data.createdAt + duration.value(30, 'm'));
+        }
+        match /posts/{postId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId)
+            && (request.resource.data.get('postedBy', '') == request.auth.uid
+                || request.resource.data.get('uid', '') == request.auth.uid);
+          allow update: if isSignedIn() && (
+            resource.data.get('postedBy', '') == request.auth.uid
+            || resource.data.get('uid', '') == request.auth.uid
+            || isLeagueAdmin(leagueId)
+            || (isLeagueMember(leagueId)
+                && request.resource.data.diff(resource.data).affectedKeys()
+                     .hasOnly(['reactions', 'commentCount', 'recentComments']))
+          );
+          allow delete: if isLeagueAdmin(leagueId)
+            || (isSignedIn() && (resource.data.get('postedBy', '') == request.auth.uid
+                                 || resource.data.get('uid', '') == request.auth.uid));
+          match /comments/{commentId} {
+            allow read: if isLeagueMember(leagueId);
+            allow create: if isLeagueMember(leagueId)
+              && request.resource.data.get('postedBy', '') == request.auth.uid;
+            allow update: if isSignedIn() && resource.data.get('postedBy', '') == request.auth.uid;
+            allow delete: if (isSignedIn() && resource.data.get('postedBy', '') == request.auth.uid)
+              || isLeagueAdmin(leagueId);
+          }
+        }
+        match /items/{itemId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId);
+          allow update, delete: if isLeagueAdmin(leagueId);
+        }
+        match /entries/{entryId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId);
+          allow update, delete: if isSignedIn() && (
+            resource.data.createdBy == request.auth.uid
+            || resource.data.addedBy == request.auth.uid
+            || isLeagueAdmin(leagueId)
+          );
+        }
+        match /requests/{requestId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId)
+            && (request.resource.data.requestedBy == request.auth.uid
+                || request.resource.data.uid == request.auth.uid);
+          allow update: if isSignedIn() && (
+            resource.data.requestedBy == request.auth.uid
+            || resource.data.uid == request.auth.uid
+            || isLeagueAdmin(leagueId)
+          );
+          allow delete: if isSignedIn() && (
+            resource.data.requestedBy == request.auth.uid
+            || resource.data.uid == request.auth.uid
+            || isLeagueAdmin(leagueId)
+          );
+        }
+        match /votes/{voteId} {
+          allow read: if isLeagueMember(leagueId);
+          allow create: if isLeagueMember(leagueId);
+          allow update, delete: if isLeagueAdmin(leagueId)
+            || (isSignedIn() && resource.data.uid == request.auth.uid);
+        }
+      }
+      // Join requests — members can read; commissioner can approve/deny
+      // Non-members can create their own join request
+     match /join_requests/{docId} {
+        allow read: if isLeagueMember(leagueId)
+          || (isSignedIn() && resource.data.uid == request.auth.uid)
+          || (isSignedIn() && docId == request.auth.uid);
+        allow create: if isSignedIn();
+        allow update, delete: if isLeagueAdmin(leagueId)
+          || (isSignedIn() && resource.data.uid == request.auth.uid);
+      }
+      // Sent invites — members can read; commissioner can manage
+      match /sent_invites/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create, update: if isLeagueAdmin(leagueId);
+        allow delete: if isLeagueAdmin(leagueId)
+          || (isSignedIn() && docId == request.auth.uid);
+      }
+      // Waitlist — members can read; anyone can add themselves; commissioner or self can remove
+      match /waitlist/{docId} {
+        allow read: if isLeagueMember(leagueId)
+          || (isSignedIn() && docId == request.auth.uid);
+        allow create: if isSignedIn()
+          && docId == request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
+        allow delete: if isLeagueAdmin(leagueId)
+          || (isSignedIn() && docId == request.auth.uid);
+      }
+      // CPU trade requests — members read; proposer creates own; admin or proposer manage
+      match /cpu_trade_requests/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create: if isLeagueMember(leagueId)
+          && request.resource.data.proposerUid == request.auth.uid;
+        allow update, delete: if isLeagueAdmin(leagueId)
+          || (isSignedIn() && resource.data.proposerUid == request.auth.uid);
+      }
+
+      match /trade_rooms/{roomId} {
+        // Participants always; league admins (for veto review); and any league
+        // member once a trade has gone to a league vote (so they can see + vote).
+        allow read: if isSignedIn()
+          && (resource == null
+            || resource.data.status == 'executed'
+            || resource.data.hostUid == request.auth.uid
+            || resource.data.guestUid == request.auth.uid
+            || isLeagueAdmin(leagueId)
+            || (isLeagueMember(leagueId)
+                && resource.data.status in ['pending_vote', 'vote_passed', 'rejected']));
+        allow create: if isLeagueMember(leagueId)
+          && (request.resource.data.hostUid == request.auth.uid
+            || request.resource.data.guestUid == request.auth.uid);
+        allow update: if isSignedIn() && (
+            // The two GMs in the trade — full control of their room.
+            resource.data.hostUid == request.auth.uid
+            || resource.data.guestUid == request.auth.uid
+            // Commissioner / co-commissioner — needed for veto + approve flows.
+            || isLeagueAdmin(leagueId)
+            // League Vote: a member casts ONLY their own vote while voting is open.
+            || (isLeagueMember(leagueId)
+                && resource.data.status == 'pending_vote'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tradeVotes', 'updatedAt'])
+                && request.resource.data.tradeVotes.diff(resource.data.tradeVotes).affectedKeys().hasOnly([request.auth.uid]))
+            // League Vote: a member records the tallied outcome (pending_vote -> passed/rejected).
+            || (isLeagueMember(leagueId)
+                && resource.data.status == 'pending_vote'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voteResolvedAt', 'updatedAt'])
+                && (request.resource.data.status == 'vote_passed' || request.resource.data.status == 'rejected'))
+          );
+        allow delete: if isSignedIn()
+          && (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid);
+
+        match /messages/{msgId} {
+          allow read: if isSignedIn()
+            && (get(/databases/$(database)/documents/leagues/$(leagueId)/trade_rooms/$(roomId)).data.hostUid == request.auth.uid
+              || get(/databases/$(database)/documents/leagues/$(leagueId)/trade_rooms/$(roomId)).data.guestUid == request.auth.uid);
+          allow create: if isSignedIn()
+            && request.resource.data.uid == request.auth.uid
+            && (get(/databases/$(database)/documents/leagues/$(leagueId)/trade_rooms/$(roomId)).data.hostUid == request.auth.uid
+              || get(/databases/$(database)/documents/leagues/$(leagueId)/trade_rooms/$(roomId)).data.guestUid == request.auth.uid);
+          allow update, delete: if false;
+        }
+      }
+
+      match /pending_players/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow create: if isLeagueMember(leagueId);
+        allow update, delete: if isLeagueAdmin(leagueId);
+      }
+
+      match /custom_players/{docId} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueAdmin(leagueId);
+      }
+    }
+
+    // ===========================================================
+    // DIRECT MESSAGES
+    // ===========================================================
+
+    match /dms/{dmId} {
+      allow read, write: if isDmParticipant(dmId);
+
+      match /messages/{msgId} {
+        allow read: if isDmParticipant(dmId);
+        allow create: if isDmParticipant(dmId)
+          && request.resource.data.uid == request.auth.uid
+          && canDmRecipient(
+            dmId.split('_')[0] == request.auth.uid
+              ? dmId.split('_')[1]
+              : dmId.split('_')[0]
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    // ===========================================================
+    // LOCKER ROOM — CONSOLE CHATS
+    // ===========================================================
+
+    match /locker_console_messages/{console}/messages/{msgId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (resource.data.uid == request.auth.uid
+         && request.time < resource.data.createdAt + duration.value(30, 'm'))
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.time < resource.data.createdAt + duration.value(30, 'm');
+    }
+
+    // ===========================================================
+    // LOCKER ROOM — GROUP CHATS
+    // ===========================================================
+
+    match /locker_groups/{chatId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+        && request.resource.data.creatorUid == request.auth.uid
+        && request.auth.uid in request.resource.data.members;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+      allow delete: if isSignedIn()
+        && resource.data.creatorUid == request.auth.uid;
+      match /messages/{msgId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/locker_groups/$(chatId)).data.members;
+        allow create: if isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/locker_groups/$(chatId)).data.members;
+        allow update: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/locker_groups/$(chatId)).data.members
+          && (
+            (resource.data.uid == request.auth.uid
+             && request.time < resource.data.createdAt + duration.value(30, 'm'))
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          );
+        allow delete: if isSignedIn() && (
+          (resource.data.uid == request.auth.uid
+           && request.time < resource.data.createdAt + duration.value(30, 'm'))
+          || get(/databases/$(database)/documents/locker_groups/$(chatId)).data.creatorUid == request.auth.uid
+        );
+      }
+    }
+
+    // ===========================================================
+    // MVP PLAYERS
+    // ===========================================================
+
+    match /mvp_players/{playerId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ===========================================================
+    // PLAYER DATA (public read, no client writes)
+    // ===========================================================
+
+    match /players/{bref_id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+match /usernames/{name} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+match /promo_codes/{code} {
+      allow read: if false;
+      allow write: if false;
+    }
+    
+    match /player_profiles/{bref_id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /era_player_pools/{era} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    match /spins/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /era_stats/{era} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /era_rosters/{era} {
+      allow read: if true;
+      allow write: if false;
+
+      match /teams/{teamId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    match /draft_classes/{year} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /rosters/{sportKey} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ===========================================================
+    // MODERATION
+    // ===========================================================
+
+    match /reports/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reportedBy == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+  }
+}

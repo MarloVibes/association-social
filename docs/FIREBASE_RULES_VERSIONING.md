@@ -2,37 +2,29 @@
 
 Last updated: 2026-07-27
 
-Franchise Mobile currently versions `firestore.indexes.json`, but Firestore and Storage security rules are still managed in the Firebase Console. Before any investor, publisher, contractor, or outside demo access, capture and review the live rules so the repo becomes the source of truth.
+Franchise Mobile now versions the published Firestore and Storage security rules captured from the `association-social` Firebase Console on July 27, 2026. The repository is the reviewable source of truth, but the captured files have not been redeployed from the repository yet.
 
 ## Why This Matters
 
 Console-only rules are easy to lose, change by accident, or forget during a pitch/demo push. Versioned rules let us review exactly who can read and write league data, chat media, schedules, teams, player pools, game results, and private admin surfaces.
 
-## Safe Capture Process
+## Captured Files
 
-1. Open Firebase Console for `association-social`.
-2. Go to Firestore Database > Rules.
-3. Copy the full published rules text into a local `firestore.rules` file.
-4. Go to Storage > Rules.
-5. Copy the full published rules text into a local `storage.rules` file.
-6. Update `firebase.json` only after both files are captured and reviewed:
+- `firestore.rules`
+- `storage.rules`
+- `firestore.indexes.json`
+- `firebase.json`
 
-```json
-{
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "storage": {
-    "rules": "storage.rules"
-  }
-}
-```
+## Safe Change Process
 
-7. Run `npm run security:pitch`.
-8. Review the diff carefully before deploying rules.
+1. Make rule changes in the versioned files.
+2. Run `npm run security:pitch`.
+3. Run `npm run test:security`.
+4. Review the full diff carefully.
+5. Deploy only the intended rules target.
+6. Confirm the published Firebase Console text matches the committed file.
 
-Do not deploy newly created rules files until they have been compared against the live console rules. A guessed rules file can accidentally lock users out or expose private league data.
+Do not deploy rules changes until they are reviewed. A rule mistake can lock users out or expose private league data.
 
 ## Pre-Pitch Rule Review Checklist
 
