@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "start:demo": "EXPO_PUBLIC_FIREBASE_TARGET=demo expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "ios:demo": "EXPO_PUBLIC_FIREBASE_TARGET=demo expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
@@ -17,7 +19,8 @@
     "security:pitch": "node scripts/pre-pitch-security-audit.mjs",
     "demo:pitch:seed": "node scripts/seed-pitch-demo-league.mjs",
     "generate:function-baselines": "node scripts/generate-functions-baseline-profiles.mjs",
-    "update": "eas update --branch main --auto"
+    "update": "eas update --branch main --auto",
+    "update:demo": "EXPO_PUBLIC_FIREBASE_TARGET=demo eas update --branch pitch-demo --auto"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",

@@ -215,7 +215,23 @@ Status: Active as needed before investor / publisher demos
 - Prepare Franchise Mobile for private pitching to 2K / Take-Two or other partners.
 - Protect the app idea, code, data, player rating logic, simulation formulas, and private roadmap before sharing demos.
 - Create a pitch-safe demo flow that lets outsiders experience the app without exposing production data, source code, admin tools, Firebase internals, or private docs.
-- Use a separate demo Firebase project or demo environment where possible.
+- Isolated Firebase demo environment is now created:
+  - project: `association-social-demo`
+  - production `association-social` remains the default target
+  - demo runtime must be selected explicitly with `EXPO_PUBLIC_FIREBASE_TARGET=demo`
+  - demo Firestore is initialized with delete protection and reviewed rules/indexes
+  - Email/Password Authentication is enabled
+  - EAS demo profile/channel is `pitch-demo`
+- Billing decision required before continuing backend setup:
+  - Firebase Storage cannot be initialized without upgrading the demo project
+  - Cloud Functions deployment is expected to require Blaze billing
+  - do not enable billing or deploy these services without explicit founder approval
+- After billing approval:
+  - initialize Storage and deploy `storage.rules`
+  - deploy required Cloud Functions to the demo project
+  - create a demo-only service account
+  - seed scrubbed data and controlled pitch accounts
+  - publish the first private `pitch-demo` build/update
 - Seed demo leagues with scrubbed / sample data only.
 - Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.

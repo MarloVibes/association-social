@@ -13,6 +13,13 @@
       "distribution": "internal",
       "channel": "main"
     },
+    "pitch-demo": {
+      "distribution": "internal",
+      "channel": "pitch-demo",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_TARGET": "demo"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "channel": "main"

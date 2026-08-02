@@ -96,33 +96,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "leagues",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "commissionerId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "leagues",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "offseason.stageEndsAt", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "teams",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "gmId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "trade_rooms",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

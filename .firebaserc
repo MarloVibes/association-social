@@ -1,3 +1,6 @@
 {
-  "projects": { "default": "association-social" }
+  "projects": {
+    "default": "association-social",
+    "demo": "association-social-demo"
+  }
 }

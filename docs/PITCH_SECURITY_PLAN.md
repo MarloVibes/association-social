@@ -30,10 +30,49 @@ Pitch viewers should not get:
 
 ## Demo Environment
 
-Preferred setup:
+Current isolated setup:
 
-- Create a separate Firebase demo project.
-- Create a separate EAS update branch or demo build profile.
+- Firebase project: `association-social-demo`
+- Firebase display name: `Franchise Mobile Pitch Demo`
+- Production remains the default Firebase target.
+- Demo access is selected only with `EXPO_PUBLIC_FIREBASE_TARGET=demo`.
+- Firestore is initialized with delete protection and the reviewed rules/indexes.
+- Email/password Authentication is enabled for controlled demo accounts.
+- EAS profile and channel: `pitch-demo`
+
+Run the app against production as usual:
+
+```bash
+npm start
+```
+
+Run the app against the isolated demo project:
+
+```bash
+npm run start:demo
+```
+
+Run the iOS simulator against the isolated demo project:
+
+```bash
+npm run ios:demo
+```
+
+Publish a demo-only EAS update:
+
+```bash
+npm run update:demo
+```
+
+Important:
+
+- Do not change the default Firebase alias away from production.
+- Do not publish the `pitch-demo` profile until demo data and backend functions are ready.
+- Firebase Storage and Cloud Functions require billing on the demo project. Enabling billing must be a separate founder-approved action.
+- Until billing is approved, do not upload pitch media or deploy Functions to the demo project.
+
+Demo data requirements:
+
 - Seed only demo leagues, demo users, scrubbed data, and sample game results.
 - Use demo-only API keys and environment variables.
 - Remove or disable destructive admin actions in demo builds.
@@ -146,11 +185,20 @@ Prepare these assets:
 
 ## Next Engineering Tasks
 
-1. Add a Firebase demo project or staging environment.
-2. Create a private pitch build/update branch separate from normal development.
+1. Decide whether to enable Firebase Blaze billing for `association-social-demo`.
+2. After explicit billing approval, initialize Storage and deploy `storage.rules`.
+3. Deploy the required Cloud Functions to the demo project.
+4. Create a demo-only service account and update the seed flow so it never reads from or writes to production during a pitch.
+5. Seed scrubbed demo data, create controlled viewer accounts, and publish the first `pitch-demo` build/update.
 
 Completed:
 
+- Created the isolated `association-social-demo` Firebase project.
+- Kept `association-social` as the default production project and added the `demo` Firebase alias.
+- Registered a demo web app and added explicit production/demo runtime selection.
+- Initialized demo Firestore with delete protection and deployed the reviewed Firestore rules/indexes.
+- Enabled Email/Password Authentication for controlled demo accounts.
+- Added the `pitch-demo` EAS profile/channel and demo-only local/update commands.
 - Added a demo-mode flag that hides admin/debug/destructive controls for pitch viewers.
 - Added demo account role detection.
 - Added `npm run security:pitch` to check `.env`, service-account files, versioned rules, indexes, and obvious sensitive TODO markers.
