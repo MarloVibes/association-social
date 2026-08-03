@@ -2,9 +2,14 @@ import admin from 'firebase-admin';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { createGenerateScheduleHandler } = require('../functions/franchise/schedule.js');
+const DEMO_PROJECT_ID = 'association-social-demo';
+const LOCAL_ERA_FILES = {
+  current: 'data/nba/current-player-pool.json',
+};
 
 const NBA_TEAMS = [
   { abbr: 'ATL', city: 'Atlanta', name: 'Hawks', conference: 'East', division: 'Southeast' },
@@ -108,28 +113,45 @@ function createLeagueId() {
   return `pitch_demo_${stamp}`;
 }
 
-function initializeAdmin(serviceAccountPath) {
+export function readDemoServiceAccount(serviceAccountPath) {
   const resolvedPath = resolve(serviceAccountPath);
   if (!existsSync(resolvedPath)) {
     throw new Error(`Missing service account file: ${resolvedPath}`);
   }
   const serviceAccount = JSON.parse(readFileSync(resolvedPath, 'utf8'));
+  if (serviceAccount.project_id !== DEMO_PROJECT_ID) {
+    throw new Error(
+      `Refusing to seed Firebase project ${serviceAccount.project_id || '(missing project_id)'}. ` +
+      `Use a service account created by ${DEMO_PROJECT_ID}.`,
+    );
+  }
+  return serviceAccount;
+}
+
+function initializeAdmin(serviceAccountPath) {
+  const serviceAccount = readDemoServiceAccount(serviceAccountPath);
   if (!admin.apps.length) {
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: DEMO_PROJECT_ID,
+    });
   }
   return admin.firestore();
 }
 
-async function loadEraData(db, era) {
-  const [poolSnap, teamsSnap] = await Promise.all([
-    db.collection('era_player_pools').doc(era).get(),
-    db.collection('era_rosters').doc(era).collection('teams').get(),
-  ]);
-  if (!poolSnap.exists) throw new Error(`Missing era_player_pools/${era}`);
-  if (teamsSnap.empty) throw new Error(`Missing era_rosters/${era}/teams`);
-
-  const pool = poolSnap.data() || {};
+export function loadLocalEraData(era) {
+  const relativePath = LOCAL_ERA_FILES[era];
+  if (!relativePath) {
+    throw new Error(
+      `Pitch demo seeding currently supports: ${Object.keys(LOCAL_ERA_FILES).join(', ')}. ` +
+      'Add and review a local scrubbed snapshot before enabling another era.',
+    );
+  }
+  const filePath = resolve(relativePath);
+  if (!existsSync(filePath)) throw new Error(`Missing local pitch roster snapshot: ${filePath}`);
+  const pool = JSON.parse(readFileSync(filePath, 'utf8'));
   const players = Array.isArray(pool.players) ? pool.players : [];
+  if (players.length === 0) throw new Error(`Local pitch roster snapshot has no players: ${filePath}`);
   const playersByTeam = new Map();
   players.forEach((player) => {
     const teamAbbr = normalizeAbbr(player.team || player.teamAbbr || player.currentTeam || player.currentTeamId);
@@ -137,24 +159,22 @@ async function loadEraData(db, era) {
     playersByTeam.set(teamAbbr, [...(playersByTeam.get(teamAbbr) || []), player]);
   });
 
-  const teams = teamsSnap.docs.map((doc) => {
-    const data = doc.data() || {};
-    const abbr = normalizeAbbr(data.abbreviation || data.abbr || data.teamId || data.id || doc.id.replace(/_current$/i, ''));
-    const meta = TEAM_BY_ABBR.get(abbr) || {};
+  const teams = NBA_TEAMS.map((meta) => {
+    const abbr = meta.abbr;
     return {
-      id: doc.id,
+      id: `${abbr.toLowerCase()}_${era}`,
       teamId: abbr,
       abbreviation: abbr,
-      city: data.city || meta.city || '',
-      name: data.name || meta.name || displayNameFor(data),
-      fullName: displayNameFor({ ...meta, ...data, abbreviation: abbr }),
-      conference: data.conference || meta.conference || null,
-      division: data.division || meta.division || null,
-      players: playersByTeam.get(abbr) || data.players || [],
+      city: meta.city,
+      name: meta.name,
+      fullName: `${meta.city} ${meta.name}`,
+      conference: meta.conference,
+      division: meta.division,
+      players: playersByTeam.get(abbr) || [],
     };
-  }).filter(team => team.abbreviation);
+  });
 
-  return { teams, playersByTeam };
+  return { teams, playersByTeam, sourceFile: relativePath };
 }
 
 function topPlayerIds(players, count) {
@@ -197,7 +217,7 @@ async function seedPitchDemoLeague() {
   const args = parseArgs(process.argv.slice(2));
   const write = args.has('write');
   const skipSchedule = args.has('skipSchedule');
-  const serviceAccount = args.get('serviceAccount', './service-account.json');
+  const serviceAccount = args.get('serviceAccount', './demo-service-account.json');
   const ownerUid = args.get('ownerUid').trim();
   const leagueId = args.get('leagueId', createLeagueId()).trim();
   const leagueName = args.get('name', 'Franchise Mobile Pitch Demo').trim();
@@ -217,8 +237,7 @@ async function seedPitchDemoLeague() {
     throw new Error(`Unknown --ownerTeam value: ${ownerTeam}`);
   }
 
-  const db = initializeAdmin(serviceAccount);
-  const { teams } = await loadEraData(db, era);
+  const { teams, sourceFile } = loadLocalEraData(era);
   const missingTeams = NBA_TEAMS.map(team => team.abbr).filter(abbr => !teams.some(team => team.abbreviation === abbr));
   if (missingTeams.length) {
     throw new Error(`Era roster is missing teams: ${missingTeams.join(', ')}`);
@@ -232,6 +251,8 @@ async function seedPitchDemoLeague() {
   console.log(`Owner team: ${ownerTeam || '(none; all teams CPU-controlled)'}`);
   console.log(`Teams: ${selectedTeams.length}`);
   console.log(`Rostered players: ${plannedPlayers}`);
+  console.log(`Roster source: ${sourceFile} (local snapshot)`);
+  console.log(`Firebase target: ${DEMO_PROJECT_ID}`);
   console.log(`Schedule: ${skipSchedule ? 'skipped' : `${gamesPerTeam} games per team`}`);
 
   if (!write) {
@@ -239,6 +260,7 @@ async function seedPitchDemoLeague() {
     return;
   }
 
+  const db = initializeAdmin(serviceAccount);
   const leagueRef = db.collection('leagues').doc(leagueId);
   const now = admin.firestore.FieldValue.serverTimestamp();
   const batch = db.batch();
@@ -314,9 +336,12 @@ async function seedPitchDemoLeague() {
   console.log(`Done. Demo league is ready: ${leagueId}`);
 }
 
-seedPitchDemoLeague()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error.message || error);
-    process.exit(1);
-  });
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isDirectRun) {
+  seedPitchDemoLeague()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error.message || error);
+      process.exit(1);
+    });
+}

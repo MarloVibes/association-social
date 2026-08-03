@@ -98,10 +98,12 @@ Dry-run first:
 npm run demo:pitch:seed
 ```
 
+The dry run uses the reviewed local snapshot at `data/nba/current-player-pool.json` and does not connect to Firebase.
+
 Create the demo league:
 
 ```bash
-npm run demo:pitch:seed -- --write --ownerUid=<your_firebase_uid>
+npm run demo:pitch:seed -- --write --ownerUid=<your_demo_firebase_uid>
 ```
 
 Optional flags:
@@ -112,7 +114,7 @@ Optional flags:
 - `--gamesPerTeam=82` to set the schedule length.
 - `--skipSchedule` to create teams without locking a schedule.
 
-The script requires the local gitignored `service-account.json`; do not share that file with pitch viewers.
+The write step requires the local gitignored `demo-service-account.json`. The script refuses production credentials and accepts only a service account whose project is `association-social-demo`. Do not share that file with pitch viewers.
 
 ## Current App Demo Access Flags
 
@@ -188,7 +190,7 @@ Prepare these assets:
 1. Decide whether to enable Firebase Blaze billing for `association-social-demo`.
 2. After explicit billing approval, initialize Storage and deploy `storage.rules`.
 3. Deploy the required Cloud Functions to the demo project.
-4. Create a demo-only service account and update the seed flow so it never reads from or writes to production during a pitch.
+4. Generate and securely store the demo-only service-account key as `demo-service-account.json`.
 5. Seed scrubbed demo data, create controlled viewer accounts, and publish the first `pitch-demo` build/update.
 
 Completed:
@@ -199,6 +201,9 @@ Completed:
 - Initialized demo Firestore with delete protection and deployed the reviewed Firestore rules/indexes.
 - Enabled Email/Password Authentication for controlled demo accounts.
 - Added the `pitch-demo` EAS profile/channel and demo-only local/update commands.
+- Changed the pitch seed to use only the checked-in local roster snapshot.
+- Added a hard project guard that refuses production or unknown Firebase service accounts.
+- Added credential-free dry runs for reviewing demo coverage before any Firebase write.
 - Added a demo-mode flag that hides admin/debug/destructive controls for pitch viewers.
 - Added demo account role detection.
 - Added `npm run security:pitch` to check `.env`, service-account files, versioned rules, indexes, and obvious sensitive TODO markers.
