@@ -83,6 +83,7 @@ const tracked = gitTrackedFiles();
 const riskyTracked = tracked.filter(file => {
   const lower = file.toLowerCase();
   return lower.includes('service-account')
+    || lower.includes('pitch-demo-credentials')
     || lower.includes('private-key')
     || lower.endsWith('.pem')
     || lower.endsWith('.p12')
@@ -102,6 +103,7 @@ const localSecretFiles = walkFiles('.')
   .filter(file => {
     const lower = file.toLowerCase();
     return lower.includes('service-account')
+      || lower.includes('pitch-demo-credentials')
       || lower.includes('private-key')
       || lower.endsWith('.pem')
       || lower.endsWith('.p12')

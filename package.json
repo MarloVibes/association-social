@@ -17,7 +17,9 @@
     "test:functions": "vitest run tests/functions",
     "test:security": "vitest run tests/security",
     "security:pitch": "node scripts/pre-pitch-security-audit.mjs",
+    "demo:pitch:provision-users": "node scripts/provision-pitch-demo-users.mjs",
     "demo:pitch:seed": "node scripts/seed-pitch-demo-league.mjs",
+    "demo:pitch:verify": "node scripts/verify-pitch-demo.mjs",
     "generate:function-baselines": "node scripts/generate-functions-baseline-profiles.mjs",
     "update": "eas update --branch main --auto",
     "update:demo": "EXPO_PUBLIC_FIREBASE_TARGET=demo eas update --branch pitch-demo --auto"

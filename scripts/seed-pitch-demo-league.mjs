@@ -219,6 +219,7 @@ async function seedPitchDemoLeague() {
   const skipSchedule = args.has('skipSchedule');
   const serviceAccount = args.get('serviceAccount', './demo-service-account.json');
   const ownerUid = args.get('ownerUid').trim();
+  const viewerUid = args.get('viewerUid').trim();
   const leagueId = args.get('leagueId', createLeagueId()).trim();
   const leagueName = args.get('name', 'Franchise Mobile Pitch Demo').trim();
   const era = args.get('era', 'current').trim();
@@ -248,6 +249,7 @@ async function seedPitchDemoLeague() {
   console.log(`${write ? 'Creating' : 'Dry run for'} pitch demo league: ${leagueName}`);
   console.log(`League ID: ${leagueId}`);
   console.log(`Owner UID: ${ownerUid || '(required only with --write)'}`);
+  console.log(`Viewer UID: ${viewerUid || '(none)'}`);
   console.log(`Owner team: ${ownerTeam || '(none; all teams CPU-controlled)'}`);
   console.log(`Teams: ${selectedTeams.length}`);
   console.log(`Rostered players: ${plannedPlayers}`);
@@ -297,7 +299,7 @@ async function seedPitchDemoLeague() {
     salaryCap: 154600000,
     commissionerId: ownerUid,
     coCommissioners: [],
-    members: [ownerUid],
+    members: [ownerUid, viewerUid].filter(Boolean),
     maxMembers: 30,
     invites: [],
     takenTeams: ownerTeam ? { [ownerTeam]: ownerUid } : {},
@@ -318,8 +320,17 @@ async function seedPitchDemoLeague() {
 
   batch.set(db.collection('users').doc(ownerUid), {
     leagues: admin.firestore.FieldValue.arrayUnion(leagueId),
+    pitchAccessRole: 'founder',
     updatedAt: now,
   }, { merge: true });
+
+  if (viewerUid) {
+    batch.set(db.collection('users').doc(viewerUid), {
+      leagues: admin.firestore.FieldValue.arrayUnion(leagueId),
+      pitchAccessRole: 'viewer',
+      updatedAt: now,
+    }, { merge: true });
+  }
 
   await batch.commit();
 

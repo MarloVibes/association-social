@@ -1,6 +1,6 @@
 # Franchise Mobile Pitch Security Plan
 
-Last updated: 2026-07-27
+Last updated: 2026-08-03
 
 This is the working plan for sharing Franchise Mobile with publishers, investors, advisors, or contractors while reducing the risk that code, data, formulas, roadmap details, or private product strategy are exposed.
 
@@ -103,14 +103,19 @@ The dry run uses the reviewed local snapshot at `data/nba/current-player-pool.js
 Create the demo league:
 
 ```bash
-npm run demo:pitch:seed -- --write --ownerUid=<your_demo_firebase_uid>
+npm run demo:pitch:provision-users
+npm run demo:pitch:seed -- --write --ownerUid=<founder_uid> --viewerUid=<viewer_uid>
+npm run demo:pitch:verify
 ```
+
+Account provisioning creates separate founder and protected viewer accounts, writes their access roles to the demo project, and stores their generated passwords only in the local gitignored `pitch-demo-credentials.json`. The password file is restricted to the local Mac user and must never be included in a pitch package.
 
 Optional flags:
 
 - `--leagueId=<id>` to choose the Firestore league id.
 - `--name="Franchise Mobile Pitch Demo"` to change the visible league name.
 - `--ownerTeam=LAL` to attach the owner account to one team; omit it for all CPU-controlled teams.
+- `--viewerUid=<uid>` to add a protected viewer as a league member.
 - `--gamesPerTeam=82` to set the schedule length.
 - `--skipSchedule` to create teams without locking a schedule.
 
@@ -187,11 +192,11 @@ Prepare these assets:
 
 ## Next Engineering Tasks
 
-1. Decide whether to enable Firebase Blaze billing for `association-social-demo`.
-2. After explicit billing approval, initialize Storage and deploy `storage.rules`.
-3. Deploy the required Cloud Functions to the demo project.
-4. Generate and securely store the demo-only service-account key as `demo-service-account.json`.
-5. Seed scrubbed demo data, create controlled viewer accounts, and publish the first `pitch-demo` build/update.
+1. Validate the founder and viewer walkthroughs in the isolated demo runtime.
+2. Publish the first private `pitch-demo` build/update after walkthrough validation.
+3. Decide whether to enable Firebase Blaze billing for `association-social-demo`.
+4. After explicit billing approval, initialize Storage and deploy `storage.rules`.
+5. Deploy only the Cloud Functions required by the approved pitch walkthrough.
 
 Completed:
 
@@ -208,5 +213,10 @@ Completed:
 - Added demo account role detection.
 - Added `npm run security:pitch` to check `.env`, service-account files, versioned rules, indexes, and obvious sensitive TODO markers.
 - Added `npm run demo:pitch:seed` to create a controlled CPU-filled pitch demo league.
+- Generated and securely stored the demo-only service-account key locally as gitignored `demo-service-account.json`.
+- Added repeatable founder/viewer provisioning with locally protected, gitignored credentials.
+- Created one founder account and one protected viewer account in `association-social-demo`.
+- Seeded and verified locked league `pitch_demo_20260803191849` with 30 CPU-controlled teams, 530 rostered players, and a locked 1,230-game schedule.
+- Added `npm run demo:pitch:verify` to confirm member roles, CPU ownership, and schedule integrity without exposing secrets.
 - Captured and versioned the published Firestore and Storage rules from Firebase Console.
 - Added `npm run test:security` to protect the versioned Firebase permission contract.

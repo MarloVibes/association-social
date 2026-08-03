@@ -229,14 +229,19 @@ Status: Active as needed before investor / publisher demos
 - After billing approval:
   - initialize Storage and deploy `storage.rules`
   - deploy required Cloud Functions to the demo project
-  - seed scrubbed data and controlled pitch accounts
-  - publish the first private `pitch-demo` build/update
+  - publish any media/function-dependent pitch features approved for the demo
 - Demo seed isolation is implemented:
   - dry runs use the checked-in local current-roster snapshot and do not connect to Firebase
   - write mode accepts only `demo-service-account.json` from `association-social-demo`
   - production and unknown service-account credentials are rejected
   - all 30 teams and 530 players are covered by the current dry run
-- Generate the demo-only service-account key after explicit approval to download and store the credential.
+- Demo credentials and data are now provisioned:
+  - the approved demo-only service-account key is stored locally as gitignored `demo-service-account.json`
+  - separate founder and protected viewer accounts exist in `association-social-demo`
+  - generated account passwords are stored only in local gitignored `pitch-demo-credentials.json`
+  - locked league `pitch_demo_20260803191849` contains 30 CPU-controlled teams, 530 rostered players, and a locked 1,230-game schedule
+  - `npm run demo:pitch:verify` confirms roles, membership, CPU ownership, and schedule integrity
+- Next: test both account walkthroughs in the demo runtime, then publish the first private `pitch-demo` update.
 - Seed demo leagues with scrubbed / sample data only.
 - Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
