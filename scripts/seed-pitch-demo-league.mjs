@@ -302,7 +302,7 @@ async function seedPitchDemoLeague() {
     members: [ownerUid, viewerUid].filter(Boolean),
     maxMembers: 30,
     invites: [],
-    takenTeams: ownerTeam ? { [ownerTeam]: ownerUid } : {},
+    takenTeams: ownerTeam ? [ownerTeam] : [],
     status: 'active',
     pitchDemoLocked: true,
     demoAccessLocked: true,

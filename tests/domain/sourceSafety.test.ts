@@ -1457,6 +1457,19 @@ describe('source safety regressions', () => {
     expect(teamSelect).toContain('division: team.division || null');
   });
 
+  it('lets founders claim seeded CPU teams without exposing team assignment to pitch viewers', () => {
+    const teamSelect = source('app/screens/team-select.tsx');
+    const league = source('app/screens/league.tsx');
+
+    expect(teamSelect).toContain("collection(db, 'leagues', leagueId, 'teams')");
+    expect(teamSelect).toContain('sourceTeamDocId: teamDoc.id');
+    expect(teamSelect).toContain('cpuControlled: false');
+    expect(teamSelect).toContain("existingGmId.startsWith('CPU_')");
+    expect(teamSelect).toContain("{ merge: true }");
+    expect(teamSelect).toContain('assignGmToPitchSchedule');
+    expect(league).toContain('Read-Only Franchise Access');
+  });
+
   it('keeps join league sport labels user-facing', () => {
     const joinLeague = source('app/screens/join-league.tsx');
 

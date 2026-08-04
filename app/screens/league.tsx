@@ -418,6 +418,11 @@ export default function LeagueScreen() {
               </View>
             )}
           </TouchableOpacity>
+        ) : pitchViewer ? (
+          <View style={styles.pitchNotice}>
+            <Text style={styles.pitchNoticeLabel}>Read-Only Franchise Access</Text>
+            <Text style={styles.pitchNoticeText}>The founder controls team assignments in this pitch league.</Text>
+          </View>
         ) : (
           <TouchableOpacity
             style={styles.pickTeamBtn}

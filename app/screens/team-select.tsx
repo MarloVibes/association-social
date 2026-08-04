@@ -115,6 +115,34 @@ const REEL_VISIBLE = 5;       // cards visible in the spin window
 const REEL_WINDOW = CARD_H * REEL_VISIBLE;
 const REEL_REPEAT = 8;        // how many times the team list repeats in the reel
 
+function normalizeTakenTeams(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (value && typeof value === 'object') return Object.keys(value);
+  return [];
+}
+
+function assignGmToPitchSchedule(schedule: any, teamId: string, uid: string) {
+  const updateGame = (game: any) => ({
+    ...game,
+    ...(game.homeTeamId === teamId ? { homeGmId: uid } : {}),
+    ...(game.awayTeamId === teamId ? { awayGmId: uid } : {}),
+  });
+  return {
+    participants: (schedule.participants || []).map((participant: any) => (
+      participant.scheduleTeamId === teamId || participant.teamId === teamId
+        ? { ...participant, gmId: uid, cpuControlled: false }
+        : participant
+    )),
+    games: (schedule.games || []).map(updateGame),
+    ...(schedule.nbaCup ? {
+      nbaCup: {
+        ...schedule.nbaCup,
+        games: (schedule.nbaCup.games || []).map(updateGame),
+      },
+    } : {}),
+  };
+}
+
 export default function TeamSelectScreen() {
   const { leagueId, sport, era, mode } = useLocalSearchParams<{
     leagueId: string; sport: string; era: string; mode: string;
@@ -148,7 +176,7 @@ export default function TeamSelectScreen() {
     if (!leagueId) return;
     const unsub = onSnapshot(doc(db, 'leagues', leagueId), (snap) => {
       const data = snap.data() || {};
-      setTakenTeams(data.takenTeams || []);
+      setTakenTeams(normalizeTakenTeams(data.takenTeams));
       setSpinChoices(data.spinChoices || 1);
     });
     return () => unsub();
@@ -169,8 +197,26 @@ export default function TeamSelectScreen() {
 
       let teamList: any[] = [];
       if (isNBALocal) {
-        const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
-        teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+        if (ld.isPitchDemoLeague === true) {
+          const seededTeamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+          teamList = seededTeamsSnap.docs
+            .map((teamDoc) => {
+              const data = teamDoc.data();
+              const abbreviation = data.abbreviation || data.teamId || '';
+              return {
+                ...data,
+                id: data.teamId || abbreviation,
+                abbreviation,
+                full_name: data.full_name || data.fullName || data.name || abbreviation,
+                sourceTeamDocId: teamDoc.id,
+              };
+            })
+            .filter(team => team.abbreviation)
+            .sort((a, b) => a.full_name.localeCompare(b.full_name));
+        } else {
+          const teamsSnap = await getDocs(collection(db, 'era_rosters', eraKey, 'teams'));
+          teamList = teamsSnap.docs.map(d => d.data()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+        }
       } else {
         // No era_rosters for football/baseball — build the team list from the sport tables.
         const table = getSportTeams(sportVal) || {};
@@ -280,7 +326,7 @@ export default function TeamSelectScreen() {
       // Collision guard: another GM may have grabbed this team while we deliberated.
       const freshLeague = await getDoc(doc(db, 'leagues', leagueId));
       const ld = freshLeague.data() || {};
-      const freshTaken: string[] = ld.takenTeams || [];
+      const freshTaken = normalizeTakenTeams(ld.takenTeams);
       if (freshTaken.includes(team.id)) {
         Alert.alert('Just missed it', (team.full_name || 'That team') + ' was just claimed by another GM. ' + (isRandom ? 'Spin again!' : 'Pick another.'));
         setSelectedTeam(null);
@@ -305,7 +351,7 @@ export default function TeamSelectScreen() {
         picks = generateTeamPicks(ld.sport || 'nba', team.abbreviation, baseYear);
       }
 
-      const teamDocId = leagueId + '_' + user.uid;
+      const teamDocId = team.sourceTeamDocId || (leagueId + '_' + user.uid);
       const leagueRef = doc(db, 'leagues', leagueId);
       const teamRef = doc(db, 'leagues', leagueId, 'teams', teamDocId);
       let shouldGenerateSchedule = false;
@@ -315,7 +361,7 @@ export default function TeamSelectScreen() {
         const existingTeamSnap = await tx.get(teamRef);
         if (!leagueTxnSnap.exists()) throw new Error('League not found.');
         const currentLeague = leagueTxnSnap.data() || {};
-        const currentTaken: string[] = currentLeague.takenTeams || [];
+        const currentTaken = normalizeTakenTeams(currentLeague.takenTeams);
         const currentMembers: string[] = currentLeague.members || [];
         const maxMembers = typeof currentLeague.maxMembers === 'number'
           ? currentLeague.maxMembers
@@ -330,12 +376,21 @@ export default function TeamSelectScreen() {
         if (!currentMembers.includes(user.uid) && currentMembers.length >= maxMembers) {
           throw new Error('This league is full.');
         }
-        if (existingTeamSnap.exists() && existingTeamSnap.data()?.teamId !== team.id) {
-          throw new Error('You already have a team in this league.');
+        if (existingTeamSnap.exists()) {
+          const existingTeam = existingTeamSnap.data() || {};
+          const existingGmId = String(existingTeam.gmId || '');
+          const isCpuTeam = existingTeam.cpuControlled === true || existingGmId.startsWith('CPU_');
+          if (existingTeam.teamId !== team.id) {
+            throw new Error('You already have a team in this league.');
+          }
+          if (existingGmId && existingGmId !== user.uid && !isCpuTeam) {
+            throw new Error('That team is already controlled by another GM.');
+          }
         }
 
         tx.set(teamRef, {
           gmId: user.uid,
+          cpuControlled: false,
           teamId: team.id,
           name: team.full_name,
           abbreviation: team.abbreviation,
@@ -345,12 +400,24 @@ export default function TeamSelectScreen() {
           players,
           picks,
           tradeBlock: [],
-        });
+        }, { merge: true });
         tx.update(leagueRef, {
           takenTeams: arrayUnion(team.id),
           members: arrayUnion(user.uid),
         });
       });
+
+      if (ld.isPitchDemoLeague === true && ld.scheduleLocked === true && ld.scheduleId) {
+        try {
+          const scheduleRef = doc(db, 'leagues', leagueId, 'schedules', String(ld.scheduleId));
+          const scheduleSnap = await getDoc(scheduleRef);
+          if (scheduleSnap.exists()) {
+            await updateDoc(scheduleRef, assignGmToPitchSchedule(scheduleSnap.data(), team.id, user.uid));
+          }
+        } catch (error) {
+          console.warn('Failed to attach the selected GM to the pitch schedule', error);
+        }
+      }
 
       try {
         await updateDoc(doc(db, 'users', user.uid), {
