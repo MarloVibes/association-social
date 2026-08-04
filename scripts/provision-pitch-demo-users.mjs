@@ -57,7 +57,7 @@ async function upsertUser(auth, { existingUid, email, displayName, role, passwor
   }
 
   const user = existing
-    ? await auth.updateUser(existing.uid, { displayName, password, disabled: false, emailVerified: true })
+    ? await auth.updateUser(existing.uid, { email, displayName, password, disabled: false, emailVerified: true })
     : await auth.createUser({ email, displayName, password, disabled: false, emailVerified: true });
 
   await auth.setCustomUserClaims(user.uid, { pitchAccessRole: role, pitchDemo: true });
