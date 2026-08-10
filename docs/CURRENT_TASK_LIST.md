@@ -223,6 +223,11 @@ Status: Active as needed before investor / publisher demos
   - keep MyNBA/MyGM as the focused first integration, with MyCAREER teammates, squads, events, community identity, and organized competition presented as the expansion roadmap
 - Protect the app idea, code, data, player rating logic, simulation formulas, and private roadmap before sharing demos.
 - Create a pitch-safe demo flow that lets outsiders experience the app without exposing production data, source code, admin tools, Firebase internals, or private docs.
+- Prepare staged outreach materials for accepted LinkedIn connections and direct responses:
+  - connection note contains no attachments
+  - approved first attachment is a non-confidential NBA 2K integration one-page teaser
+  - use a response playbook for referrals, meeting requests, demo access, technical questions, and follow-up
+  - reserve the full deck and protected viewer demo for confirmed interest or a scheduled meeting
 - Isolated Firebase demo environment is now created:
   - project: `association-social-demo`
   - production `association-social` remains the default target

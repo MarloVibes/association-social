@@ -16,6 +16,9 @@ Thumbs.db
 # Expo build output
 dist/
 
+# Local document render previews
+tmp/
+
 # Firebase service account keys - NEVER commit these
 service-account.json
 demo-service-account.json
