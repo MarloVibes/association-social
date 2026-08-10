@@ -1,6 +1,6 @@
 # Franchise Mobile Current Task List
 
-Last updated: 2026-07-27
+Last updated: 2026-08-10
 
 This file is the source of truth for active Franchise Mobile work. When Marlano says "we need to", "add", "fix", "change", "later", "park", or "continue", update this file before or during the work so the task does not disappear in chat history.
 
@@ -241,7 +241,14 @@ Status: Active as needed before investor / publisher demos
   - generated account passwords are stored only in local gitignored `pitch-demo-credentials.json`
   - locked league `pitch_demo_20260803191849` contains 30 CPU-controlled teams, 530 rostered players, and a locked 1,230-game schedule
   - `npm run demo:pitch:verify` confirms roles, membership, CPU ownership, and schedule integrity
-- Next: test both account walkthroughs in the demo runtime, then publish the first private `pitch-demo` update.
+- Founder franchise claiming is implemented and published to the private `pitch-demo` branch in `00cdf2c`:
+  - founder can take control of one of the 30 seeded CPU franchises
+  - the existing roster and schedule are preserved
+  - protected viewers remain read-only and cannot claim a team
+- Next: complete both account walkthroughs in the demo runtime:
+  - founder: sign in, claim a franchise, inspect roster/schedule, simulate a game, and confirm box score/stats
+  - viewer: sign in, browse the league, and confirm team assignment plus admin/destructive actions remain unavailable
+- After both walkthroughs pass, run the final pitch security audit and prepare the private sharing package.
 - Seed demo leagues with scrubbed / sample data only.
 - Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
