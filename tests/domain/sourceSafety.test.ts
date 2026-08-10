@@ -1470,6 +1470,17 @@ describe('source safety regressions', () => {
     expect(league).toContain('Read-Only Franchise Access');
   });
 
+  it('keeps founder-created demo leagues usable without production backend access', () => {
+    const settings = source('app/screens/league-settings.tsx');
+    const demoDelete = source('utils/deleteDemoLeague.ts');
+    const packageJson = source('package.json');
+
+    expect(settings).toContain("firebaseTarget !== 'demo'");
+    expect(settings).toContain('deleteDemoLeagueLocally(leagueId, user.uid)');
+    expect(demoDelete).toContain("collection(db, 'leagues', leagueId, 'schedules')");
+    expect(packageJson).toContain('demo:pitch:seed-catalogs');
+  });
+
   it('keeps join league sport labels user-facing', () => {
     const joinLeague = source('app/screens/join-league.tsx');
 

@@ -38,7 +38,12 @@ describe('pitch demo seed isolation', () => {
     expect(readDemoServiceAccount(path).project_id).toBe('association-social-demo');
   });
 
-  it('refuses eras without a reviewed local snapshot', () => {
-    expect(() => loadLocalEraData('jordan')).toThrow('currently supports: current');
+  it('supports every reviewed NBA era snapshot and refuses unknown eras', () => {
+    for (const era of ['current', 'magic_bird', 'jordan', 'kobe', 'lebron', 'steph']) {
+      const { teams, players } = loadLocalEraData(era);
+      expect(teams).toHaveLength(30);
+      expect(players.length).toBeGreaterThan(0);
+    }
+    expect(() => loadLocalEraData('unreviewed')).toThrow('currently supports:');
   });
 });

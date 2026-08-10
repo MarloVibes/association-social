@@ -18,6 +18,7 @@
     "test:security": "vitest run tests/security",
     "security:pitch": "node scripts/pre-pitch-security-audit.mjs",
     "demo:pitch:provision-users": "node scripts/provision-pitch-demo-users.mjs",
+    "demo:pitch:seed-catalogs": "node scripts/seed-pitch-demo-catalogs.mjs",
     "demo:pitch:seed": "node scripts/seed-pitch-demo-league.mjs",
     "demo:pitch:verify": "node scripts/verify-pitch-demo.mjs",
     "generate:function-baselines": "node scripts/generate-functions-baseline-profiles.mjs",

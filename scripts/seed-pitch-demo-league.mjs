@@ -9,6 +9,11 @@ const { createGenerateScheduleHandler } = require('../functions/franchise/schedu
 const DEMO_PROJECT_ID = 'association-social-demo';
 const LOCAL_ERA_FILES = {
   current: 'data/nba/current-player-pool.json',
+  magic_bird: 'data/nba/magic_bird-player-pool.json',
+  jordan: 'data/nba/jordan-player-pool.json',
+  kobe: 'data/nba/kobe-player-pool.json',
+  lebron: 'data/nba/lebron-player-pool.json',
+  steph: 'data/nba/steph-player-pool.json',
 };
 
 const NBA_TEAMS = [
@@ -174,7 +179,7 @@ export function loadLocalEraData(era) {
     };
   });
 
-  return { teams, playersByTeam, sourceFile: relativePath };
+  return { teams, players, playersByTeam, sourceFile: relativePath };
 }
 
 function topPlayerIds(players, count) {

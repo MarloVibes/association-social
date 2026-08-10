@@ -5,13 +5,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, functions } from '@/constants/firebase';
+import { auth, db, firebaseTarget, functions } from '@/constants/firebase';
 import { getEraCap } from '@/constants/eraCaps';
 import { defaultScheduleGamesPerTeam, getSportRules } from '@/domain/sports/rules';
 import GlobalNav from '@/components/GlobalNav';
 import { suppressDeletedLeagueAlert } from '@/utils/deletedLeagueAlert';
 import { createNbaScheduleLocally, isMissingCallable } from '@/utils/createNbaSchedule';
 import { canUsePitchSensitiveControls } from '@/utils/pitchAccess';
+import { deleteDemoLeagueLocally } from '@/utils/deleteDemoLeague';
 
 const PRIVACY_OPTIONS = [
   { value: 'public', label: 'Public', desc: 'Anyone can find and join your league' },
@@ -358,7 +359,12 @@ export default function LeagueSettingsScreen() {
           try {
             const deleteLeague = httpsCallable(functions, 'deleteLeague');
             suppressDeletedLeagueAlert(leagueId);
-            await deleteLeague({ leagueId });
+            try {
+              await deleteLeague({ leagueId });
+            } catch (error: any) {
+              if (firebaseTarget !== 'demo' || !isMissingCallable(error) || !user?.uid) throw error;
+              await deleteDemoLeagueLocally(leagueId, user.uid);
+            }
             Alert.alert('Deleted', 'The league has been deleted.');
             router.replace('/(tabs)/dashboard');
           } catch (e: any) { Alert.alert('Error', e.message); setSaving(false); }

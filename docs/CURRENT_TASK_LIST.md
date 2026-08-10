@@ -249,6 +249,12 @@ Status: Active as needed before investor / publisher demos
   - founder: sign in, claim a franchise, inspect roster/schedule, simulate a game, and confirm box score/stats
   - viewer: sign in, browse the league, and confirm team assignment plus admin/destructive actions remain unavailable
 - After both walkthroughs pass, run the final pitch security audit and prepare the private sharing package.
+- Founder-created demo leagues must support the full founder flow, not only the seeded tour:
+  - create and delete leagues
+  - select teams from every reviewed NBA era
+  - retain commissioner controls
+  - continue into schedules, simulation, box scores, trades, stats, coaching, and offseason features
+- The protected viewer remains the restricted pitch experience; founder access is not read-only.
 - Seed demo leagues with scrubbed / sample data only.
 - Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.
 - Gate demo access by approved accounts, expiring invites, or private TestFlight / Expo preview links.
