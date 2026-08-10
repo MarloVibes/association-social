@@ -222,14 +222,11 @@ Status: Active as needed before investor / publisher demos
   - demo Firestore is initialized with delete protection and reviewed rules/indexes
   - Email/Password Authentication is enabled
   - EAS demo profile/channel is `pitch-demo`
-- Billing decision required before continuing backend setup:
-  - Firebase Storage cannot be initialized without upgrading the demo project
-  - Cloud Functions deployment is expected to require Blaze billing
-  - do not enable billing or deploy these services without explicit founder approval
-- After billing approval:
-  - initialize Storage and deploy `storage.rules`
-  - deploy required Cloud Functions to the demo project
-  - publish any media/function-dependent pitch features approved for the demo
+- Demo billing decision is final:
+  - keep `association-social-demo` off Blaze billing
+  - do not initialize paid Storage or deploy Cloud Functions to the demo project
+  - the pitch walkthrough must use Auth, Firestore, bundled assets, and seeded/sample results only
+  - hide or disable demo actions that depend on unavailable paid services so the pitch never lands on a broken flow
 - Demo seed isolation is implemented:
   - dry runs use the checked-in local current-roster snapshot and do not connect to Firebase
   - write mode accepts only `demo-service-account.json` from `association-social-demo`
@@ -246,14 +243,15 @@ Status: Active as needed before investor / publisher demos
   - the existing roster and schedule are preserved
   - protected viewers remain read-only and cannot claim a team
 - Next: complete both account walkthroughs in the demo runtime:
-  - founder: sign in, claim a franchise, inspect roster/schedule, simulate a game, and confirm box score/stats
+  - founder: sign in, create/delete a league, select a franchise, and inspect the roster, schedule, seeded box scores/stats, and available management screens
   - viewer: sign in, browse the league, and confirm team assignment plus admin/destructive actions remain unavailable
 - After both walkthroughs pass, run the final pitch security audit and prepare the private sharing package.
 - Founder-created demo leagues must support the full founder flow, not only the seeded tour:
   - create and delete leagues
   - select teams from every reviewed NBA era
-  - retain commissioner controls
-  - continue into schedules, simulation, box scores, trades, stats, coaching, and offseason features
+  - retain commissioner controls that work without Cloud Functions or paid Storage
+  - browse schedules, seeded box scores/stats, rosters, coaching, and other client-safe management screens
+  - clearly disable or omit simulation, trade finalization, offseason mutations, uploads, and other function-dependent actions
 - The protected viewer remains the restricted pitch experience; founder access is not read-only.
 - Seed demo leagues with scrubbed / sample data only.
 - Use `npm run demo:pitch:seed` for controlled, CPU-filled demo leagues when a separate demo environment is not ready.

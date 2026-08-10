@@ -67,9 +67,9 @@ npm run update:demo
 Important:
 
 - Do not change the default Firebase alias away from production.
-- Do not publish the `pitch-demo` profile until demo data and backend functions are ready.
-- Firebase Storage and Cloud Functions require billing on the demo project. Enabling billing must be a separate founder-approved action.
-- Until billing is approved, do not upload pitch media or deploy Functions to the demo project.
+- Keep the demo project off Blaze billing. Do not initialize paid Storage or deploy Cloud Functions.
+- Publish the `pitch-demo` profile only after the no-billing founder and viewer walkthroughs pass.
+- Use bundled assets plus seeded/sample Firestore results, and hide or disable actions that require unavailable backend services.
 
 Demo data requirements:
 
