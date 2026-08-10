@@ -116,9 +116,15 @@ Send the temporary password separately.
 
 ## Package Contents To Prepare
 
-- `Franchise Mobile x NBA 2K - Strategic Integration Overview.pdf`
-- `Franchise Mobile x NBA 2K - Guided Product Demo.pdf`
-- `Franchise Mobile x NBA 2K - Integration Flow.pdf`
+- `Franchise_Mobile_x_NBA_2K_One_Page_Teaser.pdf`
+- `Franchise_Mobile_x_NBA_2K_Strategic_Integration_Deck.pptx`
+- `Franchise_Mobile_x_NBA_2K_Strategic_Integration_Deck.pdf`
+- `Franchise_Mobile_x_NBA_2K_Guided_Demo.pdf`
+- `Franchise_Mobile_x_NBA_2K_Meeting_and_QA_Runbook.pdf`
+- `Franchise_Mobile_x_NBA_2K_Response_Templates.pdf`
+- `Franchise_Mobile_Private_Pitch_Access_Checklist.pdf`
+- `Franchise_Mobile_Private_Pitch_Access_Tracker.csv`
+- `Franchise_Mobile_x_NBA_2K_Backup_Visual_Reel.mp4`
 - Private demo link
 - Recipient-specific viewer account
 - Private access log retained by the founder

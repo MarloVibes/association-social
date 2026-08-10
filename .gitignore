@@ -18,6 +18,10 @@ dist/
 
 # Local document render previews
 tmp/
+scripts/__pycache__/
+output/pitch-package/qa/
+output/pitch-package/rendered/
+output/pitch-package/*.inspect.ndjson
 
 # Firebase service account keys - NEVER commit these
 service-account.json

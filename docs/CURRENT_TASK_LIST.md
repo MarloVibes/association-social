@@ -228,6 +228,14 @@ Status: Active as needed before investor / publisher demos
   - approved first attachment is a non-confidential NBA 2K integration one-page teaser
   - use a response playbook for referrals, meeting requests, demo access, technical questions, and follow-up
   - reserve the full deck and protected viewer demo for confirmed interest or a scheduled meeting
+- Private pitch package is assembled and ready for controlled use:
+  - strategic integration deck in editable PPTX and fixed-layout PDF
+  - one-page non-confidential teaser
+  - ten-minute guided demo runbook and meeting/Q&A preparation guide
+  - approved response templates for referrals, meetings, demo requests, technical questions, licensing, NDA, and follow-up
+  - private access checklist and recipient tracker
+  - silent backup visual reel for live-demo failures
+  - checksums and a private delivery bundle for version verification
 - Isolated Firebase demo environment is now created:
   - project: `association-social-demo`
   - production `association-social` remains the default target
