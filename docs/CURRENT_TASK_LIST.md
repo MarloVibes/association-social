@@ -246,6 +246,11 @@ Status: Active as needed before investor / publisher demos
   - founder: sign in, create/delete a league, select a franchise, and inspect the roster, schedule, seeded box scores/stats, and available management screens
   - viewer: sign in, browse the league, and confirm team assignment plus admin/destructive actions remain unavailable
 - After both walkthroughs pass, run the final pitch security audit and prepare the private sharing package.
+- Seeded showcase results are available without Cloud Functions:
+  - 12 completed games include final scores, quarter totals, player box scores, and league-stat data
+  - `npm run demo:pitch:seed-showcase` refreshes the controlled presentation results in the isolated demo project
+  - `npm run demo:pitch:verify` validates every stored showcase box score
+- The private sharing and walkthrough runbook is maintained in `docs/PITCH_SHARING_PACKAGE.md`.
 - Founder-created demo leagues must support the full founder flow, not only the seeded tour:
   - create and delete leagues
   - select teams from every reviewed NBA era

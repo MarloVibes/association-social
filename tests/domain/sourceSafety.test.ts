@@ -740,16 +740,16 @@ describe('source safety regressions', () => {
     expect(indexes).toContain('"indexes"');
     expect(indexes).toContain('"collectionGroup": "trade_rooms"');
     expect(indexes).toContain('"collectionGroup": "contract_offers"');
+    expect(indexes).toContain('"collectionGroup": "activity"');
+    expect(indexes).toContain('"collectionGroup": "draft_classes"');
     expect(indexes).toContain('"collectionGroup": "draft_sessions"');
+    expect(indexes).toContain('"collectionGroup": "free_agents"');
+    expect(indexes).toContain('"collectionGroup": "preparation"');
     expect(indexes).not.toContain('"collectionGroup": "mvp_players"');
     expect(indexes).toContain('"collectionGroup": "players"');
-    expect(indexes).toContain('"collectionGroup": "leagues"');
-    expect(indexes).toContain('"collectionGroup": "teams"');
     expect(indexes).toContain('"fieldPath": "is_custom"');
     expect(indexes).toContain('"fieldPath": "created_by_league"');
     expect(indexes).toContain('"fieldPath": "sport"');
-    expect(indexes).toContain('"fieldPath": "offseason.stageEndsAt"');
-    expect(indexes).toContain('"fieldPath": "gmId"');
     expect(indexes).toContain('"fieldOverrides"');
     expect(indexes).toContain('"fieldPath": "status"');
     expect(indexes).toContain('"queryScope": "COLLECTION_GROUP"');
@@ -1474,11 +1474,17 @@ describe('source safety regressions', () => {
     const settings = source('app/screens/league-settings.tsx');
     const demoDelete = source('utils/deleteDemoLeague.ts');
     const packageJson = source('package.json');
+    const showcaseSeed = source('scripts/seed-pitch-demo-showcase.mjs');
 
     expect(settings).toContain("firebaseTarget !== 'demo'");
     expect(settings).toContain('deleteDemoLeagueLocally(leagueId, user.uid)');
     expect(demoDelete).toContain("collection(db, 'leagues', leagueId, 'schedules')");
     expect(packageJson).toContain('demo:pitch:seed-catalogs');
+    expect(packageJson).toContain('demo:pitch:seed-showcase');
+    expect(showcaseSeed).toContain("const DEMO_PROJECT_ID = 'association-social-demo'");
+    expect(showcaseSeed).toContain("league.isPitchDemoLeague === true && league.pitchDemoLocked === true");
+    expect(showcaseSeed).toContain('simulateScheduledGameResult');
+    expect(showcaseSeed).toContain("collection('gameResults')");
   });
 
   it('keeps join league sport labels user-facing', () => {

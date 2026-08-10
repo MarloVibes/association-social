@@ -192,12 +192,10 @@ Prepare these assets:
 
 ## Next Engineering Tasks
 
-1. Validate the founder walkthrough: claim a seeded CPU franchise, preserve its roster and schedule, simulate a game, and verify box score/stats.
-2. Validate the viewer walkthrough: browse approved content while team assignment, commissioner tools, resets, and destructive actions remain unavailable.
+1. Validate the founder walkthrough using the seeded showcase results and approved client-safe screens.
+2. Validate the viewer walkthrough while team assignment, commissioner tools, resets, and destructive actions remain unavailable.
 3. Run the final pitch security audit and prepare the private sharing package.
-4. Decide whether to enable Firebase Blaze billing for `association-social-demo`.
-5. After explicit billing approval, initialize Storage and deploy `storage.rules`.
-6. Deploy only the Cloud Functions required by the approved pitch walkthrough.
+4. Keep `association-social-demo` off Blaze billing and do not deploy Storage or Cloud Functions.
 
 Completed:
 
@@ -223,3 +221,5 @@ Completed:
 - Added `npm run test:security` to protect the versioned Firebase permission contract.
 - Published the first private `pitch-demo` Expo update.
 - Added founder transfer of a seeded CPU franchise while preserving its roster and locked schedule; protected viewers remain read-only.
+- Added deterministic seeded showcase games with complete player box scores and league-stat data without Cloud Functions.
+- Added the private pitch sharing and walkthrough runbook in `docs/PITCH_SHARING_PACKAGE.md`.
