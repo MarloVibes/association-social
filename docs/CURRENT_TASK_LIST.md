@@ -213,6 +213,14 @@ Status: Active as needed
 Status: Active as needed before investor / publisher demos
 
 - Prepare Franchise Mobile for private pitching to 2K / Take-Two or other partners.
+- Position the primary pitch as an NBA 2K strategic integration proposal:
+  - Franchise Mobile is the persistent social and front-office companion to MyNBA/MyGM
+  - NBA 2K on console/PC remains the authoritative playable game experience
+  - league rosters, schedules, matchups, trades, strategy, results, stats, and social activity synchronize between surfaces
+  - target Take-Two strategy, 2K product leadership, and Visual Concepts NBA 2K development leadership
+  - request a product and technical evaluation before deeper commercial or source-code diligence
+  - communicate the north-star vision of bringing the NBA 2K community closer through one persistent mobile home
+  - keep MyNBA/MyGM as the focused first integration, with MyCAREER teammates, squads, events, community identity, and organized competition presented as the expansion roadmap
 - Protect the app idea, code, data, player rating logic, simulation formulas, and private roadmap before sharing demos.
 - Create a pitch-safe demo flow that lets outsiders experience the app without exposing production data, source code, admin tools, Firebase internals, or private docs.
 - Isolated Firebase demo environment is now created:

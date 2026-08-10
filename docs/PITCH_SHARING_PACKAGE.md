@@ -1,6 +1,34 @@
-# Franchise Mobile Private Pitch Package
+# Franchise Mobile x NBA 2K Private Integration Pitch
 
-This is the internal operating guide for sharing the private Franchise Mobile demo. It is not legal advice and should not be sent as the pitch itself.
+This is the internal operating guide for presenting Franchise Mobile as a strategic NBA 2K integration concept. It is not a generic standalone-app investor pitch, and it is not legal advice.
+
+## The Proposal
+
+Franchise Mobile becomes the persistent social and front-office companion for NBA 2K MyNBA and MyGM.
+
+- The console or PC game remains the home of full NBA 2K gameplay.
+- The mobile app keeps the same league active away from the gaming system.
+- League rosters, schedules, standings, trades, coaching decisions, commissioner settings, alerts, and social activity stay synchronized.
+- A GM can prepare on mobile, play the scheduled game in NBA 2K, and return to mobile for results, box scores, league reaction, and the next decision.
+- Human vacancies remain viable through CPU control until another GM joins.
+
+The product should be positioned as an extension of MyNBA/MyGM engagement, not a replacement for NBA 2K gameplay.
+
+The north-star vision is broader: bring the NBA 2K community closer through a persistent mobile home. MyNBA/MyGM is the focused first integration; a later phase could extend the same identity, scheduling, social, group, and competition infrastructure into the MyCAREER community.
+
+## Who The Pitch Is For
+
+- **Take-Two strategy or corporate development** - strategic value, ownership or partnership structure, portfolio fit, engagement, and commercial opportunity.
+- **2K product and publishing leadership** - NBA 2K roadmap fit, player retention, community growth, live engagement, and product differentiation.
+- **Visual Concepts NBA 2K development leadership** - MyNBA/MyGM workflow, online league continuity, data synchronization, game-result handoff, and implementation feasibility.
+
+The first request is a product and technical evaluation meeting. Detailed formulas, source code, and private data are reserved for a protected diligence stage.
+
+## Why The Concept Fits
+
+- 2K has already established console-to-mobile continuity through MyTEAM Mobile, where console and mobile activity share progress and collections.
+- NBA 2K26 expanded MyNBA/MyGM with public online playoffs, adjustable simulations, deeper scenarios, and continued franchise-mode investment.
+- Franchise Mobile applies that connected-device model to the underserved franchise, commissioner, and social GM experience.
 
 ## What The Recipient Receives
 
@@ -14,15 +42,17 @@ Do not send source code, Firebase Console access, GitHub access, service-account
 
 ## Approved Demo Story
 
-The pitch should show a complete, deliberate product story in roughly 10 minutes:
+The pitch should show a deliberate NBA 2K integration story in roughly 10 minutes:
 
-1. **Franchise selection** - Show the NBA, NFL, and MLB franchise surfaces, then enter the prepared NBA demo league.
-2. **League control** - Show the 30-team league, franchise selection, roster, schedule, and commissioner structure.
-3. **Player intelligence** - Open player cards and explain tiers, archetypes, skill grades, potential, and front-office evaluation.
-4. **Management workflow** - Visit Command Center, Coaching Room, Trade Center, Player Wire, standings, and league statistics.
-5. **Game evidence** - Open one of the seeded completed games and show the final score, quarter scoring, top performers, full box score, and league-wide stat impact.
-6. **Multiplayer vision** - Show GM Lounge and explain private leagues, CPU-controlled vacancies, social negotiation, and long-term league continuity.
-7. **Close** - Explain that the demo is isolated from production and that deeper formulas, source code, and private roadmap material are available only in a protected diligence process.
+1. **Open with the connected league** - Explain that this is the same MyNBA league continuing on mobile while the user is away from the console or PC.
+2. **Show persistent league control** - Enter the prepared 30-team league and show franchise ownership, CPU-controlled vacancies, rosters, schedule, standings, and commissioner structure.
+3. **Show mobile GM depth** - Open player cards and explain tiers, archetypes, grades, potential, scouting, player development, and front-office evaluation.
+4. **Show the social management loop** - Visit Command Center, GM Lounge, Trade Center, Coaching Room, Player Wire, league news, alerts, and statistics.
+5. **Show the NBA 2K handoff** - Select a scheduled matchup and explain that the game can be played in NBA 2K on console or PC, with the result and authoritative statistics synchronized back to the league.
+6. **Show returned game evidence** - Open a seeded completed game and show the final score, quarter scoring, top performers, full box score, standings effect, and league-wide stat impact.
+7. **Show continuous engagement** - Explain trade negotiations, matchup requests, preparation, notifications, commissioner tools, offseason flow, and CPU continuity between console sessions.
+8. **Present the expansion vision** - Briefly show how the same connected-community foundation could later support MyCAREER teammates, squads, organized competition, creator communities, and persistent player identity.
+9. **Close with the integration request** - Ask for a product and technical evaluation of a focused MyNBA/MyGM-connected prototype, with commercial structure, MyCAREER expansion, and deeper diligence to follow.
 
 The demo uses seeded/sample results and bundled assets. Do not attempt unavailable server-backed actions during the pitch.
 
@@ -86,11 +116,18 @@ Send the temporary password separately.
 
 ## Package Contents To Prepare
 
-- `Franchise Mobile - Private Product Overview.pdf`
-- `Franchise Mobile - Guided Demo.pdf`
+- `Franchise Mobile x NBA 2K - Strategic Integration Overview.pdf`
+- `Franchise Mobile x NBA 2K - Guided Product Demo.pdf`
+- `Franchise Mobile x NBA 2K - Integration Flow.pdf`
 - Private demo link
 - Recipient-specific viewer account
 - Private access log retained by the founder
 - Optional NDA reviewed by counsel for smaller or lower-trust meetings
 
 The product overview and guided demo should contain screenshots and product value only. They must not contain passwords, source paths, Firebase identifiers, API keys, repository links, private formulas, or raw proprietary datasets.
+
+## Official Product Context
+
+- 2K Support: MyTEAM Mobile shares progress and collection activity with supported console accounts: https://support.2k.com/hc/en-us/articles/26105260862867-NBA-2K-General-Info-MyTEAM-Mobile-FAQ
+- 2K Newsroom: NBA 2K26 expanded MyNBA/MyGM with online playoffs, adjustable simulations, and deeper franchise features: https://newsroom.2k.com/news/endless-possibilities-await-as-mynba-levels-up-in-nbar-2k26
+- 2K Newsroom: NBA 2K25 described MyGM as a full general-manager role-playing experience developed by Visual Concepts: https://newsroom.2k.com/news/nbar-2k25-showcases-all-new-stephen-curry-mynba-era-and-introduces-mygm-on-playstationr5-xbox-series-xs-and-pc
