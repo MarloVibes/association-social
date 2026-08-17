@@ -1,0 +1,21 @@
+FRANCHISE MOBILE INSTAGRAM PROMO
+
+CAROUSEL
+- Upload slides 01 through 07 in order.
+- Use the supplied caption and add image alt text that summarizes each slide.
+- Pin a comment asking which league-management feature matters most.
+
+REEL
+- 1080x1920, approximately 16 seconds, silent master.
+- Add original audio or royalty-free music inside Instagram. Avoid copyrighted music if the post may be boosted.
+- Use the supplied Reel cover and keep the disclosure in the caption.
+
+STORY
+- Upload the supplied 1080x1920 Story image.
+- Place Instagram's native poll sticker over the two suggested answers.
+- Share the result in the next day's Story to keep the conversation moving.
+
+PUBLIC-SAFETY RULES
+- Do not add official league, team, publisher, or player branding.
+- Do not expose demo logins, Firebase screens, formulas, source code, or private pitch documents.
+- Describe console synchronization as a vision or proposed integration until an agreement exists.

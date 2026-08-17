@@ -22,6 +22,8 @@ scripts/__pycache__/
 output/pitch-package/qa/
 output/pitch-package/rendered/
 output/pitch-package/*.inspect.ndjson
+output/social-promo/carousel-montage.png
+output/social-promo/reel-frames/
 
 # Firebase service account keys - NEVER commit these
 service-account.json

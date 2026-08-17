@@ -1,0 +1,13 @@
+The game can end for the night. The league should not.
+
+Franchise Mobile is an independent connected-sports concept built to keep competitive leagues active between game nights — with schedules, trades, league chat, commissioner tools, player intelligence, CPU-controlled vacancies, stats, and the next decision all living in one place.
+
+The working demo currently supports 30 franchises, 530 rostered players, a 1,230-game schedule, and 12 GM-focused modules.
+
+This is the beginning of a bigger idea: one persistent home for the people, rivalries, and stories around the game.
+
+What feature would keep your league active every day?
+
+#FranchiseMobile #SportsGaming #GameDev #BasketballGaming #OnlineLeague #SportsCommunity #IndieDev #MobileGaming
+
+Disclosure: Independent product concept. Not affiliated with any league, publisher, or players association.

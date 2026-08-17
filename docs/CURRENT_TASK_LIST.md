@@ -236,6 +236,12 @@ Status: Active as needed before investor / publisher demos
   - private access checklist and recipient tracker
   - silent backup visual reel for live-demo failures
   - checksums and a private delivery bundle for version verification
+- Build a public-safe Instagram promotion package for the concept:
+  - portrait carousel that explains the problem, product loop, working proof, and vision
+  - vertical Reel and cover image for short-form promotion
+  - public caption, posting order, accessibility copy, and disclosure language
+  - exclude official league/publisher logos, player likenesses, credentials, private formulas, and protected pitch materials
+  - daily content automation is active at 9:00 AM Central and produces a fresh post, caption, Story prompt, and alt text
 - Isolated Firebase demo environment is now created:
   - project: `association-social-demo`
   - production `association-social` remains the default target
